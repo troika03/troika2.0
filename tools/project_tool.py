@@ -989,33 +989,66 @@ async def _do_pm_doc_work(payload: Dict[str, Any]) -> Dict[str, Any]:
         logger.info("PM-agent task written to file (%d chars original)", task_file.stat().st_size)
 
     logger.info("Spawning PM-agent in %s", project_path)
+    # КРИТИЧНО: НЕ используем PIPE + communicate(). gemini-cli (node) держит
+    # write-end пайпа открытым через grandchild-процессы (node-pty/conpty),
+    # EOF не приходит → communicate() висит вечно, хотя документы уже записаны,
+    # и job навсегда застревает в "running". Решение (как в gemini_code._run_gemini):
+    # стримим stdout/stderr в файлы и ждём proc.wait() — он возвращается сразу
+    # по выходу главного процесса, без ожидания EOF пайпа.
+    log_out = project_path / ".pm_run.log"
+    log_err = project_path / ".pm_run.err"
+    try:
+        f_out = open(log_out, "wb")
+        f_err = open(log_err, "wb")
+    except Exception as e:
+        return {"ok": False, "error": f"cannot open log files: {e}",
+                "say_to_user": "Не получилось запустить PM-агента."}
+
+    # Windows: node-pty при импорте делает AttachConsole(shellPid); без своего
+    # console-handle gemini-cli падает в первые секунды. CREATE_NO_WINDOW даёт
+    # child собственный console, но окно не показывается.
+    creation_flags = 0x08000000 if _os.name == "nt" else 0  # CREATE_NO_WINDOW
     try:
         proc = await _asyncio.create_subprocess_exec(
             cli, "--yolo", "--allowed-mcp-server-names", "__none__",
             "--prompt", wrapped,
             cwd=str(project_path),
-            stdout=_asyncio.subprocess.PIPE,
-            stderr=_asyncio.subprocess.PIPE,
+            stdout=f_out, stderr=f_err,
             env=env,
+            creationflags=creation_flags,
         )
         try:
-            stdout, stderr = await _asyncio.wait_for(proc.communicate(), timeout=timeout)
+            rc = await _asyncio.wait_for(proc.wait(), timeout=timeout)
         except _asyncio.TimeoutError:
+            # proc.kill() убивает только верхушку; taskkill /T /F валит всё дерево.
             try:
                 import subprocess as _sp
                 _sp.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
                         capture_output=True, timeout=10)
             except Exception:
+                try: proc.kill()
+                except Exception: pass
+            try:
+                await _asyncio.wait_for(proc.wait(), timeout=5)
+            except Exception:
                 pass
             return {"ok": False, "error": f"timed out after {timeout}s",
                     "say_to_user": "PM-агент не успел, попробуй ещё раз."}
-        rc = proc.returncode
+        finally:
+            try: f_out.close()
+            except Exception: pass
+            try: f_err.close()
+            except Exception: pass
         if rc != 0:
-            err = (stderr or b"").decode("utf-8", errors="replace")
+            err = log_err.read_text(encoding="utf-8", errors="replace") if log_err.exists() else ""
             return {"ok": False, "error": f"gemini-cli exit {rc}",
                     "stderr_tail": err[-500:],
                     "say_to_user": "PM-агент упал. Попробуй переформулировать."}
     except Exception as e:
+        try: f_out.close()
+        except Exception: pass
+        try: f_err.close()
+        except Exception: pass
         return {"ok": False, "error": f"spawn failed: {e}",
                 "say_to_user": "Не получилось запустить PM-агента."}
 
