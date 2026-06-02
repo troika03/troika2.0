@@ -1004,10 +1004,10 @@ async def _do_pm_doc_work(payload: Dict[str, Any]) -> Dict[str, Any]:
         return {"ok": False, "error": f"cannot open log files: {e}",
                 "say_to_user": "Не получилось запустить PM-агента."}
 
-    # Windows: node-pty при импорте делает AttachConsole(shellPid); без своего
-    # console-handle gemini-cli падает в первые секунды. CREATE_NO_WINDOW даёт
-    # child собственный console, но окно не показывается.
-    creation_flags = 0x08000000 if _os.name == "nt" else 0  # CREATE_NO_WINDOW
+    # creationflags=0: child наследует консоль gateway. node-pty conpty-агент
+    # пропатчен (не падает на AttachConsole), а CREATE_NO_WINDOW здесь ВРЕДЕН —
+    # gemini-cli зависает headless (проверено). См. gemini_code_tool._run_gemini.
+    creation_flags = 0
     try:
         proc = await _asyncio.create_subprocess_exec(
             cli, "--yolo", "--allowed-mcp-server-names", "__none__",

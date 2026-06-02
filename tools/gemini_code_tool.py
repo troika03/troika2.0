@@ -537,16 +537,15 @@ async def _run_gemini(workspace: Path, task: str, timeout: int, *,
     except Exception as e:
         return {"ok": False, "error": f"cannot open log files: {e}"}
 
-    # Windows: gemini-cli использует node-pty (через @lydell/node-pty)
-    # который при импорте вызывает AttachConsole(shellPid). Если родительский
-    # процесс (gateway) запущен без console (Start-Process -WindowStyle Hidden,
-    # или service) → AttachConsole падает с "AttachConsole failed", gemini-cli
-    # умирает в первые секунды, файлы пустые, job висит.
-    # Fix: используем CREATE_NO_WINDOW (0x08000000) — child получает свой
-    # console handle (нужный для node-pty), но окно НЕ показывается.
+    # Windows console handling (важно, иначе gemini-cli либо падает, либо висит):
+    #  • БЕЗ флагов: child наследует (скрытую) консоль gateway. node-pty форкает
+    #    conpty_console_list_agent → AttachConsole(shellPid). Раньше это падало
+    #    «AttachConsole failed» → теперь агент пропатчен (try/catch, fallback на
+    #    [shellPid]), поэтому безопасно.
+    #  • С CREATE_NO_WINDOW: gemini-cli ЗАВИСАЕТ headless (ink/терминал не может
+    #    рендерить в отвязанную консоль) — проверено: 200с таймаут vs 12с без флага.
+    # Поэтому creationflags=0. Окно не всплывает: child наследует консоль родителя.
     creation_flags = 0
-    if os.name == "nt":
-        creation_flags = 0x08000000  # CREATE_NO_WINDOW
     try:
         proc = await asyncio.create_subprocess_exec(
             *args, cwd=str(workspace),
