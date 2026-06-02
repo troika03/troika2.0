@@ -1,0 +1,541 @@
+"""
+self_improve — Тройка может предлагать изменения в свой собственный код,
+но НЕ применяет их без явного одобрения Миши.
+
+Безопасность:
+  • Каждое предложение = ветка `troika/proposal-<id>` в git, не main
+  • Diff сохраняется в ~/.troika/proposals/<id>.json
+  • Запретные пути: gateway/, .env, cli.py, requirements.txt, скрипты install
+  • Лимиты: ≤5 файлов, ≤300 изменённых строк, ≤10 KB diff
+  • Применить может только Миша голосом «применить предложение N»
+    или через self_improve_approve(proposal_id)
+
+Tools:
+  • self_improve_propose — Тройка генерирует diff через Gemini CLI
+  • self_improve_list    — показать pending proposals
+  • self_improve_show    — diff и rationale конкретного proposal
+  • self_improve_approve — мёрджит ветку в main, перезапускает gateway
+  • self_improve_reject  — удаляет ветку
+
+Все операции идут через git, поэтому любое применённое предложение откатывается
+одним `git revert <hash>`. История ничего не теряет.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import os
+import re
+import subprocess
+import time
+import uuid
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from tools.registry import registry
+
+logger = logging.getLogger(__name__)
+
+
+_TROIKA_HOME = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".troika"))
+_PROPOSALS_DIR = _TROIKA_HOME / "proposals"
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# Пути которые Тройка НЕ может трогать без отдельного флага бога.
+# Это не «строгая безопасность» (Миша всё равно может сам отредактировать),
+# а защита от случайных самоудачных правок которые сломают сервер.
+_FORBIDDEN_PATTERNS = [
+    r"^\.env",
+    r"^cli\.py$",
+    r"^requirements.*\.txt$",
+    r"^pyproject\.toml$",
+    r"^scripts/install",
+    r"^gateway/",            # gateway критичен для жизни
+    r"^hermes_cli/",         # CLI критичен
+    r"^\.git/",
+    r"^tools/self_improve",  # сама себя не правит!
+    r"^tools/registry\.py$",
+    r"^tools/job_runner\.py$",
+]
+_FORBIDDEN_RE = re.compile("|".join(_FORBIDDEN_PATTERNS))
+
+_MAX_FILES = 5
+_MAX_LINES_CHANGED = 300
+_MAX_DIFF_BYTES = 10_000
+
+_BRANCH_PREFIX = "troika/proposal-"
+
+
+def _ensure_dirs():
+    _PROPOSALS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _slug(text: str, max_len: int = 30) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", text.lower())[:max_len].strip("-")
+    return s or "noop"
+
+
+def _git(*args: str, cwd: Path = _REPO_ROOT, check: bool = True) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", *args], cwd=str(cwd), check=check,
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=30,
+    )
+
+
+def _is_clean_main() -> tuple[bool, str]:
+    """Возвращает (ok, reason). ok=True если на main и нет несохранённых правок."""
+    try:
+        branch = _git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+        if branch != "main":
+            return False, f"not_on_main (current: {branch})"
+        st = _git("status", "--porcelain").stdout.strip()
+        if st:
+            return False, f"uncommitted_changes ({len(st.splitlines())} files)"
+        return True, "ok"
+    except Exception as e:
+        return False, f"git_error: {e}"
+
+
+def _validate_diff(diff_text: str, files: List[str]) -> Optional[str]:
+    """Возвращает None если ок, иначе текст ошибки."""
+    if not diff_text.strip():
+        return "empty_diff"
+    if len(diff_text.encode("utf-8")) > _MAX_DIFF_BYTES:
+        return f"diff_too_large (>{_MAX_DIFF_BYTES} bytes)"
+    if len(files) > _MAX_FILES:
+        return f"too_many_files ({len(files)} > {_MAX_FILES})"
+    for f in files:
+        if _FORBIDDEN_RE.match(f):
+            return f"forbidden_path: {f}"
+    added = sum(1 for ln in diff_text.splitlines() if ln.startswith("+") and not ln.startswith("+++"))
+    removed = sum(1 for ln in diff_text.splitlines() if ln.startswith("-") and not ln.startswith("---"))
+    if added + removed > _MAX_LINES_CHANGED:
+        return f"too_many_lines_changed ({added + removed} > {_MAX_LINES_CHANGED})"
+    return None
+
+
+def _save_proposal(proposal: Dict[str, Any]) -> Path:
+    _ensure_dirs()
+    pid = proposal["id"]
+    path = _PROPOSALS_DIR / f"{pid}.json"
+    path.write_text(json.dumps(proposal, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
+def _load_proposal(pid: str) -> Optional[Dict[str, Any]]:
+    path = _PROPOSALS_DIR / f"{pid}.json"
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _list_proposals() -> List[Dict[str, Any]]:
+    _ensure_dirs()
+    out = []
+    for p in sorted(_PROPOSALS_DIR.glob("*.json")):
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+            out.append(data)
+        except Exception:
+            continue
+    return out
+
+
+# ---------------------------------------------------------------------------
+# propose
+# ---------------------------------------------------------------------------
+
+async def _propose_via_gemini(branch: str, description: str, target_files: List[str]) -> Dict[str, Any]:
+    """Запускает Gemini CLI в репо, даёт задачу, ожидает что он внесёт правки в указанные файлы."""
+    from tools.gemini_code_tool import _find_gemini_cli, _HEADLESS_RULES
+
+    cli = _find_gemini_cli()
+    if not cli:
+        return {"ok": False, "error": "gemini_cli_not_found"}
+
+    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    oauth = Path.home() / ".gemini" / "oauth_creds.json"
+    if not api_key and not oauth.exists():
+        return {"ok": False, "error": "no_gemini_auth"}
+
+    env = os.environ.copy()
+    if api_key:
+        env["GEMINI_API_KEY"] = api_key
+    env["GEMINI_CLI_TRUST_WORKSPACE"] = "true"
+
+    file_list_str = ", ".join(target_files) if target_files else "<любые файлы кроме запрещённых>"
+    forbidden_str = ", ".join([
+        ".env", "cli.py", "requirements.txt", "gateway/", "hermes_cli/",
+        "tools/registry.py", "tools/job_runner.py", "tools/self_improve_tool.py",
+    ])
+    prompt = f"""Ты улучшаешь Hermes/Troika agent. Работай аккуратно: малое изменение лучше большого.
+
+ЗАДАЧА (от пользователя): {description}
+
+ПРАВИЛА:
+1. Меняй ТОЛЬКО эти файлы: {file_list_str}
+2. ЗАПРЕЩЕНО трогать: {forbidden_str}
+3. Лимит: ≤5 файлов, ≤300 строк изменений суммарно
+4. Не создавай документацию / README, если не просили
+5. Не добавляй комментариев кроме случаев когда WHY не очевиден из кода
+6. Сохраняй стиль соседнего кода
+7. Никаких placeholder'ов и TODO — только готовый код
+
+Внеси изменения прямо в файлы. Не делай git commit — это сделает скрипт.
+По окончании запиши однострочное summary в файл .PROPOSAL_NOTE.txt — что именно изменил.
+"""
+
+    args = [cli, "--yolo", "--allowed-mcp-server-names", "__none__", "--prompt", prompt]
+    log_out = _REPO_ROOT / ".self_improve.log"
+    log_err = _REPO_ROOT / ".self_improve.err"
+
+    try:
+        with open(log_out, "wb") as f_out, open(log_err, "wb") as f_err:
+            proc = await asyncio.create_subprocess_exec(
+                *args, cwd=str(_REPO_ROOT),
+                stdout=f_out, stderr=f_err, env=env,
+            )
+            try:
+                rc = await asyncio.wait_for(proc.wait(), timeout=300)
+            except asyncio.TimeoutError:
+                try:
+                    import subprocess as _sp
+                    _sp.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                            capture_output=True, timeout=10)
+                except Exception:
+                    pass
+                return {"ok": False, "error": "gemini_timeout_300s"}
+        out = log_out.read_text(encoding="utf-8", errors="replace") if log_out.exists() else ""
+        return {"ok": rc == 0, "rc": rc, "out_tail": out[-500:]}
+    except Exception as e:
+        return {"ok": False, "error": f"spawn_failed: {e}"}
+
+
+async def _handle_propose(arguments: dict, **_kw) -> dict:
+    description = (arguments.get("description") or "").strip()
+    rationale = (arguments.get("rationale") or "").strip()
+    target_files = arguments.get("target_files") or []
+    if isinstance(target_files, str):
+        target_files = [f.strip() for f in target_files.split(",") if f.strip()]
+
+    if not description:
+        return {"ok": False, "error": "missing_description"}
+    if not rationale:
+        return {"ok": False, "error": "missing_rationale",
+                "hint": "Объясни ЗАЧЕМ это изменение — без 'почему' предложение не принимается"}
+
+    # Validate target_files против запретов до запуска Gemini
+    for f in target_files:
+        if _FORBIDDEN_RE.match(f):
+            return {"ok": False, "error": f"forbidden_path: {f}"}
+
+    ok, reason = _is_clean_main()
+    if not ok:
+        return {"ok": False, "error": f"repo_not_clean: {reason}",
+                "hint": "Сначала закоммить или откати текущие изменения"}
+
+    pid = uuid.uuid4().hex[:8]
+    branch = f"{_BRANCH_PREFIX}{pid}-{_slug(description)}"
+
+    try:
+        _git("checkout", "-b", branch)
+    except subprocess.CalledProcessError as e:
+        return {"ok": False, "error": f"branch_create_failed: {e.stderr[:200]}"}
+
+    try:
+        gres = await _propose_via_gemini(branch, description, target_files)
+        if not gres.get("ok"):
+            # Откатываем — на main, удаляем ветку
+            _git("checkout", "main", check=False)
+            _git("branch", "-D", branch, check=False)
+            return {"ok": False, "error": "gemini_failed", "details": gres}
+
+        # Что изменилось?
+        st = _git("status", "--porcelain").stdout.strip()
+        if not st:
+            _git("checkout", "main", check=False)
+            _git("branch", "-D", branch, check=False)
+            return {"ok": False, "error": "no_changes_made",
+                    "hint": "Gemini не внёс никаких правок в файлы"}
+
+        changed_files = []
+        for line in st.splitlines():
+            # формат: XY filename
+            parts = line.strip().split(None, 1)
+            if len(parts) == 2:
+                changed_files.append(parts[1].strip('"'))
+
+        # Получаем diff
+        diff_text = _git("diff", "HEAD").stdout
+
+        # Извлекаем note если есть
+        note_path = _REPO_ROOT / ".PROPOSAL_NOTE.txt"
+        note = note_path.read_text(encoding="utf-8", errors="replace").strip() if note_path.exists() else ""
+        if note_path.exists():
+            note_path.unlink()  # не коммитим заметку
+            # Re-stage без .PROPOSAL_NOTE.txt в результирующем diff
+            st2 = _git("status", "--porcelain").stdout.strip()
+            changed_files = []
+            for line in st2.splitlines():
+                parts = line.strip().split(None, 1)
+                if len(parts) == 2:
+                    changed_files.append(parts[1].strip('"'))
+            diff_text = _git("diff", "HEAD").stdout
+
+        # Валидация
+        err = _validate_diff(diff_text, changed_files)
+        if err:
+            _git("checkout", "main", check=False)
+            _git("branch", "-D", branch, check=False)
+            return {"ok": False, "error": f"validation: {err}",
+                    "details": {"files": changed_files,
+                                "diff_size": len(diff_text)}}
+
+        # Коммит на ветке
+        _git("add", ".")
+        commit_msg = f"proposal: {description[:60]}\n\nRationale: {rationale}"
+        _git("commit", "-m", commit_msg)
+        commit_hash = _git("rev-parse", "HEAD").stdout.strip()
+
+        # Обратно на main (ветка остаётся)
+        _git("checkout", "main")
+
+        proposal = {
+            "id": pid,
+            "branch": branch,
+            "commit": commit_hash,
+            "created_at": time.time(),
+            "description": description,
+            "rationale": rationale,
+            "note": note,
+            "files": changed_files,
+            "diff_size": len(diff_text),
+            "lines_changed": sum(1 for ln in diff_text.splitlines()
+                                  if ln.startswith(("+", "-")) and not ln.startswith(("+++", "---"))),
+            "status": "pending",
+            "diff_preview": diff_text[:2000],
+        }
+        _save_proposal(proposal)
+
+        return {
+            "ok": True,
+            "proposal_id": pid,
+            "branch": branch,
+            "files_changed": len(changed_files),
+            "lines_changed": proposal["lines_changed"],
+            "files": changed_files,
+            "say_to_user": f"Готово, предложение {pid}. Изменила {len(changed_files)} файлов на {proposal['lines_changed']} строк. Скажи «покажи предложение {pid}» чтобы посмотреть, или «применить {pid}» чтобы накатить.",
+        }
+    except subprocess.CalledProcessError as e:
+        _git("checkout", "main", check=False)
+        _git("branch", "-D", branch, check=False)
+        return {"ok": False, "error": f"git_error: {e.stderr[:300]}"}
+    except Exception as e:
+        try:
+            _git("checkout", "main", check=False)
+            _git("branch", "-D", branch, check=False)
+        except Exception:
+            pass
+        return {"ok": False, "error": f"propose_failed: {type(e).__name__}: {e}"}
+
+
+# ---------------------------------------------------------------------------
+# list / show
+# ---------------------------------------------------------------------------
+
+async def _handle_list(arguments: dict, **_kw) -> dict:
+    status_filter = arguments.get("status", "pending")
+    items = _list_proposals()
+    if status_filter and status_filter != "all":
+        items = [p for p in items if p.get("status") == status_filter]
+    items.sort(key=lambda p: p.get("created_at", 0), reverse=True)
+    if not items:
+        return {"ok": True, "proposals": [], "say_to_user": "Открытых предложений нет."}
+    summary = []
+    for p in items[:10]:
+        age_min = int((time.time() - p.get("created_at", time.time())) / 60)
+        summary.append({
+            "id": p["id"],
+            "description": p["description"][:80],
+            "files": len(p.get("files", [])),
+            "lines": p.get("lines_changed", 0),
+            "status": p.get("status"),
+            "age_min": age_min,
+        })
+    return {"ok": True, "proposals": summary}
+
+
+async def _handle_show(arguments: dict, **_kw) -> dict:
+    pid = (arguments.get("proposal_id") or "").strip()
+    if not pid:
+        return {"ok": False, "error": "missing_proposal_id"}
+    p = _load_proposal(pid)
+    if not p:
+        return {"ok": False, "error": "not_found"}
+    return {
+        "ok": True,
+        "id": p["id"],
+        "description": p["description"],
+        "rationale": p["rationale"],
+        "note": p.get("note", ""),
+        "files": p.get("files", []),
+        "lines_changed": p.get("lines_changed", 0),
+        "diff_preview": p.get("diff_preview", "")[:1500],
+        "status": p.get("status"),
+        "branch": p.get("branch"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# approve / reject
+# ---------------------------------------------------------------------------
+
+async def _handle_approve(arguments: dict, **_kw) -> dict:
+    pid = (arguments.get("proposal_id") or "").strip()
+    if not pid:
+        return {"ok": False, "error": "missing_proposal_id"}
+    p = _load_proposal(pid)
+    if not p:
+        return {"ok": False, "error": "not_found"}
+    if p.get("status") != "pending":
+        return {"ok": False, "error": f"already_{p.get('status')}"}
+
+    ok, reason = _is_clean_main()
+    if not ok:
+        return {"ok": False, "error": f"repo_not_clean: {reason}"}
+
+    branch = p["branch"]
+    try:
+        # fast-forward или merge --no-ff?
+        # Делаем squash merge: один аккуратный коммит на main, ветку удаляем
+        _git("merge", "--squash", branch)
+        commit_msg = f"troika self-improve: {p['description'][:60]}\n\nRationale: {p['rationale']}\nProposal: {pid}"
+        _git("commit", "-m", commit_msg)
+        merge_hash = _git("rev-parse", "HEAD").stdout.strip()
+        _git("branch", "-D", branch, check=False)
+
+        p["status"] = "applied"
+        p["applied_at"] = time.time()
+        p["merge_commit"] = merge_hash
+        _save_proposal(p)
+
+        return {
+            "ok": True,
+            "proposal_id": pid,
+            "merge_commit": merge_hash,
+            "rollback_cmd": f"git revert {merge_hash}",
+            "say_to_user": f"Применила предложение {pid}. Если что — откатить можно: git revert {merge_hash[:8]}. Возможно понадобится перезапуск gateway чтобы изменения подхватились.",
+        }
+    except subprocess.CalledProcessError as e:
+        return {"ok": False, "error": f"merge_failed: {e.stderr[:300]}"}
+
+
+async def _handle_reject(arguments: dict, **_kw) -> dict:
+    pid = (arguments.get("proposal_id") or "").strip()
+    if not pid:
+        return {"ok": False, "error": "missing_proposal_id"}
+    p = _load_proposal(pid)
+    if not p:
+        return {"ok": False, "error": "not_found"}
+    if p.get("status") != "pending":
+        return {"ok": False, "error": f"already_{p.get('status')}"}
+
+    branch = p["branch"]
+    try:
+        _git("branch", "-D", branch, check=False)
+        p["status"] = "rejected"
+        p["rejected_at"] = time.time()
+        _save_proposal(p)
+        return {"ok": True, "proposal_id": pid,
+                "say_to_user": f"Удалила предложение {pid}."}
+    except Exception as e:
+        return {"ok": False, "error": f"reject_failed: {e}"}
+
+
+# ---------------------------------------------------------------------------
+# Schemas + registration
+# ---------------------------------------------------------------------------
+
+PROPOSE_SCHEMA = {
+    "name": "self_improve_propose",
+    "description": "Тройка генерирует предложение по улучшению собственного кода через Gemini CLI. Создаёт git-ветку с правками, НЕ применяет без подтверждения. Запрещено трогать gateway/, cli.py, .env, hermes_cli/. Лимит: ≤5 файлов, ≤300 строк. Используй когда пользователь говорит «добавь себе фичу», «улучши такой-то tool», «научись делать X».",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "description": {"type": "string", "description": "Что улучшить. Конкретно и сжато (1-3 предложения)."},
+            "rationale": {"type": "string", "description": "Зачем — почему это полезно, что станет лучше. Без этого предложение не принимается."},
+            "target_files": {"type": "array", "items": {"type": "string"}, "description": "Список путей которые планируешь трогать (относительно репо). Помогает Gemini фокусироваться. Опционально."},
+        },
+        "required": ["description", "rationale"],
+    },
+}
+
+LIST_SCHEMA = {
+    "name": "self_improve_list",
+    "description": "Показать список предложений по улучшению Тройки. По умолчанию — только pending.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "status": {"type": "string", "description": "pending|applied|rejected|all. Default pending."},
+        },
+    },
+}
+
+SHOW_SCHEMA = {
+    "name": "self_improve_show",
+    "description": "Показать детали и diff конкретного предложения.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "proposal_id": {"type": "string"},
+        },
+        "required": ["proposal_id"],
+    },
+}
+
+APPROVE_SCHEMA = {
+    "name": "self_improve_approve",
+    "description": "Применить предложение: squash-merge ветки в main. Откат: git revert <merge_commit>. Только Миша может одобрить — Тройка сама себя не одобряет.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "proposal_id": {"type": "string"},
+        },
+        "required": ["proposal_id"],
+    },
+}
+
+REJECT_SCHEMA = {
+    "name": "self_improve_reject",
+    "description": "Отклонить предложение, удалить ветку.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "proposal_id": {"type": "string"},
+        },
+        "required": ["proposal_id"],
+    },
+}
+
+
+registry.register(name="self_improve_propose", toolset="self_improve",
+                  schema=PROPOSE_SCHEMA, handler=_handle_propose,
+                  is_async=True, emoji="🧠")
+registry.register(name="self_improve_list", toolset="self_improve",
+                  schema=LIST_SCHEMA, handler=_handle_list,
+                  is_async=True, emoji="📋")
+registry.register(name="self_improve_show", toolset="self_improve",
+                  schema=SHOW_SCHEMA, handler=_handle_show,
+                  is_async=True, emoji="🔍")
+registry.register(name="self_improve_approve", toolset="self_improve",
+                  schema=APPROVE_SCHEMA, handler=_handle_approve,
+                  is_async=True, emoji="✅")
+registry.register(name="self_improve_reject", toolset="self_improve",
+                  schema=REJECT_SCHEMA, handler=_handle_reject,
+                  is_async=True, emoji="❌")

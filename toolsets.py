@@ -60,6 +60,72 @@ _HERMES_CORE_TOOLS = [
     "send_message",
     # Home Assistant smart home control (gated on HASS_TOKEN via check_fn)
     "ha_list_entities", "ha_get_state", "ha_list_services", "ha_call_service",
+    # Android phone control (gated on phone WebSocket connection via check_fn)
+    "android_open_app", "android_call", "android_send_sms",
+    "android_set_alarm", "android_set_timer",
+    "android_navigate", "android_web_search",
+    "android_volume", "android_brightness",
+    "android_tap", "android_type_text", "android_swipe",
+    "android_press_back", "android_press_home",
+    "android_read_screen", "android_status",
+    "android_file_list", "android_file_read", "android_file_write",
+    "android_file_delete", "android_file_move", "android_file_info",
+    "android_request_all_files_access",
+    # Phone system / hardware
+    "android_clipboard_get", "android_clipboard_set",
+    "android_torch", "android_battery", "android_network",
+    "android_camera_photo", "android_screenshot",
+    # Phone calendar (CalendarContract on Android)
+    "android_calendar_list_calendars", "android_calendar_list_events",
+    "android_calendar_create_event", "android_calendar_update_event",
+    "android_calendar_delete_event", "android_calendar_check_permissions",
+    # Document generation on PC, delivered to phone (PDF/PPTX/DOCX/XLSX/CSV/JSON/ZIP).
+    # phone_create_pptx убран — LLM игнорировал и beautiful, и системный промпт.
+    "phone_create_pdf", "phone_create_docx",
+    "phone_create_xlsx", "phone_markdown_to_pdf",
+    "phone_create_csv", "phone_create_json", "phone_create_zip",
+    # Beautiful documents with themes + auto-illustrations
+    "phone_create_beautiful_pptx", "phone_create_beautiful_pdf",
+    "phone_create_infographic",
+    # Image generation (Pollinations, free)
+    "image_pollinations_url", "phone_create_image",
+    # HF Spaces (free, no API key): FLUX (фото) + LTX-Video (видео, async)
+    "image_hf_flux", "phone_create_video",
+    # Skills hub — лёгкие полезные tools
+    "skill_weather", "skill_wikipedia", "skill_translate",
+    "skill_currency_rate", "skill_crypto_price", "skill_hackernews",
+    "skill_qr_code", "skill_calculator", "skill_unit_convert",
+    "skill_world_time", "skill_url_shorten", "skill_random_value",
+    "skill_date_math", "skill_youtube_search", "skill_joke", "skill_fact",
+    # Obsidian vault notes (also linked to Claude memory)
+    "obsidian_note",
+    # Voice journal + reminders для Тройки
+    "journal_today", "reminder",
+    # Server-initiated push (Тройка сама заговаривает с Мишей)
+    "push_to_user",
+    # Контекст «где я» — fingerprint Wi-Fi/Bluetooth → дом/работа/машина
+    "location",
+    # Voice fingerprint — отличить Мишу от чужих голосов через Resemblyzer
+    "speaker_id",
+    # Фоновые задачи через kanban: "запусти research, через час расскажешь"
+    "bg_task",
+    # RAG-поиск по Obsidian vault (BGE-M3 + sqlite)
+    "notes",
+    # Учёт расходов/доходов голосом
+    "finance",
+    # Мета-router: find_tool(query) → schema редкого инструмента
+    "find_tool",
+    # Делегирование кодинг-задач Gemini CLI на PC
+    "gemini_code",
+    # Статус фоновых задач (job_runner)
+    "task_status",
+    # Управление проектами (vision/SRS/архитектура/код)
+    "project",
+    # Self-improvement: Тройка предлагает правки в свой код, Миша одобряет
+    "self_improve_propose", "self_improve_list", "self_improve_show",
+    "self_improve_approve", "self_improve_reject", "code_review",
+    # Поиск по vault'у памяти + дневник
+    "memory_search", "diary_add", "diary_read",
     # Kanban multi-agent coordination — only in schema when the agent is
     # spawned as a kanban worker (HERMES_KANBAN_TASK env set) or the current
     # profile explicitly enables the kanban toolset. Gated via check_fn in
@@ -249,6 +315,51 @@ TOOLSETS = {
         "includes": []
     },
 
+    "android": {
+        "description": "Control connected Android phone — apps, calls, alarms, navigation, volume/brightness, UI taps via accessibility, file system ops, clipboard, torch, battery/network info, camera, screenshot with vision.",
+        "tools": [
+            "android_open_app", "android_call", "android_send_sms",
+            "android_set_alarm", "android_set_timer",
+            "android_navigate", "android_web_search",
+            "android_volume", "android_brightness",
+            "android_tap", "android_type_text", "android_swipe",
+            "android_press_back", "android_press_home",
+            "android_read_screen",
+            "android_status",
+            "android_file_list", "android_file_read", "android_file_write",
+            "android_file_delete", "android_file_move", "android_file_info",
+            "android_request_all_files_access",
+            "android_clipboard_get", "android_clipboard_set",
+            "android_torch", "android_battery", "android_network",
+            "android_camera_photo", "android_screenshot",
+            "android_calendar_list_calendars", "android_calendar_list_events",
+            "android_calendar_create_event", "android_calendar_update_event",
+            "android_calendar_delete_event", "android_calendar_check_permissions",
+            "phone_create_pdf", "phone_create_docx",
+            "phone_create_xlsx", "phone_markdown_to_pdf",
+            "phone_create_csv", "phone_create_json", "phone_create_zip",
+            # phone_create_pptx убран — LLM упорно выбирал его вместо beautiful.
+            # Теперь единственный путь сделать презентацию — phone_create_beautiful_pptx.
+            "phone_create_beautiful_pptx", "phone_create_beautiful_pdf",
+            "phone_create_infographic",
+            "image_pollinations_url", "phone_create_image",
+            "skill_weather", "skill_wikipedia", "skill_translate",
+            "skill_currency_rate", "skill_crypto_price", "skill_hackernews",
+            "skill_qr_code", "skill_calculator", "skill_unit_convert",
+            "skill_world_time", "skill_url_shorten", "skill_random_value",
+            "skill_date_math", "skill_youtube_search", "skill_joke", "skill_fact",
+            "obsidian_note",
+            "journal_today", "reminder",
+            "push_to_user",
+            "location",
+            "speaker_id",
+            "bg_task",
+            "notes",
+            "finance",
+        ],
+        "includes": []
+    },
+
     "kanban": {
         "description": (
             "Kanban multi-agent coordination — only active when the agent "
@@ -307,6 +418,79 @@ TOOLSETS = {
         "includes": []
     },
 
+    "obsidian": {
+        "description": "Obsidian vault — read, write, search, quick-capture notes in d:\\troikahermes-vault (also linked to Claude memory).",
+        "tools": ["obsidian_note"],
+        "includes": []
+    },
+
+    "journal": {
+        "description": "Журнал того что Миша говорил Тройке за день/неделю/месяц (читает state.db).",
+        "tools": ["journal_today"],
+        "includes": []
+    },
+
+    "reminder": {
+        "description": "Голосовые напоминания через one-shot cron — push на телефон в указанное время.",
+        "tools": ["reminder"],
+        "includes": []
+    },
+
+    "push": {
+        "description": "Server-initiated push: Тройка сама говорит с Мишей через notification + TTS на телефон.",
+        "tools": ["push_to_user"],
+        "includes": []
+    },
+
+    "location": {
+        "description": (
+            "Контекст «где я»: маппинг fingerprint'а телефона (Wi-Fi BSSID, "
+            "Bluetooth-устройства, тип сети) → именованное место (дом/работа/машина). "
+            "Тройка подстраивает длину и стиль ответов под место."
+        ),
+        "tools": ["location"],
+        "includes": []
+    },
+
+    "speaker_id": {
+        "description": (
+            "Voice fingerprint через Resemblyzer — отличить Мишу от других "
+            "голосов. enroll/verify/list/forget. Требует resemblyzer + soundfile."
+        ),
+        "tools": ["speaker_id"],
+        "includes": []
+    },
+
+    "bg_task": {
+        "description": (
+            "Фоновые задачи через Kanban: 'запусти research, через час расскажешь'. "
+            "Тонкая обёртка над kanban_create — добавляет инструкцию пушнуть "
+            "результат через push_to_user когда worker закончит."
+        ),
+        "tools": ["bg_task"],
+        "includes": []
+    },
+
+    "notes": {
+        "description": (
+            "RAG-поиск по Obsidian vault (d:\\troikahermes-vault). BGE-M3 "
+            "embeddings + sqlite. operations: index/search/stats. Требует "
+            "sentence-transformers (~600MB модель скачается при первом index)."
+        ),
+        "tools": ["notes"],
+        "includes": []
+    },
+
+    "finance": {
+        "description": (
+            "Голосовой учёт расходов/доходов. sqlite в ~/.troika/finance.db. "
+            "operations: add/list/summary/delete. Без API банков — только то "
+            "что Миша надиктовал."
+        ),
+        "tools": ["finance"],
+        "includes": []
+    },
+
     "spotify": {
         "description": "Native Spotify playback, search, playlist, album, and library tools",
         "tools": [
@@ -358,41 +542,97 @@ TOOLSETS = {
     },
 
     "hermes-api-server": {
-        "description": "OpenAI-compatible API server — full agent tools accessible via HTTP (no interactive UI tools like clarify or send_message)",
+        # 29 мая 2026: УРЕЗАН до набора troika-voice ради низкой латентности
+        # голосовой Тройки. Был ~110 tools (~30k system prompt → 7-14s LLM),
+        # стал 40 tools (~6k → 2-4s). Редкие tools доступны через find_tool.
+        # Если когда-то понадобится полный набор для какого-то API-клиента —
+        # сделать отдельный composite-toolset и поменять PLATFORMS.api_server.
+        "description": "OpenAI-compatible API server — slim voice toolset. Rare tools accessible via find_tool router.",
         "tools": [
-            # Web
-            "web_search", "web_extract",
-            # Terminal + process management
-            "terminal", "process",
-            # File manipulation
-            "read_file", "write_file", "patch", "search_files",
-            # Vision + image generation
-            "vision_analyze", "image_generate",
-            # Skills
-            "skills_list", "skill_view", "skill_manage",
-            # Browser automation
-            "browser_navigate", "browser_snapshot", "browser_click",
-            "browser_type", "browser_scroll", "browser_back",
-            "browser_press", "browser_get_images",
-            "browser_vision", "browser_console", "browser_cdp", "browser_dialog",
-            # Planning & memory
-            "todo", "memory",
-            # Session history search
-            "session_search",
-            # Code execution + delegation
-            "execute_code", "delegate_task",
-            # Cronjob management
-            "cronjob",
-            # Home Assistant smart home control (gated on HASS_TOKEN via check_fn)
-            "ha_list_entities", "ha_get_state", "ha_list_services", "ha_call_service",
-
+            # Meta-router: даёт доступ ко всем 100+ остальным tools
+            "find_tool",
+            # Phone control
+            "android_open_app", "android_call", "android_send_sms",
+            "android_set_alarm", "android_set_timer", "android_navigate",
+            "android_volume", "android_brightness", "android_torch",
+            "android_battery", "android_network", "android_status",
+            "android_camera_photo", "android_screenshot",
+            "android_clipboard_get", "android_clipboard_set",
+            # Календарь
+            "android_calendar_list_events", "android_calendar_create_event",
+            "android_calendar_update_event", "android_calendar_delete_event",
+            # Документы (только beautiful — обычные через find_tool)
+            "phone_create_beautiful_pptx", "phone_create_beautiful_pdf",
+            "phone_create_image", "phone_create_video",
+            # Тройкин голос
+            "push_to_user", "journal_today", "reminder",
+            "location", "speaker_id", "bg_task", "finance",
+            # Память / RAG
+            "obsidian_note", "notes",
+            # Самые частые skill_*
+            "skill_weather", "skill_translate", "skill_calculator",
+            "skill_world_time", "skill_currency_rate",
+            # Web / vision / делегирование
+            "web_search", "vision_analyze", "delegate_task",
+            # Кодинг через Gemini CLI (sub-agent)
+            "gemini_code",
+            # Статус фоновых задач
+            "task_status",
+            # Управление проектами
+            "project",
         ],
         "includes": []
     },
-    
+
     "hermes-cli": {
         "description": "Full interactive CLI toolset - all default tools plus cronjob management",
         "tools": _HERMES_CORE_TOOLS,
+        "includes": []
+    },
+
+    "troika-cli": {
+        # Алиас "troika-cli" — используется в ~/.troika/config.yaml как имя toolset
+        # для phone-assistant Тройки. Полный набор включая mixture_of_agents
+        # и delegate_task — чтобы голосовой помощник умел делегировать сложные
+        # задачи sub-agent'ам и привлекать несколько моделей параллельно.
+        "description": "Troika voice assistant toolset - full hermes-api-server tools",
+        "tools": [],
+        "includes": ["hermes-api-server", "moa"]
+    },
+
+    "troika-voice": {
+        # Голосовой набор Тройки — hot path для низкой латентности.
+        # ~25 самых частых tools + find_tool. Документы/презентации/перевод
+        # оставлены в hot path: они частые на голосе и Gemini Lite плохо
+        # справляется с двухшаговым find_tool routing для них.
+        # Spotify/computer_use/mcp_*/exotic skill_* — через find_tool.
+        # Цель: system prompt 36k → ~15-18k токенов, latency 30s → 10-13s.
+        "description": "Troika voice — hot-path 25 tools + find_tool router. Rare tools (Spotify, computer_use, mcp, exotic skills) accessible via find_tool.",
+        "tools": [
+            # Meta-router: путь ко всем остальным 100+ tools
+            "find_tool",
+            # Phone control — самое ходовое
+            "android_open_app", "android_call",
+            "android_set_alarm", "android_set_timer", "android_navigate",
+            "android_volume", "android_screenshot",
+            "android_camera_photo",
+            # Календарь — частый
+            "android_calendar_list_events", "android_calendar_create_event",
+            # Документы (beautiful — частый запрос на голосе)
+            "phone_create_beautiful_pptx", "phone_create_beautiful_pdf",
+            "phone_create_image", "phone_create_video",
+            # Тройкин голос — все часто-вызываемые
+            "push_to_user", "journal_today", "reminder",
+            "location", "speaker_id", "bg_task", "finance",
+            # Память / RAG
+            "obsidian_note", "notes",
+            # Fuzzy-поиск по vault + дневник (для «вспомни», «запиши момент»)
+            "memory_search", "diary_add", "diary_read",
+            # Самые частые skill_*
+            "skill_weather", "skill_translate", "skill_calculator",
+            # Сложные но частые
+            "web_search", "vision_analyze",
+        ],
         "includes": []
     },
 

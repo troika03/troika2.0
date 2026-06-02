@@ -1297,6 +1297,30 @@ def _truncate_content(content: str, filename: str, max_chars: int = CONTEXT_FILE
     return head + marker + tail
 
 
+def _time_of_day_hint() -> str:
+    """Возвращает короткую подсказку для LLM о текущем времени суток.
+    Используется чтобы Тройка адаптировала тон и приоритеты под утро/день/вечер/ночь.
+    """
+    from datetime import datetime
+    now = datetime.now()
+    hour = now.hour
+    if 5 <= hour < 11:
+        part = "утро"
+        hint = "Утро. Тон бодрый, ненавязчивый. Приоритеты: календарь на день, важные сообщения, прогноз. Не вали кучей дел сразу — Миша только проснулся."
+    elif 11 <= hour < 17:
+        part = "день"
+        hint = "День — рабочее время. Тон деловой, конкретный. Можно говорить про задачи, кодинг, продуктивность."
+    elif 17 <= hour < 22:
+        part = "вечер"
+        hint = "Вечер. Тон мягче. Меньше технических вещей, больше «как день прошёл», личного, развлечения. Не предлагай новых сложных задач без явного запроса."
+    else:
+        part = "ночь"
+        hint = "Ночь. Тон тихий, спокойный. Миша скорее всего устал или не должен сейчас работать. Ничего не предлагай по собственной инициативе кроме тишины."
+    weekday = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"][now.weekday()]
+    weekend = " Выходной — никаких рабочих задач сами не начинаем." if now.weekday() >= 5 else ""
+    return f"\n\n[Текущее время: {now.strftime('%H:%M')} ({part}, {weekday}).{weekend} {hint}]\n"
+
+
 def load_soul_md() -> Optional[str]:
     """Load SOUL.md from HERMES_HOME and return its content, or None.
 
@@ -1319,6 +1343,10 @@ def load_soul_md() -> Optional[str]:
             return None
         content = _scan_context_content(content, "SOUL.md")
         content = _truncate_content(content, "SOUL.md")
+        try:
+            content = content + _time_of_day_hint()
+        except Exception as e:
+            logger.debug("Could not append time-of-day hint: %s", e)
         return content
     except Exception as e:
         logger.debug("Could not read SOUL.md from %s: %s", soul_path, e)

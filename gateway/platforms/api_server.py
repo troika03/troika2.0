@@ -521,6 +521,50 @@ def _openai_error(message: str, err_type: str = "invalid_request_error", param: 
     }
 
 
+_TTS_MD_STRIP = re.compile(r"(\*\*|__|`+|^#{1,6}\s+)", re.MULTILINE)
+_TTS_MULTISPACE = re.compile(r"[ \t]{2,}")
+_TTS_ELLIPSIS = re.compile(r"\.{3,}")
+_TTS_DASH_SPACES = re.compile(r"\s*[—–-]\s+")
+_TTS_COMMA_BEFORE_CONJ = re.compile(r",\s+(но|однако|зато|а)\b", re.IGNORECASE)
+_TTS_PARENS = re.compile(r"\s*\(([^)]{1,80})\)\s*")
+_TTS_URL = re.compile(r"https?://\S+")
+_TTS_CODE_BLOCK = re.compile(r"```[\s\S]*?```")
+_TTS_INLINE_CODE = re.compile(r"`([^`]+)`")
+_TTS_BULLET = re.compile(r"^\s*[-*+]\s+", re.MULTILINE)
+_TTS_NUM_LIST = re.compile(r"^\s*\d+[.)]\s+", re.MULTILINE)
+_TTS_LONG_SENTENCE_COMMA = re.compile(r"([а-яё]{4,}),\s+(что|чтобы|который|которая|которое|которые|если|потому)\b", re.IGNORECASE)
+
+
+def _naturalize_tts_text(text: str) -> str:
+    """Нормализовать текст перед Edge TTS для более живой просодии.
+
+    Edge экранирует <>, поэтому SSML недоступен — управляем интонацией
+    через пунктуацию: длинные паузы на точках, мягкие — на тире, очистка
+    markdown-артефактов, единообразие троеточий.
+    """
+    if not text:
+        return text
+    # Код-блоки и inline-код проговаривать бессмысленно — выкидываем
+    t = _TTS_CODE_BLOCK.sub(" … ", text)
+    t = _TTS_INLINE_CODE.sub(r"\1", t)
+    # URL → «ссылка» (произнесение URL по буквам всё ломает)
+    t = _TTS_URL.sub("ссылка", t)
+    # Markdown-артефакты
+    t = _TTS_MD_STRIP.sub("", t)
+    t = _TTS_BULLET.sub("", t)
+    t = _TTS_NUM_LIST.sub("", t)
+    # Скобки → запятые (Edge произносит круглые скобки буквально иногда)
+    t = _TTS_PARENS.sub(r", \1, ", t)
+    t = _TTS_ELLIPSIS.sub("…", t)
+    t = _TTS_DASH_SPACES.sub(" — ", t)
+    # Запятая перед «но/а/однако» → точка: длиннее пауза, разговорнее звучит
+    t = _TTS_COMMA_BEFORE_CONJ.sub(r". \1", t)
+    # Внутри длинных фраз перед «что/чтобы/который/если» — тире для микропаузы
+    t = _TTS_LONG_SENTENCE_COMMA.sub(r"\1 — \2", t)
+    t = _TTS_MULTISPACE.sub(" ", t)
+    return t.strip()
+
+
 if AIOHTTP_AVAILABLE:
     @web.middleware
     async def body_limit_middleware(request, handler):
@@ -1104,6 +1148,237 @@ class APIServerAdapter(BasePlatformAdapter):
             },
         })
 
+    async def _handle_phone_ws(self, request: "web.Request") -> "web.Response":
+        """GET /v1/phone/commands — WebSocket-канал для Android-телефона."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        from gateway.platforms.phone_bridge import bridge
+        logger.info("Phone WS handshake from %s, bridge id=%s", request.remote, id(bridge))
+        return await bridge.handle_connection(request)
+
+    async def _handle_phone_status(self, request: "web.Request") -> "web.Response":
+        """GET /v1/phone/status — диагностика (то же что bridge.is_connected())."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        from gateway.platforms.phone_bridge import bridge
+        return web.json_response({"connected": bridge.is_connected(), "bridge_id": id(bridge)})
+
+    async def _handle_list_sessions(self, request: "web.Request") -> "web.Response":
+        """GET /v1/sessions — список сессий для UI истории.
+
+        Query params:
+          - source (optional): фильтр по платформе (api_server, phone, и т.д.)
+          - limit (default 50, max 200)
+          - offset (default 0)
+        """
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+
+        db = self._ensure_session_db()
+        if db is None:
+            return web.json_response({"error": "session_db_unavailable"}, status=503)
+
+        try:
+            limit = min(int(request.query.get("limit", "50")), 200)
+            offset = max(int(request.query.get("offset", "0")), 0)
+        except ValueError:
+            return web.json_response({"error": "bad_limit_or_offset"}, status=400)
+
+        source = request.query.get("source") or None
+        try:
+            sessions = db.list_sessions_rich(
+                source=source,
+                limit=limit,
+                offset=offset,
+                order_by_last_active=True,
+            )
+        except Exception as e:
+            logger.error("list_sessions failed: %s", e, exc_info=True)
+            return web.json_response({"error": f"list_failed: {e}"}, status=500)
+
+        items: List[Dict[str, Any]] = []
+        for s in sessions or []:
+            items.append({
+                "id": s.get("id"),
+                "source": s.get("source"),
+                "title": s.get("title"),
+                "preview": s.get("preview"),
+                "message_count": s.get("message_count"),
+                "started_at": s.get("started_at"),
+                "last_active": s.get("last_active"),
+            })
+        return web.json_response({"sessions": items, "count": len(items)})
+
+    async def _handle_get_session_messages(self, request: "web.Request") -> "web.Response":
+        """GET /v1/sessions/{session_id}/messages — транскрипт одной сессии."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+
+        session_id = request.match_info.get("session_id", "").strip()
+        if not session_id or re.search(r"[\r\n\x00]", session_id):
+            return web.json_response({"error": "bad_session_id"}, status=400)
+
+        db = self._ensure_session_db()
+        if db is None:
+            return web.json_response({"error": "session_db_unavailable"}, status=503)
+
+        try:
+            rows = db.get_messages(session_id)
+        except Exception as e:
+            logger.error("get_messages failed for %s: %s", session_id, e, exc_info=True)
+            return web.json_response({"error": f"load_failed: {e}"}, status=500)
+
+        items: List[Dict[str, Any]] = []
+        for row in rows or []:
+            role = row.get("role")
+            if role not in ("user", "assistant"):
+                continue
+            content = row.get("content")
+            if isinstance(content, list):
+                # Multimodal — выжимаем только текст для UI истории
+                parts = [p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"]
+                content = "\n".join(p for p in parts if p)
+            if not isinstance(content, str) or not content.strip():
+                continue
+            items.append({
+                "role": role,
+                "content": content,
+                "timestamp": row.get("timestamp"),
+            })
+        return web.json_response({
+            "session_id": session_id,
+            "messages": items,
+            "count": len(items),
+        })
+
+    async def _handle_phone_notify(self, request: "web.Request") -> "web.Response":
+        """POST /v1/phone/notify — сервер шлёт push-уведомление на телефон.
+
+        Body: {"text": "...", "speak": true, "title": "Тройка"}
+        - speak=true → телефон озвучит через EdgeTTS
+        - speak=false → только notification в шторке
+        """
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response({"error": "invalid_json"}, status=400)
+
+        text = (body.get("text") or "").strip()
+        if not text:
+            return web.json_response({"error": "missing 'text'"}, status=400)
+        if len(text) > 2000:
+            text = text[:2000]
+
+        from gateway.platforms.phone_bridge import bridge
+        if not bridge.is_connected():
+            return web.json_response({"ok": False, "error": "phone_not_connected"}, status=503)
+
+        result = await bridge.send_command(
+            "notify_user",
+            {
+                "text": text,
+                "speak": bool(body.get("speak", True)),
+                "title": (body.get("title") or "Тройка").strip()[:80],
+            },
+            timeout=10.0,
+        )
+        return web.json_response({"ok": bool(result.get("ok", True)), "result": result})
+
+    async def _handle_audio_speech(self, request: "web.Request") -> "web.Response":
+        """POST /v1/audio/speech — Edge TTS (OpenAI-compatible body, MP3 response).
+
+        Body: {"input": "текст", "voice": "ru-RU-SvetlanaNeural", "speed": 1.0}
+        Default voice: ru-RU-SvetlanaNeural (мягкий женский, нейросетевой).
+        """
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response({"error": "invalid_json"}, status=400)
+
+        text = (body.get("input") or "").strip()
+        if not text:
+            return web.json_response({"error": "missing 'input'"}, status=400)
+        if len(text) > 5000:
+            text = text[:5000]
+        # Для русского у Edge только два голоса: Svetlana (жен) и Dmitry (муж).
+        # Светлана + pitch+8Hz/rate+4% звучит заметно живее «дикторского» базы.
+        voice = body.get("voice") or "ru-RU-SvetlanaNeural"
+
+        # Параметры голоса (SSML формат Edge TTS):
+        # rate: -50%..+200% (скорость)
+        # pitch: -50Hz..+50Hz (тон, для "женственности" поднять)
+        # volume: -100%..+100%
+        def _fmt_rate(v):
+            try:
+                pct = int(round((float(v) - 1.0) * 100))
+                return f"{pct:+d}%"
+            except (TypeError, ValueError):
+                return "+0%"
+
+        def _fmt_pitch(v):
+            try:
+                hz = int(round(float(v)))
+                return f"{hz:+d}Hz"
+            except (TypeError, ValueError):
+                return "+0Hz"
+
+        def _fmt_volume(v):
+            try:
+                pct = int(round(float(v)))
+                return f"{pct:+d}%"
+            except (TypeError, ValueError):
+                return "+0%"
+
+        # speed (legacy 1.0=normal) или rate (новый, прямой множитель)
+        # Дефолт rate=1.04 (+4%) — чуть быстрее, меньше «диктора», звучит разговорнее.
+        rate = _fmt_rate(body.get("speed") if body.get("speed") is not None else body.get("rate", 1.04))
+        # pitch=+8Hz по умолчанию для Dariya — добавляет лёгкости и теплоты.
+        # Edge экранирует <>, inline SSML не работает: тюнинг идёт через
+        # параметры Communicate + предварительную нормализацию текста.
+        pitch = _fmt_pitch(body.get("pitch", 8))
+        volume = _fmt_volume(body.get("volume", 0))
+
+        import re as _re_tts
+        original_text = text
+        naturalized = _naturalize_tts_text(text)
+        # Edge TTS бросает NoAudioReceived, если в тексте нет произносимых
+        # символов (например, ответ был одним код-блоком → стал «…»).
+        # В таком случае откатываемся к оригиналу, а если и он «немой» —
+        # подставляем безопасную заглушку, чтобы не падать 500-кой.
+        if not _re_tts.search(r"\w", naturalized):
+            naturalized = original_text if _re_tts.search(r"\w", original_text) else "Готово."
+        text = naturalized
+
+        try:
+            import tempfile, os as _os
+            tmp_fd, tmp_path = tempfile.mkstemp(suffix=".mp3", prefix="hermes_tts_")
+            _os.close(tmp_fd)
+            try:
+                import edge_tts
+                communicate = edge_tts.Communicate(
+                    text, voice=voice, rate=rate, pitch=pitch, volume=volume
+                )
+                await communicate.save(tmp_path)
+                with open(tmp_path, "rb") as f:
+                    audio = f.read()
+            finally:
+                try: _os.unlink(tmp_path)
+                except Exception: pass
+            return web.Response(body=audio, content_type="audio/mpeg")
+        except Exception as e:
+            logger.error("Edge TTS error: %s (text=%r)", e, text[:120])
+            return web.json_response({"error": f"tts_failed: {e}"}, status=500)
+
     async def _handle_chat_completions(self, request: "web.Request") -> "web.Response":
         """POST /v1/chat/completions — OpenAI Chat Completions format."""
         auth_err = self._check_auth(request)
@@ -1169,6 +1444,41 @@ class APIServerAdapter(BasePlatformAdapter):
         if key_err is not None:
             return key_err
 
+        # X-Hermes-Device-Context: JSON {bssid, ssid, network_type,
+        # bluetooth: [...], device_name}. Кладём в кэш location_tool по
+        # session_key и подмешиваем подсказку про место (дом/работа/машина)
+        # в system prompt.
+        raw_ctx = request.headers.get("X-Hermes-Device-Context", "").strip()
+        if raw_ctx:
+            try:
+                if re.search(r"[\r\n\x00]", raw_ctx):
+                    raise ValueError("control chars in header")
+                if len(raw_ctx) > 4096:
+                    raise ValueError("header too long")
+                parsed_ctx = json.loads(raw_ctx)
+                if isinstance(parsed_ctx, dict):
+                    from tools.location_tool import (
+                        remember_device_context,
+                        system_prompt_amendment as _loc_amend,
+                    )
+                    sk = gateway_session_key or "phone-misha"
+                    remember_device_context(sk, parsed_ctx)
+                    amendment = _loc_amend(sk)
+                    if amendment:
+                        system_prompt = (system_prompt or "") + amendment
+            except Exception as e:
+                logger.debug("device_context header ignored: %s", e)
+
+        # Active project context: добавляем краткую сводку об активном проекте
+        # в system prompt, чтобы LLM на каждом turn знала «сейчас работаем над X».
+        try:
+            from tools.project_tool import get_active_project_summary as _active_proj
+            _proj_summary = _active_proj()
+            if _proj_summary:
+                system_prompt = (system_prompt or "") + "\n\n" + _proj_summary
+        except Exception as _e:
+            logger.debug("active_project injection skipped: %s", _e)
+
         # Allow caller to continue an existing session by passing X-Hermes-Session-Id.
         # When provided, history is loaded from state.db instead of from the request body.
         #
@@ -1202,6 +1512,29 @@ class APIServerAdapter(BasePlatformAdapter):
                 db = self._ensure_session_db()
                 if db is not None:
                     history = db.get_messages_as_conversation(session_id)
+                    # Troika voice: ограничиваем историю до последних N сообщений
+                    # чтобы голосовая Тройка не тащила месяцы диалога в каждый
+                    # запрос. Lim читается из env TROIKA_HISTORY_LIMIT (default 20).
+                    # Sliced с конца — самые свежие реплики. 0 или отрицательное
+                    # отключает лимит.
+                    try:
+                        _hlim = int(os.environ.get("TROIKA_HISTORY_LIMIT", "20"))
+                    except (TypeError, ValueError):
+                        _hlim = 20
+                    if _hlim > 0 and len(history) > _hlim:
+                        # Стрипаем висящие tool-сообщения в начале — у LLM это
+                        # ломает контекст (tool_call_id без предыдущего
+                        # assistant с tool_calls). Берём более широкий хвост и
+                        # двигаемся вперёд пока не найдём user/system.
+                        cut = max(0, len(history) - _hlim)
+                        while cut < len(history) and history[cut].get("role") in {"tool", "assistant"}:
+                            cut += 1
+                        if cut < len(history):
+                            history = history[cut:]
+                            logger.info(
+                                "Troika voice: trimmed history for %s to %d msgs (limit=%d)",
+                                session_id, len(history), _hlim,
+                            )
             except Exception as e:
                 logger.warning("Failed to load session history for %s: %s", session_id, e)
                 history = []
@@ -3493,6 +3826,12 @@ class APIServerAdapter(BasePlatformAdapter):
             self._app.router.add_get("/v1/models", self._handle_models)
             self._app.router.add_get("/v1/capabilities", self._handle_capabilities)
             self._app.router.add_post("/v1/chat/completions", self._handle_chat_completions)
+            self._app.router.add_get("/v1/phone/commands", self._handle_phone_ws)
+            self._app.router.add_get("/v1/phone/status", self._handle_phone_status)
+            self._app.router.add_post("/v1/phone/notify", self._handle_phone_notify)
+            self._app.router.add_get("/v1/sessions", self._handle_list_sessions)
+            self._app.router.add_get("/v1/sessions/{session_id}/messages", self._handle_get_session_messages)
+            self._app.router.add_post("/v1/audio/speech", self._handle_audio_speech)
             self._app.router.add_post("/v1/responses", self._handle_responses)
             self._app.router.add_get("/v1/responses/{response_id}", self._handle_get_response)
             self._app.router.add_delete("/v1/responses/{response_id}", self._handle_delete_response)
@@ -3519,6 +3858,16 @@ class APIServerAdapter(BasePlatformAdapter):
                 pass
             if hasattr(sweep_task, "add_done_callback"):
                 sweep_task.add_done_callback(self._background_tasks.discard)
+
+            # Орфаны от прошлой жизни gateway: job_runner running-задачи без worker'а.
+            try:
+                from tools.job_runner import cleanup_orphan_jobs, ensure_watchdog_started
+                n_orph = cleanup_orphan_jobs()
+                if n_orph:
+                    logger.info("[%s] cleaned up %d orphan jobs", self.name, n_orph)
+                ensure_watchdog_started()
+            except Exception as _e:
+                logger.warning("[%s] job_runner init failed: %s", self.name, _e)
 
             # Refuse to start network-accessible without authentication
             if is_network_accessible(self._host) and not self._api_key:

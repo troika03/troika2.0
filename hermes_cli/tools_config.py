@@ -73,11 +73,23 @@ CONFIGURABLE_TOOLSETS = [
     ("cronjob",         "⏰ Cron Jobs",                 "create/list/update/pause/resume/run, with optional attached skills"),
     ("messaging",       "📨 Cross-Platform Messaging",  "send_message"),
     ("homeassistant",    "🏠 Home Assistant",           "smart home device control"),
+    ("android",          "📱 Android Phone Control",    "open apps, call, SMS, alarm, navigation, tap/type/scroll via accessibility"),
     ("spotify",          "🎵 Spotify",                  "playback, search, playlists, library"),
     ("discord",         "💬 Discord (read/participate)", "fetch messages, search members, create thread"),
     ("discord_admin",   "🛡️  Discord Server Admin",    "list channels/roles, pin, assign roles"),
     ("yuanbao",          "🤖 Yuanbao",                  "group info, member queries, DM"),
     ("computer_use",     "🖱️  Computer Use (macOS)",     "background desktop control via cua-driver"),
+    ("obsidian",         "🟪 Obsidian Vault",            "read/write/search notes in d:\\troikahermes-vault"),
+    ("journal",          "📓 Voice Journal",             "что Миша говорил Тройке сегодня/вчера/на неделе"),
+    ("reminder",         "⏰ Voice Reminders",            "напомни через час позвонить — one-shot cron на phone"),
+    ("push",             "📣 Voice Push",                 "Тройка инициирует разговор — notification+TTS на phone"),
+    ("location",         "📍 Location Context",           "дом/работа/машина по Wi-Fi BSSID + Bluetooth fingerprint"),
+    ("speaker_id",       "🎙 Speaker ID",                  "Resemblyzer voice fingerprint — Миша vs. не-Миша"),
+    ("bg_task",          "⏳ Background Tasks",            "kanban-обёртка: запусти research, через час расскажешь"),
+    ("notes",            "📚 Notes RAG",                   "семантический поиск по Obsidian vault (BGE-M3 embeddings)"),
+    ("finance",          "💰 Finance Log",                 "учёт расходов/доходов голосом, sqlite, без API банков"),
+    ("find_tool",        "🔍 Find Tool",                   "мета-router: найти редкий инструмент по описанию задачи"),
+    ("gemini_code",      "🧠 Gemini CLI Coder",            "делегирует кодинг Gemini CLI: сайт/скрипт/приложение → ZIP на телефон"),
 ]
 
 # Toolsets that are OFF by default for new installs.
@@ -1139,6 +1151,25 @@ def _get_platform_tools(
     configurable_keys = {ts_key for ts_key, _, _ in CONFIGURABLE_TOOLSETS}
     plugin_ts_keys = _get_plugin_toolset_keys()
     platform_default_keys = {p["default_toolset"] for p in PLATFORMS.values()}
+
+    # Troika voice patch: если в platform_toolsets явно прописан composite
+    # (например ['hermes-api-server'] или ['troika-voice']), вернуть его
+    # напрямую без subset-decomposition. AIAgent сам резолвит composite
+    # через resolve_toolset(). Без этого composite разваливается на
+    # configurable_keys и теряет tools которые принадлежат composite-only
+    # toolset'ам (skill_*, browser_*, файлы и т.п.).
+    # Принимаем любой явно перечисленный composite-toolset, который есть в
+    # TOOLSETS но не configurable и не plugin (e.g. 'hermes-api-server',
+    # 'troika-voice', 'hermes-cli'). Это позволяет передать его как есть в
+    # AIAgent, который его сам разрешит через resolve_toolset.
+    composite_explicit = [
+        ts for ts in toolset_names
+        if ts in TOOLSETS
+        and ts not in configurable_keys
+        and ts not in plugin_ts_keys
+    ]
+    if composite_explicit:
+        return set(composite_explicit)
 
     # If the saved list contains any configurable keys directly, the user
     # has explicitly configured this platform — use direct membership.

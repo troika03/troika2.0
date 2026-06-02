@@ -253,6 +253,29 @@ _MCP_MESSAGE_HANDLER_SUPPORTED = _check_message_handler_support()
 if _MCP_AVAILABLE and not _MCP_MESSAGE_HANDLER_SUPPORTED:
     logger.debug("MCP SDK does not support message_handler -- dynamic tool discovery disabled")
 
+
+def _check_sampling_capabilities_support() -> bool:
+    """Check if ClientSession accepts ``sampling_capabilities`` kwarg.
+
+    Newer SDKs (>=1.23) dropped this kwarg — the capability is now declared
+    via the ``Implementation`` ``client_info`` object instead. Older builds
+    still expect it. Probe the signature so we can pass it conditionally.
+    """
+    if not _MCP_AVAILABLE:
+        return False
+    try:
+        return "sampling_capabilities" in inspect.signature(ClientSession).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+_MCP_SAMPLING_CAPABILITIES_SUPPORTED = _check_sampling_capabilities_support()
+if _MCP_AVAILABLE and not _MCP_SAMPLING_CAPABILITIES_SUPPORTED:
+    logger.debug(
+        "MCP SDK does not accept sampling_capabilities kwarg -- "
+        "passing sampling_callback only (no tool-use sampling advertisement)"
+    )
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -868,12 +891,17 @@ class SamplingHandler:
 
     def session_kwargs(self) -> dict:
         """Return kwargs to pass to ClientSession for sampling support."""
-        return {
-            "sampling_callback": self,
-            "sampling_capabilities": SamplingCapability(
+        kwargs: dict = {"sampling_callback": self}
+        # Older SDKs accepted an explicit capabilities kwarg; newer ones
+        # (mcp >= 1.23) dropped it in favour of declaring caps via
+        # ``client_info``. Only pass it when supported, otherwise the
+        # session constructor raises ``unexpected keyword argument`` and
+        # the whole server fails to connect.
+        if _MCP_SAMPLING_CAPABILITIES_SUPPORTED:
+            kwargs["sampling_capabilities"] = SamplingCapability(
                 tools=SamplingToolsCapability(),
-            ),
-        }
+            )
+        return kwargs
 
     # -- Main callback -------------------------------------------------------
 
