@@ -600,18 +600,37 @@ def _count_tasks(tasks_md: Path):
 
 
 async def _notify_progress(session_id: Optional[str], text: str, task_id: str = "") -> None:
-    """Промежуточный голосовой отчёт автопилота (как heartbeat — не дублируется в историю)."""
+    """Промежуточный голосовой отчёт автопилота (как heartbeat — не дублируется в историю).
+
+    КРИТИЧНО: уведомление НЕОБЯЗАТЕЛЬНО и НЕ должно блокировать сборку. У phone_bridge
+    .send_command нет таймаута на сам ws.send_json — если телефон «connected», но сокет
+    мёртв, send_json виснет навсегда и вешает весь автопилот ещё до запуска gemini.
+    Поэтому жёстко ограничиваем всю отправку через wait_for.
+    """
+    import asyncio as _aio
+
+    async def _send() -> None:
+        try:
+            from gateway.platforms.phone_bridge import bridge
+            if bridge.is_connected():
+                await _aio.wait_for(
+                    bridge.send_command("notify_voice", {
+                        "text": text[:200],
+                        "task_id": task_id,
+                        "kind": "project_autopilot",
+                        "is_heartbeat": True,
+                    }, timeout=5),
+                    timeout=8,
+                )
+        except Exception as e:
+            logger.debug("autopilot notify failed/skip: %s", e)
+
+    # Fire-and-forget: уведомление НИКОГДА не должно блокировать проход автопилота.
+    # Планируем отправку фоном и сразу выходим — даже если bridge висит, сборка идёт.
     try:
-        from gateway.platforms.phone_bridge import bridge
-        if bridge.is_connected():
-            await bridge.send_command("notify_voice", {
-                "text": text[:200],
-                "task_id": task_id,
-                "kind": "project_autopilot",
-                "is_heartbeat": True,
-            }, timeout=5)
-    except Exception as e:
-        logger.debug("autopilot notify failed: %s", e)
+        _aio.get_running_loop().create_task(_send())
+    except Exception:
+        pass
 
 
 def _build_context_file(project_path: Path, product_dir: Path, meta: Dict[str, Any]) -> None:

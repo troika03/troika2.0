@@ -52,7 +52,10 @@ class PhoneBridge:
         payload = {"id": request_id, "action": action, "params": params or {}}
         try:
             assert self._ws is not None
-            await self._ws.send_json(payload)
+            # ВАЖНО: ограничиваем сам ws.send_json таймаутом. Если телефон числится
+            # connected, но сокет мёртв (ушёл без close), send_json виснет навсегда
+            # и вешает вызывающую корутину (напр. автопилот). Не даём ей висеть.
+            await asyncio.wait_for(self._ws.send_json(payload), timeout=min(5.0, timeout))
         except Exception as e:
             self._pending.pop(request_id, None)
             return {"ok": False, "error": f"send_failed: {e}"}
