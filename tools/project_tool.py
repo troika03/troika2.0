@@ -697,15 +697,9 @@ async def _static_check(product_dir: Path, timeout: int = 240) -> Dict[str, Any]
         proc = await _aio.create_subprocess_exec(
             *cmd, cwd=str(product_dir), stdout=f, stderr=f,
         )
-        try:
-            rc = await _aio.wait_for(proc.wait(), timeout=timeout)
-        except _aio.TimeoutError:
-            try:
-                import subprocess as _sp
-                _sp.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
-                        capture_output=True, timeout=10)
-            except Exception:
-                pass
+        from tools.gemini_code_tool import _wait_proc_or_kill
+        rc = await _wait_proc_or_kill(proc, timeout)
+        if rc is None:
             return {"ran": True, "ok": True, "kind": kind, "errors": "",
                     "note": "check_timed_out"}
     finally:
@@ -888,8 +882,11 @@ async def _do_autopilot_work(payload: Dict[str, Any]) -> Dict[str, Any]:
         files_before = set(_list_files(product_dir))
         iterate = bool([p for p in product_dir.iterdir()
                         if p.is_file() and not p.name.startswith(".")])
+        # stall_timeout=180: при реальной работе gemini постоянно стримит вывод/
+        # пишет файлы (это сбрасывает счётчик простоя), так что 3 мин полной тишины
+        # = либо headless-зависание после завершения, либо обрыв сети. Не ждём 7 мин.
         res = await _run_gemini(product_dir, full_task, per_task_timeout,
-                                iterate=iterate, use_mcp=False)
+                                iterate=iterate, use_mcp=False, stall_timeout=180)
         files_after = set(_list_files(product_dir))
         made_progress = bool(files_after - files_before) or res.get("ok")
 

@@ -161,6 +161,37 @@ def _resolve_workspace(args: Dict[str, Any]) -> Optional[Path]:
     return _load_last()
 
 
+async def _wait_proc_or_kill(proc, timeout: float) -> Optional[int]:
+    """Дождаться завершения процесса БЕЗ asyncio.wait_for(proc.wait()).
+
+    На Windows ProactorEventLoop proc.wait() висит на IOCP-handle, который не
+    отменяется чисто (особенно когда дочерний node-pty форкает ConPTY-внуков с
+    дублем хэндла) — wait_for зависает на фазе отмены. Опрашиваем returncode
+    через отменяемый asyncio.sleep, а по таймауту убиваем дерево taskkill'ом.
+    Возвращает returncode или None если пришлось убивать по таймауту.
+    """
+    import time as _t
+    deadline = _t.monotonic() + timeout
+    while True:
+        if proc.returncode is not None:
+            return proc.returncode
+        if _t.monotonic() > deadline:
+            break
+        await asyncio.sleep(1)
+    try:
+        import subprocess as _sp
+        _sp.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                capture_output=True, timeout=10)
+    except Exception:
+        try: proc.kill()
+        except Exception: pass
+    for _ in range(12):
+        if proc.returncode is not None:
+            break
+        await asyncio.sleep(0.5)
+    return None
+
+
 def _list_files(workspace: Path) -> list[str]:
     out: list[str] = []
     for p in sorted(workspace.rglob("*")):
@@ -620,42 +651,48 @@ async def _run_gemini(workspace: Path, task: str, timeout: int, *,
                 except Exception:
                     pass
 
+        # ВАЖНО (Windows): НЕ оборачиваем proc.wait() в asyncio.wait_for. На
+        # ProactorEventLoop proc.wait() висит на IOCP wait_for_handle, который
+        # не отменяется чисто — при таймауте wait_for сам зависает на фазе отмены,
+        # и весь сторож перестаёт тикать (ровно это и был баг: gemini сделал
+        # задачу, но процесс не вышел headless, а watchdog не срабатывал).
+        # Решение: опрашиваем proc.returncode через отменяемый asyncio.sleep.
         deadline = _t.monotonic() + timeout
         last_activity = _t.monotonic()
         last_sig = _activity_sig()
         rc = None
         stall_hit = False
-        try:
-            while True:
-                try:
-                    rc = await asyncio.wait_for(proc.wait(), timeout=15)
-                    break  # процесс завершился сам
-                except asyncio.TimeoutError:
-                    now = _t.monotonic()
-                    sig = _activity_sig()
-                    if sig != last_sig:
-                        last_sig = sig
-                        last_activity = now
-                    idle = now - last_activity
-                    if idle > stall_timeout:
-                        stall_hit = True
-                        logger.warning("gemini stalled %ds (no log/file activity) — killing", int(idle))
-                        break
-                    if now > deadline:
-                        logger.warning("gemini hard timeout %ds — killing", timeout)
-                        break
-        except asyncio.TimeoutError:
-            pass
+        POLL = 2
+        while True:
+            if proc.returncode is not None:
+                rc = proc.returncode
+                break
+            await asyncio.sleep(POLL)
+            now = _t.monotonic()
+            sig = _activity_sig()
+            if sig != last_sig:
+                last_sig = sig
+                last_activity = now
+            idle = now - last_activity
+            if idle > stall_timeout:
+                stall_hit = True
+                logger.warning("gemini stalled %ds (no log/file activity) — killing", int(idle))
+                break
+            if now > deadline:
+                logger.warning("gemini hard timeout %ds — killing", timeout)
+                break
 
         if rc is None:
             # Не завершился сам — убиваем всё дерево (stall или hard-timeout).
             # Windows: proc.kill() убивает только cmd.exe, дочка-node живёт →
             # taskkill /T /F рекурсивно.
             _kill_tree()
-            try:
-                await asyncio.wait_for(proc.wait(), timeout=5)
-            except Exception:
-                pass
+            # После taskkill процесс мёртв — ждём пока проактор выставит returncode,
+            # но опять же без wait_for(proc.wait()) (см. выше про зависание отмены).
+            for _ in range(12):  # ~6с максимум
+                if proc.returncode is not None:
+                    break
+                await asyncio.sleep(0.5)
 
         # Закрываем лог-файлы перед чтением, чтобы дочитать весь хвост.
         try: f_out.close()
@@ -707,23 +744,14 @@ async def _deploy_vercel(workspace: Path, timeout: int = 180) -> Dict[str, Any]:
             stdout=f_out, stderr=f_err,
         )
         try:
-            await asyncio.wait_for(proc.wait(), timeout=timeout)
-        except asyncio.TimeoutError:
-            try:
-                import subprocess as _sp
-                _sp.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
-                        capture_output=True, timeout=10)
-            except Exception:
-                try: proc.kill()
-                except Exception: pass
-            try: await asyncio.wait_for(proc.wait(), timeout=5)
-            except Exception: pass
-            return {"ok": False, "error": "vercel deploy timeout"}
+            rc = await _wait_proc_or_kill(proc, timeout)
         finally:
             try: f_out.close()
             except Exception: pass
             try: f_err.close()
             except Exception: pass
+        if rc is None:
+            return {"ok": False, "error": "vercel deploy timeout"}
         out = log_out.read_text(encoding="utf-8", errors="replace") if log_out.exists() else ""
         err = log_err.read_text(encoding="utf-8", errors="replace") if log_err.exists() else ""
         # vercel печатает URL и в stdout и в stderr (info)
