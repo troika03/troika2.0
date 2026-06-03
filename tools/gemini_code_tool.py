@@ -334,6 +334,17 @@ _HEADLESS_RULES = (
     "`flutter pub get`). If a step would need a long-running command, just WRITE the "
     "code/config and move on — do NOT execute it.\n\n"
 
+    "═══ DESIGN — USE GOOGLE STITCH FIRST (if available) ═══\n"
+    "If the 'stitch' MCP server is connected, USE IT for any UI/screen design BEFORE "
+    "writing layout code:\n"
+    "  1. Call stitch to generate a design from a concrete prompt (describe the app, "
+    "screens, brand mood, platform — mobile/web). Or 'list my Stitch projects' and reuse "
+    "an existing design if the user already made one.\n"
+    "  2. Pull the design's palette, typography, spacing and component layout from stitch.\n"
+    "  3. Implement THAT design faithfully in code (Flutter/HTML/React). Stitch output is "
+    "the source of truth for visual design — do not invent a different look.\n"
+    "If 'stitch' is NOT connected, fall back to the anti-AI-slop directions below.\n\n"
+
     "═══ DESIGN — ANTI-AI-SLOP MANDATE ═══\n"
     "Most AI-generated sites look the same: purple-pink gradients, glassy cards in 3-col "
     "grid, big hero with vague headline, rocket/lightning emoji on CTAs, 'FAST SECURE "
