@@ -500,6 +500,9 @@ async def _run_gemini(workspace: Path, task: str, timeout: int, *,
     if api_key:
         env["GEMINI_API_KEY"] = api_key
     env["GEMINI_CLI_TRUST_WORKSPACE"] = "true"
+    # Сеть нестабильна: DNS отдаёт IPv6, маршрута к IPv6 нет → node висит/ECONNRESET.
+    # Заставляем node (gemini-cli) предпочитать IPv4 — не требует админ-прав.
+    env["NODE_OPTIONS"] = (env.get("NODE_OPTIONS", "") + " --dns-result-order=ipv4first").strip()
 
     prefix = _HEADLESS_RULES
     if design_style and design_style in _DESIGN_STYLE_DIRECTIVES:

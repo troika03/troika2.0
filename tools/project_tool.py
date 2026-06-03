@@ -982,6 +982,8 @@ async def _do_pm_doc_work(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     env = _os.environ.copy()
     env["GEMINI_CLI_TRUST_WORKSPACE"] = "true"
+    # node (gemini-cli) предпочитает IPv4 — обход мёртвого IPv6 на нестабильной сети.
+    env["NODE_OPTIONS"] = (env.get("NODE_OPTIONS", "") + " --dns-result-order=ipv4first").strip()
     pm_md = Path.home() / ".gemini" / "GEMINI-PM.md"
     if pm_md.exists():
         env["GEMINI_SYSTEM_MD"] = str(pm_md)
