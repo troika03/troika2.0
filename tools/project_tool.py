@@ -650,22 +650,109 @@ def _build_context_file(project_path: Path, product_dir: Path, meta: Dict[str, A
     )
 
 
+async def _static_check(product_dir: Path, timeout: int = 240) -> Dict[str, Any]:
+    """Локальная статическая проверка по типу проекта. Возвращает
+    {ran, ok, kind, errors}. Команды локальные (не жгут сетевой бюджет)."""
+    import asyncio as _aio
+    import shutil as _sh
+
+    names = {p.name for p in product_dir.iterdir()} if product_dir.exists() else set()
+
+    cmd = None
+    kind = None
+    if "pubspec.yaml" in names:
+        flutter = _sh.which("flutter") or _sh.which("flutter.bat")
+        dart = _sh.which("dart")
+        if flutter:
+            cmd, kind = [flutter, "analyze", "--no-pub"], "flutter"
+        elif dart:
+            cmd, kind = [dart, "analyze"], "dart"
+    elif "package.json" in names:
+        try:
+            import json as _json
+            pj = _json.loads((product_dir / "package.json").read_text(encoding="utf-8"))
+            scripts = pj.get("scripts", {})
+        except Exception:
+            scripts = {}
+        npm = _sh.which("npm") or _sh.which("npm.cmd")
+        npx = _sh.which("npx") or _sh.which("npx.cmd")
+        if "build" in scripts and npm:
+            cmd, kind = [npm, "run", "build", "--if-present"], "node-build"
+        elif "tsconfig.json" in names and npx:
+            cmd, kind = [npx, "tsc", "--noEmit"], "tsc"
+    elif any(n.endswith(".py") for n in names) or "requirements.txt" in names:
+        py = _sh.which("python") or _sh.which("python3")
+        if py:
+            cmd, kind = [py, "-m", "compileall", "-q", "."], "python"
+
+    if not cmd:
+        return {"ran": False, "ok": True, "kind": "none", "errors": ""}
+
+    log = product_dir / ".verify_check.log"
+    try:
+        f = open(log, "wb")
+    except Exception as e:
+        return {"ran": False, "ok": True, "kind": kind, "errors": f"log_open: {e}"}
+    try:
+        proc = await _aio.create_subprocess_exec(
+            *cmd, cwd=str(product_dir), stdout=f, stderr=f,
+        )
+        try:
+            rc = await _aio.wait_for(proc.wait(), timeout=timeout)
+        except _aio.TimeoutError:
+            try:
+                import subprocess as _sp
+                _sp.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                        capture_output=True, timeout=10)
+            except Exception:
+                pass
+            return {"ran": True, "ok": True, "kind": kind, "errors": "",
+                    "note": "check_timed_out"}
+    finally:
+        try: f.close()
+        except Exception: pass
+
+    out = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
+    return {"ran": True, "ok": rc == 0, "kind": kind, "errors": out[-3000:]}
+
+
 async def _verify_and_fix(product_dir: Path, timeout: int) -> Dict[str, Any]:
-    """Самопроверка: открыть собранное через playwright MCP, поймать ошибки, починить."""
+    """Самопроверка по типу проекта: web → playwright-консоль; flutter/dart/node/py →
+    статический анализ/сборка. Ошибки скармливаем gemini для точечной починки."""
     from tools.gemini_code_tool import _run_gemini
-    verify_task = (
-        "VERIFY & FIX MODE (do NOT redesign, do NOT add features).\n"
-        "A site/app was just built in this directory. Your job is quality control:\n"
-        "1. Use the 'playwright' MCP server to open the built result "
-        "(open index.html via file:// URL, or start a quick static server if needed).\n"
-        "2. Read the browser console. Look for JS exceptions, 404s, failed fetches, "
-        "broken images, and obviously broken/empty layout.\n"
-        "3. If you find real errors — FIX them directly in the code files. "
-        "Apply HTTP-by-IP fallbacks (crypto.randomUUID, navigator.clipboard) if missing.\n"
-        "4. If everything renders and console is clean — change nothing.\n"
-        "Report in 1-2 lines what you found and fixed. Do NOT delete .PROJECT_CONTEXT.md."
+    from tools.gemini_code_tool import _list_files as _lf
+
+    # Веб-проект: проверяем рантайм через playwright MCP (как раньше).
+    if "index.html" in _lf(product_dir):
+        verify_task = (
+            "VERIFY & FIX MODE (do NOT redesign, do NOT add features).\n"
+            "A site/app was just built in this directory. Your job is quality control:\n"
+            "1. Use the 'playwright' MCP server to open the built result "
+            "(open index.html via file:// URL, or start a quick static server if needed).\n"
+            "2. Read the browser console. Look for JS exceptions, 404s, failed fetches, "
+            "broken images, and obviously broken/empty layout.\n"
+            "3. If you find real errors — FIX them directly in the code files. "
+            "Apply HTTP-by-IP fallbacks (crypto.randomUUID, navigator.clipboard) if missing.\n"
+            "4. If everything renders and console is clean — change nothing.\n"
+            "Report in 1-2 lines what you found and fixed. Do NOT delete .PROJECT_CONTEXT.md."
+        )
+        return await _run_gemini(product_dir, verify_task, timeout, iterate=True, use_mcp=True)
+
+    # Прочие типы: локальная статическая проверка → при ошибках один fix-pass.
+    check = await _static_check(product_dir, timeout=min(timeout, 300))
+    if not check.get("ran") or check.get("ok"):
+        return {"ok": True, "verified": check.get("kind"), "fixed": False}
+
+    errors = (check.get("errors") or "")[-2500:]
+    fix_task = (
+        "FIX-COMPILE MODE (do NOT redesign, do NOT add features).\n"
+        f"The {check.get('kind')} static check FAILED in this directory. "
+        "Fix ONLY the compile/analyzer errors below — edit the code files in place, "
+        "do not delete unrelated files, do not run servers or watchers.\n\n"
+        f"=== CHECK OUTPUT (tail) ===\n{errors}\n=== END ==="
     )
-    return await _run_gemini(product_dir, verify_task, timeout, iterate=True, use_mcp=True)
+    fix = await _run_gemini(product_dir, fix_task, timeout, iterate=True, use_mcp=False)
+    return {"ok": fix.get("ok", False), "verified": check.get("kind"), "fixed": True}
 
 
 async def _deploy_product(project_path: Path, *, git: bool = True, vercel: bool = True,
@@ -759,6 +846,9 @@ async def _do_autopilot_work(payload: Dict[str, Any]) -> Dict[str, Any]:
     start = _time.time()
     done_tasks: List[str] = []
     failed_tasks: List[str] = []
+    attempted: set = set()          # raw_line задач, которые уже брали (анти-зацикливание)
+    consecutive_net_fail = 0        # подряд идущих сетевых стопоров → ранний аборт
+    net_aborted = False
 
     for i in range(max_tasks):
         # Бюджет времени: оставляем место хотя бы на одну задачу + verify
@@ -770,6 +860,16 @@ async def _do_autopilot_work(payload: Dict[str, Any]) -> Dict[str, Any]:
         raw_line, task_text, title = _next_unchecked_task(tasks_md)
         if not task_text:
             break  # всё выполнено
+
+        # Анти-зацикливание: если _mark_task_checked не сработал и нам вернули ту же
+        # строку повторно — принудительно отмечаем её и идём дальше, не зависаем.
+        if raw_line in attempted:
+            if not _mark_task_checked(tasks_md, raw_line):
+                logger.warning("autopilot: cannot advance past task, breaking: %r", title)
+                failed_tasks.append(title)
+                break
+            continue
+        attempted.add(raw_line)
 
         done_n, total_n = _count_tasks(tasks_md)
         await _notify_progress(
@@ -785,12 +885,38 @@ async def _do_autopilot_work(payload: Dict[str, Any]) -> Dict[str, Any]:
             f"integrating with code already present. "
             f"Do NOT delete .PROJECT_CONTEXT.md."
         )
+        files_before = set(_list_files(product_dir))
         iterate = bool([p for p in product_dir.iterdir()
                         if p.is_file() and not p.name.startswith(".")])
         res = await _run_gemini(product_dir, full_task, per_task_timeout,
                                 iterate=iterate, use_mcp=False)
+        files_after = set(_list_files(product_dir))
+        made_progress = bool(files_after - files_before) or res.get("ok")
 
-        if not res.get("ok") and not _list_files(product_dir):
+        # Сетевой/стоп-детектор: gemini завис без активности или сеть рвётся.
+        # Несколько таких подряд = сеть лежит → нет смысла крутить вхолостую.
+        net_failed = (not res.get("ok")) and (
+            res.get("stalled")
+            or "ECONNRESET" in (res.get("stderr_tail") or "")
+            or "ETIMEDOUT" in (res.get("stderr_tail") or "")
+            or "RESOURCE_EXHAUSTED" in (res.get("stderr_tail") or "")
+            or "429" in (res.get("stderr_tail") or "")
+        )
+        if net_failed and not made_progress:
+            consecutive_net_fail += 1
+        else:
+            consecutive_net_fail = 0
+        if consecutive_net_fail >= 3:
+            net_aborted = True
+            logger.warning("autopilot aborting: %d network stalls in a row", consecutive_net_fail)
+            await _notify_progress(
+                session_id,
+                f"«{name}»: сеть нестабильна, ставлю автопилот на паузу. "
+                f"Скажи «продолжай», когда сеть будет получше.",
+            )
+            break
+
+        if not res.get("ok") and not made_progress:
             failed_tasks.append(title)
             await _notify_progress(session_id,
                                    f"Задача «{title[:40]}» не пошла, перехожу к следующей.")
@@ -798,8 +924,8 @@ async def _do_autopilot_work(payload: Dict[str, Any]) -> Dict[str, Any]:
             _mark_task_checked(tasks_md, raw_line)
             continue
 
-        # Самопроверка + починка (Direction 3)
-        if verify and "index.html" in _list_files(product_dir):
+        # Самопроверка + починка (Direction 3) — для любого типа проекта
+        if verify:
             try:
                 await _verify_and_fix(product_dir, min(per_task_timeout, 900))
             except Exception as e:
@@ -820,20 +946,26 @@ async def _do_autopilot_work(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     done_n, total_n = _count_tasks(tasks_md)
     remaining = total_n - done_n
-    parts = [f"Автопилот по «{name}» завершён", f"сделал {len(done_tasks)} задач"]
-    if failed_tasks:
-        parts.append(f"{len(failed_tasks)} не вышли")
-    if remaining > 0:
-        parts.append(f"осталось {remaining} (запусти ещё раз)")
-    if deploy_url:
-        parts.append("сайт задеплоен")
-    say = ". ".join(parts) + "."
+    if net_aborted:
+        say = (f"Автопилот по «{name}» на паузе: сеть нестабильна. "
+               f"Сделал {len(done_tasks)} задач, осталось {remaining}. "
+               f"Скажи «продолжай», когда сеть будет получше.")
+    else:
+        parts = [f"Автопилот по «{name}» завершён", f"сделал {len(done_tasks)} задач"]
+        if failed_tasks:
+            parts.append(f"{len(failed_tasks)} не вышли")
+        if remaining > 0:
+            parts.append(f"осталось {remaining} (запусти ещё раз)")
+        if deploy_url:
+            parts.append("сайт задеплоен")
+        say = ". ".join(parts) + "."
 
     return {
         "ok": True, "action": "autopilot",
         "project_path": str(project_path),
         "done": done_tasks, "failed": failed_tasks,
         "remaining": remaining, "deploy_url": deploy_url,
+        "paused_network": net_aborted,
         "workspace": str(product_dir),
         "say_to_user": say,
         "next_action_hint": "open" if deploy_url else None,

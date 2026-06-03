@@ -486,7 +486,8 @@ _DESIGN_STYLE_DIRECTIVES = {
 async def _run_gemini(workspace: Path, task: str, timeout: int, *,
                      iterate: bool = False, use_mcp: bool = False,
                      design_style: Optional[str] = None,
-                     extra_constraints: Optional[str] = None) -> Dict[str, Any]:
+                     extra_constraints: Optional[str] = None,
+                     stall_timeout: int = 420) -> Dict[str, Any]:
     cli = _find_gemini_cli()
     if not cli:
         return {"ok": False, "error": "gemini_cli_not_found",
@@ -564,11 +565,50 @@ async def _run_gemini(workspace: Path, task: str, timeout: int, *,
             env=env,
             creationflags=creation_flags,
         )
-        try:
-            rc = await asyncio.wait_for(proc.wait(), timeout=timeout)
-        except asyncio.TimeoutError:
-            # Windows: proc.kill() убивает только cmd.exe, дочка-node живёт.
-            # taskkill /T /F рекурсивно убивает всё дерево.
+        # Двойной сторож: (1) жёсткий общий таймаут, (2) stall-детектор.
+        # На нестабильной корпоративной сети gemini может «замолчать» на час —
+        # стримящийся stdout/stderr перестаёт расти, файлы не меняются. Это и есть
+        # зависание. Ловим его за stall_timeout (мин) вместо траты всего timeout.
+        import time as _t
+
+        def _activity_sig():
+            """Дешёвый признак активности: размеры логов + кол-во/свежесть файлов."""
+            s = 0
+            for lf in (log_out, log_err):
+                try:
+                    s += lf.stat().st_size
+                except Exception:
+                    pass
+            mx = 0.0
+            n = 0
+            try:
+                for p in workspace.iterdir():
+                    if p.name in (".git", "node_modules", ".dart_tool", "build"):
+                        continue
+                    try:
+                        st = p.stat()
+                        n += 1
+                        if st.st_mtime > mx:
+                            mx = st.st_mtime
+                    except Exception:
+                        pass
+                # один уровень вглубь lib/src (где обычно пишется код)
+                for sub in ("lib", "src", "app"):
+                    d = workspace / sub
+                    if d.is_dir():
+                        for p in d.iterdir():
+                            try:
+                                st = p.stat()
+                                n += 1
+                                if st.st_mtime > mx:
+                                    mx = st.st_mtime
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+            return (s, n, round(mx, 1))
+
+        def _kill_tree():
             try:
                 import subprocess as _sp
                 _sp.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
@@ -579,19 +619,58 @@ async def _run_gemini(workspace: Path, task: str, timeout: int, *,
                     proc.kill()
                 except Exception:
                     pass
+
+        deadline = _t.monotonic() + timeout
+        last_activity = _t.monotonic()
+        last_sig = _activity_sig()
+        rc = None
+        stall_hit = False
+        try:
+            while True:
+                try:
+                    rc = await asyncio.wait_for(proc.wait(), timeout=15)
+                    break  # процесс завершился сам
+                except asyncio.TimeoutError:
+                    now = _t.monotonic()
+                    sig = _activity_sig()
+                    if sig != last_sig:
+                        last_sig = sig
+                        last_activity = now
+                    idle = now - last_activity
+                    if idle > stall_timeout:
+                        stall_hit = True
+                        logger.warning("gemini stalled %ds (no log/file activity) — killing", int(idle))
+                        break
+                    if now > deadline:
+                        logger.warning("gemini hard timeout %ds — killing", timeout)
+                        break
+        except asyncio.TimeoutError:
+            pass
+
+        if rc is None:
+            # Не завершился сам — убиваем всё дерево (stall или hard-timeout).
+            # Windows: proc.kill() убивает только cmd.exe, дочка-node живёт →
+            # taskkill /T /F рекурсивно.
+            _kill_tree()
             try:
                 await asyncio.wait_for(proc.wait(), timeout=5)
             except Exception:
                 pass
-            return {"ok": False, "error": f"timed out after {timeout}s"}
-        finally:
-            try: f_out.close()
-            except Exception: pass
-            try: f_err.close()
-            except Exception: pass
+
+        # Закрываем лог-файлы перед чтением, чтобы дочитать весь хвост.
+        try: f_out.close()
+        except Exception: pass
+        try: f_err.close()
+        except Exception: pass
 
         out = log_out.read_text(encoding="utf-8", errors="replace") if log_out.exists() else ""
         err = log_err.read_text(encoding="utf-8", errors="replace") if log_err.exists() else ""
+
+        if rc is None:
+            reason = "stalled" if stall_hit else "timed out"
+            return {"ok": False,
+                    "error": f"gemini {reason} after {stall_timeout if stall_hit else timeout}s",
+                    "stalled": stall_hit, "stderr_tail": err[-600:]}
         if rc != 0:
             return {"ok": False, "error": f"gemini-cli exit {rc}",
                     "stderr_tail": err[-800:], "stdout_tail": out[-400:]}
