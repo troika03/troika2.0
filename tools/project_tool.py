@@ -924,9 +924,16 @@ async def _do_autopilot_work(payload: Dict[str, Any]) -> Dict[str, Any]:
     stitch_ok = False
     try:
         await _notify_progress(session_id, f"«{name}»: генерю дизайн в Stitch…")
-        stitch_ok = await _maybe_stitch_design(product_dir, name, meta.get("summary", ""))
+        # Жёсткий общий таймаут: urllib.timeout — это таймаут на сокет, не на
+        # всю операцию. Stitch генерит через Gemini 3 медленно и может висеть,
+        # блокируя автопилот ДО сборки. Не даём дизайн-шагу повесить весь job.
+        import asyncio as _aio
+        stitch_ok = await _aio.wait_for(
+            _maybe_stitch_design(product_dir, name, meta.get("summary", "")),
+            timeout=150,
+        )
     except Exception as e:
-        logger.debug("stitch design step skipped: %s", e)
+        logger.info("stitch design step skipped (%s) — строю по anti-AI-slop", e)
 
     start = _time.time()
     done_tasks: List[str] = []
