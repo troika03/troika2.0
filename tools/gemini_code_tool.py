@@ -527,6 +527,7 @@ _DESIGN_STYLE_DIRECTIVES = {
 
 async def _run_gemini(workspace: Path, task: str, timeout: int, *,
                      iterate: bool = False, use_mcp: bool = False,
+                     mcp_servers: Optional[list] = None,
                      design_style: Optional[str] = None,
                      extra_constraints: Optional[str] = None,
                      stall_timeout: int = 420) -> Dict[str, Any]:
@@ -574,10 +575,15 @@ async def _run_gemini(workspace: Path, task: str, timeout: int, *,
         logger.info("Code task written to file (%d chars original)", task_file.stat().st_size)
 
     args = [cli, "--yolo"]
-    if not use_mcp:
+    if mcp_servers:
+        # Точечный allowlist: подключаем только нужные серверы (напр. ['stitch'] —
+        # быстрый remote-http, без медленных npx-серверов context7/playwright/...).
+        args += ["--allowed-mcp-server-names", ",".join(mcp_servers)]
+    elif not use_mcp:
         args += ["--allowed-mcp-server-names", "__none__"]
     args += ["--prompt", wrapped]
-    logger.info("Spawning gemini-cli in %s (iterate=%s, mcp=%s)", workspace, iterate, use_mcp)
+    logger.info("Spawning gemini-cli in %s (iterate=%s, mcp=%s, servers=%s)",
+                workspace, iterate, use_mcp, mcp_servers or ("all" if use_mcp else "none"))
 
     # КРИТИЧНО: НЕ используем PIPE — gemini-cli (node) пишет много, буфер PIPE
     # переполняется, proc.communicate() блокируется, потом не дочитывает после
