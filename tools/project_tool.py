@@ -650,6 +650,88 @@ def _build_context_file(project_path: Path, product_dir: Path, meta: Dict[str, A
     )
 
 
+def _stitch_mcp_call(method: str, params: Dict[str, Any], key: str, timeout: int = 150) -> Dict[str, Any]:
+    """Один JSON-RPC вызов к Stitch MCP (streamable HTTP). Синхронный — звать через to_thread."""
+    import urllib.request
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
+    req = urllib.request.Request(
+        "https://stitch.googleapis.com/mcp", data=body,
+        headers={"Content-Type": "application/json",
+                 "Accept": "application/json, text/event-stream",
+                 "X-Goog-Api-Key": key})
+    raw = urllib.request.urlopen(req, timeout=timeout).read().decode("utf-8", "replace")
+    if "data:" in raw[:20]:  # SSE-обёртка
+        for ln in raw.splitlines():
+            if ln.startswith("data:"):
+                raw = ln[5:].strip()
+                break
+    return json.loads(raw)
+
+
+async def _maybe_stitch_design(product_dir: Path, name: str, summary: str,
+                               device: str = "MOBILE") -> bool:
+    """Если есть STITCH_API_KEY — генерим дизайн в Google Stitch ПРЯМЫМ вызовом
+    API (не через MCP-тулзы gemini, на которых flash падает) и кладём текстовый
+    спек в .STITCH_DESIGN.md. Кодер читает его как обычный контекст.
+    Best-effort: любая ошибка → просто пропускаем (работаем по anti-AI-slop).
+    """
+    import os
+    key = os.environ.get("STITCH_API_KEY")
+    if not key:
+        return False
+    design_file = product_dir / ".STITCH_DESIGN.md"
+    if design_file.exists() and design_file.stat().st_size > 200:
+        return True  # уже сгенерён в прошлом проходе
+    import asyncio as _aio
+    try:
+        cp = await _aio.to_thread(_stitch_mcp_call, "tools/call",
+                                  {"name": "create_project", "arguments": {"title": name[:80]}}, key, 40)
+        pid = cp.get("result", {}).get("structuredContent", {}).get("name", "")
+        pid = pid.split("/")[-1]  # 'projects/123' -> '123'
+        if not pid:
+            return False
+        prompt = (f"{name}. {summary}".strip() or name)[:1500]
+        gs = await _aio.to_thread(_stitch_mcp_call, "tools/call",
+                                  {"name": "generate_screen_from_text",
+                                   "arguments": {"projectId": pid, "prompt": prompt, "deviceType": device}}, key, 150)
+        res = gs.get("result", {})
+        if res.get("isError"):
+            logger.warning("stitch generate error: %s", str(res)[:200])
+            return False
+        data = json.loads(res["content"][0]["text"])
+        # Достаём дизайн-систему из первого компонента, где она есть.
+        ds = None
+        for comp in data.get("outputComponents", []):
+            d = (comp.get("designSystem") or {}).get("designSystem")
+            if d and d.get("styleGuidelines"):
+                ds = d
+                break
+        if not ds:
+            return False
+        theme = ds.get("theme", {})
+        colors = theme.get("namedColors", {})
+        color_lines = "\n".join(f"- {k}: {v}" for k, v in sorted(colors.items()))
+        md = (
+            f"# Google Stitch design spec — «{name}»\n"
+            f"(Сгенерировано Stitch на Gemini 3. РЕАЛИЗУЙ этот дизайн точно: палитра, "
+            f"шрифты, отступы, скругления. Это source of truth для визуала.)\n\n"
+            f"## Design system: {ds.get('displayName','')}\n"
+            f"- colorMode: {theme.get('colorMode','')}\n"
+            f"- headlineFont: {theme.get('headlineFont','')}\n"
+            f"- bodyFont: {theme.get('bodyFont','')}\n"
+            f"- labelFont: {theme.get('labelFont','')}\n"
+            f"- roundness: {theme.get('roundness','')}\n\n"
+            f"## Style guidelines\n{ds.get('styleGuidelines','')}\n\n"
+            f"## Color palette (Material 3 named colors)\n{color_lines}\n"
+        )
+        design_file.write_text(md, encoding="utf-8")
+        logger.info("stitch design written: %d chars, %d colors", len(md), len(colors))
+        return True
+    except Exception as e:
+        logger.warning("stitch design skipped: %s", e)
+        return False
+
+
 async def _static_check(product_dir: Path, timeout: int = 240) -> Dict[str, Any]:
     """Локальная статическая проверка по типу проекта. Возвращает
     {ran, ok, kind, errors}. Команды локальные (не жгут сетевой бюджет)."""
@@ -785,7 +867,7 @@ async def _deploy_product(project_path: Path, *, git: bool = True, vercel: bool 
                 gi = product_dir / ".gitignore"
                 if not gi.exists():
                     gi.write_text(
-                        ".PROJECT_CONTEXT.md\n.CODE_TASK.md\n.PM_TASK.md\n"
+                        ".PROJECT_CONTEXT.md\n.CODE_TASK.md\n.PM_TASK.md\n.STITCH_DESIGN.md\n"
                         ".gemini_run.log\n.gemini_run.err\n.vercel_deploy.log\n"
                         ".vercel_deploy.err\nnode_modules/\n.vercel/\n",
                         encoding="utf-8",
@@ -837,6 +919,15 @@ async def _do_autopilot_work(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     _build_context_file(project_path, product_dir, meta)
 
+    # Дизайн от Google Stitch (один раз, прямым вызовом API — не через MCP-тулзы,
+    # на которых flash падает). Кладёт .STITCH_DESIGN.md, кодер читает как текст.
+    stitch_ok = False
+    try:
+        await _notify_progress(session_id, f"«{name}»: генерю дизайн в Stitch…")
+        stitch_ok = await _maybe_stitch_design(product_dir, name, meta.get("summary", ""))
+    except Exception as e:
+        logger.debug("stitch design step skipped: %s", e)
+
     start = _time.time()
     done_tasks: List[str] = []
     failed_tasks: List[str] = []
@@ -871,13 +962,19 @@ async def _do_autopilot_work(payload: Dict[str, Any]) -> Dict[str, Any]:
             f"«{name}»: задача {done_n + 1} из {total_n} — {title[:50]}",
         )
 
+        stitch_line = (
+            "DESIGN: read .STITCH_DESIGN.md — it's the Google Stitch design spec "
+            "(palette, fonts, spacing). Implement the UI to match it exactly. "
+            if stitch_ok else ""
+        )
         full_task = (
             f"BEFORE CODING: read .PROJECT_CONTEXT.md in current directory — "
-            f"it has vision, requirements, architecture, full task list.\n\n"
+            f"it has vision, requirements, architecture, full task list.\n"
+            f"{stitch_line}\n"
             f"CODING TASK (one item from the plan): {task_text}\n"
             f"Working directory: {product_dir}. Build/extend the product here, "
             f"integrating with code already present. "
-            f"Do NOT delete .PROJECT_CONTEXT.md."
+            f"Do NOT delete .PROJECT_CONTEXT.md or .STITCH_DESIGN.md."
         )
         files_before = set(_list_files(product_dir))
         iterate = bool([p for p in product_dir.iterdir()
