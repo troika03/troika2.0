@@ -885,12 +885,14 @@ async def _do_autopilot_work(payload: Dict[str, Any]) -> Dict[str, Any]:
         # stall_timeout=180: при реальной работе gemini постоянно стримит вывод/
         # пишет файлы (это сбрасывает счётчик простоя), так что 3 мин полной тишины
         # = либо headless-зависание после завершения, либо обрыв сети. Не ждём 7 мин.
-        # mcp_servers=['stitch']: даём gemini доступ к Google Stitch для UI-дизайна
-        # (быстрый remote-сервер), но НЕ к медленным npx-серверам. Если ключа нет —
-        # gemini просто не подключит stitch и работает по anti-AI-slop правилам.
+        # ВАЖНО: НЕ даём gemini сами MCP-тулзы Stitch — gemini-2.5-flash на их
+        # сложных схемах выдаёт malformed tool call и падает ([ERROR] Invalid
+        # stream), что валит весь шаг сборки. Поэтому кодер работает без MCP.
+        # TODO(stitch): дизайн от Stitch генерить ДО цикла прямым вызовом API
+        # (см. _maybe_stitch_design) и класть в .STITCH_DESIGN.md как контекст —
+        # flash читает текстовый спек нормально, ломается только на tool-call.
         res = await _run_gemini(product_dir, full_task, per_task_timeout,
-                                iterate=iterate, use_mcp=True, mcp_servers=["stitch"],
-                                stall_timeout=180)
+                                iterate=iterate, use_mcp=False, stall_timeout=180)
         files_after = set(_list_files(product_dir))
         made_progress = bool(files_after - files_before) or res.get("ok")
 
