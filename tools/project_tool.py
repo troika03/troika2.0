@@ -898,7 +898,7 @@ async def _deploy_product(project_path: Path, *, git: bool = True, vercel: bool 
 async def _do_autopilot_work(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Проходит весь 04-tasks.md: build → (verify) → mark done → отчёт. В конце опц. deploy."""
     import time as _time
-    from tools.gemini_code_tool import _run_gemini, _list_files
+    from tools.gemini_code_tool import _run_gemini_resilient, _list_files
 
     project_path = Path(payload["project_path"])
     product_dir = project_path / "product"
@@ -995,8 +995,13 @@ async def _do_autopilot_work(payload: Dict[str, Any]) -> Dict[str, Any]:
         # TODO(stitch): дизайн от Stitch генерить ДО цикла прямым вызовом API
         # (см. _maybe_stitch_design) и класть в .STITCH_DESIGN.md как контекст —
         # flash читает текстовый спек нормально, ломается только на tool-call.
-        res = await _run_gemini(product_dir, full_task, per_task_timeout,
-                                iterate=iterate, use_mcp=False, stall_timeout=180)
+        # resilient-обёртка: на «Invalid stream» (malformed tool call) flash без
+        # файлового прогресса — ретраим, на последней попытке эскалируем на
+        # gemini-2.5-pro. Сетевые стопоры наверх не ретраятся (их ловит
+        # consecutive_net_fail ниже). См. autopilot-flash-invalid-stream.
+        res = await _run_gemini_resilient(product_dir, full_task, per_task_timeout,
+                                          iterate=iterate, use_mcp=False,
+                                          stall_timeout=180)
         files_after = set(_list_files(product_dir))
         made_progress = bool(files_after - files_before) or res.get("ok")
 

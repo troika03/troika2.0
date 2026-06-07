@@ -49,6 +49,18 @@ _WORKSPACES = _TROIKA_HOME / "workspaces"
 _LAST_STATE = _WORKSPACES / "_last_workspace.json"
 _DEFAULT_TIMEOUT = 300
 
+# Признак того, что gemini-cli оборвался на нестабильности модели (а не сети/квоты):
+# «[ERROR] Invalid stream: The model returned an empty response or malformed tool call.»
+# Характерно для gemini-2.5-flash под нагрузкой реальных кодинг-задач. Лечится
+# ретраем и эскалацией на gemini-2.5-pro (см. _run_gemini_resilient).
+_MALFORMED_RE = re.compile(
+    r"Invalid stream|malformed tool call|empty response or malformed",
+    re.IGNORECASE,
+)
+# Модель-эскалации по умолчанию: pro стабильнее flash на tool-calls (проверено),
+# но дороже по OAuth-квоте — зовём только когда flash реально не справился.
+_ESCALATE_MODEL = "gemini-2.5-pro"
+
 # Один реестр активных preview-серверов на процесс gateway.
 # key: workspace path → {"port": int, "thread": Thread, "httpd": server}
 _PREVIEW_SERVERS: Dict[str, Dict[str, Any]] = {}
@@ -525,11 +537,66 @@ _DESIGN_STYLE_DIRECTIVES = {
 }
 
 
+async def _ensure_gemini_oauth_fresh(cli: str, env: Dict[str, str]) -> Optional[Dict[str, Any]]:
+    """Если gemini ходит по OAuth и токен протух (или вот-вот) — прогреть его.
+
+    Причина: 5 июня автопилот стартанул через ~30 мин после истечения
+    oauth_creds.json и каждая задача делала 0 прогресса. gemini-cli умеет сам
+    рефрешить токен, но первый headless-вызов на протухшем токене может
+    повести себя нестабильно. Делаем дешёвый warm-up `gemini -p "ping"` — он
+    инициирует refresh силами CLI до того, как мы запустим реальную задачу.
+
+    Возвращает None если всё ок (или не наш случай — есть API-key), либо
+    dict-ошибку, которую _run_gemini вернёт наверх (чтобы Тройка озвучила).
+    """
+    if os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
+        return None  # API-key не протухает — рефреш не нужен
+    creds = Path.home() / ".gemini" / "oauth_creds.json"
+    try:
+        exp = json.loads(creds.read_text(encoding="utf-8")).get("expiry_date")
+    except Exception:
+        return None  # нет/битый файл — пусть CLI сам разбирается, не блокируем
+    if not exp:
+        return None
+    # expiry_date в миллисекундах; буфер 120с — рефрешим заранее.
+    import time as _t
+    if (exp / 1000.0) - _t.time() > 120:
+        return None  # токен ещё свежий
+
+    logger.info("gemini OAuth token expired/near-expiry — warming up to refresh")
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            cli, "--prompt", "ping",
+            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+            env=env, creationflags=0,
+        )
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=45)
+        except asyncio.TimeoutError:
+            import subprocess as _sp
+            _sp.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                    capture_output=True, timeout=10)
+    except Exception as e:
+        logger.warning("oauth warm-up failed: %s", e)
+    # Перечитываем: успел ли CLI обновить токен?
+    try:
+        exp2 = json.loads(creds.read_text(encoding="utf-8")).get("expiry_date")
+        if exp2 and (exp2 / 1000.0) - _t.time() > 60:
+            logger.info("gemini OAuth refreshed")
+            return None
+    except Exception:
+        pass
+    return {"ok": False, "error": "gemini_auth_expired",
+            "say_to_user": "Похоже, вход в Gemini устарел. Обнови авторизацию "
+                           "(`gemini` в терминале и войти заново), и повторим."}
+
+
 async def _run_gemini(workspace: Path, task: str, timeout: int, *,
                      iterate: bool = False, use_mcp: bool = False,
                      mcp_servers: Optional[list] = None,
                      design_style: Optional[str] = None,
                      extra_constraints: Optional[str] = None,
+                     model: Optional[str] = None,
                      stall_timeout: int = 420) -> Dict[str, Any]:
     cli = _find_gemini_cli()
     if not cli:
@@ -547,6 +614,12 @@ async def _run_gemini(workspace: Path, task: str, timeout: int, *,
     # Сеть нестабильна: DNS отдаёт IPv6, маршрута к IPv6 нет → node висит/ECONNRESET.
     # Заставляем node (gemini-cli) предпочитать IPv4 — не требует админ-прав.
     env["NODE_OPTIONS"] = (env.get("NODE_OPTIONS", "") + " --dns-result-order=ipv4first").strip()
+
+    # Защита от повтора 5 июня: протухший OAuth → 0 прогресса. Прогреваем токен
+    # до реальной задачи (no-op если есть API-key или токен свежий).
+    auth_err = await _ensure_gemini_oauth_fresh(cli, env)
+    if auth_err:
+        return auth_err
 
     prefix = _HEADLESS_RULES
     if design_style and design_style in _DESIGN_STYLE_DIRECTIVES:
@@ -575,6 +648,10 @@ async def _run_gemini(workspace: Path, task: str, timeout: int, *,
         logger.info("Code task written to file (%d chars original)", task_file.stat().st_size)
 
     args = [cli, "--yolo"]
+    # Явный выбор модели (напр. эскалация на gemini-2.5-pro при malformed-флапах
+    # gemini-2.5-flash). Форма `-m <model>` проверена рабочей через OAuth personal.
+    if model:
+        args += ["-m", model]
     if mcp_servers:
         # Точечный allowlist: подключаем только нужные серверы (напр. ['stitch'] —
         # быстрый remote-http, без медленных npx-серверов context7/playwright/...).
@@ -582,8 +659,9 @@ async def _run_gemini(workspace: Path, task: str, timeout: int, *,
     elif not use_mcp:
         args += ["--allowed-mcp-server-names", "__none__"]
     args += ["--prompt", wrapped]
-    logger.info("Spawning gemini-cli in %s (iterate=%s, mcp=%s, servers=%s)",
-                workspace, iterate, use_mcp, mcp_servers or ("all" if use_mcp else "none"))
+    logger.info("Spawning gemini-cli in %s (iterate=%s, mcp=%s, servers=%s, model=%s)",
+                workspace, iterate, use_mcp,
+                mcp_servers or ("all" if use_mcp else "none"), model or "default")
 
     # КРИТИЧНО: НЕ используем PIPE — gemini-cli (node) пишет много, буфер PIPE
     # переполняется, proc.communicate() блокируется, потом не дочитывает после
@@ -720,21 +798,110 @@ async def _run_gemini(workspace: Path, task: str, timeout: int, *,
         out = log_out.read_text(encoding="utf-8", errors="replace") if log_out.exists() else ""
         err = log_err.read_text(encoding="utf-8", errors="replace") if log_err.exists() else ""
 
+        # gemini-2.5-flash под нагрузкой реальных задач регулярно обрывается на
+        # «[ERROR] Invalid stream: The model returned an empty response or malformed
+        # tool call.» — модель не дописывает код. Это НЕ сеть/квота, а нестабильность
+        # самого flash → лечится ретраем и эскалацией на pro (см. _run_gemini_resilient).
+        malformed = bool(_MALFORMED_RE.search(err) or _MALFORMED_RE.search(out))
+
         if rc is None:
             reason = "stalled" if stall_hit else "timed out"
             return {"ok": False,
                     "error": f"gemini {reason} after {stall_timeout if stall_hit else timeout}s",
-                    "stalled": stall_hit, "stderr_tail": err[-600:]}
+                    "stalled": stall_hit, "malformed": malformed,
+                    "stderr_tail": err[-600:]}
         if rc != 0:
             return {"ok": False, "error": f"gemini-cli exit {rc}",
+                    "malformed": malformed,
                     "stderr_tail": err[-800:], "stdout_tail": out[-400:]}
-        return {"ok": True, "rc": rc, "stdout_tail": out[-400:]}
+        # rc==0, но flash мог упасть на Invalid stream ПОСЛЕ частичной работы —
+        # помечаем malformed, чтобы resilient-обёртка могла переспросить, если
+        # файлового прогресса не было.
+        return {"ok": True, "rc": rc, "malformed": malformed, "stdout_tail": out[-400:]}
     except FileNotFoundError as e:
         try: f_out.close()
         except Exception: pass
         try: f_err.close()
         except Exception: pass
         return {"ok": False, "error": f"spawn failed: {e}"}
+
+
+async def _run_gemini_resilient(
+    workspace: Path, task: str, timeout: int, *,
+    iterate: bool = False, use_mcp: bool = False,
+    mcp_servers: Optional[list] = None,
+    design_style: Optional[str] = None,
+    extra_constraints: Optional[str] = None,
+    stall_timeout: int = 420,
+    escalate_model: Optional[str] = _ESCALATE_MODEL,
+    max_attempts: int = 3,
+) -> Dict[str, Any]:
+    """Запускает _run_gemini с ретраями на malformed-флапах gemini-2.5-flash.
+
+    Стратегия (см. autopilot-flash-invalid-stream):
+      • попытка 1: flash (модель по умолчанию из settings.json);
+      • если malformed И нет файлового прогресса → попытка 2: flash повторно
+        (флапы «Invalid stream» часто разовые);
+      • если снова malformed без прогресса → попытка 3: эскалация на pro
+        (escalate_model) — он стабильнее на tool-calls.
+
+    Ретраим ТОЛЬКО malformed-фейлы без файлового прогресса. Сетевые стопоры
+    (stalled / ECONNRESET / 429 / RESOURCE_EXHAUSTED) НЕ ретраим и НЕ эскалируем
+    на pro — pro упрётся в ту же квоту; отдаём результат как есть, чтобы
+    автопилот применил свою сетевую логику (consecutive_net_fail).
+
+    Если задача дала файловый прогресс — успех, даже если в хвосте мелькнул
+    malformed (flash успел записать код до обрыва).
+    """
+    last: Dict[str, Any] = {}
+    for attempt in range(1, max_attempts + 1):
+        # Модель: первые попытки — дефолтная (flash), последняя — эскалация на pro.
+        model = escalate_model if (attempt == max_attempts and escalate_model) else None
+
+        files_before = set(_list_files(workspace))
+        res = await _run_gemini(
+            workspace, task, timeout,
+            iterate=iterate or attempt > 1,  # со 2-й попытки workspace уже не пустой
+            use_mcp=use_mcp, mcp_servers=mcp_servers,
+            design_style=design_style, extra_constraints=extra_constraints,
+            model=model, stall_timeout=stall_timeout,
+        )
+        files_after = set(_list_files(workspace))
+        # ВАЖНО: «прогресс» = реально появились новые файлы. res["ok"] при malformed
+        # НЕ означает что код написан (rc==0, но модель оборвалась на Invalid stream),
+        # поэтому ok сам по себе прогрессом не считаем — иначе ретрай не сработает.
+        new_files = bool(files_after - files_before)
+        res["attempts"] = attempt
+        res["model_used"] = model or "default"
+        last = res
+
+        # Чистый успех (без malformed) — выходим.
+        if res.get("ok") and not res.get("malformed"):
+            return res
+        # rc==0, malformed в хвосте, НО новые файлы есть — flash успел до обрыва.
+        if res.get("ok") and new_files:
+            logger.info("gemini malformed tail but files written — accepting (attempt %d)", attempt)
+            return res
+
+        # Сетевой/стоп-фейл — НЕ ретраим тут (это работа автопилота), отдаём наверх.
+        if res.get("stalled") or any(
+            tok in (res.get("stderr_tail") or "")
+            for tok in ("ECONNRESET", "ETIMEDOUT", "RESOURCE_EXHAUSTED", "429")
+        ):
+            return res
+
+        # malformed без файлового прогресса — ретраим (если есть ещё попытки).
+        if res.get("malformed") and not new_files and attempt < max_attempts:
+            nxt = escalate_model if attempt + 1 == max_attempts else "flash"
+            logger.warning("gemini malformed, no progress (attempt %d/%d) — retry on %s",
+                           attempt, max_attempts, nxt)
+            await asyncio.sleep(2 * attempt)  # короткий backoff
+            continue
+
+        # Не-malformed фейл без прогресса, либо попытки исчерпаны — отдаём как есть.
+        return res
+
+    return last
 
 
 # ---------------------------------------------------------------------------
