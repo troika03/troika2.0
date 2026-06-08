@@ -113,30 +113,50 @@ def _lazy_model():
     return _model if _model is not False else None
 
 
-def prefetch_model() -> bool:
+def prefetch_model(attempts: int = 8) -> bool:
     """Явно скачать embedding-модель (РАЗРЕШЕН сетевой доступ). Зови на стабильной
     сети — НЕ в рантайме поиска. Возвращает True если модель готова локально.
 
-    На сети с битым IPv6-маршрутом форсим IPv4, иначе HF hub виснет.
+    Сеть нестабильна (рвёт соединение на хвосте крупного файла весов) — поэтому
+    качаем с RESUME в петле: snapshot_download докачивает с места, короткие
+    таймауты переживают рывки порциями. До `attempts` повторов. Форс IPv4 (на
+    битом IPv6-маршруте HF hub виснет). См. troika-memory-tools.
     """
     global _model
     import socket
+    import time as _t
+
     _orig = socket.getaddrinfo
 
     def _ipv4_only(host, *a, **k):
         res = _orig(host, *a, **k)
         v4 = [r for r in res if r[0] == socket.AF_INET]
         return v4 or res
+
     socket.getaddrinfo = _ipv4_only
+    # Короткие таймауты: лучше быстро упасть и докачать с места, чем висеть.
+    os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "30")
+    os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "30")
+    # prefetch явно ходит в сеть — снимаем offline-флаги, если их выставлял _lazy_model.
+    for k in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE"):
+        os.environ.pop(k, None)
     try:
-        from sentence_transformers import SentenceTransformer
-        logger.info("prefetching embedding model %s (network allowed)…", _MODEL_NAME)
-        _model = SentenceTransformer(_MODEL_NAME)  # сеть разрешена
-        logger.info("embedding model prefetched")
-        return True
-    except Exception as e:
-        logger.warning("prefetch_model failed: %s", e)
-        _model = None  # сбрасываем, чтобы _lazy_model попробовал локально позже
+        from huggingface_hub import snapshot_download
+        for i in range(1, attempts + 1):
+            try:
+                logger.info("prefetch %s: attempt %d/%d (resume)…", _MODEL_NAME, i, attempts)
+                snapshot_download(_MODEL_NAME)  # resume по умолчанию
+                # Консолидировалось? Проверяем по локальному кэшу.
+                if _model_in_cache():
+                    from sentence_transformers import SentenceTransformer
+                    _model = SentenceTransformer(_MODEL_NAME, local_files_only=True)
+                    logger.info("embedding model prefetched & loaded")
+                    return True
+            except Exception as e:
+                logger.warning("prefetch attempt %d failed (%s) — retrying", i, e)
+                _t.sleep(min(2 * i, 15))
+        logger.warning("prefetch_model: exhausted %d attempts, model still not local", attempts)
+        _model = None
         return False
     finally:
         socket.getaddrinfo = _orig
