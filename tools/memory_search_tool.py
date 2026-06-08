@@ -126,6 +126,22 @@ async def _handle_search(arguments: dict, **_kw) -> dict:
     if not _VAULT.exists():
         return {"ok": False, "error": f"vault_not_found: {_VAULT}"}
 
+    # Семантический слой (опциональное усиление). Возвращает rel_path → косинус
+    # [0..1]; пустой dict, если sentence-transformers недоступен → чистый fuzzy.
+    # Запрос «как починить зависший gemini» так находит заметку про taskkill,
+    # даже без лексического пересечения слов. См. memory_semantic.
+    sem: Dict[str, float] = {}
+    try:
+        from tools.memory_semantic import semantic_scores
+        sem = semantic_scores(query)
+    except Exception as e:
+        logger.debug("semantic layer unavailable: %s", e)
+
+    used_semantic = bool(sem)
+    # Порог семантического вклада: ниже 0.30 близость = шум (multilingual MiniLM
+    # держит несвязанные тексты в районе 0.1-0.25). Берём только реально похожее.
+    SEM_FLOOR = 0.30
+
     results: List[Dict[str, Any]] = []
     for md_path in _VAULT.rglob("*.md"):
         if md_path.name == "MEMORY.md":  # index, не информативный
@@ -139,10 +155,20 @@ async def _handle_search(arguments: dict, **_kw) -> dict:
             continue
         body = _strip_frontmatter(text)
         name = md_path.stem
-        sc = _score(query, name, meta.get("description", ""), body)
-        if sc < 5:
-            continue
         rel = md_path.relative_to(_VAULT).as_posix()
+
+        fuzzy = _score(query, name, meta.get("description", ""), body)
+        sim = sem.get(rel, 0.0)
+        # Гибрид: семантика вносит до ~45 баллов (сопоставимо с substring-in-name=50),
+        # но только выше шумового порога. Так смысловое совпадение конкурирует с
+        # лексическим, не затирая его.
+        sem_pts = (sim - SEM_FLOOR) / (1 - SEM_FLOOR) * 45 if sim >= SEM_FLOOR else 0.0
+        sc = fuzzy + sem_pts
+
+        # Порог попадания: лексический ≥5 ЛИБО уверенная семантика (≥0.45).
+        if fuzzy < 5 and sim < 0.45:
+            continue
+
         results.append({
             "name": name,
             "path": rel,
@@ -150,16 +176,19 @@ async def _handle_search(arguments: dict, **_kw) -> dict:
             "description": meta.get("description", "")[:160],
             "excerpt": _excerpt(body, query),
             "score": round(sc, 1),
+            "match": ("semantic" if fuzzy < 5 else
+                      ("hybrid" if sem_pts > 0 else "lexical")),
         })
 
     results.sort(key=lambda r: r["score"], reverse=True)
     results = results[:limit]
-    return {"ok": True, "query": query, "count": len(results), "results": results}
+    return {"ok": True, "query": query, "count": len(results),
+            "semantic": used_semantic, "results": results}
 
 
 SEARCH_SCHEMA = {
     "name": "memory_search",
-    "description": "Fuzzy-поиск по Obsidian-памяти Тройки. Ищет по имени, описанию и содержимому markdown-файлов в vault. Возвращает топ-N с превью без полного чтения. Используй когда нужно «вспомнить» прошлое — что было, кто что просил, как был настроен такой-то tool. Параметр type фильтрует по project/user/feedback/reference.",
+    "description": "Поиск по Obsidian-памяти Тройки — лексический (имя/описание/содержимое) И семантический (по смыслу). Находит нужное, даже если слова в запросе и заметке разные («починить зависший gemini» → заметка про taskkill). Возвращает топ-N с превью без полного чтения. Используй когда нужно «вспомнить» прошлое — что было, кто что просил, как был настроен такой-то tool. Параметр type фильтрует по project/user/feedback/reference.",
     "parameters": {
         "type": "object",
         "properties": {

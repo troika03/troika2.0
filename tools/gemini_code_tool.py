@@ -204,6 +204,51 @@ async def _wait_proc_or_kill(proc, timeout: float) -> Optional[int]:
     return None
 
 
+def _reap_orphan_gemini(workspace: Path, min_age_s: float = 30.0) -> int:
+    """Добить осиротевшие node/gemini-процессы этого workspace (Windows).
+
+    `taskkill /T /F /PID` бьёт дерево от ЖИВОГО родителя. Но gemini-cli форкает
+    node-pty/ConPTY-внуков; если родитель умер по таймауту, внуки осиротевают и
+    переподцепляются — `/T` их уже не достаёт. Это был зомби-эффект 5 июня
+    (висели node/python после job). Здесь добиваем по командной строке: процесс,
+    чей CommandLine ссылается и на gemini-cli, и на наш workspace, и который
+    старше min_age_s (чтобы не убить только что стартовавший легитимный запуск).
+
+    Возвращает число убитых процессов. No-op не на Windows / при любой ошибке.
+    """
+    if os.name != "nt":
+        return 0
+    import subprocess as _sp
+    ws = str(workspace).replace("/", "\\").lower()
+    # Тянем Pid, CommandLine, возраст. Матчим gemini.js/gemini-cli + наш workspace.
+    ps = (
+        "$ws=$args[0]; $now=Get-Date; "
+        "Get-CimInstance Win32_Process -Filter \"Name='node.exe' or Name='gemini.exe'\" | "
+        "Where-Object { $_.CommandLine -and "
+        "($_.CommandLine -match 'gemini') -and "
+        "($_.CommandLine.ToLower().Contains($ws)) } | "
+        "ForEach-Object { "
+        "  $age = ($now - $_.CreationDate).TotalSeconds; "
+        "  if ($age -ge $args[1]) { "
+        "    try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop; "
+        "          Write-Output $_.ProcessId } catch {} } }"
+    )
+    try:
+        r = _sp.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps,
+             ws, str(min_age_s)],
+            capture_output=True, text=True, timeout=20,
+        )
+        killed = [ln for ln in (r.stdout or "").splitlines() if ln.strip().isdigit()]
+        if killed:
+            logger.warning("reaped %d orphan gemini/node procs for %s: %s",
+                           len(killed), workspace, ",".join(killed))
+        return len(killed)
+    except Exception as e:
+        logger.debug("orphan reaper skipped: %s", e)
+        return 0
+
+
 def _list_files(workspace: Path) -> list[str]:
     out: list[str] = []
     for p in sorted(workspace.rglob("*")):

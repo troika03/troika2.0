@@ -120,12 +120,20 @@ def get_active_project_summary() -> Optional[str]:
     if not data:
         return None
     phase_ru = _PHASE_LABELS_RU.get(data.get("phase", ""), data.get("phase", ""))
-    return (
+    base = (
         f"[ACTIVE_PROJECT name=\"{data.get('name')}\" phase=\"{phase_ru}\" "
         f"path=\"{data.get('path')}\"] "
         f"Все обращения 'этот проект' / 'наш проект' / build / add_note → в этот проект. "
         f"Если Миша явно зовёт другой проект, спроси и переключи через project(action=open)."
     )
+    # Авто-саммари последнего прогона (B2) — актуальное «где мы сейчас».
+    try:
+        brief = _read_project_state_brief(Path(data["path"]))
+        if brief:
+            base += f" Состояние: {brief}"
+    except Exception:
+        pass
+    return base
 
 
 # ---------------------------------------------------------------------------
@@ -599,6 +607,61 @@ def _count_tasks(tasks_md: Path):
     return done, total
 
 
+def _write_project_state(project_path: Path, *, done: List[str], failed: List[str],
+                         remaining: int, build: Optional[Dict[str, Any]] = None,
+                         deploy_url: Optional[str] = None,
+                         paused_network: bool = False) -> None:
+    """Авто-саммари хода проекта → <project>/.STATE.md (B2, память/контекст).
+
+    Сжатый «где мы сейчас» после прогона автопилота: фаза, прогресс задач,
+    последние сделанные, статус сборки, деплой. Читается в
+    get_active_project_summary() и инжектится в system prompt — чтобы Тройка
+    знала текущее состояние проекта без расспросов и без чтения всего docs/.
+    Идемпотентно: каждый прогон перезаписывает файл целиком.
+    """
+    try:
+        meta = _read_meta(project_path)
+        name = meta.get("name", project_path.name)
+        lines = [
+            f"# .STATE.md — {name}",
+            f"_обновлено: {datetime.now():%Y-%m-%d %H:%M}_",
+            "",
+            f"- фаза: {meta.get('phase', '—')}",
+            f"- сделано задач за последний прогон: {len(done)}",
+            f"- осталось задач: {remaining}",
+        ]
+        if failed:
+            lines.append(f"- не вышли: {len(failed)} ({', '.join(failed[:3])[:120]})")
+        if done:
+            lines.append(f"- последние сделанные: {', '.join(done[-3:])[:160]}")
+        if build and build.get("checked"):
+            lines.append("- сборка: "
+                         + ("ОК" + (" (правил ошибки)" if build.get("fixed") else "")
+                            if build.get("ok") else "ЕСТЬ ОШИБКИ — нужна доработка"))
+        if deploy_url:
+            lines.append(f"- деплой: {deploy_url}")
+        if paused_network:
+            lines.append("- статус: на паузе (сеть нестабильна)")
+        (project_path / ".STATE.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    except Exception as e:
+        logger.debug("write .STATE.md failed: %s", e)
+
+
+def _read_project_state_brief(project_path: Path, max_chars: int = 360) -> str:
+    """Компактная выжимка .STATE.md для инжекта (без заголовка/служебных строк)."""
+    f = project_path / ".STATE.md"
+    if not f.exists():
+        return ""
+    try:
+        txt = f.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return ""
+    bullets = [ln.strip() for ln in txt.splitlines()
+               if ln.strip().startswith("- ")]
+    brief = " ".join(b.lstrip("- ") for b in bullets)
+    return brief[:max_chars]
+
+
 async def _notify_progress(session_id: Optional[str], text: str, task_id: str = "") -> None:
     """Промежуточный голосовой отчёт автопилота (как heartbeat — не дублируется в историю).
 
@@ -831,6 +894,56 @@ async def _verify_and_fix(product_dir: Path, timeout: int) -> Dict[str, Any]:
     return {"ok": fix.get("ok", False), "verified": check.get("kind"), "fixed": True}
 
 
+async def _final_build_gate(product_dir: Path, timeout: int) -> Dict[str, Any]:
+    """Финальный gate перед деплоем: «проект реально собирается».
+
+    После цикла задач один раз гоняем статическую сборку/анализ по типу проекта
+    (для flutter — `flutter analyze`). Если красный — ОДИН fix-pass и на pro
+    (malformed-устойчивая модель), затем перепроверка. Возвращаем строгий
+    статус, чтобы итог честно говорил «собирается / есть ошибки сборки», а не
+    рапортовал «готово» поверх несобираемого кода (как в тестах 2-5 июня).
+
+    Возвращает {checked: bool, ok: bool, kind, fixed: bool, errors_tail}.
+    `checked=False` — для типа проекта нет локальной проверки (напр. чистый
+    web/index.html): тогда не блокируем и не врём про статус сборки.
+    """
+    from tools.gemini_code_tool import _run_gemini_resilient
+
+    check = await _static_check(product_dir, timeout=min(timeout, 300))
+    if not check.get("ran"):
+        return {"checked": False, "ok": True, "kind": check.get("kind", "none"),
+                "fixed": False, "errors_tail": ""}
+    if check.get("ok"):
+        return {"checked": True, "ok": True, "kind": check.get("kind"),
+                "fixed": False, "errors_tail": ""}
+
+    # Красный анализ → один прицельный fix-pass на pro (flash валит сложные правки).
+    errors = (check.get("errors") or "")[-2500:]
+    fix_task = (
+        "FINAL BUILD-GATE FIX (do NOT redesign, do NOT add features).\n"
+        f"The {check.get('kind')} build/analyze FAILED. Fix ONLY the errors below — "
+        "edit code files in place so the project compiles/analyzes cleanly. "
+        "Do not delete unrelated files, do not run servers or watchers.\n\n"
+        f"=== BUILD OUTPUT (tail) ===\n{errors}\n=== END ==="
+    )
+    try:
+        await _run_gemini_resilient(
+            product_dir, fix_task, timeout, iterate=True, use_mcp=False,
+            stall_timeout=180, escalate_model="gemini-2.5-pro", max_attempts=2,
+        )
+    except Exception as e:
+        logger.debug("build-gate fix-pass failed: %s", e)
+
+    recheck = await _static_check(product_dir, timeout=min(timeout, 300))
+    return {
+        "checked": True,
+        "ok": bool(recheck.get("ok")),
+        "kind": recheck.get("kind"),
+        "fixed": True,
+        "errors_tail": (recheck.get("errors") or "")[-1200:] if not recheck.get("ok") else "",
+    }
+
+
 async def _deploy_product(project_path: Path, *, git: bool = True, vercel: bool = True,
                           timeout: int = 300) -> Dict[str, Any]:
     """git init+commit и/или vercel --prod для product/ проекта. Возвращает dict с url."""
@@ -898,7 +1011,9 @@ async def _deploy_product(project_path: Path, *, git: bool = True, vercel: bool 
 async def _do_autopilot_work(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Проходит весь 04-tasks.md: build → (verify) → mark done → отчёт. В конце опц. deploy."""
     import time as _time
-    from tools.gemini_code_tool import _run_gemini_resilient, _list_files
+    from tools.gemini_code_tool import (
+        _run_gemini_resilient, _list_files, _reap_orphan_gemini,
+    )
 
     project_path = Path(payload["project_path"])
     product_dir = project_path / "product"
@@ -1003,7 +1118,11 @@ async def _do_autopilot_work(payload: Dict[str, Any]) -> Dict[str, Any]:
                                           iterate=iterate, use_mcp=False,
                                           stall_timeout=180)
         files_after = set(_list_files(product_dir))
-        made_progress = bool(files_after - files_before) or res.get("ok")
+        # Прогресс = реально новые файлы ЛИБО чистый ok (НЕ malformed). rc==0 при
+        # malformed-обрыве ≠ код написан — иначе задача ложно списывается как
+        # сделанная (та же ловушка, что чинил resilient). См. autopilot-flash-invalid-stream.
+        new_files = bool(files_after - files_before)
+        made_progress = new_files or (res.get("ok") and not res.get("malformed"))
 
         # Сетевой/стоп-детектор: gemini завис без активности или сеть рвётся.
         # Несколько таких подряд = сеть лежит → нет смысла крутить вхолостую.
@@ -1046,6 +1165,19 @@ async def _do_autopilot_work(payload: Dict[str, Any]) -> Dict[str, Any]:
         _mark_task_checked(tasks_md, raw_line)
         done_tasks.append(title)
 
+    # Финальный build-gate (B1): «проект реально собирается» перед деплоем/итогом.
+    # Один проход статической сборки по типу проекта; красный flutter analyze →
+    # fix-pass на pro → перепроверка. Не блокируем деплой жёстко (web-проекты
+    # выкатываются и с ворнингами), но статус сборки честно уходит в say_to_user.
+    build = {"checked": False, "ok": True}
+    if done_tasks and not net_aborted:
+        try:
+            await _notify_progress(session_id, f"«{name}»: проверяю, что собирается…")
+            build = await _final_build_gate(product_dir, min(per_task_timeout, 900))
+        except Exception as e:
+            logger.warning("autopilot build-gate failed: %s", e)
+            build = {"checked": False, "ok": True, "error": str(e)}
+
     # Финальный деплой (Direction 4)
     deploy_url = None
     if deploy and done_tasks:
@@ -1056,8 +1188,24 @@ async def _do_autopilot_work(payload: Dict[str, Any]) -> Dict[str, Any]:
         except Exception as e:
             logger.warning("autopilot deploy failed: %s", e)
 
+    # Watchdog (B1): добить осиротевшие gemini/node-деревья этого workspace.
+    # taskkill /T в _wait_proc_or_kill не всегда достаёт ConPTY-внуков — зомби
+    # 5 июня. Чистим по командной строке, безопасно (старше 30с, только наш ws).
+    try:
+        _reap_orphan_gemini(product_dir, min_age_s=30.0)
+    except Exception as e:
+        logger.debug("orphan reaper at job end skipped: %s", e)
+
     done_n, total_n = _count_tasks(tasks_md)
     remaining = total_n - done_n
+
+    # Авто-саммари хода проекта → .STATE.md (B2): инжектится в system prompt,
+    # чтобы Тройка знала текущее состояние без расспросов.
+    _write_project_state(
+        project_path, done=done_tasks, failed=failed_tasks, remaining=remaining,
+        build=build, deploy_url=deploy_url, paused_network=net_aborted,
+    )
+
     if net_aborted:
         say = (f"Автопилот по «{name}» на паузе: сеть нестабильна. "
                f"Сделал {len(done_tasks)} задач, осталось {remaining}. "
@@ -1068,6 +1216,13 @@ async def _do_autopilot_work(payload: Dict[str, Any]) -> Dict[str, Any]:
             parts.append(f"{len(failed_tasks)} не вышли")
         if remaining > 0:
             parts.append(f"осталось {remaining} (запусти ещё раз)")
+        # Статус сборки из build-gate — честно, а не «готово» поверх несобираемого.
+        if build.get("checked"):
+            if build.get("ok"):
+                parts.append("проект собирается" + (" (поправил ошибки)"
+                             if build.get("fixed") else ""))
+            else:
+                parts.append("но есть ошибки сборки — нужна доработка")
         if deploy_url:
             parts.append("сайт задеплоен")
         say = ". ".join(parts) + "."
@@ -1078,6 +1233,8 @@ async def _do_autopilot_work(payload: Dict[str, Any]) -> Dict[str, Any]:
         "done": done_tasks, "failed": failed_tasks,
         "remaining": remaining, "deploy_url": deploy_url,
         "paused_network": net_aborted,
+        "build_ok": bool(build.get("ok")) if build.get("checked") else None,
+        "build_kind": build.get("kind"),
         "workspace": str(product_dir),
         "say_to_user": say,
         "next_action_hint": "open" if deploy_url else None,
