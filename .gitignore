@@ -84,3 +84,5 @@ tts_samples/
 reports/
 .claude/
 _gemini_*/
+.gemini/
+gha-creds-*.json
