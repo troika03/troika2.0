@@ -77,8 +77,11 @@ hermes_cli/scripts/
 docs/superpowers/*
 
 # Local runtime/diagnostic artifacts (Troika)
-_gw_*.log
-_stt_*.log
+# Ad-hoc test/scratch scripts and their logs/screenshots live at repo root with
+# a leading underscore — never part of the project.
+_*.py
+_*.log
+_*.png
 _diag_*.py
 tts_samples/
 reports/
@@ -86,3 +89,5 @@ reports/
 _gemini_*/
 .gemini/
 gha-creds-*.json
+# Semantic memory cache (rebuilt from vault on demand, lives in vault not repo)
+.semantic_cache.npz

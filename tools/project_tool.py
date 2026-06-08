@@ -120,12 +120,20 @@ def get_active_project_summary() -> Optional[str]:
     if not data:
         return None
     phase_ru = _PHASE_LABELS_RU.get(data.get("phase", ""), data.get("phase", ""))
-    return (
+    base = (
         f"[ACTIVE_PROJECT name=\"{data.get('name')}\" phase=\"{phase_ru}\" "
         f"path=\"{data.get('path')}\"] "
         f"Все обращения 'этот проект' / 'наш проект' / build / add_note → в этот проект. "
         f"Если Миша явно зовёт другой проект, спроси и переключи через project(action=open)."
     )
+    # Авто-саммари последнего прогона (B2) — актуальное «где мы сейчас».
+    try:
+        brief = _read_project_state_brief(Path(data["path"]))
+        if brief:
+            base += f" Состояние: {brief}"
+    except Exception:
+        pass
+    return base
 
 
 # ---------------------------------------------------------------------------
@@ -597,6 +605,61 @@ def _count_tasks(tasks_md: Path):
     total = len(re.findall(r"^\s*[-*]\s*\[[ xX]\]", content, re.MULTILINE))
     done = len(re.findall(r"^\s*[-*]\s*\[[xX]\]", content, re.MULTILINE))
     return done, total
+
+
+def _write_project_state(project_path: Path, *, done: List[str], failed: List[str],
+                         remaining: int, build: Optional[Dict[str, Any]] = None,
+                         deploy_url: Optional[str] = None,
+                         paused_network: bool = False) -> None:
+    """Авто-саммари хода проекта → <project>/.STATE.md (B2, память/контекст).
+
+    Сжатый «где мы сейчас» после прогона автопилота: фаза, прогресс задач,
+    последние сделанные, статус сборки, деплой. Читается в
+    get_active_project_summary() и инжектится в system prompt — чтобы Тройка
+    знала текущее состояние проекта без расспросов и без чтения всего docs/.
+    Идемпотентно: каждый прогон перезаписывает файл целиком.
+    """
+    try:
+        meta = _read_meta(project_path)
+        name = meta.get("name", project_path.name)
+        lines = [
+            f"# .STATE.md — {name}",
+            f"_обновлено: {datetime.now():%Y-%m-%d %H:%M}_",
+            "",
+            f"- фаза: {meta.get('phase', '—')}",
+            f"- сделано задач за последний прогон: {len(done)}",
+            f"- осталось задач: {remaining}",
+        ]
+        if failed:
+            lines.append(f"- не вышли: {len(failed)} ({', '.join(failed[:3])[:120]})")
+        if done:
+            lines.append(f"- последние сделанные: {', '.join(done[-3:])[:160]}")
+        if build and build.get("checked"):
+            lines.append("- сборка: "
+                         + ("ОК" + (" (правил ошибки)" if build.get("fixed") else "")
+                            if build.get("ok") else "ЕСТЬ ОШИБКИ — нужна доработка"))
+        if deploy_url:
+            lines.append(f"- деплой: {deploy_url}")
+        if paused_network:
+            lines.append("- статус: на паузе (сеть нестабильна)")
+        (project_path / ".STATE.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    except Exception as e:
+        logger.debug("write .STATE.md failed: %s", e)
+
+
+def _read_project_state_brief(project_path: Path, max_chars: int = 360) -> str:
+    """Компактная выжимка .STATE.md для инжекта (без заголовка/служебных строк)."""
+    f = project_path / ".STATE.md"
+    if not f.exists():
+        return ""
+    try:
+        txt = f.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return ""
+    bullets = [ln.strip() for ln in txt.splitlines()
+               if ln.strip().startswith("- ")]
+    brief = " ".join(b.lstrip("- ") for b in bullets)
+    return brief[:max_chars]
 
 
 async def _notify_progress(session_id: Optional[str], text: str, task_id: str = "") -> None:
@@ -1135,6 +1198,14 @@ async def _do_autopilot_work(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     done_n, total_n = _count_tasks(tasks_md)
     remaining = total_n - done_n
+
+    # Авто-саммари хода проекта → .STATE.md (B2): инжектится в system prompt,
+    # чтобы Тройка знала текущее состояние без расспросов.
+    _write_project_state(
+        project_path, done=done_tasks, failed=failed_tasks, remaining=remaining,
+        build=build, deploy_url=deploy_url, paused_network=net_aborted,
+    )
+
     if net_aborted:
         say = (f"Автопилот по «{name}» на паузе: сеть нестабильна. "
                f"Сделал {len(done_tasks)} задач, осталось {remaining}. "
