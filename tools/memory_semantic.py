@@ -31,8 +31,11 @@ _DEFAULT_VAULT = Path("C:/Users/kiqu/.claude/projects/d--troikahermes/memory")
 _VAULT = Path(os.environ.get("HERMES_MEMORY_VAULT") or _DEFAULT_VAULT)
 
 # Multilingual MiniLM: ~470MB, ровно работает на русском И английском. Переопределяемо.
+# ВАЖНО: полный repo_id с организацией — snapshot_download НЕ подставляет
+# 'sentence-transformers/' сам (в отличие от SentenceTransformer) и без префикса
+# получает 401 Repository Not Found. Держим канонический id в одном месте.
 _MODEL_NAME = os.environ.get(
-    "HERMES_EMBED_MODEL", "paraphrase-multilingual-MiniLM-L12-v2"
+    "HERMES_EMBED_MODEL", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 )
 _CACHE_FILE = _VAULT / ".semantic_cache.npz"
 
@@ -66,18 +69,24 @@ def _model_in_cache() -> bool:
     первом memory_search — сразу говорим «нет» по файловой системе.
     """
     from pathlib import Path as _P
+    # HF-кэш именует папку как models--<org>--<name>; _MODEL_NAME уже содержит
+    # организацию (sentence-transformers/...), так что safe = весь id со слэшами→--.
     safe = _MODEL_NAME.replace("/", "--")
-    candidates = [
-        _P.home() / ".cache" / "huggingface" / "hub" / f"models--sentence-transformers--{safe}",
-        _P.home() / ".cache" / "huggingface" / "hub" / f"models--{safe}",
-        _P.home() / ".cache" / "torch" / "sentence_transformers" / safe,
+    bare = _MODEL_NAME.split("/")[-1].replace("/", "--")  # на случай id без org
+    hub_dirs = [
+        _P.home() / ".cache" / "huggingface" / "hub",
     ]
     hf_home = os.environ.get("HF_HOME")
     if hf_home:
-        candidates.append(_P(hf_home) / "hub" / f"models--sentence-transformers--{safe}")
+        hub_dirs.append(_P(hf_home) / "hub")
+    candidates = []
+    for hub in hub_dirs:
+        candidates.append(hub / f"models--{safe}")
+        candidates.append(hub / f"models--sentence-transformers--{bare}")
+    candidates.append(_P.home() / ".cache" / "torch" / "sentence_transformers" / safe)
     for c in candidates:
         # модель «есть», если в папке лежит снапшот с весами (не пустой каталог)
-        if c.exists() and any(c.rglob("*.safetensors")) or (c.exists() and any(c.rglob("pytorch_model.bin"))):
+        if c.exists() and (any(c.rglob("*.safetensors")) or any(c.rglob("pytorch_model.bin"))):
             return True
     return False
 
