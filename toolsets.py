@@ -30,7 +30,7 @@ from typing import List, Dict, Any, Set, Optional
 # Edit this once to update all platforms simultaneously.
 _HERMES_CORE_TOOLS = [
     # Web
-    "web_search", "web_extract",
+    "web_search", "web_extract", "web_research",
     # Terminal + process management
     "terminal", "process",
     # File manipulation
@@ -155,7 +155,7 @@ TOOLSETS = {
     # Basic toolsets - individual tool categories
     "web": {
         "description": "Web research and content extraction tools",
-        "tools": ["web_search", "web_extract"],
+        "tools": ["web_search", "web_extract", "web_research"],
         "includes": []  # No other toolsets included
     },
     
@@ -573,7 +573,7 @@ TOOLSETS = {
             "skill_weather", "skill_translate", "skill_calculator",
             "skill_world_time", "skill_currency_rate",
             # Web / vision / делегирование
-            "web_search", "vision_analyze", "delegate_task",
+            "web_search", "web_research", "vision_analyze", "delegate_task",
             # Кодинг через Gemini CLI (sub-agent)
             "gemini_code",
             # Статус фоновых задач
@@ -631,7 +631,7 @@ TOOLSETS = {
             # Самые частые skill_*
             "skill_weather", "skill_translate", "skill_calculator",
             # Сложные но частые
-            "web_search", "vision_analyze",
+            "web_search", "web_research", "vision_analyze",
         ],
         "includes": []
     },

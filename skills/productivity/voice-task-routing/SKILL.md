@@ -1,7 +1,7 @@
 ---
 name: voice-task-routing
 description: "Voice assistant tool routing: pick the right Hermes tool for spoken Russian requests (presentations, calendar, files, notes, navigation, music, contacts, web, delegation)."
-version: 1.1.0
+version: 1.2.0
 license: MIT
 metadata:
   hermes:
@@ -320,10 +320,16 @@ Worker (отдельный kanban-профиль) сделает работу а
 
 | Услышал | Tool |
 |---|---|
-| "найди в интернете", "что пишут про", "поищи" | `web_search` (потом `web_extract` если нужны детали) |
-| "почитай эту ссылку", "что на странице X" | `web_extract` |
-| "собери информацию про X", "разберись подробно", "исследуй" | `delegate_task` (sub-agent с целью) |
+| "что там с X / кто выиграл / какой курс / что нового про Y / правда ли что Z" (нужен короткий УСТНЫЙ ответ) | `web_research(question="...")` — ОДИН вызов: ищет, читает, синтезирует готовый ответ для озвучки |
+| "найди в интернете", "поищи" (нужна сырая выдача, список ссылок) | `web_search` |
+| "почитай ЭТУ ссылку", "что на странице X" (известный URL) | `web_extract` |
+| "собери подробно / большой разбор / исследуй с отчётом" (глубоко, многошагово) | `delegate_task` (sub-agent с целью) |
 | "подумай по-разному / несколько мнений" | `mixture_of_agents` |
+
+**Разводка web_research vs web_search vs delegate_task:**
+- Нужен **короткий ответ голосом на вопрос** → `web_research`. Это дефолт для «что/кто/когда/сколько/правда ли» по интернету. НЕ дёргай web_search+web_extract вручную для устного ответа — это несколько медленных ходов модели, а web_research делает всё за один вызов.
+- Нужна **сырая выдача** (список ссылок, чтобы потом выбрать) → `web_search`.
+- Нужен **глубокий разбор с письменным отчётом** (10-20 шагов) → `delegate_task`.
 
 ### Изображения
 
