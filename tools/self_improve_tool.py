@@ -69,6 +69,36 @@ _MAX_DIFF_BYTES = 10_000
 
 _BRANCH_PREFIX = "troika/proposal-"
 
+# Артефакты самого движка — пишутся в репо при работе Gemini и НЕ должны попадать
+# в предложение. Иначе diff/файлы/risk-флаги засоряются логами (всплыло на живом
+# прогоне 10 июня: .self_improve.log/_logs/ попали в proposal и пометили его risky).
+_ARTIFACT_PREFIXES = (
+    ".self_improve.log", ".self_improve.err", ".PROPOSAL_NOTE.txt",
+    "_logs/", "_logs", "_green_gateway.", "_self_improve_watcher.log",
+)
+
+
+def _is_artifact(path: str) -> bool:
+    p = path.replace("\\", "/").lstrip("./")
+    return any(p == a or p.startswith(a) for a in
+               (a.replace("\\", "/").lstrip("./") for a in _ARTIFACT_PREFIXES))
+
+
+def _collect_changed_files(cwd: Path = _REPO_ROOT) -> List[str]:
+    """Реально изменённые файлы предложения — без артефактов движка и без
+    gitignored-путей (untracked мусор вроде _logs/ сюда не попадает)."""
+    st = _git("status", "--porcelain", "--untracked-files=normal", cwd=cwd).stdout
+    files: List[str] = []
+    for line in st.splitlines():
+        parts = line.strip().split(None, 1)
+        if len(parts) != 2:
+            continue
+        f = parts[1].strip('"')
+        if _is_artifact(f):
+            continue
+        files.append(f)
+    return files
+
 
 def _ensure_dirs():
     _PROPOSALS_DIR.mkdir(parents=True, exist_ok=True)
@@ -179,21 +209,32 @@ async def _propose_via_gemini(branch: str, description: str, target_files: List[
         ".env", "cli.py", "requirements.txt", "gateway/", "hermes_cli/",
         "tools/registry.py", "tools/job_runner.py", "tools/self_improve_tool.py",
     ])
-    prompt = f"""Ты улучшаешь Hermes/Troika agent. Работай аккуратно: малое изменение лучше большого.
+    prompt = f"""Ты инженер, выполняющий КОНКРЕТНОЕ техническое задание в репозитории Troika/Hermes.
 
-ЗАДАЧА (от пользователя): {description}
+═══ ТВОЯ ЗАДАЧА (выполнить ДОСЛОВНО, ничего не выдумывая) ═══
+{description}
+═══════════════════════════════════════════════════════════
 
-ПРАВИЛА:
-1. Меняй ТОЛЬКО эти файлы: {file_list_str}
+КРИТИЧЕСКИ ВАЖНО — это не свободное «улучшение», а точное ТЗ:
+• Делай РОВНО то, что написано в задаче выше. НЕ выбирай другую задачу.
+• НЕ занимайся «улучшением на своё усмотрение» (локализация, рефакторинг, README и т.п.),
+  если этого нет в задаче. Если сделаешь не то — работа будет отклонена.
+• Целевые файлы: {file_list_str}. Если задача про новый инструмент — создай ИМЕННО
+  указанный файл с рабочим кодом.
+
+ПРАВИЛА РЕАЛИЗАЦИИ:
+1. Меняй только файлы под tools/ или skills/ (или явно указанные в задаче). Артефакты,
+   логи, ru.yaml/локали — НЕ трогать, если задача прямо не про них.
 2. ЗАПРЕЩЕНО трогать: {forbidden_str}
-3. Лимит: ≤5 файлов, ≤300 строк изменений суммарно
-4. Не создавай документацию / README, если не просили
-5. Не добавляй комментариев кроме случаев когда WHY не очевиден из кода
-6. Сохраняй стиль соседнего кода
-7. Никаких placeholder'ов и TODO — только готовый код
+3. Лимит: ≤5 файлов, ≤300 строк суммарно. Малое точное изменение лучше большого.
+4. Если это новый tool — зарегистрируй его как соседние инструменты (registry.register
+   с schema/handler/toolset), handler должен принимать (arguments, **_kw) и возвращать
+   dict с полем say_to_user. Посмотри пример в любом tools/*_tool.py.
+5. Готовый код без placeholder'ов и TODO. Стиль — как у соседнего кода.
+6. Не создавай документацию/README, если не просили.
 
-Внеси изменения прямо в файлы. Не делай git commit — это сделает скрипт.
-По окончании запиши однострочное summary в файл .PROPOSAL_NOTE.txt — что именно изменил.
+Внеси изменения прямо в файлы. НЕ делай git commit — это сделает скрипт.
+По окончании запиши однострочное summary того что СДЕЛАЛ в файл .PROPOSAL_NOTE.txt.
 """
 
     args = [cli, "--yolo", "--allowed-mcp-server-names", "__none__", "--prompt", prompt]
@@ -261,37 +302,25 @@ async def _handle_propose(arguments: dict, **_kw) -> dict:
             _git("branch", "-D", branch, check=False)
             return {"ok": False, "error": "gemini_failed", "details": gres}
 
-        # Что изменилось?
-        st = _git("status", "--porcelain").stdout.strip()
-        if not st:
-            _git("checkout", "main", check=False)
-            _git("branch", "-D", branch, check=False)
-            return {"ok": False, "error": "no_changes_made",
-                    "hint": "Gemini не внёс никаких правок в файлы"}
-
-        changed_files = []
-        for line in st.splitlines():
-            # формат: XY filename
-            parts = line.strip().split(None, 1)
-            if len(parts) == 2:
-                changed_files.append(parts[1].strip('"'))
-
-        # Получаем diff
-        diff_text = _git("diff", "HEAD").stdout
-
-        # Извлекаем note если есть
+        # Извлекаем note (summary Gemini) и удаляем её до сбора файлов.
         note_path = _REPO_ROOT / ".PROPOSAL_NOTE.txt"
         note = note_path.read_text(encoding="utf-8", errors="replace").strip() if note_path.exists() else ""
         if note_path.exists():
             note_path.unlink()  # не коммитим заметку
-            # Re-stage без .PROPOSAL_NOTE.txt в результирующем diff
-            st2 = _git("status", "--porcelain").stdout.strip()
-            changed_files = []
-            for line in st2.splitlines():
-                parts = line.strip().split(None, 1)
-                if len(parts) == 2:
-                    changed_files.append(parts[1].strip('"'))
-            diff_text = _git("diff", "HEAD").stdout
+
+        # Что изменилось (без артефактов движка и gitignored-мусора)?
+        changed_files = _collect_changed_files()
+        if not changed_files:
+            _git("checkout", "main", check=False)
+            _git("branch", "-D", branch, check=False)
+            return {"ok": False, "error": "no_changes_made",
+                    "hint": "Gemini не внёс правок в реальные файлы (только логи/артефакты)"}
+
+        # Стейджим ТОЛЬКО реальные файлы (не git add . — иначе подберём логи/артефакты).
+        for f in changed_files:
+            _git("add", "--", f, check=False)
+        # diff считаем по застейдженному — ровно то, что войдёт в коммит.
+        diff_text = _git("diff", "--cached").stdout
 
         # Валидация
         err = _validate_diff(diff_text, changed_files)
@@ -302,8 +331,7 @@ async def _handle_propose(arguments: dict, **_kw) -> dict:
                     "details": {"files": changed_files,
                                 "diff_size": len(diff_text)}}
 
-        # Коммит на ветке
-        _git("add", ".")
+        # Коммит на ветке (только застейдженные реальные файлы)
         commit_msg = f"proposal: {description[:60]}\n\nRationale: {rationale}"
         _git("commit", "-m", commit_msg)
         commit_hash = _git("rev-parse", "HEAD").stdout.strip()
