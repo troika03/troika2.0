@@ -93,7 +93,10 @@ def _is_clean_main() -> tuple[bool, str]:
         branch = _git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
         if branch != "main":
             return False, f"not_on_main (current: {branch})"
-        st = _git("status", "--porcelain").stdout.strip()
+        # --untracked-files=no: неотслеживаемые файлы (логи, scratch-скрипты _*.py,
+        # каталоги вроде _logs/) НЕ мешают ветвлению/merge — учитываем только
+        # реальные несохранённые правки tracked-файлов.
+        st = _git("status", "--porcelain", "--untracked-files=no").stdout.strip()
         if st:
             return False, f"uncommitted_changes ({len(st.splitlines())} files)"
         return True, "ok"
