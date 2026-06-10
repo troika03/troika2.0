@@ -237,7 +237,12 @@ async def _propose_via_gemini(branch: str, description: str, target_files: List[
 По окончании запиши однострочное summary того что СДЕЛАЛ в файл .PROPOSAL_NOTE.txt.
 """
 
-    args = [cli, "--yolo", "--allowed-mcp-server-names", "__none__", "--prompt", prompt]
+    # Модель: pro, НЕ дефолтный flash. Самоулучшение — это «создай файл + зарегистрируй
+    # tool» = много tool-calls, на которых gemini-2.5-flash валится «Invalid stream:
+    # empty response or malformed tool call» (см. autopilot-flash-invalid-stream).
+    # Для правок в собственный код корректность важнее экономии квоты → сразу pro.
+    args = [cli, "--yolo", "-m", "gemini-2.5-pro",
+            "--allowed-mcp-server-names", "__none__", "--prompt", prompt]
     log_out = _REPO_ROOT / ".self_improve.log"
     log_err = _REPO_ROOT / ".self_improve.err"
 
@@ -258,6 +263,13 @@ async def _propose_via_gemini(branch: str, description: str, target_files: List[
                     pass
                 return {"ok": False, "error": "gemini_timeout_300s"}
         out = log_out.read_text(encoding="utf-8", errors="replace") if log_out.exists() else ""
+        err = log_err.read_text(encoding="utf-8", errors="replace") if log_err.exists() else ""
+        # Детект malformed-обрыва модели — чтобы не списывать молча в no_changes_made.
+        if re.search(r"Invalid stream|malformed tool call|empty response", err, re.IGNORECASE):
+            return {"ok": False, "error": "gemini_malformed_stream",
+                    "hint": "Модель оборвалась (Invalid stream). Повтори запрос — "
+                            "обычно разовый флап; если повторяется, упрости задачу.",
+                    "err_tail": err[-300:]}
         return {"ok": rc == 0, "rc": rc, "out_tail": out[-500:]}
     except Exception as e:
         return {"ok": False, "error": f"spawn_failed: {e}"}
