@@ -55,7 +55,9 @@ _FORBIDDEN_PATTERNS = [
     r"^gateway/",            # gateway критичен для жизни
     r"^hermes_cli/",         # CLI критичен
     r"^\.git/",
-    r"^tools/self_improve",  # сама себя не правит!
+    r"^tools/self_improve",  # сама себя не правит! (покрывает _verify, _watcher тоже)
+    r"^tools/self_improve_verify",  # явно: движок проверки/переключения — несгораемый
+    r"^tools/self_improve_watcher",  # явно: страховочный watcher отката
     r"^tools/registry\.py$",
     r"^tools/job_runner\.py$",
 ]
@@ -323,15 +325,40 @@ async def _handle_propose(arguments: dict, **_kw) -> dict:
         }
         _save_proposal(proposal)
 
-        return {
+        base_resp = {
             "ok": True,
             "proposal_id": pid,
             "branch": branch,
             "files_changed": len(changed_files),
             "lines_changed": proposal["lines_changed"],
             "files": changed_files,
-            "say_to_user": f"Готово, предложение {pid}. Изменила {len(changed_files)} файлов на {proposal['lines_changed']} строк. Скажи «покажи предложение {pid}» чтобы посмотреть, или «применить {pid}» чтобы накатить.",
         }
+
+        # ── Проверка в green-песочнице + (авто-применение | оставить pending) ──
+        # auto_verify=False (по умолчанию из аргументов false-y) пропускает живой прогон
+        # — нужно для тестов и для случаев когда Миша хочет ручной approve.
+        if arguments.get("auto_verify", True):
+            try:
+                from tools.self_improve_verify import verify_classify_and_maybe_apply
+                outcome = await verify_classify_and_maybe_apply(proposal)
+                base_resp.update({
+                    "risk": outcome.get("risk"),
+                    "verify": outcome.get("verify"),
+                    "auto_applied": outcome.get("auto_applied", False),
+                    "needs_approval": outcome.get("needs_approval", True),
+                    "say_to_user": outcome.get("say_to_user"),
+                })
+                return base_resp
+            except Exception as e:
+                logger.warning("verify stage failed, falling back to manual approve: %s", e)
+                # Падать нельзя — предложение уже создано. Откатываемся к ручному approve.
+
+        base_resp["say_to_user"] = (
+            f"Готово, предложение {pid}. Изменила {len(changed_files)} файлов на "
+            f"{proposal['lines_changed']} строк. Скажи «покажи предложение {pid}» "
+            f"чтобы посмотреть, или «применить {pid}» чтобы накатить."
+        )
+        return base_resp
     except subprocess.CalledProcessError as e:
         _git("checkout", "main", check=False)
         _git("branch", "-D", branch, check=False)
@@ -458,19 +485,55 @@ async def _handle_reject(arguments: dict, **_kw) -> dict:
         return {"ok": False, "error": f"reject_failed: {e}"}
 
 
+async def _handle_revert(arguments: dict, **_kw) -> dict:
+    """Откатить УЖЕ ПРИМЕНЁННОЕ предложение: git revert merge-коммита на main.
+    Голосом «откати N» — после авто-применения, если изменение не понравилось."""
+    pid = (arguments.get("proposal_id") or "").strip()
+    if not pid:
+        return {"ok": False, "error": "missing_proposal_id"}
+    p = _load_proposal(pid)
+    if not p:
+        return {"ok": False, "error": "not_found"}
+    if p.get("status") != "applied":
+        return {"ok": False, "error": f"not_applied (status={p.get('status')})",
+                "hint": "Откатить можно только применённое предложение."}
+    merge_commit = p.get("merge_commit")
+    if not merge_commit:
+        return {"ok": False, "error": "no_merge_commit"}
+
+    ok, reason = _is_clean_main()
+    if not ok:
+        return {"ok": False, "error": f"repo_not_clean: {reason}"}
+    try:
+        _git("revert", "--no-edit", merge_commit)
+        revert_commit = _git("rev-parse", "HEAD").stdout.strip()
+        p["status"] = "reverted"
+        p["reverted_at"] = time.time()
+        p["revert_commit"] = revert_commit
+        _save_proposal(p)
+        return {
+            "ok": True, "proposal_id": pid, "revert_commit": revert_commit,
+            "say_to_user": f"Откатила предложение {pid}. Перезапусти gateway, чтобы "
+                           f"вернуться на прежний код — или скажи и я сама.",
+        }
+    except subprocess.CalledProcessError as e:
+        return {"ok": False, "error": f"revert_failed: {e.stderr[:300]}"}
+
+
 # ---------------------------------------------------------------------------
 # Schemas + registration
 # ---------------------------------------------------------------------------
 
 PROPOSE_SCHEMA = {
     "name": "self_improve_propose",
-    "description": "Тройка генерирует предложение по улучшению собственного кода через Gemini CLI. Создаёт git-ветку с правками, НЕ применяет без подтверждения. Запрещено трогать gateway/, cli.py, .env, hermes_cli/. Лимит: ≤5 файлов, ≤300 строк. Используй когда пользователь говорит «добавь себе фичу», «улучши такой-то tool», «научись делать X».",
+    "description": "Тройка улучшает собственный код через Gemini CLI: создаёт git-ветку с правками, ПРОВЕРЯЕТ их в одноразовой песочнице (новый код реально запускается + прогоняются тесты), и если изменение БЕЗОПАСНОЕ (новый tool/навык/мелкая правка) и проверка прошла — применяет САМА и перезапускается на новой версии. Рискованное (память/сеть/деньги/ядро) или не прошедшее проверку — остаётся ждать твоего «применить N». Запрещено трогать gateway/, cli.py, .env, hermes_cli/, registry. Лимит: ≤5 файлов, ≤300 строк. Используй на «добавь себе фичу», «улучши такой-то tool», «научись делать X».",
     "parameters": {
         "type": "object",
         "properties": {
             "description": {"type": "string", "description": "Что улучшить. Конкретно и сжато (1-3 предложения)."},
             "rationale": {"type": "string", "description": "Зачем — почему это полезно, что станет лучше. Без этого предложение не принимается."},
             "target_files": {"type": "array", "items": {"type": "string"}, "description": "Список путей которые планируешь трогать (относительно репо). Помогает Gemini фокусироваться. Опционально."},
+            "auto_verify": {"type": "boolean", "description": "По умолчанию true: проверить в песочнице и авто-применить если безопасно. false — только создать предложение для ручного approve."},
         },
         "required": ["description", "rationale"],
     },
@@ -513,7 +576,19 @@ APPROVE_SCHEMA = {
 
 REJECT_SCHEMA = {
     "name": "self_improve_reject",
-    "description": "Отклонить предложение, удалить ветку.",
+    "description": "Отклонить ОЖИДАЮЩЕЕ предложение, удалить его ветку.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "proposal_id": {"type": "string"},
+        },
+        "required": ["proposal_id"],
+    },
+}
+
+REVERT_SCHEMA = {
+    "name": "self_improve_revert",
+    "description": "Откатить УЖЕ ПРИМЕНЁННОЕ предложение через git revert merge-коммита. Используй на «откати N», «верни как было», когда применённое (в т.ч. авто-применённое) изменение не понравилось или сломало поведение.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -539,3 +614,6 @@ registry.register(name="self_improve_approve", toolset="self_improve",
 registry.register(name="self_improve_reject", toolset="self_improve",
                   schema=REJECT_SCHEMA, handler=_handle_reject,
                   is_async=True, emoji="❌")
+registry.register(name="self_improve_revert", toolset="self_improve",
+                  schema=REVERT_SCHEMA, handler=_handle_revert,
+                  is_async=True, emoji="↩️")
