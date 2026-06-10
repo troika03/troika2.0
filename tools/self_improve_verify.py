@@ -215,12 +215,22 @@ def _remove_worktree(path: Path) -> None:
 def _green_env() -> Dict[str, str]:
     env = os.environ.copy()
     env["HERMES_HOME"] = str(GREEN_HERMES_HOME)
+    # api_server включается флагом API_SERVER_ENABLED — без него gateway стартует, но
+    # не биндит HTTP, и /health никогда не отвечает (booted=False). Это и есть «копия,
+    # которую проверяем»: только api_server на 8652, без телефона/Telegram.
+    env["API_SERVER_ENABLED"] = "true"
     env["API_SERVER_PORT"] = str(GREEN_API_PORT)
     env["API_SERVER_HOST"] = GREEN_API_HOST
+    env["API_SERVER_KEY"] = "green-sandbox"
     env["HERMES_GREEN_SANDBOX"] = "1"
     env["HERMES_QUIET"] = "1"
     # STT в песочнице не нужен — не даём ему стартовать/конфликтовать.
     env.pop("STT_PROXY_PORT", None)
+    # Телефон/Telegram токены боевой копии в песочницу не тащим — green не должен
+    # подключаться к платформам, только api_server.
+    for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_USERS",
+              "DISCORD_BOT_TOKEN", "SLACK_BOT_TOKEN", "WHATSAPP_TOKEN"):
+        env.pop(k, None)
     return env
 
 
