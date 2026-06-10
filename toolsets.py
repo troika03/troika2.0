@@ -115,8 +115,10 @@ _HERMES_CORE_TOOLS = [
     "finance",
     # Мета-router: find_tool(query) → schema редкого инструмента
     "find_tool",
-    # Делегирование кодинг-задач Gemini CLI на PC
-    "gemini_code",
+    # Делегирование кодинг-задач CLI-кодерам на PC (вход по аккаунту/подписке)
+    "gemini_code",   # Gemini CLI (Google OAuth)
+    "claude_code",   # Claude Code (подписка Claude) — лучший кодер
+    "qwen_code",     # Qwen Code (Qwen OAuth, free tier) — бесплатный запасной
     # Статус фоновых задач (job_runner)
     "task_status",
     # Управление проектами (vision/SRS/архитектура/код)
@@ -574,8 +576,8 @@ TOOLSETS = {
             "skill_world_time", "skill_currency_rate",
             # Web / vision / делегирование
             "web_search", "web_research", "vision_analyze", "delegate_task",
-            # Кодинг через Gemini CLI (sub-agent)
-            "gemini_code",
+            # Кодинг через CLI-кодеров (sub-agent): Gemini / Claude / Qwen
+            "gemini_code", "claude_code", "qwen_code",
             # Статус фоновых задач
             "task_status",
             # Управление проектами
