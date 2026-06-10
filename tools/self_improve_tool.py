@@ -117,6 +117,35 @@ def _git(*args: str, cwd: Path = _REPO_ROOT, check: bool = True) -> subprocess.C
     )
 
 
+def _abort_to_main(branch: Optional[str] = None) -> None:
+    """Безопасный откат на чистый main при ЛЮБОМ обрыве propose.
+
+    КРИТИЧНО: Gemini мог оставить НЕзакоммиченные правки в рабочем дереве. Если просто
+    `git checkout main`, эти правки «переедут» на main (всплыло на живом прогоне:
+    мусорный add_numbers в utils.py утёк на main). Поэтому СНАЧАЛА жёстко сбрасываем
+    рабочее дерево (reset --hard + clean реальных файлов), и только потом checkout main.
+    """
+    try:
+        _git("reset", "--hard", "HEAD", check=False)
+    except Exception:
+        pass
+    # Удаляем неотслеживаемые файлы, которые Gemini мог создать (новый tool и т.п.),
+    # НО только не-игнорируемые — артефакты/логи не трогаем тут (их чистит вызывающий).
+    try:
+        _git("clean", "-fd", "--", "tools/", "skills/", check=False)
+    except Exception:
+        pass
+    try:
+        _git("checkout", "main", check=False)
+    except Exception:
+        pass
+    if branch:
+        try:
+            _git("branch", "-D", branch, check=False)
+        except Exception:
+            pass
+
+
 def _is_clean_main() -> tuple[bool, str]:
     """Возвращает (ok, reason). ok=True если на main и нет несохранённых правок."""
     try:
@@ -322,9 +351,7 @@ async def _handle_propose(arguments: dict, **_kw) -> dict:
     try:
         gres = await _propose_via_gemini(branch, description, target_files)
         if not gres.get("ok"):
-            # Откатываем — на main, удаляем ветку
-            _git("checkout", "main", check=False)
-            _git("branch", "-D", branch, check=False)
+            _abort_to_main(branch)
             return {"ok": False, "error": "gemini_failed", "details": gres}
 
         # Извлекаем note (summary Gemini) и удаляем её до сбора файлов.
@@ -336,8 +363,7 @@ async def _handle_propose(arguments: dict, **_kw) -> dict:
         # Что изменилось (без артефактов движка и gitignored-мусора)?
         changed_files = _collect_changed_files()
         if not changed_files:
-            _git("checkout", "main", check=False)
-            _git("branch", "-D", branch, check=False)
+            _abort_to_main(branch)
             return {"ok": False, "error": "no_changes_made",
                     "hint": "Gemini не внёс правок в реальные файлы (только логи/артефакты)"}
 
@@ -350,8 +376,7 @@ async def _handle_propose(arguments: dict, **_kw) -> dict:
         # Валидация
         err = _validate_diff(diff_text, changed_files)
         if err:
-            _git("checkout", "main", check=False)
-            _git("branch", "-D", branch, check=False)
+            _abort_to_main(branch)
             return {"ok": False, "error": f"validation: {err}",
                     "details": {"files": changed_files,
                                 "diff_size": len(diff_text)}}
@@ -416,13 +441,11 @@ async def _handle_propose(arguments: dict, **_kw) -> dict:
         )
         return base_resp
     except subprocess.CalledProcessError as e:
-        _git("checkout", "main", check=False)
-        _git("branch", "-D", branch, check=False)
+        _abort_to_main(branch)
         return {"ok": False, "error": f"git_error: {e.stderr[:300]}"}
     except Exception as e:
         try:
-            _git("checkout", "main", check=False)
-            _git("branch", "-D", branch, check=False)
+            _abort_to_main(branch)
         except Exception:
             pass
         return {"ok": False, "error": f"propose_failed: {type(e).__name__}: {e}"}
