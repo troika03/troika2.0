@@ -242,33 +242,50 @@ async def _propose_via_gemini(branch: str, description: str, target_files: List[
     log_out = _REPO_ROOT / ".self_improve.log"
     log_err = _REPO_ROOT / ".self_improve.err"
 
-    try:
-        with open(log_out, "wb") as f_out, open(log_err, "wb") as f_err:
-            proc = await asyncio.create_subprocess_exec(
-                *args, cwd=str(_REPO_ROOT),
-                stdout=f_out, stderr=f_err, env=env,
-            )
-            try:
-                rc = await asyncio.wait_for(proc.wait(), timeout=300)
-            except asyncio.TimeoutError:
+    async def _one_run() -> Dict[str, Any]:
+        try:
+            with open(log_out, "wb") as f_out, open(log_err, "wb") as f_err:
+                proc = await asyncio.create_subprocess_exec(
+                    *args, cwd=str(_REPO_ROOT),
+                    stdout=f_out, stderr=f_err, env=env,
+                )
                 try:
-                    import subprocess as _sp
-                    _sp.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
-                            capture_output=True, timeout=10)
-                except Exception:
-                    pass
-                return {"ok": False, "error": "gemini_timeout_300s"}
-        out = log_out.read_text(encoding="utf-8", errors="replace") if log_out.exists() else ""
-        err = log_err.read_text(encoding="utf-8", errors="replace") if log_err.exists() else ""
-        # Детект malformed-обрыва модели — чтобы не списывать молча в no_changes_made.
-        if re.search(r"Invalid stream|malformed tool call|empty response", err, re.IGNORECASE):
-            return {"ok": False, "error": "gemini_malformed_stream",
-                    "hint": "Модель оборвалась (Invalid stream). Повтори запрос — "
-                            "обычно разовый флап; если повторяется, упрости задачу.",
-                    "err_tail": err[-300:]}
-        return {"ok": rc == 0, "rc": rc, "out_tail": out[-500:]}
-    except Exception as e:
-        return {"ok": False, "error": f"spawn_failed: {e}"}
+                    rc = await asyncio.wait_for(proc.wait(), timeout=300)
+                except asyncio.TimeoutError:
+                    try:
+                        import subprocess as _sp
+                        _sp.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                                capture_output=True, timeout=10)
+                    except Exception:
+                        pass
+                    return {"ok": False, "error": "gemini_timeout_300s"}
+            out = log_out.read_text(encoding="utf-8", errors="replace") if log_out.exists() else ""
+            err = log_err.read_text(encoding="utf-8", errors="replace") if log_err.exists() else ""
+            if re.search(r"Invalid stream|malformed tool call|empty response", err, re.IGNORECASE):
+                return {"ok": False, "error": "gemini_malformed_stream",
+                        "err_tail": err[-300:]}
+            return {"ok": rc == 0, "rc": rc, "out_tail": out[-500:]}
+        except Exception as e:
+            return {"ok": False, "error": f"spawn_failed: {e}"}
+
+    # Ретрай на malformed-флапах «Invalid stream» — они часто разовые (см.
+    # autopilot-flash-invalid-stream). Ретраим ТОЛЬКО если Gemini не оставил
+    # реальных правок (нет файлового прогресса) — иначе можем затереть успех.
+    last: Dict[str, Any] = {}
+    for attempt in range(1, 4):
+        last = await _one_run()
+        if last.get("ok"):
+            return last
+        if last.get("error") != "gemini_malformed_stream":
+            return last
+        if _collect_changed_files():
+            # Файлы всё-таки появились до обрыва — считаем успехом, дальше валидатор.
+            return {"ok": True, "rc": 0, "note": "progress_despite_malformed"}
+        logger.warning("self_improve gemini malformed flap, retry %d/3", attempt)
+        await asyncio.sleep(3)
+    last.setdefault("hint", "Модель трижды оборвалась на Invalid stream. "
+                            "Попробуй упростить задачу или повтори позже.")
+    return last
 
 
 async def _handle_propose(arguments: dict, **_kw) -> dict:
