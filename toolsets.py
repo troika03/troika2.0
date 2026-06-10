@@ -118,7 +118,9 @@ _HERMES_CORE_TOOLS = [
     # Делегирование кодинг-задач CLI-кодерам на PC (вход по аккаунту/подписке)
     "gemini_code",   # Gemini CLI (Google OAuth)
     "claude_code",   # Claude Code (подписка Claude) — лучший кодер
-    "qwen_code",     # Qwen Code (Qwen OAuth, free tier) — бесплатный запасной
+    # "qwen_code",   # Qwen Code — СПЯЩИЙ: требует API-ключ Alibaba ModelStudio (не
+    #                  чистый OAuth). Код готов в coder_tool.py; раскомментить когда
+    #                  будет ключ (~/.qwen/oauth_creds.json или QWEN API key).
     # Статус фоновых задач (job_runner)
     "task_status",
     # Управление проектами (vision/SRS/архитектура/код)
@@ -576,8 +578,8 @@ TOOLSETS = {
             "skill_world_time", "skill_currency_rate",
             # Web / vision / делегирование
             "web_search", "web_research", "vision_analyze", "delegate_task",
-            # Кодинг через CLI-кодеров (sub-agent): Gemini / Claude / Qwen
-            "gemini_code", "claude_code", "qwen_code",
+            # Кодинг через CLI-кодеров (sub-agent): Gemini / Claude (Qwen — спящий)
+            "gemini_code", "claude_code",
             # Статус фоновых задач
             "task_status",
             # Управление проектами
