@@ -168,8 +168,11 @@ async def _run_coder(backend: str, workspace: Path, task: str, timeout: int,
 
     malformed = bool(_MALFORMED_RE.search(err))
     if rc != 0:
+        # Логируем причину СРАЗУ — файлы логов уже удалены выше, иначе диагностика теряется.
+        logger.warning("%s coder exit %s; stderr tail: %s | stdout tail: %s",
+                       backend, rc, (err[-300:] or "(empty)"), (out[-200:] or "(empty)"))
         return {"ok": False, "error": f"{backend}-cli exit {rc}",
-                "malformed": malformed, "err_tail": err[-400:]}
+                "malformed": malformed, "err_tail": err[-400:], "out_tail": out[-400:]}
     return {"ok": True, "rc": rc, "malformed": malformed, "out_tail": out[-400:]}
 
 

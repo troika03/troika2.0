@@ -1421,32 +1421,53 @@ async def _do_pm_doc_work(payload: Dict[str, Any]) -> Dict[str, Any]:
     coder = (payload.get("coder") or "claude").strip().lower()
 
     # --- Путь Claude: основной (gemini-cli виснет headless на этой машине) ---
+    # Документ считаем готовым по ФАКТУ файла на диске, а НЕ по rc: Claude иногда
+    # отдаёт ненулевой код (внутренний таймаут turn'а, лимит), уже записав файл.
+    # Поэтому при сбое сначала проверяем файл, и только если его нет — ретраим
+    # Claude с увеличенным таймаутом. Фолбэк на gemini-cli — лишь когда Claude
+    # вообще недоступен (gemini виснет headless, это последний шанс, не первый).
+    def _phase_doc_path() -> Optional[Path]:
+        m = _read_meta(project_path)
+        rel = _PHASE_DOCS.get(m.get("phase", "discovery"))
+        return (project_path / rel) if rel else None
+
+    def _doc_ready() -> bool:
+        p = _phase_doc_path()
+        return bool(p and p.exists() and p.stat().st_size >= 300)
+
+    def _ok_result(via: str) -> Dict[str, Any]:
+        meta = _read_meta(project_path)
+        phase = meta.get("phase", "discovery")
+        doc_rel = _PHASE_DOCS.get(phase)
+        return {
+            "ok": True, "phase": phase, "doc": doc_rel,
+            "project_path": str(project_path), "via": via,
+            "say_to_user": (f"Готов документ {doc_rel}. Прочитать или сразу идём дальше?"
+                            if doc_rel and (project_path / doc_rel).exists()
+                            else "PM-агент завершил работу. Посмотри что вышло."),
+            "next_action_hint": "read_doc",
+        }
+
     if coder == "claude":
         try:
             from tools.coder_tool import _run_coder, _find_backend_cli
             if _find_backend_cli("claude"):
                 sysp = _read_pm_system_prompt()
-                res = await _run_coder(
-                    "claude", project_path, task, timeout,
-                    headless_rules=_PM_HEADLESS_RULES, system_prompt=sysp,
-                )
-                if res.get("ok"):
-                    meta = _read_meta(project_path)
-                    phase = meta.get("phase", "discovery")
-                    doc_rel = _PHASE_DOCS.get(phase)
-                    doc_exists = doc_rel and (project_path / doc_rel).exists()
-                    return {
-                        "ok": True, "phase": phase, "doc": doc_rel,
-                        "project_path": str(project_path), "via": "claude",
-                        "say_to_user": (
-                            f"Готов документ {doc_rel}. Прочитать или сразу идём дальше?"
-                            if doc_exists else
-                            "PM-агент завершил работу. Посмотри что вышло."
-                        ),
-                        "next_action_hint": "read_doc",
-                    }
-                logger.warning("PM via claude failed (%s) — fallback to gemini-cli",
-                               res.get("error"))
+                last_err = ""
+                # До 2 попыток Claude с растущим таймаутом: тяжёлые доки (tasks с 3
+                # документами контекста) не всегда укладываются с первого раза.
+                for attempt in range(2):
+                    t = timeout if attempt == 0 else int(timeout * 1.5)
+                    res = await _run_coder(
+                        "claude", project_path, task, t,
+                        headless_rules=_PM_HEADLESS_RULES, system_prompt=sysp,
+                    )
+                    if res.get("ok") or _doc_ready():
+                        # rc!=0 но файл записан — это успех (Claude дописал и упал на выходе).
+                        return _ok_result("claude" if res.get("ok") else "claude-partial")
+                    last_err = res.get("error", "") + " | " + (res.get("err_tail", "") or "")
+                    logger.warning("PM claude attempt %d failed: %s", attempt + 1, last_err[:300])
+                logger.warning("PM claude exhausted retries (%s) — fallback to gemini-cli", last_err[:200])
         except Exception as e:
             logger.warning("PM claude path crashed (%s) — fallback to gemini-cli", e)
 
