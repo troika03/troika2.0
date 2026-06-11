@@ -91,3 +91,6 @@ _gemini_*/
 gha-creds-*.json
 # Semantic memory cache (rebuilt from vault on demand, lives in vault not repo)
 .semantic_cache.npz
+
+# Локальные логи отладки (stt, gateway, аудит-скрипты)
+_logs/
