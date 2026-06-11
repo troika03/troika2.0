@@ -52,16 +52,16 @@ _MALFORMED_RE = re.compile(r"Invalid stream|malformed tool call|empty response",
 # Описание бэкендов: как звать CLI и как он принимает headless-задачу
 # ---------------------------------------------------------------------------
 
-def _claude_args(cli: str, prompt_file: Path) -> list[str]:
-    # Claude Code headless: -p печатает ответ и выходит; acceptEdits авто-применяет
-    # правки файлов без интерактивных подтверждений. Промпт даём через stdin (надёжнее
-    # длинных cmdline на Windows) — здесь возвращаем базовые флаги, текст пойдёт в stdin.
-    return [cli, "-p", "--permission-mode", "acceptEdits",
+def _claude_args(cli: str, prompt_file: Path, prompt: str) -> list[str]:
+    # Claude Code headless: промпт — ПОЗИЦИОННЫЙ аргумент после -p (НЕ stdin: stdin
+    # гонится с 3с-таймаутом Claude и падает «Input must be provided»). acceptEdits +
+    # skip-permissions = авто-применять правки без подтверждений.
+    return [cli, "-p", prompt, "--permission-mode", "acceptEdits",
             "--dangerously-skip-permissions"]
 
 
-def _qwen_args(cli: str, prompt_file: Path) -> list[str]:
-    # Qwen Code — форк Gemini-CLI: те же флаги. --yolo авто-аппрув, без MCP для скорости.
+def _qwen_args(cli: str, prompt_file: Path, prompt: str) -> list[str]:
+    # Qwen Code — форк Gemini-CLI: промпт через @file, --yolo авто-аппрув, без MCP.
     return [cli, "--yolo", "--allowed-mcp-server-names", "__none__", "--prompt", "@" + str(prompt_file)]
 
 
@@ -70,7 +70,7 @@ _BACKENDS = {
         "cli_name": "claude",
         "env_path": "CLAUDE_CLI_PATH",
         "build_args": _claude_args,
-        "stdin_prompt": True,   # промпт через stdin
+        "stdin_prompt": False,  # промпт идёт аргументом, stdin не используем
         "auth_hint": "Запусти `claude` в терминале и войди по подписке.",
         "label": "Claude",
     },
@@ -108,7 +108,7 @@ async def _run_coder(backend: str, workspace: Path, task: str, timeout: int) -> 
     prompt_file = workspace / ".CODE_TASK.md"
     prompt_file.write_text(prompt, encoding="utf-8")
 
-    args = spec["build_args"](cli, prompt_file)
+    args = spec["build_args"](cli, prompt_file, prompt)
 
     env = os.environ.copy()
     # node предпочитает IPv4 — лечит висяки на IPv6-DNS без маршрута (как в gemini_code).
@@ -125,18 +125,12 @@ async def _run_coder(backend: str, workspace: Path, task: str, timeout: int) -> 
         return {"ok": False, "error": f"cannot open log files: {e}"}
 
     try:
-        stdin_data = prompt.encode("utf-8") if spec["stdin_prompt"] else None
         proc = await asyncio.create_subprocess_exec(
             *args, cwd=str(workspace), env=env,
-            stdin=asyncio.subprocess.PIPE if spec["stdin_prompt"] else asyncio.subprocess.DEVNULL,
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=f_out, stderr=f_err,
         )
         try:
-            if spec["stdin_prompt"]:
-                # Промпт в stdin, затем ждём завершения с таймаутом.
-                proc.stdin.write(stdin_data)
-                await proc.stdin.drain()
-                proc.stdin.close()
             rc = await asyncio.wait_for(proc.wait(), timeout=timeout)
         except asyncio.TimeoutError:
             try:

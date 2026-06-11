@@ -1011,10 +1011,27 @@ async def _do_create_work(payload: Dict[str, Any]) -> Dict[str, Any]:
     want_preview = payload["want_preview"]
     design_style = payload.get("design_style")
     extra_constraints = payload.get("extra_constraints")
+    coder = (payload.get("coder") or "gemini").strip().lower()
 
-    gemini = await _run_gemini(workspace, task, timeout, use_mcp=use_mcp,
-                              design_style=design_style,
-                              extra_constraints=extra_constraints)
+    if coder == "claude":
+        # Claude как кодер: сильнее и без Invalid stream. Дизайн-стиль/констрейнты
+        # дописываем в task (claude-бэкенд не принимает их отдельными параметрами).
+        from tools.coder_tool import _run_coder
+        ctask = task
+        if design_style:
+            ctask += f"\n\nDESIGN STYLE: {design_style} (никакого AI-look — без фиолетовых градиентов, glassy-карточек, эмодзи на кнопках)."
+        if extra_constraints:
+            ctask += f"\n\nДОП. ТРЕБОВАНИЯ: {extra_constraints}"
+        gemini = await _run_coder("claude", workspace, ctask, timeout)
+        if not gemini.get("ok") and "not_found" in str(gemini.get("error", "")):
+            # Claude CLI не установлен/не залогинен — не валим задачу, падаем на Gemini.
+            gemini = await _run_gemini(workspace, task, timeout, use_mcp=use_mcp,
+                                       design_style=design_style,
+                                       extra_constraints=extra_constraints)
+    else:
+        gemini = await _run_gemini(workspace, task, timeout, use_mcp=use_mcp,
+                                  design_style=design_style,
+                                  extra_constraints=extra_constraints)
     files = _list_files(workspace)
 
     # Сохраняем указатель на workspace ВСЕГДА, если там есть пользовательские файлы.
@@ -1028,7 +1045,7 @@ async def _do_create_work(payload: Dict[str, Any]) -> Dict[str, Any]:
                 **gemini, "say_to_user": "Не получилось сделать сайт. Попробуй переформулировать."}
     if not files:
         return {"ok": False, "workspace": str(workspace), "error": "no_files",
-                "say_to_user": "Gemini ничего не сгенерировал."}
+                "say_to_user": "Кодер ничего не сгенерировал, попробуй переформулировать."}
 
     zip_info: Dict[str, Any] = {}
     if deliver != "none":
@@ -1086,6 +1103,9 @@ async def _action_create(args: Dict[str, Any]) -> Dict[str, Any]:
         "timeout": timeout, "use_mcp": use_mcp, "deliver": deliver, "want_preview": want_preview,
         "design_style": (args.get("design_style") or "").strip().lower() or None,
         "extra_constraints": (args.get("extra_constraints") or "").strip() or None,
+        # Дефолтный кодер — Claude (надёжнее Gemini, без Invalid stream). Можно
+        # переопределить coder="gemini" в аргументах.
+        "coder": (args.get("coder") or "claude").strip().lower(),
     }
 
     if not async_mode:
@@ -1126,6 +1146,7 @@ async def _action_iterate(args: Dict[str, Any]) -> Dict[str, Any]:
         "timeout": timeout, "use_mcp": use_mcp, "deliver": deliver,
         "design_style": (args.get("design_style") or "").strip().lower() or None,
         "extra_constraints": (args.get("extra_constraints") or "").strip() or None,
+        "coder": (args.get("coder") or "claude").strip().lower(),
     }
 
     if not async_mode:
@@ -1151,10 +1172,25 @@ async def _do_iterate_work(payload: Dict[str, Any]) -> Dict[str, Any]:
     deliver = payload["deliver"]
     design_style = payload.get("design_style")
     extra_constraints = payload.get("extra_constraints")
+    coder = (payload.get("coder") or "gemini").strip().lower()
 
-    gemini = await _run_gemini(workspace, task, timeout, iterate=True, use_mcp=use_mcp,
-                              design_style=design_style,
-                              extra_constraints=extra_constraints)
+    if coder == "claude":
+        from tools.coder_tool import _run_coder
+        ctask = ("Это ПРАВКА существующего проекта в текущей директории — измени "
+                 "файлы на месте, не пересоздавай с нуля.\n\n" + task)
+        if design_style:
+            ctask += f"\n\nDESIGN STYLE: {design_style} (никакого AI-look — без фиолетовых градиентов, glassy-карточек, эмодзи на кнопках)."
+        if extra_constraints:
+            ctask += f"\n\nДОП. ТРЕБОВАНИЯ: {extra_constraints}"
+        gemini = await _run_coder("claude", workspace, ctask, timeout)
+        if not gemini.get("ok") and "not_found" in str(gemini.get("error", "")):
+            gemini = await _run_gemini(workspace, task, timeout, iterate=True, use_mcp=use_mcp,
+                                       design_style=design_style,
+                                       extra_constraints=extra_constraints)
+    else:
+        gemini = await _run_gemini(workspace, task, timeout, iterate=True, use_mcp=use_mcp,
+                                  design_style=design_style,
+                                  extra_constraints=extra_constraints)
     files = _list_files(workspace)
 
     if files:
@@ -1397,6 +1433,11 @@ GEMINI_CODE_SCHEMA = {
             "async_mode": {
                 "type": "boolean",
                 "description": "Запускать ли в фоне (default true). Тройка получит task_id сразу, продолжит общение, и озвучит результат когда фон-задача готова. Поставь false ТОЛЬКО если нужно ждать результат прямо сейчас (редко).",
+            },
+            "coder": {
+                "type": "string",
+                "enum": ["claude", "gemini"],
+                "description": "Каким движком писать код (только для create). Default 'claude' — надёжнее. 'gemini' — если Миша явно просит Gemini или лимит Claude исчерпан.",
             },
         },
     },
