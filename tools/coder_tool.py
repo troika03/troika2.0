@@ -52,15 +52,21 @@ _MALFORMED_RE = re.compile(r"Invalid stream|malformed tool call|empty response",
 # Описание бэкендов: как звать CLI и как он принимает headless-задачу
 # ---------------------------------------------------------------------------
 
-def _claude_args(cli: str, prompt_file: Path, prompt: str) -> list[str]:
+def _claude_args(cli: str, prompt_file: Path, prompt: str,
+                 system_prompt: str = "") -> list[str]:
     # Claude Code headless: промпт — ПОЗИЦИОННЫЙ аргумент после -p (НЕ stdin: stdin
     # гонится с 3с-таймаутом Claude и падает «Input must be provided»). acceptEdits +
     # skip-permissions = авто-применять правки без подтверждений.
-    return [cli, "-p", prompt, "--permission-mode", "acceptEdits",
+    args = [cli, "-p", prompt, "--permission-mode", "acceptEdits",
             "--dangerously-skip-permissions"]
+    if system_prompt:
+        # PM-режим: добавляем системный промпт (стиль PM/Tech Lead) поверх дефолтного.
+        args += ["--append-system-prompt", system_prompt]
+    return args
 
 
-def _qwen_args(cli: str, prompt_file: Path, prompt: str) -> list[str]:
+def _qwen_args(cli: str, prompt_file: Path, prompt: str,
+               system_prompt: str = "") -> list[str]:
     # Qwen Code — форк Gemini-CLI: промпт через @file, --yolo авто-аппрув, без MCP.
     return [cli, "--yolo", "--allowed-mcp-server-names", "__none__", "--prompt", "@" + str(prompt_file)]
 
@@ -97,18 +103,21 @@ def _find_backend_cli(backend: str) -> Optional[str]:
 # Запуск кодера в workspace (file-log, не PIPE — windows-subprocess-no-pipe)
 # ---------------------------------------------------------------------------
 
-async def _run_coder(backend: str, workspace: Path, task: str, timeout: int) -> Dict[str, Any]:
+async def _run_coder(backend: str, workspace: Path, task: str, timeout: int,
+                     *, headless_rules: Optional[str] = None,
+                     system_prompt: str = "") -> Dict[str, Any]:
     spec = _BACKENDS[backend]
     cli = _find_backend_cli(backend)
     if not cli:
         return {"ok": False, "error": f"{backend}_cli_not_found",
                 "hint": spec["auth_hint"]}
 
-    prompt = f"{_HEADLESS_RULES}\nUSER TASK:\n{task}"
+    rules = _HEADLESS_RULES if headless_rules is None else headless_rules
+    prompt = f"{rules}\nUSER TASK:\n{task}" if rules else task
     prompt_file = workspace / ".CODE_TASK.md"
     prompt_file.write_text(prompt, encoding="utf-8")
 
-    args = spec["build_args"](cli, prompt_file, prompt)
+    args = spec["build_args"](cli, prompt_file, prompt, system_prompt)
 
     env = os.environ.copy()
     # node предпочитает IPv4 — лечит висяки на IPv6-DNS без маршрута (как в gemini_code).

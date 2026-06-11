@@ -463,6 +463,7 @@ async def _action_generate_doc(args: Dict[str, Any]) -> Dict[str, Any]:
         "task": task,
         "use_pm_prompt": True,
         "timeout": 1800,
+        "coder": (args.get("coder") or "claude").strip().lower(),
     }
     label = f"документ {doc_rel} ({meta.get('name')})"
     session_id = args.get("_session_id") or "phone-misha-main"
@@ -1391,21 +1392,73 @@ async def _action_deploy_project(args: Dict[str, Any]) -> Dict[str, Any]:
 # PM-доc handler (для job_runner)
 # ---------------------------------------------------------------------------
 
+_PM_HEADLESS_RULES = (
+    "You are running HEADLESS as a Product Manager / Tech Lead writing project "
+    "documentation. Write the document(s) DIRECTLY to disk using your file-write "
+    "tools — do NOT print the document to the chat. Write content in Russian if "
+    "the task is in Russian. Be concrete and specific (no AI fluff like "
+    "'empower', 'leverage', 'seamless', 'next-gen'). When done, stop briefly."
+)
+
+
+def _read_pm_system_prompt() -> str:
+    """PM/Tech-Lead системный промпт (стиль документации). Из GEMINI-PM.md."""
+    for p in (Path.home() / ".gemini" / "GEMINI-PM.md",):
+        try:
+            if p.exists():
+                return p.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+    return ""
+
+
 async def _do_pm_doc_work(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Запуск PM-агента (Gemini-cli с GEMINI-PM.md) в папке проекта."""
+    """Запуск PM-агента в папке проекта. По умолчанию — Claude (надёжен headless,
+    не виснет как gemini-cli); фолбэк на Gemini-cli если Claude недоступен/упал."""
     project_path = Path(payload["project_path"])
     task = payload["task"]
     timeout = int(payload.get("timeout", 600))
+    coder = (payload.get("coder") or "claude").strip().lower()
 
-    # Используем env-var GEMINI_SYSTEM_MD на PM-промпт, и нашу обёртку запуска gemini-cli
+    # --- Путь Claude: основной (gemini-cli виснет headless на этой машине) ---
+    if coder == "claude":
+        try:
+            from tools.coder_tool import _run_coder, _find_backend_cli
+            if _find_backend_cli("claude"):
+                sysp = _read_pm_system_prompt()
+                res = await _run_coder(
+                    "claude", project_path, task, timeout,
+                    headless_rules=_PM_HEADLESS_RULES, system_prompt=sysp,
+                )
+                if res.get("ok"):
+                    meta = _read_meta(project_path)
+                    phase = meta.get("phase", "discovery")
+                    doc_rel = _PHASE_DOCS.get(phase)
+                    doc_exists = doc_rel and (project_path / doc_rel).exists()
+                    return {
+                        "ok": True, "phase": phase, "doc": doc_rel,
+                        "project_path": str(project_path), "via": "claude",
+                        "say_to_user": (
+                            f"Готов документ {doc_rel}. Прочитать или сразу идём дальше?"
+                            if doc_exists else
+                            "PM-агент завершил работу. Посмотри что вышло."
+                        ),
+                        "next_action_hint": "read_doc",
+                    }
+                logger.warning("PM via claude failed (%s) — fallback to gemini-cli",
+                               res.get("error"))
+        except Exception as e:
+            logger.warning("PM claude path crashed (%s) — fallback to gemini-cli", e)
+
+    # --- Фолбэк: Gemini-cli с GEMINI_SYSTEM_MD=GEMINI-PM.md ---
     import asyncio as _asyncio
     import os as _os
     from tools.gemini_code_tool import _find_gemini_cli
 
     cli = _find_gemini_cli()
     if not cli:
-        return {"ok": False, "error": "gemini_cli_not_found",
-                "say_to_user": "Gemini CLI не найден."}
+        return {"ok": False, "error": "no_coder_available",
+                "say_to_user": "Ни Claude, ни Gemini CLI не доступны для PM-агента."}
 
     env = _os.environ.copy()
     env["GEMINI_CLI_TRUST_WORKSPACE"] = "true"
