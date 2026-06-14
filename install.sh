@@ -87,26 +87,54 @@ banner
 # ════════════════════════════════════════════════════════
 step 1 "Проверка окружения"
 
-if ! command -v docker &>/dev/null; then
-    error "Docker не найден.\n    Поставь: ${CYAN}curl -fsSL https://get.docker.com | sh${NC}"
-fi
-if ! docker info &>/dev/null; then
-    error "Docker не запущен или нет прав.\n    Запусти: ${CYAN}sudo systemctl start docker${NC}\n    Либо:    ${CYAN}sudo usermod -aG docker \$USER${NC} и перезайди в сессию"
-fi
-
-if docker compose version &>/dev/null 2>&1; then
-    COMPOSE_CMD="docker compose"
-elif docker-compose version &>/dev/null 2>&1; then
-    COMPOSE_CMD="docker-compose"
-else
-    error "Docker Compose не найден.\n    Поставь: https://docs.docker.com/compose/install/"
-fi
+# sudo-обёртка: если не root и sudo есть — используем его
+if [ "$(id -u)" -eq 0 ]; then SUDO=""; elif command -v sudo &>/dev/null; then SUDO="sudo"; else SUDO=""; fi
 
 if ! command -v curl &>/dev/null; then
     error "curl не найден. Поставь: ${CYAN}apt install curl${NC}"
 fi
 
-success "Docker      ${DIM}$(docker --version | sed 's/,.*//')${NC}"
+# --- Docker: если нет — ставим сам ---
+if ! command -v docker &>/dev/null; then
+    warn "Docker не найден — ставлю автоматически"
+    spin "Устанавливаю Docker (curl get.docker.com)" sh -c "curl -fsSL https://get.docker.com | $SUDO sh"
+    # Запускаем демон (на systemd-системах)
+    $SUDO systemctl enable --now docker &>/dev/null || $SUDO service docker start &>/dev/null || true
+fi
+
+# --- Демон запущен? ---
+if ! docker info &>/dev/null 2>&1; then
+    $SUDO systemctl start docker &>/dev/null || $SUDO service docker start &>/dev/null || true
+    sleep 2
+fi
+if ! docker info &>/dev/null 2>&1; then
+    # Возможно не хватает прав — пробуем через sudo на весь дальнейший docker
+    if [ -n "$SUDO" ] && $SUDO docker info &>/dev/null 2>&1; then
+        DOCKER="$SUDO docker"
+    else
+        error "Docker установлен, но демон не отвечает.\n    Запусти: ${CYAN}${SUDO} systemctl start docker${NC} и повтори установку"
+    fi
+else
+    DOCKER="docker"
+fi
+
+# --- Compose (plugin или legacy) ---
+if $DOCKER compose version &>/dev/null 2>&1; then
+    COMPOSE_CMD="$DOCKER compose"
+elif command -v docker-compose &>/dev/null 2>&1; then
+    COMPOSE_CMD="${SUDO} docker-compose"
+else
+    # get.docker.com уже ставит compose-plugin; если вдруг нет — доставим
+    warn "Docker Compose не найден — доставляю plugin"
+    spin "Ставлю docker-compose-plugin" sh -c "$SUDO apt-get update -qq && $SUDO apt-get install -y -qq docker-compose-plugin" || true
+    if $DOCKER compose version &>/dev/null 2>&1; then
+        COMPOSE_CMD="$DOCKER compose"
+    else
+        error "Не удалось поставить Docker Compose.\n    Поставь вручную: https://docs.docker.com/compose/install/"
+    fi
+fi
+
+success "Docker      ${DIM}$($DOCKER --version | sed 's/,.*//')${NC}"
 success "Compose     ${DIM}$($COMPOSE_CMD version --short 2>/dev/null || echo ok)${NC}"
 
 # ════════════════════════════════════════════════════════
@@ -191,6 +219,32 @@ spin "Тяну образ troika69/troika ${DIM}(первый раз — пар�
 spin "Поднимаю контейнер" \
     $COMPOSE_CMD -f docker-compose.troika.yml up -d
 
+# --- Автооткрытие портов на локальном firewall ---
+# Телефон стучится на 8642 (gateway) и 8643 (STT). Без открытых портов
+# приложение не подключится. Открываем сами, тихо и идемпотентно.
+open_ports() {
+    # ufw (Ubuntu/Debian)
+    if command -v ufw &>/dev/null && $SUDO ufw status 2>/dev/null | grep -qi "Status: active"; then
+        $SUDO ufw allow 8642/tcp &>/dev/null || true
+        $SUDO ufw allow 8643/tcp &>/dev/null || true
+        return 0
+    fi
+    # firewalld (CentOS/RHEL/Fedora)
+    if command -v firewall-cmd &>/dev/null && $SUDO firewall-cmd --state &>/dev/null 2>&1; then
+        $SUDO firewall-cmd --permanent --add-port=8642/tcp &>/dev/null || true
+        $SUDO firewall-cmd --permanent --add-port=8643/tcp &>/dev/null || true
+        $SUDO firewall-cmd --reload &>/dev/null || true
+        return 0
+    fi
+    return 1
+}
+if open_ports; then
+    success "Порты 8642/8643 открыты на firewall"
+    FW_OK=1
+else
+    FW_OK=0   # активного firewall нет — порты и так доступны
+fi
+
 # --- Ждём /health красивым прогресс-баром ---
 printf "\n  ${BOLD}Жду готовности gateway${NC} ${DIM}(до 90с)${NC}\n  "
 WAIT=0; MAXW=90; READY=0
@@ -211,6 +265,31 @@ if [ "$READY" -eq 1 ]; then
 else
     warn "Gateway пока молчит. Проверь логи и повтори через минуту:"
     warn "  ${CYAN}$COMPOSE_CMD -f docker-compose.troika.yml logs -f${NC}"
+fi
+
+# ════════════════════════════════════════════════════════
+# Вход кодеров по подписке (интерактивно, сразу)
+# ════════════════════════════════════════════════════════
+# Кодер (claude/gemini CLI) работает по ПОДПИСКЕ — нужен один интерактивный
+# логин внутри контейнера. Предлагаем сделать прямо сейчас, пока есть TTY.
+if [ "$READY" -eq 1 ] && [ -e /dev/tty ]; then
+    printf "\n  ${BOLD}Вход кодеров по подписке${NC} ${DIM}(чтобы Тройка могла писать код)${NC}\n"
+    printf "  ${DIM}claude/gemini CLI просят войти один раз. Можно сейчас или потом.${NC}\n"
+    printf "  ${BOLD}Залогинить кодеры сейчас? [Y/n]:${NC} "
+    read -r DO_LOGIN < "$TTY"
+    case "${DO_LOGIN:-y}" in
+        [Nn]*)
+            warn "Пропущено. Потом: ${CYAN}$DOCKER exec -it troika claude${NC} → /login"
+            ;;
+        *)
+            printf "\n  ${CYAN}→ Claude${NC} ${DIM}(в открывшемся CLI набери /login и следуй ссылке)${NC}\n"
+            $DOCKER exec -it troika claude < /dev/tty || \
+                warn "claude-login прерван — повторишь позже: ${CYAN}$DOCKER exec -it troika claude${NC}"
+            printf "\n  ${CYAN}→ Gemini${NC} ${DIM}(войди в Google-аккаунт по ссылке)${NC}\n"
+            $DOCKER exec -it troika gemini < /dev/tty || \
+                warn "gemini-login прерван — повторишь позже: ${CYAN}$DOCKER exec -it troika gemini${NC}"
+            ;;
+    esac
 fi
 
 # ════════════════════════════════════════════════════════
@@ -237,14 +316,13 @@ if command -v qrencode &>/dev/null; then
     printf "\n"
 fi
 
-printf "  ${BOLD}${YELLOW}Важно — открой порты на firewall VPS:${NC}\n"
-printf "    ${CYAN}8642${NC} ${DIM}— gateway (чат, голос, управление телефоном)${NC}\n"
-printf "    ${CYAN}8643${NC} ${DIM}— распознавание речи (телефон шлёт сюда аудио)${NC}\n"
-printf "  ${DIM}ufw: ${NC}${CYAN}sudo ufw allow 8642 && sudo ufw allow 8643${NC}\n\n"
-
-printf "  ${BOLD}Вход кодеров по подписке${NC} ${DIM}(один раз, интерактивно):${NC}\n"
-printf "    ${CYAN}docker exec -it troika claude${NC}  ${DIM}→ /login  (подписка Claude)${NC}\n"
-printf "    ${CYAN}docker exec -it troika gemini${NC}  ${DIM}→ войти в Google${NC}\n\n"
+if [ "${FW_OK:-0}" = "1" ]; then
+    printf "  ${GREEN}✓${NC} Порты 8642/8643 открыты автоматически\n"
+else
+    printf "  ${DIM}Локального firewall нет — порты 8642/8643 уже доступны.${NC}\n"
+fi
+printf "  ${DIM}Если у провайдера есть ВНЕШНИЙ firewall (панель VPS) —${NC}\n"
+printf "  ${DIM}разреши там TCP 8642 и 8643.${NC}\n\n"
 
 printf "  ${BOLD}Управление${NC}\n"
 printf "    ${DIM}логи:${NC}     ${CYAN}cd %s && %s -f docker-compose.troika.yml logs -f${NC}\n" "$TROIKA_DIR" "$COMPOSE_CMD"
