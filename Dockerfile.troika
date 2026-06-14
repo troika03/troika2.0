@@ -91,7 +91,9 @@ RUN npm install --prefer-offline --no-audit && \
 # ---------- Python deps (кэшируем отдельно) ----------
 COPY pyproject.toml uv.lock ./
 RUN touch ./README.md
-RUN uv sync --frozen --no-install-project --extra all --extra messaging
+# edge-tts вынесен из [all] (lazy-install), но в контейнере lazy-install не
+# срабатывает → голос Тройки падал с "No module named 'edge_tts'". Ставим явно.
+RUN uv sync --frozen --no-install-project --extra all --extra messaging --extra edge-tts
 
 # ---------- Исходный код ----------
 COPY --chown=hermes:hermes . .
