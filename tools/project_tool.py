@@ -415,7 +415,7 @@ async def _action_next_phase(args: Dict[str, Any]) -> Dict[str, Any]:
     elif new_phase == "tasks":
         hint = " Скажи 'сгенерируй задачи' и PM-агент разобьёт работу на части."
     elif new_phase == "building":
-        hint = " Можно начинать писать код: скажи 'делай' и Gemini возьмётся за первую задачу."
+        hint = " Можно начинать писать код: скажи 'делай' и кодер возьмётся за первую задачу."
     return {"ok": True, "action": "next_phase", "new_phase": new_phase,
             "say_to_user": f"Переход в фазу: {phase_ru}.{hint}"}
 
@@ -463,6 +463,7 @@ async def _action_generate_doc(args: Dict[str, Any]) -> Dict[str, Any]:
         "task": task,
         "use_pm_prompt": True,
         "timeout": 1800,
+        "coder": (args.get("coder") or "claude").strip().lower(),
     }
     label = f"документ {doc_rel} ({meta.get('name')})"
     session_id = args.get("_session_id") or "phone-misha-main"
@@ -534,7 +535,10 @@ async def _action_build(args: Dict[str, Any]) -> Dict[str, Any]:
                 "say_to_user": "У меня уже шесть задач в работе, подожди."}
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    iterate = bool(list(product_dir.iterdir()))  # если есть файлы → iterate
+    # iterate только если есть РЕАЛЬНЫЕ файлы продукта — служебные .PROJECT_CONTEXT.md
+    # и пр. дотфайлы не в счёт (мы сами только что записали контекст).
+    iterate = bool([p for p in product_dir.iterdir()
+                    if p.is_file() and not p.name.startswith(".")])
     payload = {
         "task": full_task,
         "workspace": str(product_dir),
@@ -544,6 +548,8 @@ async def _action_build(args: Dict[str, Any]) -> Dict[str, Any]:
         "use_mcp": False,
         "deliver": "phone",
         "want_preview": None,
+        # Кодер как в gemini_code: default claude, авто-фолбэк на gemini внутри.
+        "coder": (args.get("coder") or "claude").strip().lower(),
     }
     kind = "gemini_code_iterate" if iterate else "gemini_code_create"
     label = f"{'правка' if iterate else 'код'} {meta.get('name')[:30]}"
@@ -561,11 +567,11 @@ _UNCHECKED_RE = re.compile(r"^\s*[-*]\s*\[ \]\s*(.+)$")
 
 
 def _next_unchecked_task(tasks_md: Path):
-    """Вернуть (raw_line, task_text) первой невыполненной задачи или (None, None)."""
+    """Вернуть (raw_line, task_text, title) первой невыполненной задачи или (None, None, None)."""
     try:
         content = tasks_md.read_text(encoding="utf-8")
     except Exception:
-        return None, None
+        return None, None, None
     for line in content.splitlines():
         m = _UNCHECKED_RE.match(line)
         if m:
@@ -694,6 +700,26 @@ async def _notify_progress(session_id: Optional[str], text: str, task_id: str = 
         _aio.get_running_loop().create_task(_send())
     except Exception:
         pass
+
+
+async def _run_task_coder(product_dir: Path, task: str, timeout: int, *,
+                          iterate: bool, coder: str = "claude") -> Dict[str, Any]:
+    """Одна кодинг-задача выбранным кодером. Claude — основной (нет «Invalid
+    stream»); если CLI не найден или прогон упал — добиваем gemini-resilient,
+    чтобы автопилот не вставал из-за одного движка."""
+    from tools.gemini_code_tool import _run_gemini_resilient
+    if coder == "claude":
+        try:
+            from tools.coder_tool import _run_coder
+            res = await _run_coder("claude", product_dir, task, timeout)
+            if res.get("ok"):
+                return res
+            logger.warning("claude coder failed (%s) — fallback to gemini", res.get("error"))
+        except Exception as e:
+            logger.warning("claude coder crashed (%s) — fallback to gemini", e)
+    return await _run_gemini_resilient(product_dir, task, timeout,
+                                       iterate=iterate, use_mcp=False,
+                                       stall_timeout=180)
 
 
 def _build_context_file(project_path: Path, product_dir: Path, meta: Dict[str, Any]) -> None:
@@ -1110,13 +1136,13 @@ async def _do_autopilot_work(payload: Dict[str, Any]) -> Dict[str, Any]:
         # TODO(stitch): дизайн от Stitch генерить ДО цикла прямым вызовом API
         # (см. _maybe_stitch_design) и класть в .STITCH_DESIGN.md как контекст —
         # flash читает текстовый спек нормально, ломается только на tool-call.
-        # resilient-обёртка: на «Invalid stream» (malformed tool call) flash без
-        # файлового прогресса — ретраим, на последней попытке эскалируем на
-        # gemini-2.5-pro. Сетевые стопоры наверх не ретраятся (их ловит
-        # consecutive_net_fail ниже). См. autopilot-flash-invalid-stream.
-        res = await _run_gemini_resilient(product_dir, full_task, per_task_timeout,
-                                          iterate=iterate, use_mcp=False,
-                                          stall_timeout=180)
+        # Основной кодер — Claude (без «Invalid stream»). Фолбэк внутри
+        # _run_task_coder: gemini-resilient с ретраями и эскалацией на pro.
+        # Сетевые стопоры наверх не ретраятся (их ловит consecutive_net_fail
+        # ниже). См. autopilot-flash-invalid-stream.
+        res = await _run_task_coder(product_dir, full_task, per_task_timeout,
+                                    iterate=iterate,
+                                    coder=payload.get("coder") or "claude")
         files_after = set(_list_files(product_dir))
         # Прогресс = реально новые файлы ЛИБО чистый ok (НЕ malformed). rc==0 при
         # malformed-обрыве ≠ код написан — иначе задача ложно списывается как
@@ -1314,6 +1340,7 @@ async def _action_autopilot(args: Dict[str, Any]) -> Dict[str, Any]:
         "timeout": 21600,
         "max_tasks": int(args.get("max_tasks", 30)),
         "session_id": session_id,
+        "coder": (args.get("coder") or "claude").strip().lower(),
     }
     label = f"автопилот {name[:30]}"
     task_id = job_runner.submit("project_autopilot", payload,
@@ -1365,21 +1392,94 @@ async def _action_deploy_project(args: Dict[str, Any]) -> Dict[str, Any]:
 # PM-доc handler (для job_runner)
 # ---------------------------------------------------------------------------
 
+_PM_HEADLESS_RULES = (
+    "You are running HEADLESS as a Product Manager / Tech Lead writing project "
+    "documentation. Write the document(s) DIRECTLY to disk using your file-write "
+    "tools — do NOT print the document to the chat. Write content in Russian if "
+    "the task is in Russian. Be concrete and specific (no AI fluff like "
+    "'empower', 'leverage', 'seamless', 'next-gen'). When done, stop briefly."
+)
+
+
+def _read_pm_system_prompt() -> str:
+    """PM/Tech-Lead системный промпт (стиль документации). Из GEMINI-PM.md."""
+    for p in (Path.home() / ".gemini" / "GEMINI-PM.md",):
+        try:
+            if p.exists():
+                return p.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+    return ""
+
+
 async def _do_pm_doc_work(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Запуск PM-агента (Gemini-cli с GEMINI-PM.md) в папке проекта."""
+    """Запуск PM-агента в папке проекта. По умолчанию — Claude (надёжен headless,
+    не виснет как gemini-cli); фолбэк на Gemini-cli если Claude недоступен/упал."""
     project_path = Path(payload["project_path"])
     task = payload["task"]
     timeout = int(payload.get("timeout", 600))
+    coder = (payload.get("coder") or "claude").strip().lower()
 
-    # Используем env-var GEMINI_SYSTEM_MD на PM-промпт, и нашу обёртку запуска gemini-cli
+    # --- Путь Claude: основной (gemini-cli виснет headless на этой машине) ---
+    # Документ считаем готовым по ФАКТУ файла на диске, а НЕ по rc: Claude иногда
+    # отдаёт ненулевой код (внутренний таймаут turn'а, лимит), уже записав файл.
+    # Поэтому при сбое сначала проверяем файл, и только если его нет — ретраим
+    # Claude с увеличенным таймаутом. Фолбэк на gemini-cli — лишь когда Claude
+    # вообще недоступен (gemini виснет headless, это последний шанс, не первый).
+    def _phase_doc_path() -> Optional[Path]:
+        m = _read_meta(project_path)
+        rel = _PHASE_DOCS.get(m.get("phase", "discovery"))
+        return (project_path / rel) if rel else None
+
+    def _doc_ready() -> bool:
+        p = _phase_doc_path()
+        return bool(p and p.exists() and p.stat().st_size >= 300)
+
+    def _ok_result(via: str) -> Dict[str, Any]:
+        meta = _read_meta(project_path)
+        phase = meta.get("phase", "discovery")
+        doc_rel = _PHASE_DOCS.get(phase)
+        return {
+            "ok": True, "phase": phase, "doc": doc_rel,
+            "project_path": str(project_path), "via": via,
+            "say_to_user": (f"Готов документ {doc_rel}. Прочитать или сразу идём дальше?"
+                            if doc_rel and (project_path / doc_rel).exists()
+                            else "PM-агент завершил работу. Посмотри что вышло."),
+            "next_action_hint": "read_doc",
+        }
+
+    if coder == "claude":
+        try:
+            from tools.coder_tool import _run_coder, _find_backend_cli
+            if _find_backend_cli("claude"):
+                sysp = _read_pm_system_prompt()
+                last_err = ""
+                # До 2 попыток Claude с растущим таймаутом: тяжёлые доки (tasks с 3
+                # документами контекста) не всегда укладываются с первого раза.
+                for attempt in range(2):
+                    t = timeout if attempt == 0 else int(timeout * 1.5)
+                    res = await _run_coder(
+                        "claude", project_path, task, t,
+                        headless_rules=_PM_HEADLESS_RULES, system_prompt=sysp,
+                    )
+                    if res.get("ok") or _doc_ready():
+                        # rc!=0 но файл записан — это успех (Claude дописал и упал на выходе).
+                        return _ok_result("claude" if res.get("ok") else "claude-partial")
+                    last_err = res.get("error", "") + " | " + (res.get("err_tail", "") or "")
+                    logger.warning("PM claude attempt %d failed: %s", attempt + 1, last_err[:300])
+                logger.warning("PM claude exhausted retries (%s) — fallback to gemini-cli", last_err[:200])
+        except Exception as e:
+            logger.warning("PM claude path crashed (%s) — fallback to gemini-cli", e)
+
+    # --- Фолбэк: Gemini-cli с GEMINI_SYSTEM_MD=GEMINI-PM.md ---
     import asyncio as _asyncio
     import os as _os
     from tools.gemini_code_tool import _find_gemini_cli
 
     cli = _find_gemini_cli()
     if not cli:
-        return {"ok": False, "error": "gemini_cli_not_found",
-                "say_to_user": "Gemini CLI не найден."}
+        return {"ok": False, "error": "no_coder_available",
+                "say_to_user": "Ни Claude, ни Gemini CLI не доступны для PM-агента."}
 
     env = _os.environ.copy()
     env["GEMINI_CLI_TRUST_WORKSPACE"] = "true"
@@ -1532,7 +1632,7 @@ SCHEMA = {
         "Управление проектами Тройки. Один активный проект за раз. "
         "Фазы: discovery → requirements → architecture → tasks → building. "
         "На фазах 1-4 PM-под-агент пишет документацию (vision, SRS, ADR, tasks). "
-        "На building запускается обычный кодинг через gemini_code в product/. "
+        "На building кодит Claude (фолбэк Gemini) в product/ проекта. "
         "Все async-действия (generate_doc, build) запускаются в фоне с уведомлением голосом по готовности."
     ),
     "parameters": {
@@ -1563,6 +1663,7 @@ SCHEMA = {
             "text": {"type": "string", "description": "Текст заметки для add_note."},
             "task": {"type": "string", "description": "Описание кодинг-задачи для build. Если пусто — берёт первую невыполненную из 04-tasks.md."},
             "deploy": {"type": "boolean", "description": "Для autopilot: задеплоить (git+vercel) после всех задач. Default false."},
+            "coder": {"type": "string", "enum": ["claude", "gemini"], "description": "Для build/autopilot: каким движком кодить. Default claude."},
             "verify": {"type": "boolean", "description": "Для autopilot: самопроверка+починка через playwright после каждой задачи. Default true."},
             "max_tasks": {"type": "integer", "description": "Для autopilot: максимум задач за один прогон. Default 30."},
         },

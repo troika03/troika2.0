@@ -1,0 +1,46 @@
+name: hermes_assistant
+description: "Hermes — персональный голосовой ассистент на базе Troika/Hermes Agent"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.3 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.6
+
+  # ── State management ──────────────────────────────────────────
+  provider: ^6.1.2
+
+  # ── HTTP клиент для Hermes API ─────────────────────────────────
+  http: ^1.2.0
+
+  # ── Запись звука (микрофон) ────────────────────────────────────
+  record: ^5.1.2
+
+  # ── TTS — встроенный Android TTS (офлайн, бесплатно) ──────────
+  flutter_tts: ^4.0.2
+
+  # ── Хранение настроек ─────────────────────────────────────────
+  shared_preferences: ^2.2.3
+
+  # ── Разрешения (микрофон) ─────────────────────────────────────
+  permission_handler: ^11.3.1
+
+  # ── Воспроизведение аудио ─────────────────────────────────────
+  audioplayers: ^6.0.0
+
+  # ── Временные файлы ───────────────────────────────────────────
+  path_provider: ^2.1.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true

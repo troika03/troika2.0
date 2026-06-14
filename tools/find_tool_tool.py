@@ -77,9 +77,10 @@ _SYNONYMS = {
     "позвони": "call", "звонок": "call",
     "сообщение": "sms message",
     "смс": "sms", "месседж": "message",
-    # медиа
-    "музыка": "spotify music", "music": "spotify",
-    "плеер": "player",
+    # медиа (spotify-tools в этой сборке нет — музыка живёт в приложении на телефоне)
+    "музыка": "music player open app", "музыку": "music player open app",
+    "music": "player app",
+    "плеер": "player open app",
     "видео": "video youtube",
     "youtube": "youtube",
     "трек": "track",
@@ -100,12 +101,19 @@ _SYNONYMS = {
     "финансы": "finance money",
     "потратил": "finance expense",
     "купил": "finance expense buy",
+    "расход": "finance expense",
+    "расходы": "finance expense",
+    "трата": "finance expense",
+    "траты": "finance expense",
     "доход": "finance income",
     "зарплата": "salary income",
     # обсидиан / память
     "заметка": "obsidian note",
     "obsidian": "note",
     "память": "memory note",
+    # перевод
+    "переведи": "translate", "перевод": "translate",
+    "переводчик": "translate",
     # веб
     "поиск": "search", "search": "поиск",
     "браузер": "browser web",

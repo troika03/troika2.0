@@ -1,2 +1,11 @@
 # Auto-generated files — collapse diffs and exclude from language stats
 web/package-lock.json linguist-generated=true
+
+# Shell-скрипты и s6-сервисы ДОЛЖНЫ быть LF — иначе в Linux-контейнере
+# bash/s6 падают на \r (CRLF). Жёстко фиксируем перевод строки.
+*.sh              text eol=lf
+install.sh        text eol=lf
+Dockerfile*       text eol=lf
+docker/s6-rc.d/** text eol=lf
+docker/**/run     text eol=lf
+docker/**/finish  text eol=lf

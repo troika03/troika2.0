@@ -23,6 +23,41 @@ test_durations.json
 tmp/
 temp_vision_images/
 hermes-*/*
+
+# Но исходники Android-приложения версионируем (без тяжёлых артефактов).
+# Сначала «разигнориваем» нужное в hermes-android, потом режем мусор.
+!hermes-android/
+hermes-android/*
+!hermes-android/lib/
+!hermes-android/android/
+!hermes-android/ios/
+!hermes-android/macos/
+!hermes-android/linux/
+!hermes-android/windows/
+!hermes-android/web/
+!hermes-android/test/
+!hermes-android/assets/
+!hermes-android/pubspec.yaml
+!hermes-android/pubspec.lock
+!hermes-android/analysis_options.yaml
+!hermes-android/README.md
+!hermes-android/stt_proxy_server.py
+!hermes-android/*.md
+# Тяжёлые/генерируемые артефакты приложения — НЕ версионируем
+hermes-android/build/
+hermes-android/.dart_tool/
+hermes-android/.gradle/
+hermes-android/**/build/
+hermes-android/**/.gradle/
+hermes-android/**/.cxx/
+hermes-android/**/Pods/
+hermes-android/**/*.iml
+hermes-android/android/local.properties
+hermes-android/android/key.properties
+hermes-android/**/*.keystore
+hermes-android/**/*.jks
+hermes-android/**/GeneratedPluginRegistrant.*
+
 examples/
 tests/quick_test_dataset.jsonl
 tests/sample_dataset.jsonl
@@ -91,3 +126,6 @@ _gemini_*/
 gha-creds-*.json
 # Semantic memory cache (rebuilt from vault on demand, lives in vault not repo)
 .semantic_cache.npz
+
+# Локальные логи отладки (stt, gateway, аудит-скрипты)
+_logs/

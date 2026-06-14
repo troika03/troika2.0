@@ -1,0 +1,333 @@
+package com.troika.hermes_assistant
+
+import android.Manifest
+import android.app.KeyguardManager
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
+import android.view.WindowManager
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.FlutterEngineCache
+import io.flutter.plugin.common.MethodChannel
+
+class MainActivity : FlutterActivity() {
+
+    private val FLUTTER_CHANNEL = "com.troika.hermes/background"
+    private val REQ_CALENDAR = 7421
+    private var methodChannel: MethodChannel? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+            (getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager)
+                ?.requestDismissKeyguard(this, null)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+                    WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+            )
+        }
+        super.onCreate(savedInstanceState)
+    }
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        FlutterEngineCache.getInstance().put("main_engine", flutterEngine)
+
+        methodChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            FLUTTER_CHANNEL
+        )
+        methodChannel!!.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "startListenerService" -> { startListenerService(); result.success(null) }
+                "stopListenerService" -> { stopListenerService(); result.success(null) }
+                "triggerDialog" -> { triggerDialog(); result.success(null) }
+                "interruptTts" -> { interruptTts(); result.success(null) }
+                "requestBatteryOptimizationDisable" -> {
+                    requestBatteryOptimizationDisable()
+                    result.success(null)
+                }
+                "isBatteryOptimizationIgnored" -> {
+                    result.success(isBatteryOptimizationIgnored())
+                }
+                "requestOverlayPermission" -> {
+                    requestOverlayPermission()
+                    result.success(null)
+                }
+                "hasOverlayPermission" -> {
+                    result.success(hasOverlayPermission())
+                }
+                "openAccessibilitySettings" -> {
+                    openAccessibilitySettings()
+                    result.success(null)
+                }
+                "isAccessibilityEnabled" -> {
+                    result.success(HermesAccessibilityService.instance != null)
+                }
+                "hasAllFilesAccess" -> {
+                    result.success(PhoneFiles.hasAllFilesAccess())
+                }
+                "requestAllFilesAccess" -> {
+                    requestAllFilesAccess()
+                    result.success(null)
+                }
+                "previewEdgeVoice" -> {
+                    val voice = call.argument<String>("voice") ?: "ru-RU-SvetlanaNeural"
+                    val rate = (call.argument<Number>("rate") ?: 1.0).toDouble()
+                    val pitch = (call.argument<Number>("pitch") ?: 0).toInt()
+                    val volume = (call.argument<Number>("volume") ?: 0).toInt()
+                    previewEdgeVoice(voice, rate, pitch, volume)
+                    result.success(null)
+                }
+                "setEdgeVoice" -> {
+                    val voice = call.argument<String>("voice") ?: "ru-RU-SvetlanaNeural"
+                    val rate = (call.argument<Number>("rate") ?: 1.0).toDouble()
+                    val pitch = (call.argument<Number>("pitch") ?: 0).toInt()
+                    val volume = (call.argument<Number>("volume") ?: 0).toInt()
+                    setEdgeVoice(voice, rate, pitch, volume)
+                    result.success(null)
+                }
+                "hasCalendarPermission" -> {
+                    result.success(hasCalendarPermission())
+                }
+                "requestCalendarPermission" -> {
+                    requestCalendarPermission()
+                    result.success(null)
+                }
+                "getEdgeVoice" -> {
+                    val prefs = getSharedPreferences(
+                        HermesListenerService.PREFS, MODE_PRIVATE
+                    )
+                    val data = mapOf(
+                        "voice" to prefs.getString("flutter.hermes_edge_voice", "ru-RU-SvetlanaNeural"),
+                        "rate" to (prefs.all["flutter.hermes_voice_rate"] as? Double ?: 1.0),
+                        "pitch" to (prefs.all["flutter.hermes_voice_pitch"] as? Int ?: 0),
+                        "volume" to (prefs.all["flutter.hermes_voice_volume"] as? Int ?: 0),
+                    )
+                    result.success(data)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        if (intent?.getBooleanExtra("wake_word_detected", false) == true) {
+            methodChannel!!.invokeMethod("wake_word_detected", null)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.getBooleanExtra("wake_word_detected", false)) {
+            methodChannel?.invokeMethod("wake_word_detected", null)
+        }
+    }
+
+    private fun startListenerService() {
+        val intent = Intent(this, HermesListenerService::class.java).apply {
+            action = HermesListenerService.ACTION_START
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
+    }
+
+    private fun triggerDialog() {
+        val intent = Intent(this, HermesListenerService::class.java).apply {
+            action = HermesListenerService.ACTION_TRIGGER_DIALOG
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
+    }
+
+    private fun interruptTts() {
+        val intent = Intent(this, HermesListenerService::class.java).apply {
+            action = HermesListenerService.ACTION_INTERRUPT_TTS
+        }
+        // startService — НЕ forground; сервис уже работает, нам нужен лишь сигнал.
+        try { startService(intent) } catch (_: Exception) {}
+    }
+
+    private fun stopListenerService() {
+        val intent = Intent(this, HermesListenerService::class.java).apply {
+            action = HermesListenerService.ACTION_STOP
+        }
+        startService(intent)
+    }
+
+    private fun isBatteryOptimizationIgnored(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        return pm.isIgnoringBatteryOptimizations(packageName)
+    }
+
+    private fun hasOverlayPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Settings.canDrawOverlays(this)
+        } else true
+    }
+
+    private fun requestOverlayPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        if (hasOverlayPermission()) return
+        try {
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")
+            )
+            startActivity(intent)
+        } catch (_: Exception) {}
+    }
+
+    /** Озвучивает короткую фразу указанным Edge-голосом и параметрами — для preview */
+    private fun previewEdgeVoice(
+        voice: String,
+        rate: Double = 1.0,
+        pitch: Int = 0,
+        volume: Int = 0,
+    ) {
+        val prefs = getSharedPreferences(HermesListenerService.PREFS, MODE_PRIVATE)
+        val url = prefs.getString(HermesListenerService.PREF_URL, null) ?: return
+        val key = prefs.getString(HermesListenerService.PREF_KEY, "") ?: ""
+        val sample = if (voice.startsWith("ru-")) {
+            "Слушаю. Сейчас восемь часов вечера, дождь до полуночи."
+        } else {
+            "At your service. The time is eight in the evening."
+        }
+        Thread {
+            try {
+                val player = EdgeTtsPlayer(applicationContext, url, key, voice, rate, pitch, volume)
+                player.speak(sample) { player.stop() }
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "preview failed: ${e.message}")
+            }
+        }.start()
+    }
+
+    /** Сохраняет голос + параметры. Перезапускает сервис чтобы изменения вступили в силу. */
+    private fun setEdgeVoice(voice: String, rate: Double = 1.0, pitch: Int = 0, volume: Int = 0) {
+        val prefs = getSharedPreferences(HermesListenerService.PREFS, MODE_PRIVATE)
+        prefs.edit()
+            .putString("flutter.hermes_edge_voice", voice)
+            .apply()
+        // SharedPreferences Edit не поддерживает Double — пишем как Float через putFloat
+        // и читаем как Number. Но Flutter shared_preferences хранит как Double напрямую.
+        // Используем reflection-friendly approach — write via SharedPreferences.Editor.commit()
+        // c приведением к нужным типам.
+        val editor = prefs.edit()
+        editor.putString("flutter.hermes_edge_voice", voice)
+        // Trick: пишем через putFloat — Flutter всё равно читает как num
+        editor.putFloat("flutter.hermes_voice_rate", rate.toFloat())
+        editor.putInt("flutter.hermes_voice_pitch", pitch)
+        editor.putInt("flutter.hermes_voice_volume", volume)
+        editor.apply()
+
+        try {
+            val stop = Intent(this, HermesListenerService::class.java).apply {
+                action = HermesListenerService.ACTION_STOP
+            }
+            startService(stop)
+            Thread.sleep(300)
+            val start = Intent(this, HermesListenerService::class.java).apply {
+                action = HermesListenerService.ACTION_START
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(start)
+            else startService(start)
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "setEdgeVoice restart failed: ${e.message}")
+        }
+    }
+
+    private fun openAccessibilitySettings() {
+        try {
+            startActivity(
+                Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            )
+        } catch (_: Exception) {}
+    }
+
+    private fun requestAllFilesAccess() {
+        if (PhoneFiles.hasAllFilesAccess()) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        try {
+            startActivity(
+                Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                    data = Uri.parse("package:$packageName")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            )
+        } catch (_: Exception) {
+            try {
+                startActivity(
+                    Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                )
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun hasCalendarPermission(): Boolean {
+        val read = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALENDAR) ==
+            PackageManager.PERMISSION_GRANTED
+        val write = ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_CALENDAR) ==
+            PackageManager.PERMISSION_GRANTED
+        return read && write
+    }
+
+    private fun requestCalendarPermission() {
+        if (hasCalendarPermission()) return
+        try {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR),
+                REQ_CALENDAR
+            )
+        } catch (_: Exception) {}
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_CALENDAR) {
+            methodChannel?.invokeMethod("calendar_permission_result", hasCalendarPermission())
+        }
+    }
+
+    @Suppress("BatteryLife")
+    private fun requestBatteryOptimizationDisable() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        if (isBatteryOptimizationIgnored()) return
+        try {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+            intent.data = Uri.parse("package:$packageName")
+            startActivity(intent)
+        } catch (e: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            } catch (_: Exception) {}
+        }
+    }
+}

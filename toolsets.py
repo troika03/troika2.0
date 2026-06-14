@@ -127,7 +127,8 @@ _HERMES_CORE_TOOLS = [
     "project",
     # Self-improvement: Тройка предлагает правки в свой код, Миша одобряет
     "self_improve_propose", "self_improve_list", "self_improve_show",
-    "self_improve_approve", "self_improve_reject", "code_review",
+    "self_improve_approve", "self_improve_reject", "self_improve_revert",
+    "code_review",
     # Поиск по vault'у памяти + дневник
     "memory_search", "diary_add", "diary_read",
     # Kanban multi-agent coordination — only in schema when the agent is

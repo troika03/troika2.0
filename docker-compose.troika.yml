@@ -1,0 +1,80 @@
+# Тройка — docker-compose для VPS/Linux
+#
+# Использование:
+#   cp .env.troika.example .env   # заполни API-ключи
+#   docker compose -f docker-compose.troika.yml up -d
+#
+# Доступ:
+#   Gateway (чат/голос с телефона):  http://<IP>:8642
+#   STT прокси (Whisper/Groq):       http://<IP>:8643  (телефон пишет сюда сам)
+#   Preview кодеров (сайты на лету): http://<IP>:7800-7900
+#
+# Обновление:
+#   docker compose -f docker-compose.troika.yml pull && \
+#   docker compose -f docker-compose.troika.yml up -d
+
+services:
+  troika:
+    image: troika69/troika:latest
+    container_name: troika
+    restart: unless-stopped
+
+    env_file: .env
+
+    # Запускаем gateway в foreground (PID контейнера). Это поднимает
+    # OpenAI-совместимый API-сервер, к которому коннектится приложение:
+    # /v1/chat/completions, /v1/audio/speech, /v1/phone/commands.
+    # `hermes gateway run` — foreground-режим, работает из любого cwd
+    # (main-wrapper.sh делает cd /opt/data, поэтому python cli.py не годится).
+    command: ["gateway", "run"]
+
+    environment:
+      HERMES_HOME: /opt/data
+      # claude-code и gemini-cli хранят авторизацию в volume
+      CLAUDE_CONFIG_DIR: /opt/data/.claude
+      GEMINI_HOME: /opt/data/.gemini
+      # Groq STT — быстро и без GPU. Поменяй на local если хочешь офлайн Whisper
+      STT_BACKEND: groq
+      # --- API-сервер для приложения (без этого телефон не подключится) ---
+      API_SERVER_ENABLED: "true"
+      # 0.0.0.0 — слушать снаружи контейнера (иначе только loopback)
+      API_SERVER_HOST: 0.0.0.0
+      API_SERVER_PORT: "8642"
+      # API_SERVER_KEY берётся из .env (его же вводишь в приложении).
+      # Сервер откажется стартовать на 0.0.0.0 без этого ключа.
+
+    ports:
+      # Gateway — основной API, голос/чат с телефона и браузера
+      - "8642:8642"
+      # STT прокси — Android-приложение слушает именно порт 8643
+      - "8643:8643"
+      # Preview-серверы для проектов кодера (один порт на workspace)
+      - "7800-7900:7800-7900"
+
+    volumes:
+      # Все данные Тройки: конфиг, память, сессии, авторизация кодеров
+      - troika-data:/opt/data
+
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+        reservations:
+          memory: 512M
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8642/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+volumes:
+  troika-data:
+    driver: local

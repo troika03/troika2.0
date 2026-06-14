@@ -52,16 +52,22 @@ _MALFORMED_RE = re.compile(r"Invalid stream|malformed tool call|empty response",
 # Описание бэкендов: как звать CLI и как он принимает headless-задачу
 # ---------------------------------------------------------------------------
 
-def _claude_args(cli: str, prompt_file: Path) -> list[str]:
-    # Claude Code headless: -p печатает ответ и выходит; acceptEdits авто-применяет
-    # правки файлов без интерактивных подтверждений. Промпт даём через stdin (надёжнее
-    # длинных cmdline на Windows) — здесь возвращаем базовые флаги, текст пойдёт в stdin.
-    return [cli, "-p", "--permission-mode", "acceptEdits",
+def _claude_args(cli: str, prompt_file: Path, prompt: str,
+                 system_prompt: str = "") -> list[str]:
+    # Claude Code headless: промпт — ПОЗИЦИОННЫЙ аргумент после -p (НЕ stdin: stdin
+    # гонится с 3с-таймаутом Claude и падает «Input must be provided»). acceptEdits +
+    # skip-permissions = авто-применять правки без подтверждений.
+    args = [cli, "-p", prompt, "--permission-mode", "acceptEdits",
             "--dangerously-skip-permissions"]
+    if system_prompt:
+        # PM-режим: добавляем системный промпт (стиль PM/Tech Lead) поверх дефолтного.
+        args += ["--append-system-prompt", system_prompt]
+    return args
 
 
-def _qwen_args(cli: str, prompt_file: Path) -> list[str]:
-    # Qwen Code — форк Gemini-CLI: те же флаги. --yolo авто-аппрув, без MCP для скорости.
+def _qwen_args(cli: str, prompt_file: Path, prompt: str,
+               system_prompt: str = "") -> list[str]:
+    # Qwen Code — форк Gemini-CLI: промпт через @file, --yolo авто-аппрув, без MCP.
     return [cli, "--yolo", "--allowed-mcp-server-names", "__none__", "--prompt", "@" + str(prompt_file)]
 
 
@@ -70,7 +76,7 @@ _BACKENDS = {
         "cli_name": "claude",
         "env_path": "CLAUDE_CLI_PATH",
         "build_args": _claude_args,
-        "stdin_prompt": True,   # промпт через stdin
+        "stdin_prompt": False,  # промпт идёт аргументом, stdin не используем
         "auth_hint": "Запусти `claude` в терминале и войди по подписке.",
         "label": "Claude",
     },
@@ -97,18 +103,21 @@ def _find_backend_cli(backend: str) -> Optional[str]:
 # Запуск кодера в workspace (file-log, не PIPE — windows-subprocess-no-pipe)
 # ---------------------------------------------------------------------------
 
-async def _run_coder(backend: str, workspace: Path, task: str, timeout: int) -> Dict[str, Any]:
+async def _run_coder(backend: str, workspace: Path, task: str, timeout: int,
+                     *, headless_rules: Optional[str] = None,
+                     system_prompt: str = "") -> Dict[str, Any]:
     spec = _BACKENDS[backend]
     cli = _find_backend_cli(backend)
     if not cli:
         return {"ok": False, "error": f"{backend}_cli_not_found",
                 "hint": spec["auth_hint"]}
 
-    prompt = f"{_HEADLESS_RULES}\nUSER TASK:\n{task}"
+    rules = _HEADLESS_RULES if headless_rules is None else headless_rules
+    prompt = f"{rules}\nUSER TASK:\n{task}" if rules else task
     prompt_file = workspace / ".CODE_TASK.md"
     prompt_file.write_text(prompt, encoding="utf-8")
 
-    args = spec["build_args"](cli, prompt_file)
+    args = spec["build_args"](cli, prompt_file, prompt, system_prompt)
 
     env = os.environ.copy()
     # node предпочитает IPv4 — лечит висяки на IPv6-DNS без маршрута (как в gemini_code).
@@ -125,18 +134,12 @@ async def _run_coder(backend: str, workspace: Path, task: str, timeout: int) -> 
         return {"ok": False, "error": f"cannot open log files: {e}"}
 
     try:
-        stdin_data = prompt.encode("utf-8") if spec["stdin_prompt"] else None
         proc = await asyncio.create_subprocess_exec(
             *args, cwd=str(workspace), env=env,
-            stdin=asyncio.subprocess.PIPE if spec["stdin_prompt"] else asyncio.subprocess.DEVNULL,
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=f_out, stderr=f_err,
         )
         try:
-            if spec["stdin_prompt"]:
-                # Промпт в stdin, затем ждём завершения с таймаутом.
-                proc.stdin.write(stdin_data)
-                await proc.stdin.drain()
-                proc.stdin.close()
             rc = await asyncio.wait_for(proc.wait(), timeout=timeout)
         except asyncio.TimeoutError:
             try:
@@ -165,8 +168,11 @@ async def _run_coder(backend: str, workspace: Path, task: str, timeout: int) -> 
 
     malformed = bool(_MALFORMED_RE.search(err))
     if rc != 0:
+        # Логируем причину СРАЗУ — файлы логов уже удалены выше, иначе диагностика теряется.
+        logger.warning("%s coder exit %s; stderr tail: %s | stdout tail: %s",
+                       backend, rc, (err[-300:] or "(empty)"), (out[-200:] or "(empty)"))
         return {"ok": False, "error": f"{backend}-cli exit {rc}",
-                "malformed": malformed, "err_tail": err[-400:]}
+                "malformed": malformed, "err_tail": err[-400:], "out_tail": out[-400:]}
     return {"ok": True, "rc": rc, "malformed": malformed, "out_tail": out[-400:]}
 
 
