@@ -21,11 +21,13 @@ services:
 
     env_file: .env
 
-    # НЕ задаём command: gateway поднимается как s6-supervised сервис
-    # gateway-default (его авто-старт включён через cont-init
-    # 019-seed-gateway-running). Свой `command: gateway run` спавнил
-    # ВТОРОЙ gateway, который конфликтовал за порт 8642 — поэтому
-    # api_server не мог забиндиться. Пусть рулит s6.
+    # Главная программа контейнера = sleep infinity. Gateway поднимается
+    # как s6-supervised сервис gateway-default (авто-старт через cont-init
+    # 019-seed-gateway-running), api_server слушает 8642.
+    # ВАЖНО: без command пустой CMD запускает ИНТЕРАКТИВНЫЙ hermes (TUI),
+    # который без TTY сразу выходит («Goodbye!») и роняет контейнер в
+    # рестарт-цикл. sleep infinity держит контейнер живым, пока рулит s6.
+    command: ["sleep", "infinity"]
 
     environment:
       HERMES_HOME: /opt/data
