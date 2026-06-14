@@ -257,6 +257,61 @@ object PhoneFiles {
         }
     }
 
+    /**
+     * Сохранить картинку/видео в Галерею телефона (MediaStore).
+     * content — base64. Тип (фото/видео) определяется по расширению filename.
+     * На Android 10+ работает без WRITE_EXTERNAL_STORAGE (scoped storage).
+     */
+    fun saveToGallery(ctx: Context, filename: String, contentB64: String): JSONObject {
+        if (filename.isBlank()) return err("missing filename")
+        if (contentB64.isBlank()) return err("missing content")
+        return try {
+            val bytes = Base64.decode(contentB64, Base64.DEFAULT)
+            val lower = filename.lowercase()
+            val isVideo = lower.endsWith(".mp4") || lower.endsWith(".mov") ||
+                lower.endsWith(".mkv") || lower.endsWith(".webm")
+            val mime = when {
+                isVideo -> "video/mp4"
+                lower.endsWith(".png") -> "image/png"
+                lower.endsWith(".webp") -> "image/webp"
+                else -> "image/jpeg"
+            }
+            val collection = if (isVideo)
+                android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            else
+                android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            val subDir = if (isVideo)
+                Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES
+
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, filename)
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mime)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, "$subDir/Тройка")
+                    put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+            }
+            val resolver = ctx.contentResolver
+            val uri = resolver.insert(collection, values)
+                ?: return err("mediastore_insert_failed")
+            resolver.openOutputStream(uri)?.use { it.write(bytes) }
+                ?: return err("open_output_failed")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                values.clear()
+                values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+            }
+            JSONObject().apply {
+                put("ok", true)
+                put("message", "Сохранено в Галерею: $filename")
+                put("uri", uri.toString())
+                put("size", bytes.size)
+            }
+        } catch (e: Exception) {
+            err("save_to_gallery_failed: ${e.message}")
+        }
+    }
+
     fun deleteFile(ctx: Context, path: String, recursive: Boolean = false): JSONObject {
         val f = resolveSafe(ctx, path) ?: return err("path_not_allowed: $path")
         if (!f.exists()) return err("not_found: ${f.absolutePath}")

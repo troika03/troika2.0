@@ -80,6 +80,11 @@ object PhoneCommandExecutor {
                 params.optBoolean("overwrite", false),
             )
             "file_info" -> PhoneFiles.fileInfo(ctx, params.optString("path"))
+            "save_to_gallery" -> PhoneFiles.saveToGallery(
+                ctx,
+                params.optString("filename"),
+                params.optString("content"),
+            )
             "request_all_files_access" -> requestAllFilesAccess(ctx)
             // ── Системные ──────────────────────────────────────────
             "clipboard_get" -> PhoneSystem.clipboardGet(ctx)

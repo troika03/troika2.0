@@ -190,6 +190,53 @@ async def _handle_file_write(args: Dict[str, Any], **kw) -> str:
     }, timeout=30)
 
 
+async def _handle_push_file(args: Dict[str, Any], **kw) -> str:
+    """Скинуть файл С СЕРВЕРА на телефон. «Скинь мне на телефон X».
+
+    Берёт файл по пути на сервере (например результат gemini_code, скачанный
+    файл, скриншот), сам читает+кодирует base64 и пишет на телефон — без
+    протаскивания контента через контекст LLM (работает для больших файлов).
+    По умолчанию кладёт в Downloads/. Картинки можно сразу в галерею
+    (to_gallery=true → команда save_to_gallery на телефоне).
+    """
+    import base64 as _b64
+    import os
+
+    src = args.get("server_path") or args.get("src") or ""
+    if not src:
+        return json.dumps({"ok": False, "error": "missing 'server_path'"}, ensure_ascii=False)
+    if not os.path.isfile(src):
+        return json.dumps({"ok": False, "error": f"file_not_found_on_server: {src}"}, ensure_ascii=False)
+
+    try:
+        size = os.path.getsize(src)
+        # Защита: не тащим гигабайты по WS
+        if size > 50 * 1024 * 1024:
+            return json.dumps({"ok": False, "error": f"file_too_big: {size} bytes (max 50MB)"}, ensure_ascii=False)
+        with open(src, "rb") as f:
+            data_b64 = _b64.b64encode(f.read()).decode("ascii")
+    except Exception as e:
+        return json.dumps({"ok": False, "error": f"read_failed: {e}"}, ensure_ascii=False)
+
+    filename = args.get("filename") or os.path.basename(src)
+    to_gallery = bool(args.get("to_gallery", False))
+
+    if to_gallery:
+        # Картинка/видео → в галерею телефона (MediaStore)
+        return await _call_phone("save_to_gallery", {
+            "filename": filename,
+            "content": data_b64,
+        }, timeout=60)
+
+    # Обычный файл → в Downloads/ (или указанный путь)
+    dest = args.get("phone_path") or filename
+    return await _call_phone("file_write", {
+        "path": dest,
+        "content": data_b64,
+        "encoding": "base64",
+    }, timeout=60)
+
+
 async def _handle_file_delete(args: Dict[str, Any], **kw) -> str:
     path = args.get("path") or ""
     if not path:
@@ -320,8 +367,27 @@ async def _handle_screenshot(args: Dict[str, Any], **kw) -> str:
     except Exception:
         return raw
 
-    if not result.get("ok") or not args.get("analyze"):
+    if not result.get("ok"):
         return raw
+
+    # Сохранить скриншот в Галерею телефона, если попросили
+    if args.get("to_gallery"):
+        image_b64 = result.get("image")
+        if image_b64:
+            import time as _time
+            fname = f"screenshot_{int(_time.time())}.png"
+            save_res = await _call_phone("save_to_gallery", {
+                "filename": fname,
+                "content": image_b64,
+            }, timeout=30)
+            try:
+                result["gallery"] = json.loads(save_res)
+            except Exception:
+                result["gallery"] = save_res
+
+    if not args.get("analyze"):
+        result.pop("image", None)  # не тащим огромный base64 в ответ LLM
+        return json.dumps(result, ensure_ascii=False)
 
     # Vision-анализ скриншота
     image_b64 = result.get("image")
@@ -589,6 +655,28 @@ FILE_WRITE_SCHEMA = {
     },
 }
 
+PUSH_FILE_SCHEMA = {
+    "name": "android_push_file",
+    "description": (
+        "Скинуть файл С СЕРВЕРА на телефон пользователя. Используй когда юзер "
+        "говорит «скинь мне на телефон», «отправь файл», «загрузи в галерею». "
+        "Берёт файл по пути на сервере (результат gemini_code/кодера, скачанный "
+        "файл, скриншот и т.п.) и кладёт на телефон. Работает с большими файлами "
+        "(до 50MB). По умолчанию в Downloads/; для фото/видео ставь to_gallery=true "
+        "чтобы появилось в Галерее."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "server_path": {"type": "string", "description": "Абсолютный путь к файлу НА СЕРВЕРЕ."},
+            "filename": {"type": "string", "description": "Имя файла на телефоне (по умолчанию — как на сервере)."},
+            "phone_path": {"type": "string", "description": "Целевой путь на телефоне (отн. = Downloads/). Игнорируется если to_gallery."},
+            "to_gallery": {"type": "boolean", "description": "true для фото/видео → в Галерею. Default false (Downloads)."},
+        },
+        "required": ["server_path"],
+    },
+}
+
 FILE_DELETE_SCHEMA = {
     "name": "android_file_delete",
     "description": "Delete a file or (with recursive=true) a directory on the phone. Be cautious — no undo.",
@@ -769,10 +857,11 @@ CALENDAR_CHECK_PERMISSIONS_SCHEMA = {
 
 SCREENSHOT_SCHEMA = {
     "name": "android_screenshot",
-    "description": "Capture a screenshot of the phone's current screen (requires AccessibilityService enabled). Optionally analyze the image with vision LLM by setting analyze=true.",
+    "description": "Capture a screenshot of the phone's current screen (requires AccessibilityService enabled). Set to_gallery=true to save it into the phone's Gallery (Photos). Optionally analyze the image with vision LLM by setting analyze=true.",
     "parameters": {
         "type": "object",
         "properties": {
+            "to_gallery": {"type": "boolean", "description": "Сохранить скриншот в Галерею телефона (появится в Фото). Используй когда юзер просит «сохрани скрин» / «в галерею»."},
             "analyze": {"type": "boolean", "description": "If true, also describe the screenshot via vision LLM."},
             "prompt": {"type": "string", "description": "Custom vision prompt. Default: 'Describe what's on this screenshot.'"},
         },
@@ -853,6 +942,9 @@ registry.register(name="android_file_list", toolset="android", schema=FILE_LIST_
 registry.register(name="android_file_read", toolset="android", schema=FILE_READ_SCHEMA,
                   handler=_handle_file_read, check_fn=_check_phone_connected,
                   is_async=True, emoji="📄")
+registry.register(name="android_push_file", toolset="android", schema=PUSH_FILE_SCHEMA,
+                  handler=_handle_push_file, check_fn=_check_phone_connected,
+                  is_async=True, emoji="📱")
 registry.register(name="android_file_write", toolset="android", schema=FILE_WRITE_SCHEMA,
                   handler=_handle_file_write, check_fn=_check_phone_connected,
                   is_async=True, emoji="📝")
