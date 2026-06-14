@@ -8,6 +8,12 @@
 #   GROQ_API_KEY  — обязателен для backend=groq
 #   HERMES_HOME   — путь к данным (default /opt/data)
 
+# s6-setuidgid не выставляет HOME — фиксим, иначе чтение ~/.troika/.env
+# падает с PermissionError (HOME=/root недоступен пользователю hermes).
+export HOME=/opt/data
+export HERMES_HOME="${HERMES_HOME:-/opt/data}"
+
 exec s6-setuidgid hermes \
+    env HOME=/opt/data HERMES_HOME="${HERMES_HOME}" \
     /opt/hermes/.venv/bin/python \
     /opt/hermes/hermes-android/stt_proxy_server.py

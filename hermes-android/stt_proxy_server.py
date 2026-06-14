@@ -19,14 +19,23 @@ import tempfile
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Подгружаем .env из ~/.troika/.env
-TROIKA_ENV = Path.home() / ".troika" / ".env"
-if TROIKA_ENV.exists():
-    load_dotenv(TROIKA_ENV)
-# И из ~/troika/.env (вторичное место)
-TROIKA_ENV2 = Path.home() / "troika" / ".env"
-if TROIKA_ENV2.exists():
-    load_dotenv(TROIKA_ENV2)
+# Подгружаем .env из возможных мест. В Docker переменные уже приходят
+# через env_file/environment, а домашняя папка может быть недоступна
+# процессу (UID hermes vs /root) — поэтому .exists()/load обёрнуты так,
+# чтобы PermissionError не ронял сервис (s6 иначе крутит рестарт по кругу).
+def _try_load_env(path: Path) -> None:
+    try:
+        if path.is_file():
+            load_dotenv(path)
+    except (PermissionError, OSError):
+        pass
+
+try:
+    _home = Path.home()
+except (RuntimeError, OSError):
+    _home = Path("/tmp")
+_try_load_env(_home / ".troika" / ".env")
+_try_load_env(_home / "troika" / ".env")
 
 from aiohttp import web, ClientSession, FormData
 import logging

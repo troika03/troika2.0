@@ -17,6 +17,13 @@ cd /opt/data
 # shellcheck disable=SC1091
 . /opt/hermes/.venv/bin/activate
 
+# s6-setuidgid меняет UID/GID, но НЕ HOME — он остаётся /root (от /init),
+# куда hermes (UID 10000) писать не может. Без этого gateway/кодеры
+# валятся с PermissionError на ~/.troika, ~/.claude и т.п.
+# Жёстко указываем home пользователя hermes.
+export HOME=/opt/data
+export HERMES_HOME="${HERMES_HOME:-/opt/data}"
+
 if [ $# -eq 0 ]; then
     exec s6-setuidgid hermes hermes
 fi
