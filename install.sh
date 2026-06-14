@@ -160,12 +160,12 @@ if [ -f .env ]; then
 else
     printf "${DIM}  Ключи нигде не сохраняются кроме локального .env (chmod 600).${NC}\n\n"
 
-    # --- Anthropic (обязательно) ---
-    printf "  ${BOLD}1) Anthropic API key${NC}  ${RED}(обязательно)${NC}\n"
+    # --- Anthropic (основной мозг + кодер Claude) ---
+    printf "  ${BOLD}1) Anthropic API key${NC}  ${GREEN}(рекомендуется)${NC}\n"
     printf "     ${DIM}Основной мозг + кодер Claude. Ключ: https://console.anthropic.com/keys${NC}\n"
-    printf "     ${BOLD}ANTHROPIC_API_KEY:${NC} "
+    printf "     ${DIM}Можно пропустить, если задашь другого провайдера ниже.${NC}\n"
+    printf "     ${BOLD}ANTHROPIC_API_KEY${NC} ${DIM}(Enter — пропустить):${NC} "
     read -r ANTHROPIC_KEY < "$TTY"
-    [ -z "$ANTHROPIC_KEY" ] && error "Без Anthropic API key Тройка не запустится."
 
     # --- Groq (голос) ---
     printf "\n  ${BOLD}2) Groq API key${NC}  ${YELLOW}(для голоса)${NC}\n"
@@ -174,11 +174,26 @@ else
     printf "     ${BOLD}GROQ_API_KEY${NC} ${DIM}(Enter — пропустить):${NC} "
     read -r GROQ_KEY < "$TTY"
 
-    # --- OpenRouter (опц.) ---
-    printf "\n  ${BOLD}3) OpenRouter API key${NC}  ${DIM}(опционально)${NC}\n"
-    printf "     ${DIM}Резервные модели (GPT, Gemini…): https://openrouter.ai/keys${NC}\n"
-    printf "     ${BOLD}OPENROUTER_API_KEY${NC} ${DIM}(Enter — пропустить):${NC} "
-    read -r OPENROUTER_KEY < "$TTY"
+    # --- Доп. провайдеры «мозга» (по желанию) ---
+    # Имя_переменной | Подпись | Где взять ключ
+    PROVIDERS="
+OPENROUTER_API_KEY|OpenRouter (один ключ — сотни моделей)|https://openrouter.ai/keys
+OPENAI_API_KEY|OpenAI (GPT-4o, o1, o3)|https://platform.openai.com/api-keys
+GEMINI_API_KEY|Google Gemini (2.5/3 Pro, Flash)|https://aistudio.google.com/app/apikey
+XAI_API_KEY|xAI Grok|https://console.x.ai
+DEEPSEEK_API_KEY|DeepSeek (дёшево, силён в коде)|https://platform.deepseek.com/api_keys
+MISTRAL_API_KEY|Mistral|https://console.mistral.ai/api-keys
+"
+    printf "\n  ${BOLD}3) Другие провайдеры мозга${NC} ${DIM}(по желанию — Enter пропускает каждый)${NC}\n"
+    printf "     ${DIM}Любой можно добавить/поменять и потом в %s/.env${NC}\n" "$TROIKA_DIR"
+    rm -f /tmp/troika_extra_keys   # чистим от прошлого запуска
+    printf '%s\n' "$PROVIDERS" | while IFS='|' read -r VAR LABEL URL; do
+        [ -z "$VAR" ] && continue
+        printf "     ${BOLD}%s${NC} ${DIM}— %s${NC}\n" "$LABEL" "$URL"
+        printf "       ${BOLD}%s${NC} ${DIM}(Enter — пропустить):${NC} " "$VAR"
+        read -r VAL < "$TTY"
+        [ -n "$VAL" ] && printf '%s=%s\n' "$VAR" "$VAL" >> /tmp/troika_extra_keys
+    done
 
     # --- API-ключ для приложения (по умолчанию hermes-2024) ---
     printf "\n  ${BOLD}4) Пароль доступа${NC}  ${DIM}(для приложения и API)${NC}\n"
@@ -186,6 +201,12 @@ else
     printf "     ${BOLD}API_SERVER_KEY${NC} ${DIM}(Enter — hermes-2024):${NC} "
     read -r SERVER_KEY < "$TTY"
     [ -z "$SERVER_KEY" ] && SERVER_KEY="hermes-2024"
+
+    # --- Проверка: хоть один мозг должен быть ---
+    if [ -z "$ANTHROPIC_KEY" ] && [ ! -s /tmp/troika_extra_keys ]; then
+        rm -f /tmp/troika_extra_keys
+        error "Не задан ни один провайдер мозга.\n    Нужен хотя бы Anthropic ИЛИ один из доп. провайдеров (шаг 3)."
+    fi
 
     # --- Пишем .env ---
     set_kv() {  # set_kv KEY VALUE
@@ -198,9 +219,15 @@ else
     }
 
     cp .env.example .env
-    set_kv ANTHROPIC_API_KEY "$ANTHROPIC_KEY"
-    [ -n "$GROQ_KEY" ]       && set_kv GROQ_API_KEY       "$GROQ_KEY"
-    [ -n "$OPENROUTER_KEY" ] && set_kv OPENROUTER_API_KEY "$OPENROUTER_KEY"
+    [ -n "$ANTHROPIC_KEY" ]   && set_kv ANTHROPIC_API_KEY "$ANTHROPIC_KEY"
+    [ -n "$GROQ_KEY" ]        && set_kv GROQ_API_KEY      "$GROQ_KEY"
+    # доп. провайдеры из временного файла
+    if [ -s /tmp/troika_extra_keys ]; then
+        while IFS='=' read -r VAR VAL; do
+            [ -n "$VAR" ] && set_kv "$VAR" "$VAL"
+        done < /tmp/troika_extra_keys
+    fi
+    rm -f /tmp/troika_extra_keys
     set_kv API_SERVER_KEY "$SERVER_KEY"
     set_kv STT_BACKEND "groq"
 
