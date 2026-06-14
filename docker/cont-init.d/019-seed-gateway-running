@@ -1,0 +1,26 @@
+#!/command/with-contenv sh
+# shellcheck shell=sh
+# Тройка: помечаем дефолтный gateway как "running", чтобы reconciler
+# (02-reconcile-profiles) авто-стартовал его на каждом старте контейнера.
+#
+# Зачем: container_boot.py авто-стартует только профили, чей последний
+# записанный state == "running" (_AUTOSTART_STATES). На свежем образе
+# gateway_state.json отсутствует → prior_state=None → gateway НЕ
+# поднимается, и api_server (порт 8642) не слушает. Тройка должна
+# подниматься сама, без ручного `hermes gateway start`, поэтому жёстко
+# сидируем состояние "running" ДО запуска reconciler.
+#
+# Порядок: 015-supervise-perms < 019-seed-gateway-running < 02-reconcile.
+set -e
+
+HOME_DIR="${HERMES_HOME:-/opt/data}"
+STATE_FILE="$HOME_DIR/gateway_state.json"
+
+# Не перезатираем, если пользователь явно остановил gateway и файл уже
+# существует со state != running? — нет: для серверного образа Тройки
+# поведение «всегда поднимать» желаемо. Пишем безусловно.
+mkdir -p "$HOME_DIR"
+printf '{"gateway_state": "running"}\n' > "$STATE_FILE"
+chown hermes:hermes "$STATE_FILE" 2>/dev/null || true
+
+echo "[seed-gateway] $STATE_FILE → running (gateway авто-старт включён)"

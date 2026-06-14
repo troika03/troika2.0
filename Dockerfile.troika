@@ -124,6 +124,9 @@ RUN mkdir -p /etc/cont-init.d && \
         > /etc/cont-init.d/01-hermes-setup && \
     chmod +x /etc/cont-init.d/01-hermes-setup
 COPY --chmod=0755 docker/cont-init.d/015-supervise-perms /etc/cont-init.d/015-supervise-perms
+# Тройка: сидируем gateway_state=running ДО reconciler, чтобы gateway
+# (и api_server на 8642) поднимался сам на каждом старте контейнера.
+COPY --chmod=0755 docker/cont-init.d/019-seed-gateway-running /etc/cont-init.d/019-seed-gateway-running
 COPY --chmod=0755 docker/cont-init.d/02-reconcile-profiles /etc/cont-init.d/02-reconcile-profiles
 
 # ---------- Runtime ----------
