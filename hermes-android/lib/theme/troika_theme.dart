@@ -1,0 +1,87 @@
+import 'package:flutter/material.dart';
+import '../services/assistant_service.dart';
+
+/// Единая дизайн-система Тройки.
+///
+/// Принципы: один тёплый фирменный акцент (Troika Amber), тёплый почти-чёрный
+/// фон, чистая типографика (Inter), без неона/градиентов-радуг/HUD-мусора.
+/// Тёплая палитра читается как «человеческое», а не «холодное AI».
+class TroikaColors {
+  TroikaColors._();
+
+  /// Фирменный акцент — тёплый медово-янтарный. Лицо бренда.
+  static const Color brand = Color(0xFFF5A623);
+  static const Color brandDeep = Color(0xFFE08A12);
+  static const Color brandSoft = Color(0xFFFFC65C);
+
+  /// Фон — тёплый почти-чёрный (не чистый #000, чуть тёплее).
+  static const Color bg = Color(0xFF0C0B0A);
+  static const Color surface = Color(0xFF17150F);
+  static const Color surfaceHi = Color(0xFF211E16);
+
+  /// Текст — тёплый off-white и приглушённый.
+  static const Color text = Color(0xFFF3F0EA);
+  static const Color textMuted = Color(0xFF8C887F);
+  static const Color textFaint = Color(0xFF55524B);
+
+  /// Единственный «не-акцентный» цвет — мягкая тёплая ошибка.
+  static const Color error = Color(0xFFE5604D);
+
+  /// Цвет под состояние ассистента. Бренд держим постоянным, играем
+  /// яркостью/мотивом, ошибка — единственное исключение.
+  static Color forState(AssistantState s) {
+    switch (s) {
+      case AssistantState.idle:
+        return brand;
+      case AssistantState.wakeDetected:
+        return brandSoft;
+      case AssistantState.recording:
+        return brandSoft;
+      case AssistantState.processing:
+        return brand;
+      case AssistantState.speaking:
+        return brandSoft;
+      case AssistantState.error:
+        return error;
+    }
+  }
+
+  /// Короткая подпись состояния — спокойная, строчными, без жаргона.
+  static String hint(AssistantState s) {
+    switch (s) {
+      case AssistantState.idle:
+        return 'скажи «тройка»';
+      case AssistantState.wakeDetected:
+        return 'да, слушаю';
+      case AssistantState.recording:
+        return 'слушаю — нажми, чтобы отправить';
+      case AssistantState.processing:
+        return 'думаю';
+      case AssistantState.speaking:
+        return 'нажми, чтобы прервать';
+      case AssistantState.error:
+        return 'ошибка — нажми, чтобы повторить';
+    }
+  }
+}
+
+/// Тема приложения.
+ThemeData buildTroikaTheme() {
+  const accent = TroikaColors.brand;
+  return ThemeData(
+    brightness: Brightness.dark,
+    scaffoldBackgroundColor: TroikaColors.bg,
+    colorScheme: const ColorScheme.dark(
+      primary: accent,
+      secondary: accent,
+      surface: TroikaColors.surface,
+      error: TroikaColors.error,
+      onPrimary: Color(0xFF1A1206),
+    ),
+    useMaterial3: true,
+    textTheme: const TextTheme().apply(
+      bodyColor: TroikaColors.text,
+      displayColor: TroikaColors.text,
+    ),
+  );
+}

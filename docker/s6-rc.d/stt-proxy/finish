@@ -1,0 +1,6 @@
+#!/command/with-contenv sh
+# shellcheck shell=sh
+# Restart STT proxy if it exits unexpectedly.
+# s6 restarts longrun services automatically; this finish script
+# just adds a small delay to avoid spinning on permanent errors.
+sleep 3

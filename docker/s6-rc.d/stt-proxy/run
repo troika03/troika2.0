@@ -1,0 +1,13 @@
+#!/command/with-contenv sh
+# shellcheck shell=sh
+# STT Proxy — Whisper/Groq распознавание голоса с телефона
+# Слушает на порту 8643 (телефон пишет туда WAV, получает текст)
+#
+# Env:
+#   STT_BACKEND   — groq (default) | local | auto
+#   GROQ_API_KEY  — обязателен для backend=groq
+#   HERMES_HOME   — путь к данным (default /opt/data)
+
+exec s6-setuidgid hermes \
+    /opt/hermes/.venv/bin/python \
+    /opt/hermes/hermes-android/stt_proxy_server.py

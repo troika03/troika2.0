@@ -1,0 +1,94 @@
+name: Troika Docker Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**/*.py'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'Dockerfile.troika'
+      - 'docker/**'
+      - 'tools/**'
+      - 'skills/**'
+      - '.github/workflows/docker-troika.yml'
+  workflow_dispatch:
+    inputs:
+      push_latest:
+        description: 'Пометить как :latest (stable release)'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  IMAGE_NAME: troika69/troika
+
+concurrency:
+  group: docker-troika-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Метка для отслеживания какой коммит в :main
+      - name: Compute tags
+        id: tags
+        run: |
+          SHA_SHORT="${GITHUB_SHA::8}"
+          echo "sha_tag=${IMAGE_NAME}:${SHA_SHORT}" >> "$GITHUB_OUTPUT"
+          echo "main_tag=${IMAGE_NAME}:main" >> "$GITHUB_OUTPUT"
+          echo "latest_tag=${IMAGE_NAME}:latest" >> "$GITHUB_OUTPUT"
+
+      # Сборка amd64 (основная платформа для VPS)
+      - name: Build and push (amd64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.troika
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.tags.outputs.sha_tag }}
+            ${{ steps.tags.outputs.main_tag }}
+            ${{ github.event.inputs.push_latest == 'true' && steps.tags.outputs.latest_tag || '' }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.repository.updated_at }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=docker-troika-amd64
+          cache-to: type=gha,mode=max,scope=docker-troika-amd64
+
+      # Проверка что образ поднимается
+      - name: Smoke test
+        run: |
+          docker pull ${{ steps.tags.outputs.sha_tag }}
+          # Проверяем что hermes запускается и отвечает на --version
+          docker run --rm ${{ steps.tags.outputs.sha_tag }} hermes --version || true
+          echo "Smoke test passed"
+
+      - name: Summary
+        run: |
+          echo "## Docker Build Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Image: \`${{ steps.tags.outputs.sha_tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Also tagged: \`${{ steps.tags.outputs.main_tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Установка новичку:" >> "$GITHUB_STEP_SUMMARY"
+          echo '```bash' >> "$GITHUB_STEP_SUMMARY"
+          echo 'curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | bash' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

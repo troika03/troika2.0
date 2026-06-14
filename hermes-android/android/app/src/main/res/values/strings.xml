@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_service_description">Тройка использует спец. возможности чтобы выполнять голосовые команды: открывать приложения, нажимать кнопки, вводить текст, читать содержимое экрана. Все действия инициируются твоими голосовыми командами.</string>
+    <string name="accessibility_service_summary">Включи чтобы Тройка мог управлять телефоном по голосовым командам</string>
+</resources>
