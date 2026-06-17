@@ -8,8 +8,11 @@ import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -33,25 +36,58 @@ class EdgeTtsPlayer(
     private val currentDoneCallback = AtomicReference<(() -> Unit)?>(null)
     private val streamCancelled = AtomicBoolean(false)
 
+    // «Поколение» текущей озвучки. Любой новый speak()/speakStream() инкрементит
+    // его и глушит предыдущую речь. Потоки синтеза/проигрывания сверяют своё
+    // поколение с актуальным — если устарело, тихо выходят и НЕ запускают звук.
+    // Это убирает наложение нескольких голосов при быстрых повторных вызовах.
+    private val generation = AtomicInteger(0)
+
+    /**
+     * Начать новую озвучку: глушит предыдущую (stop текущего плеера + отмена
+     * стрима + отстрел старого onDone) и возвращает номер своего поколения.
+     * Дальше каждый шаг проверяет generation.get() == myGen.
+     */
+    private fun beginPlayback(onDone: (() -> Unit)?): Int {
+        val myGen = generation.incrementAndGet()
+        // Прервать предыдущую речь, не трогая НАШ ещё-не-установленный колбэк.
+        streamCancelled.set(true)
+        try {
+            player.getAndSet(null)?.let {
+                try { if (it.isPlaying) it.stop() } catch (_: Exception) {}
+                try { it.release() } catch (_: Exception) {}
+            }
+        } catch (_: Exception) {}
+        // Отстрелить колбэк прошлой озвучки (если был), чтобы её ожидающий
+        // проснулся и не завис.
+        currentDoneCallback.getAndSet(null)?.let {
+            try { it() } catch (_: Exception) {}
+        }
+        // Теперь это наша озвучка.
+        streamCancelled.set(false)
+        currentDoneCallback.set(onDone)
+        return myGen
+    }
+
     /** Синхронно скачивает MP3 и проигрывает; колбэк вызывается когда озвучка закончилась. */
     fun speak(text: String, onDone: (() -> Unit)? = null) {
         val cleaned = text.replace(Regex("[*#`]+"), "").trim()
         if (cleaned.isEmpty()) { onDone?.invoke(); return }
 
-        currentDoneCallback.set(onDone)
+        val myGen = beginPlayback(onDone)
 
         val t = Thread {
             try {
                 val file = synthesizeOrCached(cleaned)
+                if (generation.get() != myGen) return@Thread  // нас перебили — молчим
                 if (file != null && file.length() > 0) {
-                    playFile(file)
+                    playFile(file, myGen)
                 } else {
                     Log.w(tag, "synth returned empty, fallback to silence")
-                    invokeDoneOnce()
+                    invokeDoneOnce(myGen)
                 }
             } catch (e: Exception) {
                 Log.e(tag, "speak error: ${e.message}", e)
-                invokeDoneOnce()
+                invokeDoneOnce(myGen)
             }
         }
         t.name = "EdgeTtsFetch"
@@ -60,15 +96,20 @@ class EdgeTtsPlayer(
 
     /** Прервать текущее воспроизведение. Вызовет onDone из текущего speak(), если он ещё не отстрелял. */
     fun stop() {
+        // Инкремент поколения — любой in-flight синтез/проигрывание увидит, что
+        // устарел, и не запустит звук.
+        generation.incrementAndGet()
         streamCancelled.set(true)
         try {
-            player.get()?.let {
+            player.getAndSet(null)?.let {
                 try { if (it.isPlaying) it.stop() } catch (_: Exception) {}
                 it.release()
             }
         } catch (_: Exception) {}
-        player.set(null)
-        invokeDoneOnce()
+        // Отстрелить колбэк текущей озвучки (кто ждёт — проснётся).
+        currentDoneCallback.getAndSet(null)?.let {
+            try { it() } catch (e: Exception) { Log.e(tag, "stop onDone: ${e.message}") }
+        }
     }
 
     /**
@@ -89,48 +130,68 @@ class EdgeTtsPlayer(
             return
         }
 
-        streamCancelled.set(false)
-        currentDoneCallback.set(onDone)
-        val queue = LinkedBlockingQueue<Any>()
-        val endMarker = Any()
+        val myGen = beginPlayback(onDone)
 
-        // Продьюсер: качаем mp3 на каждое предложение последовательно, кладём в очередь
+        // УПРЕЖДАЮЩИЙ ПАРАЛЛЕЛЬНЫЙ СИНТЕЗ.
+        // Раньше предложения синтезировались строго по очереди — если синтез
+        // медленнее проигрывания, между фразами появлялась дыра тишины.
+        // Теперь синтезируем сразу несколько фраз вперёд (look-ahead), но играем
+        // строго по порядку: для каждого предложения заводим Future-«слот», а
+        // воркеры из пула заполняют их параллельно. Консьюмер просто ждёт слот N,
+        // пока N+1, N+2 уже качаются. Порядок речи сохраняется, тишина исчезает.
+        val n = sentences.size
+        @Suppress("UNCHECKED_CAST")
+        val slots = arrayOfNulls<CompletableFuture<File?>>(n) as Array<CompletableFuture<File?>>
+        for (i in 0 until n) slots[i] = CompletableFuture()
+
+        // Сколько фраз держим «в полёте» одновременно. 3 — компромисс: убирает
+        // дыры даже на медленной сети, но не штурмует сервер десятком запросов.
+        val lookahead = minOf(3, n)
+        val pool = Executors.newFixedThreadPool(lookahead) { r ->
+            Thread(r, "EdgeTtsSynth").apply { isDaemon = true }
+        }
+        val nextIndex = AtomicInteger(0)
+
+        fun pump() {
+            // Каждый воркер берёт следующий невзятый индекс, синтезирует, кладёт в слот,
+            // затем берёт ещё один — пока предложения не кончатся или поток не отменён.
+            while (true) {
+                if (streamCancelled.get() || generation.get() != myGen) return
+                val i = nextIndex.getAndIncrement()
+                if (i >= n) return
+                val file: File? = try {
+                    synthesizeOrCached(sentences[i])
+                } catch (e: Exception) {
+                    Log.e(tag, "stream synth #$i: ${e.message}"); null
+                }
+                slots[i].complete(file)
+            }
+        }
+        repeat(lookahead) { pool.submit { pump() } }
+
+        // Консьюмер: играем слоты строго по порядку. Слот N может быть ещё не готов —
+        // ждём его get(), пока следующие уже синтезируются параллельно.
         Thread {
             try {
-                for ((i, s) in sentences.withIndex()) {
-                    if (streamCancelled.get()) break
-                    try {
-                        val file = synthesizeOrCached(s)
-                        if (file != null && file.length() > 0) {
-                            queue.put(file)
-                        } else {
-                            Log.w(tag, "stream: empty file for sentence #$i")
-                        }
+                for (i in 0 until n) {
+                    if (streamCancelled.get() || generation.get() != myGen) break
+                    val file = try {
+                        slots[i].get(60, TimeUnit.SECONDS)
                     } catch (e: Exception) {
-                        Log.e(tag, "stream synth #$i: ${e.message}")
+                        Log.e(tag, "stream slot #$i wait: ${e.message}"); null
+                    }
+                    if (streamCancelled.get() || generation.get() != myGen) break
+                    if (file != null && file.length() > 0) {
+                        playFileBlocking(file, myGen)
+                    } else {
+                        Log.w(tag, "stream: empty file for sentence #$i")
                     }
                 }
-            } finally {
-                queue.put(endMarker)
-            }
-        }.apply { name = "EdgeTtsStreamSynth"; isDaemon = true }.start()
-
-        // Консьюмер: играем файлы по порядку, последний триггерит onDone
-        Thread {
-            try {
-                while (!streamCancelled.get()) {
-                    val item = queue.take()
-                    if (item === endMarker) break
-                    if (streamCancelled.get()) break
-                    val file = item as File
-                    playFileBlocking(file)
-                }
-            } catch (e: InterruptedException) {
-                // ok
             } catch (e: Exception) {
                 Log.e(tag, "stream play: ${e.message}")
             } finally {
-                invokeDoneOnce()
+                pool.shutdownNow()
+                invokeDoneOnce(myGen)
             }
         }.apply { name = "EdgeTtsStreamPlay"; isDaemon = true }.start()
     }
@@ -164,10 +225,16 @@ class EdgeTtsPlayer(
     }
 
     /** Синхронное проигрывание одного файла — блокирует до завершения. */
-    private fun playFileBlocking(file: File) {
+    private fun playFileBlocking(file: File, myGen: Int) {
+        if (generation.get() != myGen) return  // нас перебили до старта
         val done = Object()
         val mp = MediaPlayer()
         try {
+            val attrs = android.media.AudioAttributes.Builder()
+                .setUsage(android.media.AudioAttributes.USAGE_ASSISTANT)
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+            mp.setAudioAttributes(attrs)
             mp.setDataSource(file.absolutePath)
             mp.setOnCompletionListener {
                 try { it.release() } catch (_: Exception) {}
@@ -182,7 +249,13 @@ class EdgeTtsPlayer(
                 true
             }
             mp.prepare()
+            // Финальная проверка: если за время prepare() нас перебили — не играем.
+            if (generation.get() != myGen) {
+                try { mp.release() } catch (_: Exception) {}
+                return
+            }
             player.set(mp)
+            mp.setVolume(1.0f, 1.0f)
             mp.start()
             synchronized(done) {
                 try { done.wait(120000) } catch (_: Exception) {}
@@ -193,7 +266,10 @@ class EdgeTtsPlayer(
         }
     }
 
-    private fun invokeDoneOnce() {
+    private fun invokeDoneOnce(myGen: Int) {
+        // Колбэк отстреливаем только если мы всё ещё актуальная озвучка —
+        // иначе beginPlayback() уже вызвал onDone предыдущего поколения.
+        if (generation.get() != myGen) return
         val cb = currentDoneCallback.getAndSet(null) ?: return
         try { cb() } catch (e: Exception) { Log.e(tag, "onDone error: ${e.message}") }
     }
@@ -249,9 +325,8 @@ class EdgeTtsPlayer(
         return cached
     }
 
-    private fun playFile(file: File) {
-        // Не вызываем stop() здесь — иначе текущий onDone отстрелит до начала проигрывания.
-        // Достаточно того что предыдущий speak() уже отработал колбэк.
+    private fun playFile(file: File, myGen: Int) {
+        if (generation.get() != myGen) return  // нас перебили до старта
         val mp = MediaPlayer()
         try {
             // КРИТИЧНО: на Android 11+ без AudioAttributes MediaPlayer может играть тихо
@@ -268,7 +343,7 @@ class EdgeTtsPlayer(
             mp.setOnCompletionListener {
                 try { it.release() } catch (_: Exception) {}
                 player.compareAndSet(it, null)
-                invokeDoneOnce()
+                invokeDoneOnce(myGen)
             }
             mp.setOnErrorListener { p, what, extra ->
                 Log.e(tag, "MediaPlayer error: $what/$extra (file=${file.name}, size=${file.length()})")
@@ -276,16 +351,19 @@ class EdgeTtsPlayer(
                 try { file.delete() } catch (_: Exception) {}
                 try { p.release() } catch (_: Exception) {}
                 player.compareAndSet(p, null)
-                invokeDoneOnce()
+                invokeDoneOnce(myGen)
                 true
             }
             mp.setOnPreparedListener {
-                // Громкость на максимум независимо от media volume — это голос ассистента,
-                // он должен быть слышен. Если пользователь хочет тише — есть volume в JSON-теле.
                 it.setVolume(1.0f, 1.0f)
                 Log.i(tag, "MediaPlayer prepared: file=${file.name}, duration=${it.duration}ms")
             }
             mp.prepare()
+            // Если за время prepare() пришёл новый speak() — не играем устаревшее.
+            if (generation.get() != myGen) {
+                try { mp.release() } catch (_: Exception) {}
+                return
+            }
             player.set(mp)
             mp.start()
         } catch (e: Exception) {
@@ -293,7 +371,7 @@ class EdgeTtsPlayer(
             // Удалим битый файл
             try { file.delete() } catch (_: Exception) {}
             try { mp.release() } catch (_: Exception) {}
-            invokeDoneOnce()
+            invokeDoneOnce(myGen)
         }
     }
 

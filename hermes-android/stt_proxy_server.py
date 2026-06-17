@@ -43,7 +43,23 @@ import logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("stt-proxy")
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
+def _collect_groq_keys() -> list[str]:
+    """Собирает все Groq-ключи: GROQ_API_KEY, GROQ_API_KEY2, GROQ_API_KEY3...
+    Несколько бесплатных аккаунтов = суммарный дневной лимит. Прокси при 429
+    на одном ключе переключается на следующий."""
+    keys: list[str] = []
+    primary = os.getenv("GROQ_API_KEY", "").strip()
+    if primary:
+        keys.append(primary)
+    for i in range(2, 6):  # GROQ_API_KEY2..GROQ_API_KEY5
+        k = os.getenv(f"GROQ_API_KEY{i}", "").strip()
+        if k and k not in keys:
+            keys.append(k)
+    return keys
+
+
+GROQ_KEYS = _collect_groq_keys()
+GROQ_API_KEY = GROQ_KEYS[0] if GROQ_KEYS else ""  # обратная совместимость
 API_SERVER_KEY = os.getenv("API_SERVER_KEY", "hermes-2024")
 PORT = int(os.getenv("STT_PROXY_PORT", "8643"))
 HOST = "0.0.0.0"
@@ -154,7 +170,11 @@ async def _transcribe_local(audio_bytes: bytes, language: str) -> tuple[str, dic
             pass
 
 
-async def _groq_post(audio_bytes: bytes, filename: str, language: str, model: str) -> str:
+class _GroqRateLimited(RuntimeError):
+    """429 от Groq — стоит попробовать другой ключ."""
+
+
+async def _groq_post(audio_bytes: bytes, filename: str, language: str, model: str, api_key: str) -> str:
     form = FormData()
     form.add_field("file", audio_bytes, filename=filename, content_type="audio/m4a")
     form.add_field("model", model)
@@ -165,11 +185,14 @@ async def _groq_post(audio_bytes: bytes, filename: str, language: str, model: st
     async with ClientSession() as session:
         async with session.post(
             GROQ_URL, data=form,
-            headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+            headers={"Authorization": f"Bearer {api_key}"},
             # 30с заставляли ждать полминуты при лаге сети → «не реагирует».
             # 8с: не дождались — отдаём провал быстро, а не висим. (env override)
             timeout=int(os.getenv("GROQ_STT_TIMEOUT", "8")),
         ) as resp:
+            if resp.status == 429:
+                err = await resp.text()
+                raise _GroqRateLimited(f"Groq 429: {err}")
             if resp.status != 200:
                 err = await resp.text()
                 raise RuntimeError(f"Groq {resp.status}: {err}")
@@ -178,20 +201,36 @@ async def _groq_post(audio_bytes: bytes, filename: str, language: str, model: st
 
 
 async def _transcribe_groq(audio_bytes: bytes, filename: str, language: str) -> tuple[str, dict]:
-    if not GROQ_API_KEY:
+    if not GROQ_KEYS:
         raise RuntimeError("GROQ_API_KEY не задан")
     # turbo ~2-4x быстрее large-v3 на коротких командах — режет паузу перед ответом.
     # Если turbo недоступен на ключе (403/404) — один раз падаем на проверенный large-v3.
     primary = os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo")
-    try:
-        text = await _groq_post(audio_bytes, filename, language, primary)
-        return text, {"backend": "groq", "model": primary}
-    except RuntimeError as e:
-        msg = str(e)
-        if primary != "whisper-large-v3" and (" 403" in msg or " 404" in msg or "model" in msg.lower()):
-            text = await _groq_post(audio_bytes, filename, language, "whisper-large-v3")
-            return text, {"backend": "groq", "model": "whisper-large-v3", "fellback": True}
-        raise
+    last_429: Exception | None = None
+    # Перебираем ключи: первый словил 429 (дневной лимит) → пробуем следующий.
+    for idx, key in enumerate(GROQ_KEYS):
+        try:
+            try:
+                text = await _groq_post(audio_bytes, filename, language, primary, key)
+                meta = {"backend": "groq", "model": primary}
+            except RuntimeError as e:
+                if isinstance(e, _GroqRateLimited):
+                    raise
+                msg = str(e)
+                if primary != "whisper-large-v3" and (" 403" in msg or " 404" in msg or "model" in msg.lower()):
+                    text = await _groq_post(audio_bytes, filename, language, "whisper-large-v3", key)
+                    meta = {"backend": "groq", "model": "whisper-large-v3", "fellback": True}
+                else:
+                    raise
+            if idx > 0:
+                meta["key_index"] = idx  # пометка что сработал запасной ключ
+            return text, meta
+        except _GroqRateLimited as e:
+            last_429 = e
+            log.warning("Groq key #%d rate-limited, trying next key (%d total)", idx, len(GROQ_KEYS))
+            continue
+    # все ключи исчерпали лимит
+    raise _GroqRateLimited(str(last_429) if last_429 else "all Groq keys rate-limited")
 
 
 # Серверный фильтр Whisper-галлюцинаций — последняя линия защиты,
@@ -208,6 +247,10 @@ _HALLUCINATION_EXACT = {
     "ну", "так", "и", "да", "вот", "ага", "угу", "ох", "эх", "хм",
     "конец", "конец фильма", "конец видео", "начало", "стоп",
     "продолжение", "тишина", "молчание", "аплодисменты", "музыка",
+    # Частые галлюцинации Whisper на тишине/шуме (наблюдались в логах 16.06):
+    "поехали", "поехали.", "слышь", "прекрасно", "качество",
+    "давай", "давай.", "у нас", "у нас?", "и когда", "время",
+    "вот и есть", "ваши младенцы", "вечный комплекс",
     "thanks", "thank you", "you", "bye", "okay", "ok", "the end",
     ".", "..", "...", "[музыка]", "(музыка)",
     "[аплодисменты]", "(аплодисменты)",
@@ -251,7 +294,8 @@ async def health(request):
         "backend": STT_BACKEND,
         "local_ready": _local_model is not None,
         "local_init_error": _local_init_error or None,
-        "groq_key_set": bool(GROQ_API_KEY),
+        "groq_key_set": bool(GROQ_KEYS),
+        "groq_keys_count": len(GROQ_KEYS),
         "service": "hermes-stt-proxy"
     })
 

@@ -54,17 +54,21 @@ class HermesListenerService : Service() {
         const val PREF_BARGE_IN_THRESHOLD = "flutter.hermes_barge_in_threshold"
 
         const val AMPLITUDE_THRESHOLD = 800   // достаточный голос, но не шум
-        // Пониженный порог для wake-word listener — лучше пропустить тихое
-        // "Тройка" и отдать его Whisper'у, чем не услышать вообще. recordUtterance
-        // использует более строгий порог + проверку среднего, так что лишние
-        // транскрипции не превращаются в ложные диалоги.
-        const val WAKE_AMPLITUDE_THRESHOLD = 450
+        // Порог для wake-word listener. 16.06.2026 поднят 450→600: слишком низкий
+        // порог + триггер на 1 фрейме слал в облачный Whisper КАЖДЫЙ шорох, выжигая
+        // дневной лимit Groq (2000/день) на тишине и ловя галлюцинации. 600 выше
+        // фонового шума, но ловит нормально сказанное "Тройка".
+        const val WAKE_AMPLITUDE_THRESHOLD = 600
+        // Сколько подряд «голосовых» фреймов (~125мс каждый) нужно, чтобы вообще
+        // отправить аудио в STT на проверку wake-word. 3 фрейма ≈ 375мс реальной
+        // речи — короткий шум/щелчок такого не даёт. Это главный фикс расхода лимита.
+        const val WAKE_MIN_VOICE_FRAMES = 3
         const val SAMPLE_RATE = 16000
         const val BUFFER_SECONDS = 3   // храним последние 3 сек
-        // Короткий кулдаун между попытками распознать wake-word.
-        // Раньше было 1500 мс — если первая попытка не поймала, юзеру
-        // приходилось ждать почти 2 секунды и говорить заново.
-        const val COOLDOWN_MS = 350L
+        // Кулдаун между попытками распознать wake-word. 16.06.2026 поднят 350→1200:
+        // при 350мс получалось до ~2.8 STT-запросов/сек на шум. 1200мс = максимум
+        // ~0.8/сек, отклик на «Тройка» при этом не страдает (слово длиннее).
+        const val COOLDOWN_MS = 1200L
 
         // Покрываем основные ошибки распознавания Whisper'ом слова "Тройка".
         // Список расширен — лучше иметь немного ложных срабатываний (юзер
@@ -197,6 +201,19 @@ class HermesListenerService : Service() {
             "HermesListener",
             "Picked voice: ${chosen.name} quality=${chosen.quality} network=${chosen.isNetworkConnectionRequired}"
         )
+    }
+
+    /**
+     * Озвучить и ДОЖДАТЬСЯ окончания (блокирует вызывающий поток). Заменяет
+     * паттерн speak(x) + speak("") {wait}, который запускал ДВЕ озвучки подряд
+     * и накладывал голоса. Один speak — одно ожидание.
+     */
+    private fun speakBlocking(text: String, timeoutMs: Long = 120000) {
+        val cleaned = text.replace(Regex("[*#`]+"), "").trim()
+        if (cleaned.isEmpty()) return
+        val w = Object()
+        speak(cleaned) { synchronized(w) { w.notify() } }
+        synchronized(w) { try { w.wait(timeoutMs) } catch (_: Exception) {} }
     }
 
     private fun speak(text: String, onDone: (() -> Unit)? = null) {
@@ -436,8 +453,9 @@ class HermesListenerService : Service() {
                 }
 
                 // Голос обнаружен и кулдаун прошёл — проверяем wake-word.
-                // Триггер на одном фрейме речи (~125 мс) — быстрый отклик.
-                if (voiceFrames >= 1 &&
+                // Требуем НЕСКОЛЬКО подряд голосовых фреймов (устойчивую речь),
+                // иначе короткий шум/щелчок не должен слать аудио в облачный STT.
+                if (voiceFrames >= WAKE_MIN_VOICE_FRAMES &&
                     !isTranscribing.get() &&
                     now - lastTranscribeTime > COOLDOWN_MS
                 ) {
@@ -522,9 +540,11 @@ class HermesListenerService : Service() {
             android.util.Log.d("HermesListener", "heard='$raw' norm='$text'")
             sendDebugToFlutter(raw)
             val matched = WAKE_WORDS.firstOrNull { text.contains(it) }
-            if (matched != null && !isInDialog.get()) {
+            // АТОМАРНО: compareAndSet вместо get()+set() — иначе между проверкой
+            // и установкой manual-путь (triggerDialog) мог тоже стартовать диалог,
+            // и запускались ДВА runDialog → два приветствия / наложение голосов.
+            if (matched != null && isInDialog.compareAndSet(false, true)) {
                 android.util.Log.i("HermesListener", "WAKE_WORD matched=$matched")
-                isInDialog.set(true)
                 thread(name = "HermesDialog") { runDialog() }
             }
         }
@@ -679,8 +699,7 @@ class HermesListenerService : Service() {
                 )
                 if (exitPhrases.any { question.contains(it) } && question.length < 40) {
                     HermesOverlay.get(this).updateStatus("До связи!")
-                    speak("Хорошо")
-                    Thread.sleep(1200)
+                    speakBlocking("Хорошо", timeoutMs = 5000)
                     break
                 }
 
@@ -692,10 +711,10 @@ class HermesListenerService : Service() {
                 ) {
                     val newName = switchToNextVoice()
                     HermesOverlay.get(this).updateStatus("Голос: $newName")
-                    speak("Это новый голос. Если нравится — продолжаем. Если нет, скажи смени голос.")
-                    val w = Object()
-                    speak("") { synchronized(w) { w.notify() } }
-                    synchronized(w) { try { w.wait(6000) } catch (_: Exception) {} }
+                    speakBlocking(
+                        "Это новый голос. Если нравится — продолжаем. Если нет, скажи смени голос.",
+                        timeoutMs = 15000,
+                    )
                     continue
                 }
 
@@ -706,10 +725,7 @@ class HermesListenerService : Service() {
                 val localResult = PhoneCommands.tryExecute(this, question, rawQuestion)
                 if (localResult != null) {
                     HermesOverlay.get(this).updateStatus(localResult)
-                    speak(localResult)
-                    val w = Object()
-                    speak("") { synchronized(w) { w.notify() } }
-                    synchronized(w) { try { w.wait(4000) } catch (_: Exception) {} }
+                    speakBlocking(localResult, timeoutMs = 20000)
                     // Добавляем в историю чтобы LLM знал о выполненной команде
                     history.add(JSONObject().apply {
                         put("role", "user"); put("content", rawQuestion)
@@ -717,6 +733,8 @@ class HermesListenerService : Service() {
                     history.add(JSONObject().apply {
                         put("role", "assistant"); put("content", localResult)
                     })
+                    sendChatToFlutter("user", rawQuestion)
+                    sendChatToFlutter("assistant", localResult)
                     firstTurn = false
                     continue
                 }
@@ -726,8 +744,14 @@ class HermesListenerService : Service() {
                 SoundFeedback.thinking()
                 history.add(JSONObject().apply {
                     put("role", "user")
-                    put("content", rawQuestion)
+                    // Дату кладём В НАЧАЛО вопроса (user-сообщение), а НЕ в system prompt:
+                    // слабая модель (deepseek) игнорирует дату из system, но слушается
+                    // прямого ввода юзера. Проверено: system→«14 июня» (галлюцинация
+                    // из обучения), user-префикс→верная дата. Префикс короткий и
+                    // незаметный в TTS т.к. это вход, а не ответ.
+                    put("content", currentDatePrefix() + rawQuestion)
                 })
+                sendChatToFlutter("user", rawQuestion)
                 val answer = chatWithHermesHistory(history)
                 if (answer.isEmpty()) {
                     HermesOverlay.get(this).updateStatus("Тройка не ответил")
@@ -738,6 +762,7 @@ class HermesListenerService : Service() {
                     put("role", "assistant")
                     put("content", answer)
                 })
+                sendChatToFlutter("assistant", answer)
 
                 HermesOverlay.get(this).updateStatus(answer.take(120))
                 val ttsDone = Object()
@@ -877,6 +902,24 @@ class HermesListenerService : Service() {
         }
     }
 
+    /** Короткий префикс с датой для ВХОДЯЩЕГО user-сообщения. Слабая модель
+     *  игнорирует дату из system prompt, но не из прямого ввода юзера. */
+    private fun currentDatePrefix(): String {
+        val cal = java.util.Calendar.getInstance()
+        val months = arrayOf("января", "февраля", "марта", "апреля", "мая", "июня",
+            "июля", "августа", "сентября", "октября", "ноября", "декабря")
+        val weekdays = arrayOf("воскресенье", "понедельник", "вторник", "среда",
+            "четверг", "пятница", "суббота")
+        val day = cal.get(java.util.Calendar.DAY_OF_MONTH)
+        val month = months[cal.get(java.util.Calendar.MONTH)]
+        val year = cal.get(java.util.Calendar.YEAR)
+        val wd = weekdays[cal.get(java.util.Calendar.DAY_OF_WEEK) - 1]
+        val hh = cal.get(java.util.Calendar.HOUR_OF_DAY)
+        val mm = cal.get(java.util.Calendar.MINUTE)
+        return "[сейчас $day $month $year, $wd, " +
+            String.format("%02d:%02d", hh, mm) + "] "
+    }
+
     /** Запрос к Hermes /v1/chat/completions с историей сообщений (для continuous-режима) */
     private fun chatWithHermesHistory(history: List<JSONObject>): String {
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -955,7 +998,9 @@ class HermesListenerService : Service() {
                             "— MCP-tools (mcp_filesystem_*, mcp_git_*, mcp_time_*, mcp_fetch_*, mcp_sequential_thinking_*) — " +
                             "доступ к файлам PC, git-репам, точному времени/таймзонам, HTTP fetch и пошаговому " +
                             "рассуждению. Используй их когда нужно работать с компьютером Миши, а не с телефоном.\n" +
-                            "— Не пиши 'сейчас сделаю презентацию' — просто вызови tool и потом скажи 'готово, в Downloads'."
+                            "— Не пиши 'сейчас сделаю презентацию' — просто вызови tool и потом скажи 'готово, в Downloads'.\n\n" +
+                            "ДАТА/ВРЕМЯ: текущие дата и время идут в начале сообщения Миши в квадратных скобках " +
+                            "[сейчас ...] — бери их ОТТУДА, никогда не называй дату из памяти/обучения."
                         )
                     })
                     for (msg in history) put(msg)
@@ -1104,6 +1149,21 @@ class HermesListenerService : Service() {
         )
         android.os.Handler(mainLooper).post {
             channel.invokeMethod("debug_heard", text)
+        }
+    }
+
+    /// Прокинуть реплику голосового диалога в Flutter-чат, чтобы голос и текст
+    /// складывались в одну общую ленту (одна сессия phone-misha-main).
+    private fun sendChatToFlutter(role: String, content: String) {
+        val engine = FlutterEngineCache.getInstance().get("main_engine") ?: return
+        val channel = MethodChannel(
+            engine.dartExecutor.binaryMessenger, FLUTTER_CHANNEL
+        )
+        val payload = HashMap<String, Any>()
+        payload["role"] = role
+        payload["content"] = content
+        android.os.Handler(mainLooper).post {
+            channel.invokeMethod("voice_message", payload)
         }
     }
 

@@ -22,6 +22,8 @@ class MainActivity : FlutterActivity() {
 
     private val FLUTTER_CHANNEL = "com.troika.hermes/background"
     private val REQ_CALENDAR = 7421
+    private val REQ_LOCATION = 7422
+    private val REQ_LOCATION_BG = 7423
     private var methodChannel: MethodChannel? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -105,6 +107,20 @@ class MainActivity : FlutterActivity() {
                 }
                 "requestCalendarPermission" -> {
                     requestCalendarPermission()
+                    result.success(null)
+                }
+                "hasLocationPermission" -> {
+                    result.success(hasLocationPermission())
+                }
+                "requestLocationPermission" -> {
+                    requestLocationPermission()
+                    result.success(null)
+                }
+                "hasBackgroundLocation" -> {
+                    result.success(hasBackgroundLocation())
+                }
+                "requestBackgroundLocation" -> {
+                    requestBackgroundLocation()
                     result.success(null)
                 }
                 "getEdgeVoice" -> {
@@ -305,14 +321,77 @@ class MainActivity : FlutterActivity() {
         } catch (_: Exception) {}
     }
 
+    private fun hasLocationPermission(): Boolean {
+        val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        val coarse = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        return fine || coarse
+    }
+
+    private fun requestLocationPermission() {
+        if (hasLocationPermission()) return
+        try {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                ),
+                REQ_LOCATION
+            )
+        } catch (_: Exception) {}
+    }
+
+    private fun hasBackgroundLocation(): Boolean {
+        // До Android 10 фонового разрешения нет — фон работает с обычным.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return hasLocationPermission()
+        return ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_BACKGROUND_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun requestBackgroundLocation() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        if (hasBackgroundLocation()) return
+        // Сначала нужно обычное разрешение; без него фоновое запрашивать нельзя.
+        if (!hasLocationPermission()) {
+            requestLocationPermission()
+            return
+        }
+        // Android 11+: фоновое нельзя выдать диалогом — только «Разрешать всегда»
+        // в системных настройках приложения. Уводим туда.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                intent.data = Uri.parse("package:$packageName")
+                startActivity(intent)
+            } catch (_: Exception) {}
+        } else {
+            // Android 10: можно запросить диалогом.
+            try {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION),
+                    REQ_LOCATION_BG
+                )
+            } catch (_: Exception) {}
+        }
+    }
+
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQ_CALENDAR) {
-            methodChannel?.invokeMethod("calendar_permission_result", hasCalendarPermission())
+        when (requestCode) {
+            REQ_CALENDAR ->
+                methodChannel?.invokeMethod("calendar_permission_result", hasCalendarPermission())
+            REQ_LOCATION ->
+                methodChannel?.invokeMethod("location_permission_result", hasLocationPermission())
+            REQ_LOCATION_BG ->
+                methodChannel?.invokeMethod("background_location_result", hasBackgroundLocation())
         }
     }
 

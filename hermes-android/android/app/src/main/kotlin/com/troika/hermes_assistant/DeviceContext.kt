@@ -1,13 +1,17 @@
 package com.troika.hermes_assistant
 
+import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.os.Build
-import android.provider.Settings
+import androidx.core.content.ContextCompat
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -69,8 +73,55 @@ object DeviceContext {
             } catch (_: SecurityException) {
             } catch (_: Exception) {}
             out.put("bluetooth", bt)
+
+            // GPS-координаты — last known fix (дёшево, без постоянного listener,
+            // работает и в фоне при выданном ACCESS_BACKGROUND_LOCATION). Берём
+            // самый свежий fix из доступных провайдеров.
+            try {
+                val loc = lastKnownLocation(ctx)
+                if (loc != null) {
+                    out.put("lat", loc.latitude)
+                    out.put("lon", loc.longitude)
+                    if (loc.hasAccuracy()) out.put("accuracy_m", loc.accuracy.toDouble())
+                    val ageMs = System.currentTimeMillis() - loc.time
+                    out.put("location_age_sec", (ageMs / 1000L))
+                }
+            } catch (_: SecurityException) {
+                // нет разрешения на местоположение — просто без координат
+            } catch (_: Exception) {}
         } catch (_: Exception) {}
         return out
+    }
+
+    /** Есть ли хоть какое-то разрешение на местоположение (fine или coarse). */
+    private fun hasLocationPermission(ctx: Context): Boolean {
+        val fine = ContextCompat.checkSelfPermission(
+            ctx, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val coarse = ContextCompat.checkSelfPermission(
+            ctx, Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        return fine || coarse
+    }
+
+    /** Самый свежий last-known fix из GPS/Network/Passive. null если нет/нет прав. */
+    private fun lastKnownLocation(ctx: Context): Location? {
+        if (!hasLocationPermission(ctx)) return null
+        val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+            ?: return null
+        val providers = listOf(
+            LocationManager.GPS_PROVIDER,
+            LocationManager.NETWORK_PROVIDER,
+            LocationManager.PASSIVE_PROVIDER,
+        )
+        var best: Location? = null
+        for (p in providers) {
+            val l = try {
+                if (lm.isProviderEnabled(p)) lm.getLastKnownLocation(p) else null
+            } catch (_: SecurityException) { null } catch (_: Exception) { null }
+            if (l != null && (best == null || l.time > best!!.time)) best = l
+        }
+        return best
     }
 
     private fun networkType(ctx: Context): String {
