@@ -131,6 +131,11 @@ _HERMES_CORE_TOOLS = [
     "code_review",
     # Поиск по vault'у памяти + дневник
     "memory_search", "diary_add", "diary_read",
+    # SOMA — память о пользователе с эмоц-весом и confidence
+    "soma_remember", "soma_recall", "soma_forget",
+    # GROUND — фоновый наблюдатель экрана; DAEMON — автономный проактивный ум
+    "ground_start", "ground_stop", "ground_status",
+    "daemon_start", "daemon_stop", "daemon_status",
     # Kanban multi-agent coordination — only in schema when the agent is
     # spawned as a kanban worker (HERMES_KANBAN_TASK env set) or the current
     # profile explicitly enables the kanban toolset. Gated via check_fn in
@@ -365,6 +370,18 @@ TOOLSETS = {
         "includes": []
     },
 
+    "ground": {
+        "description": "GROUND — фоновый наблюдатель экрана телефона: Тройка периодически 'видит' чем занят пользователь (через vision), анализируя экран только при изменениях.",
+        "tools": ["ground_start", "ground_stop", "ground_status"],
+        "includes": []
+    },
+
+    "daemon": {
+        "description": "DAEMON — автономный фоновый ум: Тройка раз в несколько минут осматривается и сама пишет первой, если есть стоящий повод (с анти-спамом: тихие часы, лимит/день, пауза).",
+        "tools": ["daemon_start", "daemon_stop", "daemon_status"],
+        "includes": []
+    },
+
     "kanban": {
         "description": (
             "Kanban multi-agent coordination — only active when the agent "
@@ -553,38 +570,44 @@ TOOLSETS = {
         # Если когда-то понадобится полный набор для какого-то API-клиента —
         # сделать отдельный composite-toolset и поменять PLATFORMS.api_server.
         "description": "OpenAI-compatible API server — slim voice toolset. Rare tools accessible via find_tool router.",
+        # 15 июня 2026: УРЕЗАН с 53 до ~28 tools. На телефоне payload разбух до
+        # ~21k токенов (deepseek на бесплатном пуле OpenRouter ловил 429 и мозг
+        # «не мог»). Редкие tools (календарь update/delete, torch/network/battery/
+        # brightness/clipboard/timer/camera, finance/notes/journal/speaker_id,
+        # phone_create_video, gemini_code, delegate_task, skill_calculator/
+        # world_time/currency, *_status) доступны через find_tool-роутер.
         "tools": [
-            # Meta-router: даёт доступ ко всем 100+ остальным tools
+            # Meta-router: даёт доступ ко всем остальным tools голосом
             "find_tool",
-            # Phone control
+            # Phone control — самое частое
             "android_open_app", "android_call", "android_send_sms",
-            "android_set_alarm", "android_set_timer", "android_navigate",
-            "android_volume", "android_brightness", "android_torch",
-            "android_battery", "android_network", "android_status",
-            "android_camera_photo", "android_screenshot",
-            "android_clipboard_get", "android_clipboard_set",
-            # Календарь
+            "android_set_alarm", "android_navigate",
+            "android_volume", "android_status", "android_screenshot",
+            # Календарь — создать/посмотреть (update/delete через find_tool)
             "android_calendar_list_events", "android_calendar_create_event",
-            "android_calendar_update_event", "android_calendar_delete_event",
             # Документы (только beautiful — обычные через find_tool)
             "phone_create_beautiful_pptx", "phone_create_beautiful_pdf",
-            "phone_create_image", "phone_create_video",
-            # Тройкин голос
-            "push_to_user", "journal_today", "reminder",
-            "location", "speaker_id", "bg_task", "finance",
+            "phone_create_image",
+            # Тройкин голос / напоминания
+            "push_to_user", "reminder", "location", "bg_task",
             # Память / RAG
-            "obsidian_note", "notes",
+            "obsidian_note",
+            "soma_remember", "soma_recall",
+            # GROUND/DAEMON — наблюдение за экраном и автономный режим
+            "ground_start", "ground_stop",
+            "daemon_start", "daemon_stop",
             # Самые частые skill_*
-            "skill_weather", "skill_translate", "skill_calculator",
-            "skill_world_time", "skill_currency_rate",
-            # Web / vision / делегирование
-            "web_search", "web_research", "vision_analyze", "delegate_task",
-            # Кодинг через CLI-кодеров (sub-agent): Gemini / Claude (Qwen — спящий)
-            "gemini_code", "claude_code",
-            # Статус фоновых задач
-            "task_status",
-            # Управление проектами
-            "project",
+            "skill_weather", "skill_translate",
+            # Web / vision
+            "web_search", "web_research", "vision_analyze",
+            # Кодинг через CLI-кодер (Claude по подписке)
+            "claude_code",
+            # Статус фоновых задач / проекты
+            "task_status", "project",
+            # Самоулучшение — ключевая фича, должна работать голосом напрямую
+            # («улучши себя», «добавь себе фичу»). Остальные self_improve_* (approve/
+            # reject/revert/show) — через find_tool.
+            "self_improve_propose", "self_improve_list",
         ],
         "includes": []
     },

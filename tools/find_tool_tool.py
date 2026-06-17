@@ -128,6 +128,31 @@ _SYNONYMS = {
     # экран
     "скриншот": "screenshot screen",
     "экран": "screen screenshot",
+    # GROUND — фоновое наблюдение за экраном
+    "следи": "ground screen observe наблюдай",
+    "следить": "ground screen observe",
+    "наблюдай": "ground screen observe",
+    "наблюдать": "ground screen observe",
+    # DAEMON — автономный/проактивный режим
+    "активнее": "daemon proactive autonomous",
+    "сама": "daemon proactive",
+    "инициатива": "daemon proactive",
+    "проактивн": "daemon proactive",
+    "автономн": "daemon autonomous",
+    # SOMA — память о пользователе
+    "запомни": "soma remember memory обо мне",
+    "вспомни": "soma recall memory",
+    "забудь": "soma forget",
+    "обо": "soma about me",
+    # Самоулучшение — self_improve_* (имена английские, форм «улучши/улучшить» нет)
+    "улучши": "self_improve propose improve",
+    "улучшить": "self_improve propose improve",
+    "улучшение": "self_improve improve",
+    "самоулучшение": "self_improve improve",
+    "себя": "self_improve self propose",
+    "научись": "self_improve propose improve skill",
+    "доработай": "self_improve propose improve",
+    "fix": "self_improve propose",
     # vision
     "картинка": "image vision",
     "фото": "photo image camera",

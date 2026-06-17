@@ -1298,11 +1298,23 @@ def _truncate_content(content: str, filename: str, max_chars: int = CONTEXT_FILE
 
 
 def _time_of_day_hint() -> str:
-    """Возвращает короткую подсказку для LLM о текущем времени суток.
-    Используется чтобы Тройка адаптировала тон и приоритеты под утро/день/вечер/ночь.
+    """Возвращает подсказку для LLM о текущей ДАТЕ и времени суток.
+
+    Вычисляется на КАЖДЫЙ запрос (не кешируется) по московскому времени —
+    сервер в UTC, поэтому без явной таймзоны Тройка отставала на 3 часа и
+    выдумывала число. Полная дата в контексте = модель не галлюцинирует «14 июня».
+    Таймзона переопределяется env TROIKA_TZ (default Europe/Moscow).
     """
-    from datetime import datetime
-    now = datetime.now()
+    from datetime import datetime, timezone, timedelta
+    import os as _os
+    tz_name = (_os.environ.get("TROIKA_TZ") or "Europe/Moscow").strip()
+    now = None
+    try:
+        from zoneinfo import ZoneInfo
+        now = datetime.now(ZoneInfo(tz_name))
+    except Exception:
+        # zoneinfo/tzdata недоступны — фиксированный UTC+3 (Москва без перехода на летнее)
+        now = datetime.now(timezone.utc) + timedelta(hours=3)
     hour = now.hour
     if 5 <= hour < 11:
         part = "утро"
@@ -1316,9 +1328,15 @@ def _time_of_day_hint() -> str:
     else:
         part = "ночь"
         hint = "Ночь. Тон тихий, спокойный. Миша скорее всего устал или не должен сейчас работать. Ничего не предлагай по собственной инициативе кроме тишины."
-    weekday = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"][now.weekday()]
+    months = ["января", "февраля", "марта", "апреля", "мая", "июня",
+              "июля", "августа", "сентября", "октября", "ноября", "декабря"]
+    weekdays = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
     weekend = " Выходной — никаких рабочих задач сами не начинаем." if now.weekday() >= 5 else ""
-    return f"\n\n[Текущее время: {now.strftime('%H:%M')} ({part}, {weekday}).{weekend} {hint}]\n"
+    date_str = f"{now.day} {months[now.month - 1]} {now.year} ({weekdays[now.weekday()]})"
+    return (
+        f"\n\n[ТОЧНАЯ дата и время прямо сейчас (МСК): {date_str}, {now.strftime('%H:%M')}. "
+        f"Это {part}. Когда спрашивают число/дату/время — бери ОТСЮДА, не выдумывай.{weekend} {hint}]\n"
+    )
 
 
 def load_soul_md() -> Optional[str]:
@@ -1347,6 +1365,11 @@ def load_soul_md() -> Optional[str]:
             content = content + _time_of_day_hint()
         except Exception as e:
             logger.debug("Could not append time-of-day hint: %s", e)
+        try:
+            from agent.iris_persona import iris_persona_hint
+            content = content + iris_persona_hint()
+        except Exception as e:
+            logger.debug("Could not append IRIS persona hint: %s", e)
         return content
     except Exception as e:
         logger.debug("Could not read SOUL.md from %s: %s", soul_path, e)
