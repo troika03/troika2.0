@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'config/hermes_config.dart';
 import 'services/assistant_service.dart';
 import 'screens/home_screen.dart';
+import 'screens/onboarding_screen.dart';
 import 'theme/troika_theme.dart';
 
 void main() async {
@@ -23,8 +24,16 @@ void main() async {
   runApp(const HermesApp());
 }
 
-class HermesApp extends StatelessWidget {
+class HermesApp extends StatefulWidget {
   const HermesApp({super.key});
+
+  @override
+  State<HermesApp> createState() => _HermesAppState();
+}
+
+class _HermesAppState extends State<HermesApp> {
+  // Первый запуск показывает онбординг разрешений; после — сразу домой.
+  bool _onboarded = HermesConfig.onboardingDone;
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +43,11 @@ class HermesApp extends StatelessWidget {
         title: 'Тройка',
         debugShowCheckedModeBanner: false,
         theme: buildTroikaTheme(),
-        home: const HomeScreen(),
+        home: _onboarded
+            ? const HomeScreen()
+            : OnboardingScreen(
+                onDone: () => setState(() => _onboarded = true),
+              ),
       ),
     );
   }

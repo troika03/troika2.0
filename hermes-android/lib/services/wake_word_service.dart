@@ -11,6 +11,8 @@ class WakeWordService {
   Function()? onWakeWordDetected;
   Function(String)? onStatusUpdate;
   Function(String)? onDebugHeard;
+  // Реплика голосового диалога (role, content) → в общую ленту чата.
+  void Function(String role, String content)? onVoiceMessage;
 
   bool get isListening => _isListening;
 
@@ -38,6 +40,13 @@ class WakeWordService {
     } else if (call.method == 'debug_heard') {
       final text = call.arguments?.toString() ?? '';
       onDebugHeard?.call(text);
+    } else if (call.method == 'voice_message') {
+      final args = call.arguments;
+      if (args is Map) {
+        final role = args['role']?.toString() ?? 'assistant';
+        final content = args['content']?.toString() ?? '';
+        if (content.trim().isNotEmpty) onVoiceMessage?.call(role, content);
+      }
     }
   }
 

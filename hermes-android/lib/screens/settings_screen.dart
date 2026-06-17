@@ -346,6 +346,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _requestLocationPermission() async {
+    const channel = MethodChannel('com.troika.hermes/background');
+    try {
+      final has = await channel.invokeMethod('hasLocationPermission');
+      if (has != true) {
+        await channel.invokeMethod('requestLocationPermission');
+        return;
+      }
+      // Обычное уже есть — предлагаем фоновое (через системные настройки).
+      final bg = await channel.invokeMethod('hasBackgroundLocation');
+      if (bg == true) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Местоположение уже разрешено (включая фон)')),
+          );
+        }
+        return;
+      }
+      await channel.invokeMethod('requestBackgroundLocation');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Выбери «Разрешать всегда» в настройках приложения'),
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Не удалось запросить доступ: $e')),
+        );
+      }
+    }
+  }
+
   void _save() {
     HermesConfig.serverUrl = _normalizeUrl(_urlController.text);
     HermesConfig.apiKey = _apiKeyController.text.trim();
@@ -736,6 +772,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             icon: const Icon(Icons.event_available, size: 18),
             label: const Text('Разрешить доступ к календарю'),
+          ),
+
+          const SizedBox(height: 16),
+          const Divider(color: Colors.white10),
+          const SizedBox(height: 16),
+
+          _sectionHeader('Местоположение'),
+          const Text(
+            'Чтобы Тройка знала где ты — погода рядом, места поблизости, '
+            'маршруты, «где я». Для работы в фоне выбери «Разрешать всегда».',
+            style: TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _requestLocationPermission,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFFF5A623),
+              side: const BorderSide(color: Color(0xFFF5A623)),
+            ),
+            icon: const Icon(Icons.my_location, size: 18),
+            label: const Text('Разрешить местоположение'),
           ),
 
           const SizedBox(height: 24),

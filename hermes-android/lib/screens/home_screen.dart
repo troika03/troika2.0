@@ -3,9 +3,7 @@ import 'package:provider/provider.dart';
 import '../config/hermes_config.dart';
 import '../services/assistant_service.dart';
 import '../theme/troika_theme.dart';
-import '../widgets/status_orb.dart';
-import '../widgets/conversation_view.dart';
-import '../widgets/text_input_bar.dart';
+import 'chat_screen.dart';
 import 'settings_screen.dart';
 import 'history_screen.dart';
 
@@ -20,8 +18,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // Первый запуск: сервер ещё не настроен — мягко уводим новичка в Настройки,
-    // чтобы он не тыкал в «сломанный» орб без понимания что делать.
+    // Первый запуск: сервер ещё не настроен — мягко уводим новичка в Настройки.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (HermesConfig.serverUrl.trim().isEmpty && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -41,70 +38,42 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final assistant = context.watch<AssistantService>();
-    final state = assistant.state;
-    final isRecording = state == AssistantState.recording;
-    final isProcessing = state == AssistantState.processing ||
-        state == AssistantState.speaking;
-    final accent = TroikaColors.forState(state);
+    final accent = TroikaColors.forState(assistant.state);
 
     return Scaffold(
       backgroundColor: TroikaColors.bg,
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             _TopBar(accent: accent),
-
-            // Орб — центр всего
-            Expanded(
-              flex: 5,
-              child: Center(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    if (state == AssistantState.idle ||
-                        state == AssistantState.error) {
-                      assistant.startManualRecording();
-                    } else if (isRecording) {
-                      assistant.stopRecordingAndProcess();
-                    } else if (isProcessing) {
-                      assistant.interrupt();
-                    }
-                  },
-                  child: StatusOrb(state: state),
-                ),
-              ),
-            ),
-
-            // Спокойная подпись состояния
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Text(
-                TroikaColors.hint(state),
-                style: TextStyle(
-                  color: state == AssistantState.error
-                      ? TroikaColors.error.withOpacity(0.9)
-                      : TroikaColors.textMuted,
-                  fontSize: 14,
-                  letterSpacing: 0.2,
-                ),
-              ),
-            ),
-
-            // Лента диалога
-            Expanded(
-              flex: 4,
-              child: ConversationView(
-                userText: assistant.lastUserText,
-                hermesText: assistant.lastHermesText,
-                errorText: state == AssistantState.error
-                    ? assistant.errorMessage
-                    : null,
-              ),
-            ),
-
-            TextInputBar(onSubmit: assistant.sendTextQuery),
-            const SizedBox(height: 12),
+            // Тонкая подпись состояния — компактно, не мешает чату.
+            _StatusLine(state: assistant.state),
+            const Expanded(child: ChatScreen()),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusLine extends StatelessWidget {
+  final AssistantState state;
+  const _StatusLine({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    if (state == AssistantState.idle) return const SizedBox(height: 2);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Text(
+        TroikaColors.hint(state),
+        style: TextStyle(
+          color: state == AssistantState.error
+              ? TroikaColors.error.withOpacity(0.9)
+              : TroikaColors.textMuted,
+          fontSize: 12,
+          letterSpacing: 0.2,
         ),
       ),
     );
@@ -118,10 +87,9 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(left: 20, right: 6, top: 10, bottom: 2),
+      padding: const EdgeInsets.only(left: 20, right: 4, top: 8, bottom: 2),
       child: Row(
         children: [
-          // Маленький фирменный знак-точка
           Container(
             width: 9,
             height: 9,
@@ -144,6 +112,14 @@ class _TopBar extends StatelessWidget {
             ),
           ),
           const Spacer(),
+          IconButton(
+            icon: const Icon(Icons.add_comment_outlined),
+            color: TroikaColors.textMuted,
+            iconSize: 21,
+            tooltip: 'Очистить ленту',
+            onPressed: () =>
+                context.read<AssistantService>().clearConversation(),
+          ),
           IconButton(
             icon: const Icon(Icons.history_rounded),
             color: TroikaColors.textMuted,

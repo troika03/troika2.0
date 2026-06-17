@@ -8,11 +8,13 @@ class HermesConfig {
   static const String _keyModel = 'hermes_model';
   static const String _keyVoiceEnabled = 'hermes_voice_enabled';
   static const String _keyWakeWordEnabled = 'hermes_wake_word_enabled';
+  static const String _keyOnboardingDone = 'hermes_onboarding_done';
 
-  // Дефолтные значения
-  // Пусто — новичок вводит адрес своего сервера в настройках при первом запуске
-  // (вид: http://1.2.3.4:8642 или http://my-domain.com:8642)
-  static const String defaultServerUrl = '';
+  // Дефолтные значения.
+  // Предзаполнены под наш VPS, чтобы свежая установка работала сразу, без ручной
+  // настройки. Пользователь всё равно может сменить адрес в Настройках —
+  // сохранённое значение перекрывает дефолт (см. геттер serverUrl).
+  static const String defaultServerUrl = 'http://89.208.105.187:8642';
   static const String defaultApiKey = 'hermes-2024';
   static const String defaultModel = ''; // пустая строка = использует модель из конфига на PC
 
@@ -58,6 +60,13 @@ class HermesConfig {
   static set wakeWordEnabled(bool v) =>
       _prefs.setBool(_keyWakeWordEnabled, v);
 
+  /// Пройден ли экран первичной настройки (онбординг разрешений).
+  static bool get onboardingDone =>
+      _prefs.getBool(_keyOnboardingDone) ?? false;
+
+  static set onboardingDone(bool v) =>
+      _prefs.setBool(_keyOnboardingDone, v);
+
   /// URL для WebSocket канала команд (управление телефоном)
   static String get phoneCommandsWsUrl =>
       '${serverUrl.replaceFirst('http', 'ws')}/v1/phone/commands';
@@ -66,12 +75,26 @@ class HermesConfig {
   static String get chatCompletionsUrl =>
       '$serverUrl/v1/chat/completions';
 
+  /// Единая сессия для голоса И текста — чтобы у Тройки был общий контекст.
+  /// Голос (Kotlin HermesListenerService) шлёт ровно эти же значения.
+  static const String sessionId = 'phone-misha-main';
+  static const String sessionKey = 'phone-misha';
+
   /// Headers для запросов к Hermes
   static Map<String, String> get headers {
     final key = apiKey;
     return {
       'Content-Type': 'application/json',
       if (key.isNotEmpty) 'Authorization': 'Bearer $key',
+    };
+  }
+
+  /// Headers для чата — те же + привязка к общей сессии (голос+текст).
+  static Map<String, String> get chatHeaders {
+    return {
+      ...headers,
+      'X-Hermes-Session-Key': sessionKey,
+      'X-Hermes-Session-Id': sessionId,
     };
   }
 }

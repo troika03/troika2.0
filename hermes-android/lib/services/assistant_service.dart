@@ -32,12 +32,18 @@ class AssistantService extends ChangeNotifier {
   String _debugHeard = '';
   bool _wakeWordEnabled = true;
 
+  // Единая лента диалога — голос и текст вперемешку, как в мессенджере.
+  final List<ChatMessage> _messages = [];
+  bool _historyLoaded = false;
+
   AssistantState get state => _state;
   String get lastUserText => _lastUserText;
   String get lastHermesText => _lastHermesText;
   String get errorMessage => _errorMessage;
   String get debugHeard => _debugHeard;
   bool get wakeWordEnabled => _wakeWordEnabled;
+  List<ChatMessage> get messages => List.unmodifiable(_messages);
+  bool get historyLoaded => _historyLoaded;
 
   static const _platform = MethodChannel('com.troika.hermes/background');
 
@@ -78,6 +84,8 @@ class AssistantService extends ChangeNotifier {
       _debugHeard = text;
       notifyListeners();
     };
+    // Голосовой диалог (нативный Kotlin) кладёт свои реплики в общую ленту.
+    _wakeWord.onVoiceMessage = _onVoiceMessage;
 
     // Гарантируем что URL/key уже лежат в SharedPreferences с префиксом 'flutter.'
     // (нативный сервис их читает оттуда). Forсируем запись текущих значений.
@@ -86,6 +94,27 @@ class AssistantService extends ChangeNotifier {
 
     if (micStatus.isGranted && _wakeWordEnabled) {
       await _startWakeWordListening();
+    }
+
+    // Подтянуть историю общей сессии с сервера, чтобы чат открылся не пустым.
+    unawaited(loadHistory());
+  }
+
+  /// Загрузить ленту общей сессии (голос+текст) с сервера.
+  Future<void> loadHistory() async {
+    try {
+      final loaded = await _hermes.loadSessionHistory();
+      if (loaded.isNotEmpty) {
+        _messages
+          ..clear()
+          ..addAll(loaded);
+      }
+      _historyLoaded = true;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[Assistant] loadHistory failed: $e');
+      _historyLoaded = true; // не блокируем UI
+      notifyListeners();
     }
   }
 
@@ -102,6 +131,36 @@ class AssistantService extends ChangeNotifier {
   Future<void> _startWakeWordListening() async {
     if (!_wakeWordEnabled) return;
     await _wakeWord.startListening();
+  }
+
+  /// Реплика из нативного голосового диалога → в общую ленту чата.
+  /// Dedup: если такое же сообщение только что добавлено (ручной путь или
+  /// повтор от Kotlin), не дублируем.
+  void _onVoiceMessage(String role, String content) {
+    final text = content.trim();
+    if (text.isEmpty) return;
+    // снять pending-«печатает», если был
+    if (role == 'assistant') {
+      final idx = _messages.lastIndexWhere((m) => m.pending);
+      if (idx >= 0) {
+        _messages[idx]
+          ..text = text
+          ..pending = false;
+        notifyListeners();
+        return;
+      }
+    }
+    final dup = _messages.isNotEmpty &&
+        _messages.last.role == role &&
+        _messages.last.text.trim() == text;
+    if (dup) return;
+    _messages.add(ChatMessage(role: role, text: text, fromVoice: true));
+    if (role == 'assistant') {
+      _lastHermesText = text;
+    } else {
+      _lastUserText = text;
+    }
+    notifyListeners();
   }
 
   /// Wake-word "Гермес" подтверждён Kotlin'ом → начинаем диалог
@@ -168,10 +227,18 @@ class AssistantService extends ChangeNotifier {
       }
 
       _lastUserText = userText;
+      final userMsg = ChatMessage(role: 'user', text: userText, fromVoice: true);
+      _messages.add(userMsg);
+      final pending = ChatMessage(role: 'assistant', pending: true);
+      _messages.add(pending);
       notifyListeners();
 
-      final response = await _hermes.sendMessage(userText);
+      final response =
+          await _hermes.sendMessage(userMsg, recent: _recentContext());
       _lastHermesText = response;
+      pending
+        ..text = response
+        ..pending = false;
       notifyListeners();
 
       _setState(AssistantState.speaking);
@@ -179,8 +246,18 @@ class AssistantService extends ChangeNotifier {
       _setState(AssistantState.idle);
     } catch (e) {
       await audioFile.delete().catchError((_) => audioFile);
+      _messages.removeWhere((m) => m.pending);
       _setError(e.toString());
     }
+  }
+
+  /// Несколько последних реплик для немедленного контекста (сервер и так
+  /// помнит сессию, но это страхует первый ход после рестарта).
+  List<ChatMessage> _recentContext({int n = 6}) {
+    final done = _messages.where((m) => !m.pending).toList();
+    if (done.length <= 1) return const [];
+    final slice = done.sublist(0, done.length - 1); // без только что добавленного user
+    return slice.length > n ? slice.sublist(slice.length - n) : slice;
   }
 
   Future<void> interrupt() async {
@@ -192,24 +269,56 @@ class AssistantService extends ChangeNotifier {
     _setState(AssistantState.idle);
   }
 
-  Future<void> sendTextQuery(String text) async {
-    if (text.trim().isEmpty) return;
+  /// Отправить текст и/или картинки из чата.
+  /// [imageDataUrls] — список data:image/...;base64,... (галерея/камера).
+  /// [speak] — проговаривать ли ответ голосом (в текстовом чате обычно нет).
+  Future<void> sendTextQuery(
+    String text, {
+    List<String> imageDataUrls = const [],
+    bool speak = false,
+  }) async {
+    if (text.trim().isEmpty && imageDataUrls.isEmpty) return;
 
     _lastUserText = text;
+    final userMsg = ChatMessage(
+      role: 'user',
+      text: text,
+      imageDataUrls: List.of(imageDataUrls),
+    );
+    _messages.add(userMsg);
+    final pending = ChatMessage(role: 'assistant', pending: true);
+    _messages.add(pending);
     _setState(AssistantState.processing);
+    notifyListeners();
 
     try {
-      final response = await _hermes.sendMessage(text);
+      final response =
+          await _hermes.sendMessage(userMsg, recent: _recentContext());
       _lastHermesText = response;
-      _setState(AssistantState.speaking);
+      pending
+        ..text = response
+        ..pending = false;
       notifyListeners();
-      await _tts.speak(response);
+
+      if (speak) {
+        _setState(AssistantState.speaking);
+        await _tts.speak(response);
+      }
       _setState(AssistantState.idle);
     } catch (e) {
+      _messages.remove(pending);
       _setError(e.toString());
     } finally {
       if (_wakeWordEnabled) await _startWakeWordListening();
     }
+  }
+
+  /// Стереть локальную ленту (визуально). Серверную сессию не трогает.
+  void clearConversation() {
+    _messages.clear();
+    _lastUserText = '';
+    _lastHermesText = '';
+    notifyListeners();
   }
 
   void _setState(AssistantState s) {

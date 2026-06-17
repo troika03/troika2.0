@@ -4,21 +4,54 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../config/hermes_config.dart';
 
-/// Сервис для общения с Hermes API Server (на PC)
-/// Использует OpenAI-совместимый Chat Completions API
+/// Одно сообщение в чате (общая модель для голоса и текста).
+/// Может нести текст и/или вложенные картинки (base64 data-url).
+class ChatMessage {
+  final String role; // 'user' | 'assistant'
+  String text;
+  final List<String> imageDataUrls; // data:image/...;base64,... (для отрисовки и отправки)
+  final bool fromVoice;
+  final DateTime time;
+  bool pending; // ждём ответ сервера (для индикатора «печатает»)
+
+  ChatMessage({
+    required this.role,
+    this.text = '',
+    List<String>? imageDataUrls,
+    this.fromVoice = false,
+    DateTime? time,
+    this.pending = false,
+  })  : imageDataUrls = imageDataUrls ?? [],
+        time = time ?? DateTime.now();
+
+  bool get isUser => role == 'user';
+  bool get hasImages => imageDataUrls.isNotEmpty;
+
+  /// Превратить в OpenAI-совместимый message для отправки.
+  /// Если есть картинки — content становится списком частей (multimodal).
+  Map<String, dynamic> toApiMessage() {
+    if (imageDataUrls.isEmpty) {
+      return {'role': role, 'content': text};
+    }
+    final parts = <Map<String, dynamic>>[];
+    if (text.trim().isNotEmpty) {
+      parts.add({'type': 'text', 'text': text});
+    }
+    for (final url in imageDataUrls) {
+      parts.add({
+        'type': 'image_url',
+        'image_url': {'url': url},
+      });
+    }
+    return {'role': role, 'content': parts};
+  }
+}
+
+/// Сервис для общения с Hermes API Server.
+/// Использует OpenAI-совместимый Chat Completions API в общей сессии
+/// phone-misha-main — той же, что голосовой путь (Kotlin).
 class HermesApiService {
-  static const Duration _timeout = Duration(seconds: 60);
-
-  // История разговора (для памяти контекста)
-  final List<Map<String, String>> _conversationHistory = [];
-
-  // Системный промпт — личность ассистента
-  static const String _systemPrompt = '''
-Ты Тройка — персональный голосовой ассистент. Отвечай коротко и чётко, так как твои ответы будут проговорены голосом.
-Ты помогаешь управлять телефоном, отвечаешь на вопросы, выполняешь задачи.
-Общайся на русском языке, если пользователь говорит по-русски.
-Не используй маркдаун и форматирование — только чистый текст для TTS.
-''';
+  static const Duration _timeout = Duration(seconds: 90);
 
   /// Проверка подключения к Hermes
   Future<bool> checkConnection() async {
@@ -33,17 +66,19 @@ class HermesApiService {
     }
   }
 
-  /// Отправить текстовый запрос, получить текстовый ответ
-  Future<String> sendMessage(String userMessage) async {
-    // Добавить сообщение в историю
-    _conversationHistory.add({
-      'role': 'user',
-      'content': userMessage,
-    });
-
-    final messages = [
-      {'role': 'system', 'content': _systemPrompt},
-      ..._conversationHistory,
+  /// Отправить сообщение (текст + опционально картинки) в общую сессию.
+  ///
+  /// История на сервере (state.db) ведётся по session-id, поэтому мы НЕ
+  /// тащим всю историю в запросе — шлём только новое сообщение, сервер сам
+  /// подмешивает контекст сессии (как для голоса). [recent] — несколько
+  /// последних реплик для немедленного контекста, если сервер этого ждёт.
+  Future<String> sendMessage(
+    ChatMessage message, {
+    List<ChatMessage> recent = const [],
+  }) async {
+    final messages = <Map<String, dynamic>>[
+      for (final m in recent) m.toApiMessage(),
+      message.toApiMessage(),
     ];
 
     final bodyMap = <String, dynamic>{
@@ -57,51 +92,97 @@ class HermesApiService {
     try {
       final uri = Uri.parse(HermesConfig.chatCompletionsUrl);
       final response = await http
-          .post(uri, headers: HermesConfig.headers, body: json.encode(bodyMap))
+          .post(uri,
+              headers: HermesConfig.chatHeaders, body: json.encode(bodyMap))
           .timeout(_timeout);
 
       if (response.statusCode != 200) {
         throw HermesApiException(
-            'API error ${response.statusCode}: ${response.body}');
+            'API error ${response.statusCode}: ${_short(response.body)}');
       }
 
-      final data = json.decode(response.body);
+      final data = json.decode(utf8.decode(response.bodyBytes));
       final assistantMessage =
-          data['choices'][0]['message']['content'] as String;
-
-      // Сохранить ответ в историю
-      _conversationHistory.add({
-        'role': 'assistant',
-        'content': assistantMessage,
-      });
-
-      // Ограничить историю последними 20 сообщениями
-      if (_conversationHistory.length > 20) {
-        _conversationHistory.removeRange(0, _conversationHistory.length - 20);
-      }
-
+          data['choices'][0]['message']['content'] as String? ?? '';
       return assistantMessage;
     } on SocketException {
       throw HermesApiException(
-          'Нет соединения с сервером. Проверь что PC включён и сервер запущен.');
+          'Нет соединения с сервером. Проверь что сервер включён.');
     } on TimeoutException {
       throw HermesApiException('Сервер не ответил вовремя. Попробуй ещё раз.');
     }
   }
 
-  /// Очистить историю разговора (начать новую сессию)
-  void clearHistory() {
-    _conversationHistory.clear();
+  static String _short(String s) => s.length > 200 ? '${s.substring(0, 200)}…' : s;
+
+  /// Загрузить историю общей сессии с сервера (для отрисовки ленты при входе).
+  /// Возвращает сообщения по порядку (старые → новые).
+  Future<List<ChatMessage>> loadSessionHistory({int limit = 60}) async {
+    final encoded = Uri.encodeComponent(HermesConfig.sessionId);
+    final uri = Uri.parse(
+        '${HermesConfig.serverUrl}/v1/sessions/$encoded/messages?limit=$limit');
+    try {
+      final response = await http
+          .get(uri, headers: HermesConfig.headers)
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode == 404) {
+        return []; // сессии ещё нет — пустой чат
+      }
+      if (response.statusCode != 200) {
+        throw HermesApiException('История недоступна (${response.statusCode}).');
+      }
+      final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final raw = (data['messages'] as List?) ?? const [];
+      final out = <ChatMessage>[];
+      for (final m in raw.whereType<Map<String, dynamic>>()) {
+        final role = (m['role'] ?? 'user').toString();
+        if (role != 'user' && role != 'assistant') continue;
+        final content = _extractText(m['content']);
+        if (content.trim().isEmpty) continue;
+        out.add(ChatMessage(
+          role: role,
+          text: _stripDatePrefix(content),
+          time: _toTime(m['timestamp']),
+        ));
+      }
+      return out;
+    } on SocketException {
+      throw HermesApiException('Нет соединения с сервером — историю взять негде.');
+    } on TimeoutException {
+      throw HermesApiException('Сервер не ответил вовремя.');
+    }
   }
 
-  /// Получить историю для отображения в UI
-  List<Map<String, String>> get history =>
-      List.unmodifiable(_conversationHistory);
+  /// content может быть строкой или списком частей — достаём текст.
+  static String _extractText(dynamic content) {
+    if (content is String) return content;
+    if (content is List) {
+      final buf = StringBuffer();
+      for (final part in content) {
+        if (part is Map && part['type'] == 'text') {
+          buf.write(part['text'] ?? '');
+        }
+      }
+      return buf.toString();
+    }
+    return content?.toString() ?? '';
+  }
 
-  /// Список всех сессий из state.db на сервере (для экрана истории).
-  ///
-  /// Возвращает список сессий с превью первого сообщения и временем последнего
-  /// сообщения. Сортировка — последнее активное вверху.
+  /// Убрать служебный префикс «[сейчас 16 июня 2026, вторник, 15:30] » из
+  /// пользовательских сообщений — он нужен модели, но в UI лишний.
+  static String _stripDatePrefix(String s) {
+    final re = RegExp(r'^\[сейчас [^\]]*\]\s*');
+    return s.replaceFirst(re, '');
+  }
+
+  static DateTime _toTime(dynamic ts) {
+    if (ts is num) {
+      return DateTime.fromMillisecondsSinceEpoch((ts * 1000).round());
+    }
+    return DateTime.now();
+  }
+
+  // ── Список всех сессий (экран истории) ───────────────────────────────────
   Future<List<SessionSummary>> listSessions({int limit = 50, int offset = 0}) async {
     final uri = Uri.parse(
       '${HermesConfig.serverUrl}/v1/sessions?limit=$limit&offset=$offset',
@@ -111,24 +192,21 @@ class HermesApiService {
           .get(uri, headers: HermesConfig.headers)
           .timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) {
-        throw HermesApiException(
-            'История недоступна (${response.statusCode}).');
+        throw HermesApiException('История недоступна (${response.statusCode}).');
       }
-      final data = json.decode(response.body) as Map<String, dynamic>;
+      final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       final raw = (data['sessions'] as List?) ?? const [];
       return raw
           .whereType<Map<String, dynamic>>()
           .map(SessionSummary.fromJson)
           .toList();
     } on SocketException {
-      throw HermesApiException(
-          'Нет соединения с сервером — историю взять негде.');
+      throw HermesApiException('Нет соединения с сервером — историю взять негде.');
     } on TimeoutException {
       throw HermesApiException('Сервер не ответил вовремя.');
     }
   }
 
-  /// Транскрипт одной сессии (user + assistant сообщения).
   Future<List<SessionMessage>> getSessionMessages(String sessionId) async {
     final encoded = Uri.encodeComponent(sessionId);
     final uri = Uri.parse('${HermesConfig.serverUrl}/v1/sessions/$encoded/messages');
@@ -137,18 +215,16 @@ class HermesApiService {
           .get(uri, headers: HermesConfig.headers)
           .timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) {
-        throw HermesApiException(
-            'Сессия недоступна (${response.statusCode}).');
+        throw HermesApiException('Сессия недоступна (${response.statusCode}).');
       }
-      final data = json.decode(response.body) as Map<String, dynamic>;
+      final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       final raw = (data['messages'] as List?) ?? const [];
       return raw
           .whereType<Map<String, dynamic>>()
           .map(SessionMessage.fromJson)
           .toList();
     } on SocketException {
-      throw HermesApiException(
-          'Нет соединения с сервером — транскрипт взять негде.');
+      throw HermesApiException('Нет соединения с сервером — транскрипт взять негде.');
     } on TimeoutException {
       throw HermesApiException('Сервер не ответил вовремя.');
     }
