@@ -215,6 +215,73 @@ def _list_proposals() -> List[Dict[str, Any]]:
 # propose
 # ---------------------------------------------------------------------------
 
+def _build_propose_prompt(description: str, target_files: List[str]) -> str:
+    """Единый prompt для кодера-под-агента (Gemini или Claude)."""
+    file_list_str = ", ".join(target_files) if target_files else "<любые файлы кроме запрещённых>"
+    forbidden_str = ", ".join([
+        ".env", "cli.py", "requirements.txt", "gateway/", "hermes_cli/",
+        "tools/registry.py", "tools/job_runner.py", "tools/self_improve_tool.py",
+    ])
+    return f"""ВЫПОЛНИ СЕЙЧАС следующую задачу в этом репозитории. Не спрашивай подтверждения,
+не уточняй, не отвечай текстом — сразу начни редактировать/создавать файлы инструментами.
+
+ЗАДАЧА:
+{description}
+
+Целевые файлы: {file_list_str}
+
+ОБЯЗАТЕЛЬНЫЕ ПРАВИЛА:
+1. Делай РОВНО эту задачу. НЕ выбирай другую, НЕ «улучшай на своё усмотрение»
+   (никакой локализации/рефакторинга/README, если этого нет в задаче).
+2. Если задача про новый инструмент — СОЗДАЙ указанный файл tools/...py с рабочим
+   кодом и зарегистрируй его как соседние (registry.register с schema/handler/toolset;
+   handler принимает (arguments, **_kw) и возвращает dict с say_to_user). Открой любой
+   готовый tools/*_tool.py как образец.
+3. ЗАПРЕЩЕНО трогать: {forbidden_str}. Не трогать локали/логи/артефакты.
+4. Лимит: ≤5 файлов, ≤300 строк. Готовый код без placeholder'ов и TODO, стиль соседнего.
+5. НЕ делай git commit — это сделает скрипт.
+
+ПОСЛЕДНИЙ ШАГ: запиши однострочное summary сделанного в файл .PROPOSAL_NOTE.txt.
+
+Приступай немедленно — первым действием открой образцовый tools/*_tool.py, затем создай
+целевой файл."""
+
+
+def _self_improve_backend() -> Optional[str]:
+    """Какой CLI-кодер доступен для самоулучшения. claude приоритетнее (подписка),
+    gemini — fallback. None если ни один не настроен."""
+    try:
+        from tools.coder_tool import _find_backend_cli
+        # Claude: подписка/OAuth, основной кодер на сервере
+        if _find_backend_cli("claude"):
+            return "claude"
+    except Exception:
+        pass
+    # Gemini: нужен ключ или oauth
+    try:
+        from tools.gemini_code_tool import _find_gemini_cli
+        if _find_gemini_cli():
+            api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+            oauth = Path.home() / ".gemini" / "oauth_creds.json"
+            if api_key or oauth.exists():
+                return "gemini"
+    except Exception:
+        pass
+    return None
+
+
+async def _propose_via_claude(description: str, target_files: List[str]) -> Dict[str, Any]:
+    """Запускает Claude Code CLI (подписка) в репо для внесения правок."""
+    from tools.coder_tool import _run_coder
+    task = _build_propose_prompt(description, target_files)
+    res = await _run_coder("claude", _REPO_ROOT, task, timeout=300)
+    # _run_coder уже вернул {ok, ...}; нормализуем под контракт _propose_via_gemini
+    if res.get("ok"):
+        return {"ok": True, "rc": 0, "backend": "claude"}
+    return {"ok": False, "error": res.get("error") or "claude_failed",
+            "details": res}
+
+
 async def _propose_via_gemini(branch: str, description: str, target_files: List[str]) -> Dict[str, Any]:
     """Запускает Gemini CLI в репо, даёт задачу, ожидает что он внесёт правки в указанные файлы."""
     from tools.gemini_code_tool import _find_gemini_cli, _HEADLESS_RULES
@@ -340,6 +407,13 @@ async def _handle_propose(arguments: dict, **_kw) -> dict:
         return {"ok": False, "error": f"repo_not_clean: {reason}",
                 "hint": "Сначала закоммить или откати текущие изменения"}
 
+    # Выбираем доступный кодер ДО создания ветки, чтобы не плодить пустые ветки.
+    backend = _self_improve_backend()
+    if backend is None:
+        return {"ok": False, "error": "no_coder",
+                "hint": "Нет настроенного CLI-кодера. Залогинь Claude (claude setup-token) "
+                        "или задай GEMINI_API_KEY."}
+
     pid = uuid.uuid4().hex[:8]
     branch = f"{_BRANCH_PREFIX}{pid}-{_slug(description)}"
 
@@ -349,10 +423,13 @@ async def _handle_propose(arguments: dict, **_kw) -> dict:
         return {"ok": False, "error": f"branch_create_failed: {e.stderr[:200]}"}
 
     try:
-        gres = await _propose_via_gemini(branch, description, target_files)
+        if backend == "claude":
+            gres = await _propose_via_claude(description, target_files)
+        else:
+            gres = await _propose_via_gemini(branch, description, target_files)
         if not gres.get("ok"):
             _abort_to_main(branch)
-            return {"ok": False, "error": "gemini_failed", "details": gres}
+            return {"ok": False, "error": f"{backend}_failed", "details": gres}
 
         # Извлекаем note (summary Gemini) и удаляем её до сбора файлов.
         note_path = _REPO_ROOT / ".PROPOSAL_NOTE.txt"

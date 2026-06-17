@@ -400,8 +400,16 @@ class ToolRegistry:
         try:
             if entry.is_async:
                 from model_tools import _run_async
-                return _run_async(entry.handler(args, **kwargs))
-            return entry.handler(args, **kwargs)
+                result = _run_async(entry.handler(args, **kwargs))
+            else:
+                result = entry.handler(args, **kwargs)
+            # Некоторые хендлеры (self_improve, diary, soma и др.) возвращают
+            # dict/list, а не JSON-строку. Строгие провайдеры (deepseek) отвергают
+            # tool-message с не-строковым content → HTTP 400 "Invalid input", и
+            # модель «не получает» результат. Гарантируем строку на выходе.
+            if isinstance(result, (dict, list)):
+                return json.dumps(result, ensure_ascii=False)
+            return result
         except Exception as e:
             logger.exception("Tool %s dispatch error: %s", name, e)
             # Route through the sanitizer so framing tokens / CDATA / fences

@@ -25,8 +25,11 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import sqlite3
 import time
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -40,6 +43,70 @@ logger = logging.getLogger(__name__)
 # api_server.py пишет сюда при обработке /v1/chat/completions.
 # Tool читает (а ещё этим кэшем пользуется _system_prompt_amendment).
 _DEVICE_CONTEXT_CACHE: Dict[str, Dict[str, Any]] = {}
+
+
+# ── Reverse geocoding (Nominatim/OSM, без ключа) ─────────────────────────────
+# Кэш адресов по округлённым координатам, чтобы не дёргать Nominatim на каждый
+# запрос (их лимит ~1 req/sec). Ключ — (lat,lon) с округлением до ~100 м.
+_GEOCODE_CACHE: Dict[Tuple[float, float], Tuple[str, float]] = {}
+_GEOCODE_TTL_SEC = 3600  # адрес для одной точки кэшируем час
+
+
+def _geocode_key(lat: float, lon: float) -> Tuple[float, float]:
+    # 3 знака после запятой ≈ 110 м — достаточно, чтобы не геокодить каждый шаг.
+    return (round(lat, 3), round(lon, 3))
+
+
+def reverse_geocode(lat: float, lon: float) -> Optional[str]:
+    """Координаты → человекочитаемый адрес (RU). None при ошибке/таймауте."""
+    key = _geocode_key(lat, lon)
+    now = time.time()
+    cached = _GEOCODE_CACHE.get(key)
+    if cached and (now - cached[1]) < _GEOCODE_TTL_SEC:
+        return cached[0]
+    try:
+        params = urllib.parse.urlencode({
+            "lat": f"{lat:.6f}",
+            "lon": f"{lon:.6f}",
+            "format": "json",
+            "accept-language": "ru",
+            "zoom": "18",
+        })
+        url = f"https://nominatim.openstreetmap.org/reverse?{params}"
+        req = urllib.request.Request(url, headers={"User-Agent": "TroikaAssistant/1.0"})
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        addr = _format_address(data)
+        if addr:
+            _GEOCODE_CACHE[key] = (addr, now)
+        return addr
+    except Exception as e:
+        logger.debug("reverse_geocode failed: %s", e)
+        return None
+
+
+def _format_address(data: Dict[str, Any]) -> Optional[str]:
+    """Собрать короткий понятный адрес из ответа Nominatim."""
+    a = data.get("address") or {}
+    if not a and data.get("display_name"):
+        # запасной — первые 3 части display_name
+        parts = [p.strip() for p in str(data["display_name"]).split(",")]
+        return ", ".join(parts[:3]) or None
+    road = a.get("road") or a.get("pedestrian") or a.get("neighbourhood")
+    house = a.get("house_number")
+    city = (
+        a.get("city") or a.get("town") or a.get("village")
+        or a.get("municipality") or a.get("suburb") or a.get("city_district")
+    )
+    region = a.get("state") or a.get("region")
+    bits: List[str] = []
+    if road:
+        bits.append(f"{road} {house}".strip() if house else road)
+    if city and city not in bits:
+        bits.append(city)
+    if region and region != city:
+        bits.append(region)
+    return ", ".join(bits) or None
 
 
 def _db_path() -> Path:
@@ -155,21 +222,55 @@ def _identify_location(ctx: Dict[str, Any]) -> Optional[Tuple[str, float]]:
     return None
 
 
+def _gps_hint(ctx: Dict[str, Any]) -> str:
+    """Строка с координатами для system prompt, если есть свежий GPS-fix."""
+    gps = _gps(ctx)
+    if not gps:
+        return ""
+    age = gps.get("age_sec")
+    fresh = age is None or age <= 600  # ≤10 мин считаем актуальным
+    age_note = ""
+    if age is not None:
+        if age <= 120:
+            age_note = " (только что)"
+        elif age <= 600:
+            age_note = f" (~{age // 60} мин назад)"
+        else:
+            age_note = f" (устарело, ~{age // 60} мин назад)"
+    acc = gps.get("accuracy_m")
+    acc_note = f", точность ±{int(acc)} м" if acc else ""
+    # Реальный адрес по координатам (Nominatim). Без него модель «угадывает» и
+    # путает — например называет «центр Москвы», хотя это область.
+    addr = reverse_geocode(gps["lat"], gps["lon"])
+    addr_note = f" Адрес: {addr}." if addr else ""
+    return (
+        f"\n\nГДЕ МИША СЕЙЧАС (по GPS телефона): {gps['lat']}, {gps['lon']}"
+        f"{acc_note}{age_note}.{addr_note} Карта: {gps['maps_url']}. "
+        + (
+            "Это ТОЧНОЕ местоположение Миши — бери адрес ОТСЮДА, не выдумывай город/"
+            "район. Используй для погоды рядом, мест поблизости, маршрутов, «где я»."
+            if fresh
+            else "Координаты могли устареть — учитывай это."
+        )
+    )
+
+
 def system_prompt_amendment(session_key: Optional[str]) -> str:
     """Кусок текста для добавления в system prompt. Пусто если ничего не понятно."""
     ctx = get_device_context(session_key)
     if not ctx:
         return ""
+    gps_hint = _gps_hint(ctx)
     match = _identify_location(ctx)
     if match is None:
         # Известен только тип сети — это тоже полезный сигнал
         net = (ctx.get("network_type") or "").lower()
         if net == "cellular":
-            return (
+            return gps_hint + (
                 "\n\nКОНТЕКСТ МЕСТА: телефон Миши на мобильной сети (не дома и не на "
                 "работе — возможно в дороге). Отвечай короче и без markdown."
             )
-        return ""
+        return gps_hint
 
     name, score = match
     name_l = name.strip().lower()
@@ -189,7 +290,7 @@ def system_prompt_amendment(session_key: Optional[str]) -> str:
         "car": "Misha is driving. One-sentence answers. No links, no app launches.",
     }
     rule = hints.get(name_l, f"Миша сейчас в месте «{name}» (по сохранённому fingerprint).")
-    return f"\n\nКОНТЕКСТ МЕСТА: {rule}"
+    return gps_hint + f"\n\nКОНТЕКСТ МЕСТА: {rule}"
 
 
 # ── Tool operations ─────────────────────────────────────────────────────────
@@ -251,11 +352,41 @@ def _set(args: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _gps(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """GPS-координаты из контекста, если телефон их прислал."""
+    lat = ctx.get("lat")
+    lon = ctx.get("lon")
+    if lat is None or lon is None:
+        return None
+    try:
+        out: Dict[str, Any] = {"lat": round(float(lat), 6), "lon": round(float(lon), 6)}
+    except (TypeError, ValueError):
+        return None
+    acc = ctx.get("accuracy_m")
+    if acc is not None:
+        try:
+            out["accuracy_m"] = round(float(acc), 1)
+        except (TypeError, ValueError):
+            pass
+    age = ctx.get("location_age_sec")
+    if age is not None:
+        try:
+            out["age_sec"] = int(age)
+        except (TypeError, ValueError):
+            pass
+    out["maps_url"] = f"https://maps.google.com/?q={out['lat']},{out['lon']}"
+    addr = reverse_geocode(out["lat"], out["lon"])
+    if addr:
+        out["address"] = addr
+    return out
+
+
 def _get(args: Dict[str, Any]) -> Dict[str, Any]:
     session_key = args.get("session_key") or "phone-misha"
     ctx = get_device_context(session_key)
     if not ctx:
         return {"ok": True, "location": None, "reason": "no_device_context_yet"}
+    gps = _gps(ctx)
     match = _identify_location(ctx)
     if match is None:
         net = ctx.get("network_type") or "?"
@@ -264,13 +395,15 @@ def _get(args: Dict[str, Any]) -> Dict[str, Any]:
             "location": None,
             "network_type": net,
             "bluetooth_count": len(_bt_set(ctx)),
-            "reason": "no_match",
+            "gps": gps,  # реальные координаты, даже если место не распознано
+            "reason": "no_named_place" if gps else "no_match",
         }
     name, score = match
     return {
         "ok": True,
         "location": name,
         "confidence": round(score, 2),
+        "gps": gps,
         "context_snapshot": {
             "network_type": ctx.get("network_type"),
             "bluetooth_count": len(_bt_set(ctx)),
@@ -334,11 +467,12 @@ async def _handle(args: Dict[str, Any], **_kw) -> str:
 LOCATION_SCHEMA = {
     "name": "location",
     "description": (
-        "Где сейчас Миша по fingerprint'у телефона (Wi-Fi BSSID, Bluetooth-устройства, "
-        "тип сети). Используется когда Миша говорит 'запомни это место как дом', "
-        "'я дома?', 'покажи мои места'. "
-        "operations: set (сохранить текущий fingerprint под именем), get (где я "
-        "сейчас), list (все места), forget (удалить место)."
+        "Где сейчас Миша: реальные GPS-координаты (lat/lon + ссылка на карту, если "
+        "телефон их прислал) И/ИЛИ распознанное место по fingerprint'у (Wi-Fi BSSID, "
+        "Bluetooth, тип сети). Используется когда Миша спрашивает 'где я', 'какие "
+        "координаты', 'запомни это место как дом', 'я дома?', 'покажи мои места'. "
+        "operations: get (где я сейчас — вернёт gps если есть), set (сохранить "
+        "текущее место под именем), list (все места), forget (удалить место)."
     ),
     "parameters": {
         "type": "object",

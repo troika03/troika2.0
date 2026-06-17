@@ -557,12 +557,61 @@ def _naturalize_tts_text(text: str) -> str:
     t = _TTS_PARENS.sub(r", \1, ", t)
     t = _TTS_ELLIPSIS.sub("…", t)
     t = _TTS_DASH_SPACES.sub(" — ", t)
-    # Запятая перед «но/а/однако» → точка: длиннее пауза, разговорнее звучит
-    t = _TTS_COMMA_BEFORE_CONJ.sub(r". \1", t)
-    # Внутри длинных фраз перед «что/чтобы/который/если» — тире для микропаузы
-    t = _TTS_LONG_SENTENCE_COMMA.sub(r"\1 — \2", t)
+    # ВАЖНО: НЕ добавляем искусственных пауз. Раньше тут запятые перед «но/а»
+    # превращались в точки, а внутри длинных фраз вставлялись тире — это делало
+    # речь рубленой, «дикторской». Миша просил плавную речь без больших пауз,
+    # поэтому естественную пунктуацию автора оставляем как есть.
     t = _TTS_MULTISPACE.sub(" ", t)
     return t.strip()
+
+
+# Тоны Тройки: смещения rate/pitch относительно базы. Привязаны к IRIS-профилям
+# (см. agent/iris_persona.py) — клиент может прислать "tone" в теле запроса, иначе
+# тон выводится из самого текста фразы (вопрос/восклицание/спокойствие).
+# (Δrate — множитель к базовой скорости, Δpitch — Hz поверх базового pitch.)
+_TTS_TONES = {
+    "spark":   (1.06, 4),    # бодрый/утро — чуть быстрее и выше
+    "playful": (1.05, 5),    # игривый — живо, выше
+    "focus":   (1.03, 0),    # рабочий — чуть быстрее, ровно
+    "steady":  (1.00, 0),    # нейтральный
+    "calm":    (0.94, -2),   # спокойный/вечер — медленнее, мягче
+    "support": (0.92, -3),   # поддержка/усталость — тише, теплее, ниже
+}
+
+
+def _infer_tone_from_text(text: str) -> str:
+    """Грубый тон по самой фразе, когда клиент не прислал явный tone."""
+    s = (text or "").strip()
+    if not s:
+        return "steady"
+    if "!" in s:
+        return "spark"          # восклицание — энергичнее
+    if s.endswith("?"):
+        return "focus"          # вопрос — собранный, интонация вверх делается отдельно
+    return "steady"
+
+
+def _tts_prosody(text: str, tone: Optional[str], base_rate_mult: float, base_pitch_hz: int):
+    """Вернуть (rate_mult, pitch_hz) с учётом тона и типа фразы.
+
+    Реальный человек не говорит всё одним тоном: вопрос — интонация вверх,
+    восклицание — энергичнее, спокойная мысль — ниже и мягче. Здесь это и
+    эмулируется лёгкими сдвигами поверх базовых параметров голоса.
+    """
+    t = (tone or "").strip().lower()
+    if t not in _TTS_TONES:
+        t = _infer_tone_from_text(text)
+    dr, dp = _TTS_TONES.get(t, (1.0, 0))
+    rate_mult = base_rate_mult * dr
+    pitch_hz = base_pitch_hz + dp
+    # Вопрос — приподнимаем тон в конце (интонация вверх). Edge не даёт SSML,
+    # поэтому имитируем общим лёгким подъёмом pitch на вопросительных фразах.
+    if (text or "").strip().endswith("?"):
+        pitch_hz += 3
+    # Клампы в допустимые Edge-диапазоны.
+    rate_mult = max(0.5, min(rate_mult, 1.6))
+    pitch_hz = max(-30, min(pitch_hz, 30))
+    return rate_mult, pitch_hz
 
 
 if AIOHTTP_AVAILABLE:
@@ -1341,11 +1390,32 @@ class APIServerAdapter(BasePlatformAdapter):
 
         # speed (legacy 1.0=normal) или rate (новый, прямой множитель)
         # Дефолт rate=1.04 (+4%) — чуть быстрее, меньше «диктора», звучит разговорнее.
-        rate = _fmt_rate(body.get("speed") if body.get("speed") is not None else body.get("rate", 1.04))
-        # pitch=+8Hz по умолчанию для Dariya — добавляет лёгкости и теплоты.
+        base_rate_mult = body.get("speed") if body.get("speed") is not None else body.get("rate", 1.04)
+        try:
+            base_rate_mult = float(base_rate_mult)
+        except (TypeError, ValueError):
+            base_rate_mult = 1.04
+        # pitch=+8Hz по умолчанию — добавляет лёгкости и теплоты.
         # Edge экранирует <>, inline SSML не работает: тюнинг идёт через
         # параметры Communicate + предварительную нормализацию текста.
-        pitch = _fmt_pitch(body.get("pitch", 8))
+        try:
+            base_pitch_hz = int(round(float(body.get("pitch", 8))))
+        except (TypeError, ValueError):
+            base_pitch_hz = 8
+
+        # Авто-тон: приоритет (1) явный "tone" в теле → (2) текущий профиль IRIS
+        # (настроение Миши прямо сейчас) → (3) тип самой фразы. Так голос звучит
+        # как живой человек: в режиме поддержки — мягче, бодрый утром — энергичнее.
+        tone = body.get("tone")
+        if not tone:
+            try:
+                from agent.iris_persona import _choose_profile
+                tone = _choose_profile()
+            except Exception:
+                tone = None
+        rate_mult, pitch_hz = _tts_prosody(text, tone, base_rate_mult, base_pitch_hz)
+        rate = _fmt_rate(rate_mult)
+        pitch = _fmt_pitch(pitch_hz)
         volume = _fmt_volume(body.get("volume", 0))
 
         import re as _re_tts
