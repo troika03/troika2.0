@@ -4291,6 +4291,15 @@ class GatewayRunner:
             "platforms": [p.value for p in self.adapters.keys()],
         })
 
+        # GROUND: фоновый «глаз» Тройки. Если GROUND_AUTOSTART=1 — периодически
+        # снимает экран телефона и держит «что сейчас на экране» в контексте, чтобы
+        # DAEMON говорил по делу, а не вслепую. Стартуем до DAEMON.
+        try:
+            from tools.ground_tool import maybe_autostart as _ground_autostart
+            _ground_autostart()
+        except Exception as _e:
+            logger.debug("GROUND autostart skipped: %s", _e)
+
         # DAEMON: автономная инициатива Тройки. Если DAEMON_AUTOSTART=1 — запускаем
         # фоновый «ум», который сам решает, есть ли повод написать Мише первой.
         # Делаем здесь, когда gateway уже поднят и есть рабочий event loop.

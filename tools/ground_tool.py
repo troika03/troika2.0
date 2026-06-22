@@ -160,14 +160,37 @@ async def _analyze(image_b64: str) -> Optional[str]:
             pass
 
 
+def _heartbeat(state_note: str = "") -> None:
+    """Состояние GROUND в файл — видно снаружи процесса."""
+    try:
+        import os as _os
+        home = _os.environ.get("HERMES_HOME", "/opt/data")
+        with open(_os.path.join(home, ".ground_heartbeat.json"), "w", encoding="utf-8") as f:
+            json.dump({
+                "running": _state.running,
+                "frames_seen": _state.frames_seen,
+                "frames_analyzed": _state.frames_analyzed,
+                "last_observation": (_state.last_observation or "")[:160],
+                "obs_age_sec": (round(time.time() - _state.last_obs_ts) if _state.last_obs_ts else None),
+                "errors": _state.errors,
+                "last_error": _state.last_error,
+                "note": state_note,
+                "ts": time.time(),
+            }, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
 async def _loop() -> None:
     logger.info("GROUND observer started (interval=%ss)", _state.interval_sec)
+    _heartbeat("started")
     backoff = _state.interval_sec
     while _state.running:
         try:
             shot = await _capture_screen_b64()
             if not shot or not shot.get("ok") or not shot.get("image"):
                 # экран выключен / телефон молчит / нет прав — наблюдать реже
+                _heartbeat("phone_offline_or_screen_off")
                 backoff = min(max(_IDLE_INTERVAL_SEC, backoff), _MAX_BACKOFF_SEC)
                 await asyncio.sleep(backoff)
                 continue
@@ -186,6 +209,7 @@ async def _loop() -> None:
                     _state.frames_analyzed += 1
                     logger.info("GROUND: %s", obs[:120])
             # если не изменилось — просто ждём, vision не зовём (экономия)
+            _heartbeat("observing")
 
             await asyncio.sleep(_state.interval_sec)
         except asyncio.CancelledError:
@@ -265,6 +289,44 @@ async def _handle_ground_status(args: Dict[str, Any], **kw) -> str:
         "last_error": _state.last_error,
         "uptime_sec": (round(time.time() - _state.started_ts) if _state.started_ts else 0),
     }, ensure_ascii=False)
+
+
+def maybe_autostart() -> None:
+    """Запустить GROUND автоматически при старте gateway, если GROUND_AUTOSTART=1.
+
+    В отличие от ground_start (требует подключённого телефона) — autostart
+    стартует цикл сразу: сам _loop при offline-телефоне просто уходит в backoff
+    и ждёт, а как телефон подключится — начинает видеть экран. Безопасно дёргать
+    только из работающего event loop (вызывается из gateway.start())."""
+    import os as _os
+    if _os.environ.get("GROUND_AUTOSTART", "").strip().lower() not in ("1", "true", "yes"):
+        return
+    if is_running():
+        return
+    # интервал можно переопределить через env
+    try:
+        iv = float(_os.environ.get("GROUND_INTERVAL_SEC", "") or _DEFAULT_INTERVAL_SEC)
+        _state.interval_sec = max(15.0, min(iv, 600.0))
+    except (TypeError, ValueError):
+        _state.interval_sec = _DEFAULT_INTERVAL_SEC
+    try:
+        loop = asyncio.get_running_loop()
+        _state.running = True
+        _state.started_ts = time.time()
+        _state.task = loop.create_task(_loop())
+        logger.info("GROUND autostarted via env (interval=%ss)", _state.interval_sec)
+    except RuntimeError:
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                _state.running = True
+                _state.started_ts = time.time()
+                _state.task = loop.create_task(_loop())
+                logger.info("GROUND autostarted via env (fallback loop)")
+        except Exception as e:
+            logger.warning("GROUND autostart skipped (no loop): %s", e)
+    except Exception as e:
+        logger.warning("GROUND autostart skipped: %s", e)
 
 
 # --- schemas ----------------------------------------------------------------
