@@ -8,22 +8,36 @@ import android.media.audiofx.NoiseSuppressor
 import android.util.Log
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
+import kotlin.math.sqrt
 
 /**
- * Параллельный микрофонный монитор для barge-in:
- * во время TTS слушает микрофон через отдельный AudioRecord (с AEC чтобы
- * не цеплять свой же динамик), считает амплитуду, и если 3 кадра подряд
- * превышают порог — дергает onUserStarted. После этого монитор больше
- * не срабатывает в текущей сессии — start() новый цикл нужен явно.
+ * Параллельный микрофонный монитор для barge-in (перебить Тройку голосом).
  *
- * grace-период (~500ms) в начале — чтобы первый звук динамика не оборвал сам себя.
+ * Главная проблема старой версии: фиксированный порог 700 требовал кричать,
+ * потому что качество AEC и громкость динамика у разных телефонов разные —
+ * фоновое эхо своего же TTS «съедало» запас до порога.
+ *
+ * Новый подход — АДАПТИВНЫЙ порог:
+ *   1. grace (~250мс) — динамик/AEC раскачиваются, игнор.
+ *   2. калибровка (~350мс) — меряем уровень остаточного эхо TTS (фон).
+ *   3. детект — срабатываем когда громкость превышает max(фон×множитель, минимум)
+ *      несколько кадров подряд. Это ловит обычную речь поверх любого фона и не
+ *      зависит от абсолютной громкости.
+ *
+ * Метрика — RMS (корень из средней энергии): лучше отделяет речь от ровного
+ * эхо-фона, чем средняя |амплитуда|.
  */
 class BargeInMonitor(
-    private val threshold: Int = 1200,
+    // floorThreshold — абсолютный минимум, ниже которого никогда не триггерим
+    // (защита от тишины). При наличии фона реальный порог считается адаптивно.
+    private val floorThreshold: Int = 500,
     private val sampleRate: Int = 16000,
-    private val frameMs: Int = 30,
-    private val consecutiveFrames: Int = 2,
-    private val gracePeriodMs: Long = 300,
+    private val frameMs: Int = 20,
+    private val consecutiveFrames: Int = 3,
+    private val gracePeriodMs: Long = 250,
+    private val calibrationMs: Long = 350,
+    // во сколько раз голос должен превышать эхо-фон, чтобы считаться речью юзера
+    private val overBackgroundFactor: Double = 2.2,
     private val onUserStarted: () -> Unit,
 ) {
     private val tag = "BargeIn"
@@ -63,28 +77,51 @@ class BargeInMonitor(
 
                 attachEffects(rec.audioSessionId)
                 rec.startRecording()
-                Log.d(tag, "started, threshold=$threshold grace=${gracePeriodMs}ms")
 
                 val startTime = System.currentTimeMillis()
                 val buf = ShortArray(frameSize)
                 var loud = 0
 
+                // Калибровка эхо-фона: копим RMS кадров и берём «спокойный»
+                // уровень (среднее) как базу. Адаптивный порог = база × фактор.
+                var bgSum = 0.0
+                var bgCount = 0
+                var dynamicThreshold = floorThreshold
+
                 while (running.get()) {
                     val read = rec.read(buf, 0, buf.size)
                     if (read <= 0) {
-                        Thread.sleep(5)
+                        Thread.sleep(3)
                         continue
                     }
-                    if (System.currentTimeMillis() - startTime < gracePeriodMs) continue
+                    val now = System.currentTimeMillis()
+                    val elapsed = now - startTime
+                    if (elapsed < gracePeriodMs) continue
 
-                    var sum = 0L
-                    for (i in 0 until read) sum += Math.abs(buf[i].toInt())
-                    val amp = (sum / read).toInt()
+                    // RMS кадра
+                    var energy = 0.0
+                    for (i in 0 until read) {
+                        val s = buf[i].toInt()
+                        energy += (s * s).toDouble()
+                    }
+                    val rms = sqrt(energy / read)
 
-                    if (amp > threshold) {
+                    // Фаза калибровки — измеряем фон, не триггерим.
+                    if (elapsed < gracePeriodMs + calibrationMs) {
+                        bgSum += rms
+                        bgCount++
+                        continue
+                    } else if (bgCount > 0 && dynamicThreshold == floorThreshold) {
+                        val bg = bgSum / bgCount
+                        dynamicThreshold =
+                            (bg * overBackgroundFactor).toInt().coerceAtLeast(floorThreshold)
+                        Log.d(tag, "calibrated: bg=${bg.toInt()} threshold=$dynamicThreshold")
+                    }
+
+                    if (rms > dynamicThreshold) {
                         loud++
                         if (loud >= consecutiveFrames && triggered.compareAndSet(false, true)) {
-                            Log.i(tag, "barge-in detected (amp=$amp)")
+                            Log.i(tag, "barge-in detected (rms=${rms.toInt()} thr=$dynamicThreshold)")
                             running.set(false)
                             try { onUserStarted() } catch (e: Exception) {
                                 Log.e(tag, "callback error: ${e.message}")

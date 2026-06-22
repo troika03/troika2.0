@@ -4,6 +4,24 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../config/hermes_config.dart';
 
+/// Тип шага в «потоке мыслей» Тройки (что она делает перед ответом).
+enum ThoughtKind {
+  thinking, // размышление (reasoning.available)
+  toolStart, // начала вызывать инструмент
+  toolDone, // инструмент отработал
+}
+
+/// Один шаг внутренней работы Тройки — для ленты «как она думает».
+class ThoughtStep {
+  final ThoughtKind kind;
+  final String text; // текст мысли / имя инструмента / результат
+  final bool isError; // для toolDone — отработал с ошибкой
+  final DateTime time;
+
+  ThoughtStep(this.kind, this.text, {this.isError = false, DateTime? time})
+      : time = time ?? DateTime.now();
+}
+
 /// Одно сообщение в чате (общая модель для голоса и текста).
 /// Может нести текст и/или вложенные картинки (base64 data-url).
 class ChatMessage {
@@ -14,6 +32,10 @@ class ChatMessage {
   final DateTime time;
   bool pending; // ждём ответ сервера (для индикатора «печатает»)
 
+  // «Поток мыслей» Тройки: размышления и вызовы инструментов в реальном
+  // времени. Пусто для пользовательских сообщений и старой истории.
+  final List<ThoughtStep> thoughts;
+
   ChatMessage({
     required this.role,
     this.text = '',
@@ -21,11 +43,14 @@ class ChatMessage {
     this.fromVoice = false,
     DateTime? time,
     this.pending = false,
+    List<ThoughtStep>? thoughts,
   })  : imageDataUrls = imageDataUrls ?? [],
+        thoughts = thoughts ?? [],
         time = time ?? DateTime.now();
 
   bool get isUser => role == 'user';
   bool get hasImages => imageDataUrls.isNotEmpty;
+  bool get hasThoughts => thoughts.isNotEmpty;
 
   /// Превратить в OpenAI-совместимый message для отправки.
   /// Если есть картинки — content становится списком частей (multimodal).
@@ -110,6 +135,177 @@ class HermesApiService {
           'Нет соединения с сервером. Проверь что сервер включён.');
     } on TimeoutException {
       throw HermesApiException('Сервер не ответил вовремя. Попробуй ещё раз.');
+    }
+  }
+
+  /// Отправить сообщение через structured runs и стримить «поток мыслей».
+  ///
+  /// Шлёт POST /v1/runs, затем читает SSE /v1/runs/{id}/events.
+  /// Колбэки вызываются по мере поступления событий:
+  ///  - [onThought]   — размышление Тройки (reasoning.available)
+  ///  - [onToolStart] — начала вызывать инструмент
+  ///  - [onToolDone]  — инструмент отработал (имя, была ли ошибка)
+  ///  - [onDelta]     — кусочек финального текста ответа (message.delta)
+  /// Возвращает полный текст ответа.
+  Future<String> streamMessage(
+    ChatMessage message, {
+    List<ChatMessage> recent = const [],
+    void Function(String thought)? onThought,
+    void Function(String tool)? onToolStart,
+    void Function(String tool, bool isError)? onToolDone,
+    void Function(String delta)? onDelta,
+  }) async {
+    // 1) Стартуем run. input = только новое сообщение; историю сервер берёт
+    //    из общей сессии. recent шлём как conversation_history для надёжности.
+    final history = <Map<String, dynamic>>[
+      for (final m in recent) m.toApiMessage(),
+    ];
+    final inputContent = message.toApiMessage()['content'];
+    final startBody = <String, dynamic>{
+      'input': inputContent is String
+          ? inputContent
+          : [message.toApiMessage()],
+      'session_id': HermesConfig.sessionId,
+      if (history.isNotEmpty) 'conversation_history': history,
+    };
+
+    final client = http.Client();
+    try {
+      final startReq = http.Request('POST', Uri.parse(HermesConfig.runsUrl))
+        ..headers.addAll(HermesConfig.chatHeaders)
+        ..body = json.encode(startBody);
+      final startResp = await client.send(startReq).timeout(_timeout);
+      final startBodyStr = await startResp.stream.bytesToString();
+      // Сервер отдаёт 202 Accepted (run стартовал асинхронно), реже 200.
+      if (startResp.statusCode != 200 && startResp.statusCode != 202) {
+        throw HermesApiException(
+            'API error ${startResp.statusCode}: ${_short(startBodyStr)}');
+      }
+      final startData = json.decode(startBodyStr) as Map<String, dynamic>;
+      final runId = (startData['run_id'] ?? startData['id'])?.toString();
+      if (runId == null || runId.isEmpty) {
+        throw HermesApiException('Сервер не вернул run_id.');
+      }
+
+      // 2) Слушаем поток событий.
+      final evUri = Uri.parse('${HermesConfig.runsUrl}/$runId/events');
+      final evReq = http.Request('GET', evUri)
+        ..headers.addAll(HermesConfig.headers);
+      final evResp = await client.send(evReq).timeout(_timeout);
+      if (evResp.statusCode != 200) {
+        throw HermesApiException('Поток событий недоступен (${evResp.statusCode}).');
+      }
+
+      final answer = StringBuffer();
+      String lastThought = '';
+      bool runFailed = false;
+      await for (final raw in evResp.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())) {
+        final line = raw.trim();
+        if (line.isEmpty || !line.startsWith('data:')) continue;
+        final payload = line.substring(5).trim();
+        if (payload.isEmpty || payload == '[DONE]') continue;
+        Map<String, dynamic> ev;
+        try {
+          ev = json.decode(payload) as Map<String, dynamic>;
+        } catch (_) {
+          continue;
+        }
+        switch (ev['event']) {
+          case 'reasoning.available':
+            final t = (ev['text'] ?? '').toString().trim();
+            if (t.isNotEmpty && t != lastThought) {
+              lastThought = t;
+              onThought?.call(t);
+            }
+            break;
+          case 'tool.started':
+            onToolStart?.call((ev['tool'] ?? '').toString());
+            break;
+          case 'tool.completed':
+            onToolDone?.call(
+              (ev['tool'] ?? '').toString(),
+              ev['error'] == true,
+            );
+            break;
+          case 'message.delta':
+            final d = (ev['delta'] ?? '').toString();
+            if (d.isNotEmpty) {
+              answer.write(d);
+              onDelta?.call(d);
+            }
+            break;
+          case 'run.failed':
+            runFailed = true;
+            break;
+          case 'run.completed':
+            // Поток закроется сам; выходим из чтения.
+            break;
+        }
+      }
+
+      final full = answer.toString().trim();
+      if (runFailed && full.isEmpty) {
+        // Run упал на сервере — достаём причину из статуса, чтобы показать
+        // понятную ошибку, а не пустой пузырь.
+        final reason = await _fetchRunError(client, runId);
+        throw HermesApiException(reason);
+      }
+      if (full.isEmpty) {
+        // Финал не пришёл дельтами — добираем через статус run.
+        final r = await _fetchRunResult(client, runId);
+        if (r.isEmpty) {
+          throw HermesApiException(await _fetchRunError(client, runId));
+        }
+        return r;
+      }
+      return full;
+    } on SocketException {
+      throw HermesApiException('Нет соединения с сервером.');
+    } on TimeoutException {
+      throw HermesApiException('Сервер не ответил вовремя.');
+    } finally {
+      client.close();
+    }
+  }
+
+  /// Достаёт человеко-понятную причину падения run из его статуса.
+  Future<String> _fetchRunError(http.Client client, String runId) async {
+    try {
+      final uri = Uri.parse('${HermesConfig.runsUrl}/$runId');
+      final req = http.Request('GET', uri)..headers.addAll(HermesConfig.headers);
+      final resp = await client.send(req).timeout(const Duration(seconds: 20));
+      final body = await resp.stream.bytesToString();
+      final data = json.decode(body) as Map<String, dynamic>;
+      final err = (data['error'] ?? '').toString();
+      if (err.contains('402') || err.toLowerCase().contains('credits')) {
+        return 'У Тройки закончились кредиты OpenRouter — нужно пополнить баланс, '
+            'чтобы она снова могла думать и отвечать.';
+      }
+      if (err.contains('429')) {
+        return 'Модель временно перегружена (лимит запросов). Попробуй через минуту.';
+      }
+      if (err.isNotEmpty) return 'Тройка не смогла ответить: ${_short(err)}';
+      return 'Тройка не смогла ответить (run завершился неудачно).';
+    } catch (_) {
+      return 'Тройка не смогла ответить (run завершился неудачно).';
+    }
+  }
+
+  /// Запасной путь: если message.delta не пришли — берём готовый ответ run.
+  Future<String> _fetchRunResult(http.Client client, String runId) async {
+    try {
+      final uri = Uri.parse('${HermesConfig.runsUrl}/$runId');
+      final req = http.Request('GET', uri)..headers.addAll(HermesConfig.headers);
+      final resp = await client.send(req).timeout(const Duration(seconds: 30));
+      final body = await resp.stream.bytesToString();
+      if (resp.statusCode != 200) return '';
+      final data = json.decode(body) as Map<String, dynamic>;
+      final out = data['output'] ?? data['result'] ?? data['content'] ?? '';
+      return _extractText(out).trim();
+    } catch (_) {
+      return '';
     }
   }
 

@@ -34,11 +34,15 @@ _DEFAULT_ASSIGNEE = os.getenv("TROIKA_BG_ASSIGNEE", "researcher")
 
 
 def _connect():
-    """Прямой коннект к kanban.db через hermes_cli.kanban_db."""
-    from hermes_cli.kanban_db import KanbanDB
+    """Прямой коннект к kanban.db через hermes_cli.kanban_db.
 
-    kb = KanbanDB()
-    return kb, kb.connect()
+    API стал функциональным (раньше был класс KanbanDB): connect() отдаёт
+    sqlite-соединение, create_task() — module-level функция.
+    """
+    from hermes_cli.kanban_db import connect, create_task
+
+    conn = connect()
+    return create_task, conn
 
 
 def _compose_body(user_brief: str, notify: bool, push_title: str) -> str:
@@ -72,7 +76,7 @@ async def _handle(args: Dict[str, Any], **_kw) -> str:
     body = _compose_body(brief, notify, push_title)
 
     try:
-        kb, conn = _connect()
+        create_fn, conn = _connect()
     except Exception as e:
         return json.dumps(
             {"ok": False, "error": f"kanban_unavailable: {e}",
@@ -80,7 +84,7 @@ async def _handle(args: Dict[str, Any], **_kw) -> str:
             ensure_ascii=False,
         )
     try:
-        new_tid = kb.create_task(
+        new_tid = create_fn(
             conn,
             title=title,
             body=body,

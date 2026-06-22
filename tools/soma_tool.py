@@ -344,6 +344,52 @@ FORGET_SCHEMA = {
 }
 
 
+# --- context hint (авто-инжект памяти в промпт) ------------------------------
+
+
+def soma_context_hint(limit: int = 6) -> str:
+    """Топ выводов о Мише для подмешивания в system prompt КАЖДЫЙ запрос.
+
+    Это Этап «память→мнения»: Тройка не ждёт явного soma_recall, а всегда
+    держит в голове самое весомое о Мише (привычки, предпочтения, настроение).
+    Ранжирование как в recall: salience × confidence × свежесть. Берём только
+    достаточно уверенные выводы (confidence ≥ 0.45), чтобы не тащить домыслы.
+    """
+    try:
+        with _db() as conn:
+            rows = conn.execute("SELECT * FROM memories").fetchall()
+    except Exception as e:  # БД может быть пустой/недоступной — не ломаем промпт
+        logger.debug("soma_context_hint: %s", e)
+        return ""
+    if not rows:
+        return ""
+
+    scored = []
+    for r in rows:
+        if r["confidence"] < 0.45:
+            continue
+        score = r["salience"] * r["confidence"] * _recency(r["last_seen_ts"])
+        scored.append((score, r))
+    if not scored:
+        return ""
+    scored.sort(key=lambda x: x[0], reverse=True)
+    top = scored[:limit]
+
+    lines = []
+    for _, r in top:
+        # маркер уверенности: ↑ — твёрдо знаю, ~ — скорее так
+        mark = "" if r["confidence"] >= 0.7 else "(возможно) "
+        lines.append(f"• {mark}{r['text'].strip()}")
+
+    body = "\n".join(lines)
+    return (
+        "\n\n## Что ты знаешь о Мише (из своей памяти)\n"
+        "Это твои накопленные выводы о нём — пользуйся ими естественно, "
+        "не зачитывай вслух и не ссылайся на «память», просто учитывай:\n"
+        f"{body}"
+    )
+
+
 # --- registration ------------------------------------------------------------
 
 from tools.registry import registry  # noqa: E402

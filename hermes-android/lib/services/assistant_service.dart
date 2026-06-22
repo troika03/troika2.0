@@ -292,8 +292,29 @@ class AssistantService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final response =
-          await _hermes.sendMessage(userMsg, recent: _recentContext());
+      // Стримим «поток мыслей»: размышления и вызовы инструментов
+      // появляются в пузыре в реальном времени, пока Тройка работает.
+      final response = await _hermes.streamMessage(
+        userMsg,
+        recent: _recentContext(),
+        onThought: (t) {
+          pending.thoughts.add(ThoughtStep(ThoughtKind.thinking, t));
+          notifyListeners();
+        },
+        onToolStart: (tool) {
+          pending.thoughts.add(ThoughtStep(ThoughtKind.toolStart, tool));
+          notifyListeners();
+        },
+        onToolDone: (tool, isErr) {
+          pending.thoughts
+              .add(ThoughtStep(ThoughtKind.toolDone, tool, isError: isErr));
+          notifyListeners();
+        },
+        onDelta: (d) {
+          pending.text += d;
+          notifyListeners();
+        },
+      );
       _lastHermesText = response;
       pending
         ..text = response

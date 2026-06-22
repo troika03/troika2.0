@@ -63,9 +63,12 @@ _FORBIDDEN_PATTERNS = [
 ]
 _FORBIDDEN_RE = re.compile("|".join(_FORBIDDEN_PATTERNS))
 
-_MAX_FILES = 5
-_MAX_LINES_CHANGED = 300
-_MAX_DIFF_BYTES = 10_000
+_MAX_FILES = 8
+# Лимиты подняты: полноценный инструмент (схема + обработка + деградация +
+# docstring'и в стиле Тройки) легко даёт 200-600 строк и пробивает 10КБ —
+# старые лимиты (300 строк / 10КБ) резали нормальные tools на корню.
+_MAX_LINES_CHANGED = 900
+_MAX_DIFF_BYTES = 40_000
 
 _BRANCH_PREFIX = "troika/proposal-"
 
@@ -174,6 +177,19 @@ def _validate_diff(diff_text: str, files: List[str]) -> Optional[str]:
     for f in files:
         if _FORBIDDEN_RE.match(f):
             return f"forbidden_path: {f}"
+        # Файл proposal обязан лежать ВНУТРИ репо. Путь "C:/" или абсолютный =
+        # кодер промахнулся (писал по пути со своей машины) — на Linux-сервере
+        # неприменимо. (баг daily_journal: писал в C:\Users\...\memory)
+        if f.startswith("/") or re.match(r"^[A-Za-z]:[\\/]", f) or ".." in f.split("/"):
+            return f"path_outside_repo: {f}"
+    # Захардкоженные абсолютные пути В КОДЕ — главная причина «работает у Миши,
+    # падает на сервере». Тройка живёт на Linux; путей C:\... / D:\... там нет.
+    _abs_path_re = re.compile(r"""['"]\s*[A-Za-z]:[\\/]|['"]/(?:home|Users|mnt)/""")
+    for _ln in diff_text.splitlines():
+        if _ln.startswith("+") and not _ln.startswith("+++") and _abs_path_re.search(_ln):
+            return ("hardcoded_abs_path: код содержит абсолютный путь, неприменимый на "
+                    "Linux-сервере: " + repr(_ln.strip()[:80]) + 
+                    ". Используй get_hermes_home() или Path.home(), а не C:\\... / /Users/...")
     added = sum(1 for ln in diff_text.splitlines() if ln.startswith("+") and not ln.startswith("+++"))
     removed = sum(1 for ln in diff_text.splitlines() if ln.startswith("-") and not ln.startswith("---"))
     if added + removed > _MAX_LINES_CHANGED:
@@ -238,6 +254,10 @@ def _build_propose_prompt(description: str, target_files: List[str]) -> str:
    handler принимает (arguments, **_kw) и возвращает dict с say_to_user). Открой любой
    готовый tools/*_tool.py как образец.
 3. ЗАПРЕЩЕНО трогать: {forbidden_str}. Не трогать локали/логи/артефакты.
+   ВАЖНО: Тройка работает на Linux-СЕРВЕРЕ. НИКОГДА не пиши абсолютные пути
+   вроде C:\... , D:\... или /home/<user>/... — их на сервере НЕТ, код упадёт.
+   Для файлов используй get_hermes_home(), os.environ.get("TROIKA_VAULT_PATH")
+   или Path.home(); создавай файлы ТОЛЬКО внутри репозитория или hermes_home.
 4. Лимит: ≤5 файлов, ≤300 строк. Готовый код без placeholder'ов и TODO, стиль соседнего.
 5. НЕ делай git commit — это сделает скрипт.
 
@@ -274,7 +294,9 @@ async def _propose_via_claude(description: str, target_files: List[str]) -> Dict
     """Запускает Claude Code CLI (подписка) в репо для внесения правок."""
     from tools.coder_tool import _run_coder
     task = _build_propose_prompt(description, target_files)
-    res = await _run_coder("claude", _REPO_ROOT, task, timeout=300)
+    # 600с (как дефолт coder_tool): Claude по подписке думает дольше, но делает
+    # полноценный инструмент за раз. 300с обрывало на сложных tools.
+    res = await _run_coder("claude", _REPO_ROOT, task, timeout=600)
     # _run_coder уже вернул {ok, ...}; нормализуем под контракт _propose_via_gemini
     if res.get("ok"):
         return {"ok": True, "rc": 0, "backend": "claude"}
@@ -321,6 +343,10 @@ async def _propose_via_gemini(branch: str, description: str, target_files: List[
    handler принимает (arguments, **_kw) и возвращает dict с say_to_user). Открой любой
    готовый tools/*_tool.py как образец.
 3. ЗАПРЕЩЕНО трогать: {forbidden_str}. Не трогать локали/логи/артефакты.
+   ВАЖНО: Тройка работает на Linux-СЕРВЕРЕ. НИКОГДА не пиши абсолютные пути
+   вроде C:\... , D:\... или /home/<user>/... — их на сервере НЕТ, код упадёт.
+   Для файлов используй get_hermes_home(), os.environ.get("TROIKA_VAULT_PATH")
+   или Path.home(); создавай файлы ТОЛЬКО внутри репозитория или hermes_home.
 4. Лимит: ≤5 файлов, ≤300 строк. Готовый код без placeholder'ов и TODO, стиль соседнего.
 5. НЕ делай git commit — это сделает скрипт.
 
@@ -346,7 +372,7 @@ async def _propose_via_gemini(branch: str, description: str, target_files: List[
                     stdout=f_out, stderr=f_err, env=env,
                 )
                 try:
-                    rc = await asyncio.wait_for(proc.wait(), timeout=300)
+                    rc = await asyncio.wait_for(proc.wait(), timeout=600)
                 except asyncio.TimeoutError:
                     try:
                         import subprocess as _sp
@@ -354,7 +380,7 @@ async def _propose_via_gemini(branch: str, description: str, target_files: List[
                                 capture_output=True, timeout=10)
                     except Exception:
                         pass
-                    return {"ok": False, "error": "gemini_timeout_300s"}
+                    return {"ok": False, "error": "gemini_timeout_600s"}
             out = log_out.read_text(encoding="utf-8", errors="replace") if log_out.exists() else ""
             err = log_err.read_text(encoding="utf-8", errors="replace") if log_err.exists() else ""
             if re.search(r"Invalid stream|malformed tool call|empty response", err, re.IGNORECASE):
@@ -406,6 +432,20 @@ async def _handle_propose(arguments: dict, **_kw) -> dict:
     if not ok:
         return {"ok": False, "error": f"repo_not_clean: {reason}",
                 "hint": "Сначала закоммить или откати текущие изменения"}
+
+    # АНТИ-ЗАЦИКЛИВАНИЕ: Тройка склонна плодить почти одинаковые proposal
+    # (наблюдалось: 2 ветки daily-journal подряд). Если pending-предложение
+    # с таким же slug уже есть — не создаём дубль, возвращаем существующее.
+    _new_slug = _slug(description)
+    for _p in _list_proposals():
+        if _p.get("status") in (None, "pending") and _slug(_p.get("description", "")) == _new_slug:
+            return {
+                "ok": False,
+                "error": "duplicate_proposal",
+                "existing_id": _p.get("id"),
+                "hint": "Такое предложение уже создано и ждёт Мишу. Не делай дубль — "
+                        "покажи его через self_improve_show или жди одобрения.",
+            }
 
     # Выбираем доступный кодер ДО создания ветки, чтобы не плодить пустые ветки.
     backend = _self_improve_backend()

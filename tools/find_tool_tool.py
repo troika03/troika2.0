@@ -77,6 +77,11 @@ _SYNONYMS = {
     "позвони": "call", "звонок": "call",
     "сообщение": "sms message",
     "смс": "sms", "месседж": "message",
+    # телеграм — отправка Мише в личку/избранное
+    "телеграм": "telegram send", "телеграмм": "telegram send",
+    "тг": "telegram send", "telegram": "telegram send",
+    "избранное": "telegram send saved", "избранную": "telegram send saved",
+    "отправь": "send telegram", "скинь": "send telegram file",
     # медиа (spotify-tools в этой сборке нет — музыка живёт в приложении на телефоне)
     "музыка": "music player open app", "музыку": "music player open app",
     "music": "player app",

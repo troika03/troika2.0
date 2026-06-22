@@ -45,6 +45,8 @@ dependencies:
 
   # ── Открытие ссылок (кликабельные URL в сообщениях) ───────────
   url_launcher: ^6.3.0
+  google_mlkit_translation: ^0.13.1
+  open_filex: ^4.7.0
 
 dev_dependencies:
   flutter_test:

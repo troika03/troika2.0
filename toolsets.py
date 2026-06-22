@@ -58,6 +58,8 @@ _HERMES_CORE_TOOLS = [
     "cronjob",
     # Cross-platform messaging (gated on gateway running via check_fn)
     "send_message",
+    # Отправка Мише в его личный Telegram (текст/файл) — «отправь мне в тг»
+    "telegram_send",
     # Home Assistant smart home control (gated on HASS_TOKEN via check_fn)
     "ha_list_entities", "ha_get_state", "ha_list_services", "ha_call_service",
     # Android phone control (gated on phone WebSocket connection via check_fn)
@@ -590,6 +592,8 @@ TOOLSETS = {
             "phone_create_image",
             # Тройкин голос / напоминания
             "push_to_user", "reminder", "location", "bg_task",
+            # Отправка в личный Telegram Миши («отправь мне в тг / в избранное»)
+            "telegram_send",
             # Память / RAG
             "obsidian_note",
             "soma_remember", "soma_recall",

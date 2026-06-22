@@ -6,6 +6,7 @@ import '../theme/troika_theme.dart';
 import 'chat_screen.dart';
 import 'settings_screen.dart';
 import 'history_screen.dart';
+import 'files_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -119,6 +120,16 @@ class _TopBar extends StatelessWidget {
             tooltip: 'Очистить ленту',
             onPressed: () =>
                 context.read<AssistantService>().clearConversation(),
+          ),
+          IconButton(
+            icon: const Icon(Icons.folder_outlined),
+            color: TroikaColors.textMuted,
+            iconSize: 22,
+            tooltip: 'Файлы Тройки',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const FilesScreen()),
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.history_rounded),

@@ -56,6 +56,10 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig signingConfigs.debug
+            // 20.06: R8/minify отключён — крэшил JVM по OOM на машине с 16G RAM.
+            // Для личного APK обфускация не нужна; APK чуть больше, но собирается.
+            minifyEnabled false
+            shrinkResources false
         }
     }
 }

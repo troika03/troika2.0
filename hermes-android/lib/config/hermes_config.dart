@@ -75,6 +75,12 @@ class HermesConfig {
   static String get chatCompletionsUrl =>
       '$serverUrl/v1/chat/completions';
 
+  /// URL structured runs (стриминг мыслей и вызовов через SSE)
+  static String get runsUrl => serverUrl + '/v1/runs';
+
+  /// URL файлового браузера (документы Тройки на сервере)
+  static String get filesUrl => serverUrl + '/v1/files';
+
   /// Единая сессия для голоса И текста — чтобы у Тройки был общий контекст.
   /// Голос (Kotlin HermesListenerService) шлёт ровно эти же значения.
   static const String sessionId = 'phone-misha-main';

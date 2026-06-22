@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -6,12 +7,16 @@ import 'services/assistant_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'theme/troika_theme.dart';
+import 'services/thought_translator.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Инициализировать настройки (SharedPreferences)
   await HermesConfig.init();
+
+  // Прогреть офлайн-переводчик мыслей EN->RU в фоне (разовая загрузка модели).
+  unawaited(ThoughtTranslator.instance.warmUp());
 
   // Тёмный статус бар
   SystemChrome.setSystemUIOverlayStyle(

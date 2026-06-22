@@ -1370,6 +1370,16 @@ def load_soul_md() -> Optional[str]:
             content = content + iris_persona_hint()
         except Exception as e:
             logger.debug("Could not append IRIS persona hint: %s", e)
+        try:
+            from persona.response_flow import response_flow_hint
+            content = content + response_flow_hint()
+        except Exception as e:
+            logger.debug("Could not append response_flow hint: %s", e)
+        try:
+            from tools.soma_tool import soma_context_hint
+            content = content + soma_context_hint()
+        except Exception as e:
+            logger.debug("Could not append SOMA memory hint: %s", e)
         return content
     except Exception as e:
         logger.debug("Could not read SOUL.md from %s: %s", soul_path, e)

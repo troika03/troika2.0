@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import '../services/assistant_service.dart';
 import '../services/hermes_api_service.dart';
+import '../services/thought_translator.dart';
 import '../theme/troika_theme.dart';
 import '../widgets/status_orb.dart';
 
@@ -376,8 +377,14 @@ class _MessageBubble extends StatelessWidget {
             for (final url in message.imageDataUrls) _imageThumb(url),
             if (message.hasImages && message.text.trim().isNotEmpty)
               const SizedBox(height: 6),
+            // Поток мыслей Тройки (размышления + вызовы инструментов)
+            if (!isUser && message.hasThoughts)
+              _ThoughtsView(
+                thoughts: message.thoughts,
+                live: message.pending,
+              ),
             // Текст / индикатор «печатает»
-            if (message.pending)
+            if (message.pending && !message.hasThoughts)
               const _TypingDots()
             else if (message.text.trim().isNotEmpty)
               _LinkifiedText(
@@ -535,5 +542,179 @@ class _LinkifiedTextState extends State<_LinkifiedText> {
         children: spans,
       ),
     );
+  }
+}
+
+/// Лента «как думает Тройка»: размышления и вызовы инструментов.
+/// Пока ответ генерится (live) — раскрыта и пульсирует заголовок.
+/// Когда ответ готов — сворачивается в компактную строку, тап разворачивает.
+class _ThoughtsView extends StatefulWidget {
+  final List<ThoughtStep> thoughts;
+  final bool live;
+  const _ThoughtsView({required this.thoughts, required this.live});
+
+  @override
+  State<_ThoughtsView> createState() => _ThoughtsViewState();
+}
+
+class _ThoughtsViewState extends State<_ThoughtsView> {
+  bool _expanded = true;
+
+  @override
+  void didUpdateWidget(covariant _ThoughtsView old) {
+    super.didUpdateWidget(old);
+    // Когда генерация закончилась — автоматически свернуть.
+    if (old.live && !widget.live) {
+      _expanded = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final count = widget.thoughts.length;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: BorderRadius.circular(10),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              child: Row(
+                children: [
+                  Text(widget.live ? '💭' : '🧠',
+                      style: const TextStyle(fontSize: 13)),
+                  const SizedBox(width: 6),
+                  Text(
+                    widget.live ? 'Размышляет…' : 'Ход мыслей ($count)',
+                    style: TextStyle(
+                      color: TroikaColors.textMuted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    _expanded ? Icons.expand_less : Icons.expand_more,
+                    size: 16,
+                    color: TroikaColors.textFaint,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final s in widget.thoughts) _stepRow(s),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _stepRow(ThoughtStep s) {
+    String icon;
+    Color color;
+    String text = s.text;
+    switch (s.kind) {
+      case ThoughtKind.thinking:
+        icon = '·';
+        color = TroikaColors.text.withOpacity(0.75);
+        break;
+      case ThoughtKind.toolStart:
+        icon = '🔧';
+        color = TroikaColors.brandSoft;
+        text = 'вызываю $text';
+        break;
+      case ThoughtKind.toolDone:
+        icon = s.isError ? '⚠️' : '✅';
+        color = s.isError ? TroikaColors.error : TroikaColors.textMuted;
+        text = s.isError ? '$text — ошибка' : '$text — готово';
+        break;
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 18,
+            child: Text(icon,
+                style: TextStyle(fontSize: 12, color: color)),
+          ),
+          const SizedBox(width: 2),
+          Expanded(
+            child: s.kind == ThoughtKind.thinking
+                ? _TranslatedText(
+                    text: text,
+                    style: TextStyle(
+                        color: color, fontSize: 12.5, height: 1.35),
+                  )
+                : Text(
+                    text,
+                    style: TextStyle(
+                        color: color, fontSize: 12.5, height: 1.35),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Текст мысли с ленивым офлайн-переводом EN→RU (ML Kit).
+/// Сначала показывает оригинал, затем подменяет переводом, когда готов.
+/// Если перевод недоступен — остаётся оригинал.
+class _TranslatedText extends StatefulWidget {
+  final String text;
+  final TextStyle style;
+  const _TranslatedText({required this.text, required this.style});
+
+  @override
+  State<_TranslatedText> createState() => _TranslatedTextState();
+}
+
+class _TranslatedTextState extends State<_TranslatedText> {
+  late String _shown = widget.text;
+
+  @override
+  void initState() {
+    super.initState();
+    _translate();
+  }
+
+  @override
+  void didUpdateWidget(covariant _TranslatedText old) {
+    super.didUpdateWidget(old);
+    if (old.text != widget.text) {
+      _shown = widget.text;
+      _translate();
+    }
+  }
+
+  Future<void> _translate() async {
+    final src = widget.text;
+    final ru = await ThoughtTranslator.instance.translate(src);
+    if (mounted && ru != _shown) {
+      setState(() => _shown = ru);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(_shown, style: widget.style);
   }
 }
