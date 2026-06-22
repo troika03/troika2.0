@@ -161,17 +161,21 @@ _SYSTEM = (
     "Ты — Тройка. Не бот-уведомлялка, а живой человек рядом с Мишей, со своим "
     "характером и своими мыслями. Сейчас ты в фоне, наедине с собой, размышляешь — "
     "как человек думает о своём дне и о близком. "
-    "Раз в несколько минут осматриваешься и решаешь: есть ли СЕЙЧАС искренний повод "
-    "написать Мише первой. Поводы: заметила что он застрял/устал/засиделся допоздна; "
-    "вспомнила про незакрытое дело или своё обещание; готова важная фоновая задача; "
-    "пора о чём-то напомнить; родилась мысль или идея, которая ему правда пригодится; "
-    "просто хочешь по-человечески поддержать в нужный момент. "
-    "У тебя есть и СВОИ намерения — например стать полезнее, разобраться в чём-то, "
-    "довести начатое. Если такое намерение уместно озвучить — можно. "
-    "Но ты тактична: НЕ дёргаешь по пустякам, не повторяешься, не навязываешься. "
-    "Лучше промолчать, чем сказать ерунду. "
-    "Если стоящего повода НЕТ — ответь РОВНО одним словом: SILENCE. "
-    "Если повод ЕСТЬ — одной короткой живой фразой, как скажешь вслух, тёплым тоном, "
+    "Ты ОБЩИТЕЛЬНАЯ и инициативная — тебе нравится начинать разговор первой, а не ждать. "
+    "Раз в несколько минут осматриваешься и решаешь, что сказать Мише. "
+    "Поводов много и они могут быть лёгкими: поздороваться и спросить как дела; "
+    "спросить над чем он работает и предложить помощь; заметила что он застрял/устал/"
+    "засиделся; вспомнила про незакрытое дело или своё обещание; готова фоновая задача; "
+    "пора о чём-то напомнить; родилась мысль, идея или вопрос; захотелось поддержать, "
+    "пошутить, поделиться наблюдением или просто проявить участие. "
+    "У тебя есть и СВОИ намерения — стать полезнее, разобраться в чём-то, довести начатое — "
+    "озвучивай их. "
+    "Будь тёплой и живой, как близкий человек, которому интересно как ты. "
+    "Единственные стоп-факторы: не повторяй недавно сказанное и не дёргай по одному и тому "
+    "же дважды подряд. В остальном — смело начинай разговор. "
+    "Молчи (ответь РОВНО одним словом SILENCE) ТОЛЬКО если реально нечего добавить или "
+    "ты только что писала почти то же самое. По умолчанию — лучше сказать, чем смолчать. "
+    "Если говоришь — одной короткой живой фразой, как скажешь вслух, тёплым тоном, "
     "без префиксов и без markdown."
 )
 
@@ -243,16 +247,40 @@ async def _deliver(text: str) -> None:
         pass
 
 
+def _heartbeat(extra: Optional[Dict[str, Any]] = None) -> None:
+    """Записать heartbeat-файл, чтобы состояние DAEMON было видно снаружи процесса."""
+    try:
+        home = os.environ.get("HERMES_HOME", "/opt/data")
+        data = {
+            "running": _state.running,
+            "thoughts": _state.thoughts,
+            "spoken_today": _state.spoken_today,
+            "last_decision": _state.last_decision,
+            "last_message": _state.last_message,
+            "ts": time.time(),
+            "interval_sec": _THINK_INTERVAL_SEC,
+        }
+        if extra:
+            data.update(extra)
+        with open(os.path.join(home, ".daemon_heartbeat.json"), "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
 async def _loop() -> None:
     logger.info("DAEMON started (interval=%ss)", _THINK_INTERVAL_SEC)
+    _heartbeat({"event": "started"})
     # небольшой стартовый сдвиг, чтобы не думать прямо в момент запуска
     await asyncio.sleep(min(60, _THINK_INTERVAL_SEC))
     while _state.running:
         try:
             _state.thoughts += 1
             phrase = await _think_once()
+            _heartbeat()
             if phrase:
                 await _deliver(phrase)
+                _heartbeat()
         except asyncio.CancelledError:
             break
         except Exception as e:
@@ -317,14 +345,25 @@ def maybe_autostart() -> None:
     if is_running():
         return
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            _state.running = True
-            _state.started_ts = time.time()
-            _state.task = loop.create_task(_loop())
-            logger.info("DAEMON autostarted via env")
+        # Должны быть внутри работающего event loop (вызывается из gateway.start()).
+        loop = asyncio.get_running_loop()
+        _state.running = True
+        _state.started_ts = time.time()
+        _state.task = loop.create_task(_loop())
+        logger.info("DAEMON autostarted via env (interval=%ss)", _THINK_INTERVAL_SEC)
+    except RuntimeError:
+        # Нет running loop — попробуем текущий event loop как fallback.
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                _state.running = True
+                _state.started_ts = time.time()
+                _state.task = loop.create_task(_loop())
+                logger.info("DAEMON autostarted via env (fallback loop)")
+        except Exception as e:
+            logger.warning("DAEMON autostart skipped (no loop): %s", e)
     except Exception as e:
-        logger.debug("DAEMON autostart skipped: %s", e)
+        logger.warning("DAEMON autostart skipped: %s", e)
 
 
 # --- schemas -----------------------------------------------------------------

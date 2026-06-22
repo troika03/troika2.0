@@ -4290,7 +4290,16 @@ class GatewayRunner:
         await self.hooks.emit("gateway:startup", {
             "platforms": [p.value for p in self.adapters.keys()],
         })
-        
+
+        # DAEMON: автономная инициатива Тройки. Если DAEMON_AUTOSTART=1 — запускаем
+        # фоновый «ум», который сам решает, есть ли повод написать Мише первой.
+        # Делаем здесь, когда gateway уже поднят и есть рабочий event loop.
+        try:
+            from tools.daemon_tool import maybe_autostart as _daemon_autostart
+            _daemon_autostart()
+        except Exception as _e:
+            logger.debug("DAEMON autostart skipped: %s", _e)
+
         if connected_count > 0:
             logger.info("Gateway running with %s platform(s)", connected_count)
         
