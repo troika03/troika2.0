@@ -49,6 +49,25 @@ class HermesListenerService : Service() {
         const val PREFS = "FlutterSharedPreferences"
         const val PREF_URL = "flutter.hermes_server_url"
         const val PREF_KEY = "flutter.hermes_api_key"
+
+        // Дефолты на случай, когда онбординг/настройки ещё не записали prefs
+        // (например adb-установка release НЕ пишет SharedPreferences). Без этого
+        // fallback Kotlin-служба получала url=null → не подключалась к серверу →
+        // «нет сети», хотя Flutter-сторона работала на тех же дефолтах.
+        const val DEFAULT_URL = "http://89.208.105.187:8642"
+        const val DEFAULT_KEY = "hermes-2024"
+
+        /** URL сервера из prefs, либо вшитый дефолт (никогда не null/пусто). */
+        fun resolvedUrl(prefs: android.content.SharedPreferences): String {
+            val u = prefs.getString(PREF_URL, null)
+            return if (u.isNullOrBlank()) DEFAULT_URL else u
+        }
+
+        /** API-ключ из prefs, либо вшитый дефолт. */
+        fun resolvedKey(prefs: android.content.SharedPreferences): String {
+            val k = prefs.getString(PREF_KEY, null)
+            return if (k.isNullOrBlank()) DEFAULT_KEY else k
+        }
         const val PREF_TTS_VOICE = "flutter.hermes_tts_voice"
         const val PREF_BARGE_IN_ENABLED = "flutter.hermes_barge_in_enabled"
         const val PREF_BARGE_IN_THRESHOLD = "flutter.hermes_barge_in_threshold"
@@ -331,9 +350,8 @@ class HermesListenerService : Service() {
     private fun startEdgeTts() {
         if (edgeTts != null) return
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val url = prefs.getString(PREF_URL, null)
-        val key = prefs.getString(PREF_KEY, "") ?: ""
-        if (url.isNullOrBlank()) return
+        val url = resolvedUrl(prefs)
+        val key = resolvedKey(prefs)
         val voice = prefs.getString("flutter.hermes_edge_voice", null) ?: "ru-RU-SvetlanaNeural"
         // SharedPreferences хранит числа как double/int; берём с fallback
         val rate = readDoublePref(prefs, "flutter.hermes_voice_rate", 1.15)  // 20.06: чуть быстрее речь по умолчанию
@@ -376,14 +394,10 @@ class HermesListenerService : Service() {
     private fun startPhoneBridge() {
         if (phoneBridge != null) return
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val url = prefs.getString(PREF_URL, null)
-        val key = prefs.getString(PREF_KEY, "") ?: ""
-        if (url.isNullOrBlank()) {
-            android.util.Log.w("HermesListener", "PhoneBridge: no URL configured")
-            return
-        }
+        val url = resolvedUrl(prefs)
+        val key = resolvedKey(prefs)
         phoneBridge = PhoneBridgeClient(applicationContext, url, key).also { it.start() }
-        android.util.Log.i("HermesListener", "PhoneBridge started")
+        android.util.Log.i("HermesListener", "PhoneBridge started → $url")
     }
 
     private fun runListenerLoop() {
@@ -933,8 +947,8 @@ class HermesListenerService : Service() {
     /** Запрос к Hermes /v1/chat/completions с историей сообщений (для continuous-режима) */
     private fun chatWithHermesHistory(history: List<JSONObject>): String {
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val serverUrl = prefs.getString(PREF_URL, null) ?: return ""
-        val apiKey = prefs.getString(PREF_KEY, "") ?: ""
+        val serverUrl = resolvedUrl(prefs)
+        val apiKey = resolvedKey(prefs)
         val url = "$serverUrl/v1/chat/completions"
 
         return try {
@@ -1055,8 +1069,8 @@ class HermesListenerService : Service() {
 
     private fun transcribeSync(wav: ByteArray): String? {
         val prefs: SharedPreferences = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val serverUrl = prefs.getString(PREF_URL, null) ?: return null
-        val apiKey = prefs.getString(PREF_KEY, "") ?: ""
+        val serverUrl = resolvedUrl(prefs)
+        val apiKey = resolvedKey(prefs)
         val sttUrl = serverUrl.replace(Regex(":\\d+$"), ":8643") +
             "/v1/audio/transcriptions"
 
