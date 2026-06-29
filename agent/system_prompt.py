@@ -294,6 +294,23 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
         except Exception:
             pass
 
+    # SOMA — что Тройка знает о Мише. Волатильный слой (не часть стабильной
+    # личности): держим память отдельно от идентичности, чтобы слабая модель
+    # не путала «вечный фон о Мише» с текущей задачей. Когда доступна последняя
+    # реплика пользователя, ранжируем выводы по релевантности к ней и
+    # отбрасываем не относящиеся — служебные реплики не тащат досье на Мишу.
+    # Отключаемо через SOMA_CONTEXT_DISABLED=1.
+    if not os.environ.get("SOMA_CONTEXT_DISABLED", "").strip() in ("1", "true", "yes"):
+        try:
+            from tools.soma_tool import soma_context_hint
+            _last_user = getattr(agent, "_last_user_message", None)
+            _soma_block = soma_context_hint(query=_last_user)
+            if _soma_block:
+                volatile_parts.append(_soma_block.lstrip("\n"))
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).debug("SOMA context hint skipped: %s", e)
+
     from hermes_time import now as _hermes_now
     now = _hermes_now()
     # Date-only (not minute-precision) so the system prompt is byte-stable

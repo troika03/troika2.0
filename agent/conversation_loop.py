@@ -197,6 +197,17 @@ def _restore_or_build_system_prompt(agent, system_message, conversation_history)
 
     # First turn of a new session (or recovering from a broken stored
     # prompt) — build from scratch.
+    #
+    # Expose the latest user message to the prompt builder so the volatile
+    # SOMA block can be filtered for relevance to what Миша actually asked,
+    # instead of dumping every stored conclusion about him into every turn
+    # (which makes a weaker model lose the thread). Best-effort: any failure
+    # just leaves _last_user_message as-is and SOMA falls back to its
+    # importance-only ranking.
+    try:
+        agent._last_user_message = _extract_last_user_text(conversation_history)
+    except Exception:
+        pass
     agent._cached_system_prompt = agent._build_system_prompt(system_message)
 
     # Plugin hook: on_session_start — fired once when a brand-new
@@ -227,6 +238,36 @@ def _restore_or_build_system_prompt(agent, system_message, conversation_history)
                 "miss the prefix cache.",
                 agent.session_id, exc,
             )
+
+
+def _extract_last_user_text(conversation_history) -> "str | None":
+    """Best-effort extraction of the most recent user-message text.
+
+    Handles dict/object messages and multimodal content lists (pulls the
+    text parts). Returns None when nothing usable is found. Used to give the
+    SOMA volatile block a relevance signal (see soma_context_hint).
+    """
+    if not conversation_history:
+        return None
+    for msg in reversed(list(conversation_history)):
+        role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)
+        if role != "user":
+            continue
+        content = msg.get("content") if isinstance(msg, dict) else getattr(msg, "content", None)
+        if isinstance(content, str):
+            return content.strip() or None
+        if isinstance(content, list):
+            parts = []
+            for blk in content:
+                if isinstance(blk, dict):
+                    if blk.get("type") in (None, "text") and isinstance(blk.get("text"), str):
+                        parts.append(blk["text"])
+                elif isinstance(blk, str):
+                    parts.append(blk)
+            joined = " ".join(p for p in parts if p).strip()
+            return joined or None
+        return None
+    return None
 
 
 def _get_continuation_prompt(is_partial_stub: bool, dropped_tools: Optional[List[str]] = None) -> str:

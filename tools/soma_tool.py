@@ -347,14 +347,37 @@ FORGET_SCHEMA = {
 # --- context hint (авто-инжект памяти в промпт) ------------------------------
 
 
-def soma_context_hint(limit: int = 6) -> str:
-    """Топ выводов о Мише для подмешивания в system prompt КАЖДЫЙ запрос.
+# Параметры авто-инжекта памяти в промпт. Урезаны намеренно: на слабой модели
+# дамп всех выводов о Мише в КАЖДЫЙ запрос растаскивает внимание («путается,
+# когда всё в одном месте»). Меньше, но увереннее — лучше держит фокус.
+# Всё переопределяемо через env, старое поведение восстановимо.
+_CTX_LIMIT = int(os.environ.get("SOMA_CONTEXT_LIMIT", "3"))            # было 6
+_CTX_MIN_CONF = float(os.environ.get("SOMA_CONTEXT_MIN_CONF", "0.55")) # было 0.45
+# Порог релевантности к текущей реплике (если она передана). Ниже — вывод
+# считаем не относящимся к делу и не подмешиваем.
+_CTX_MIN_REL = float(os.environ.get("SOMA_CONTEXT_MIN_REL", "0.15"))
 
-    Это Этап «память→мнения»: Тройка не ждёт явного soma_recall, а всегда
-    держит в голове самое весомое о Мише (привычки, предпочтения, настроение).
-    Ранжирование как в recall: salience × confidence × свежесть. Берём только
-    достаточно уверенные выводы (confidence ≥ 0.45), чтобы не тащить домыслы.
+
+def soma_context_hint(limit: Optional[int] = None, query: Optional[str] = None) -> str:
+    """Топ выводов о Мише для подмешивания в system prompt.
+
+    Это Этап «память→мнения»: Тройка не ждёт явного soma_recall, а держит в
+    голове самое весомое о Мише (привычки, предпочтения, настроение).
+
+    Два режима:
+      • query задан → ранжируем по РЕЛЕВАНТНОСТИ к текущей реплике (как
+        soma_recall): salience × confidence × свежесть × релевантность.
+        Выводы, никак не пересекающиеся с репликой, отбрасываем — память
+        подмешивается только когда реально относится к делу. Это лечит
+        «мозг путается, когда всё свалено в одно место»: служебные реплики
+        («который час») не тащат за собой досье на Мишу.
+      • query пуст (напр. кешируемый system prompt сессии) → старое поведение:
+        топ по salience × confidence × свежесть, без фильтра релевантности.
+
+    Берём только достаточно уверенные выводы (confidence ≥ _CTX_MIN_CONF),
+    чтобы не тащить домыслы. Количество урезано до _CTX_LIMIT.
     """
+    limit = _CTX_LIMIT if limit is None else limit
     try:
         with _db() as conn:
             rows = conn.execute("SELECT * FROM memories").fetchall()
@@ -364,11 +387,18 @@ def soma_context_hint(limit: int = 6) -> str:
     if not rows:
         return ""
 
+    q_tokens = _tokens(query) if query else set()
     scored = []
     for r in rows:
-        if r["confidence"] < 0.45:
+        if r["confidence"] < _CTX_MIN_CONF:
             continue
-        score = r["salience"] * r["confidence"] * _recency(r["last_seen_ts"])
+        rel = 1.0
+        if q_tokens:
+            rt = _tokens(r["text"])
+            rel = (len(q_tokens & rt) / len(q_tokens)) if q_tokens else 0.0
+            if rel < _CTX_MIN_REL:
+                continue  # реплика задана, но этот вывод к ней не относится
+        score = r["salience"] * r["confidence"] * _recency(r["last_seen_ts"]) * (0.4 + 0.6 * rel)
         scored.append((score, r))
     if not scored:
         return ""

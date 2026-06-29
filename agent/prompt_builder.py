@@ -1375,11 +1375,11 @@ def load_soul_md() -> Optional[str]:
             content = content + response_flow_hint()
         except Exception as e:
             logger.debug("Could not append response_flow hint: %s", e)
-        try:
-            from tools.soma_tool import soma_context_hint
-            content = content + soma_context_hint()
-        except Exception as e:
-            logger.debug("Could not append SOMA memory hint: %s", e)
+        # NB: SOMA-память (что Тройка знает о Мише) НЕ подмешивается здесь.
+        # Она волатильна и переехала в build_system_prompt_parts → volatile-слой
+        # (agent/system_prompt.py), отдельно от стабильной личности. Так память
+        # не слипается с идентичностью, и слабая модель не путает «вечный фон о
+        # Мише» с текущей задачей. См. soma_context_hint(query=...).
         return content
     except Exception as e:
         logger.debug("Could not read SOUL.md from %s: %s", soul_path, e)
