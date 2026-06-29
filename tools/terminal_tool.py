@@ -990,13 +990,17 @@ def _resolve_container_task_id(task_id: Optional[str]) -> str:
 
 # Configuration from environment variables
 
-def _parse_env_var(name: str, default: str, converter=int, type_label: str = "integer"):
+def _parse_env_var(name: str, default: str, converter=int, type_label: str = "integer",
+                   session_aware: bool = False):
     """Parse an environment variable with *converter*, raising a clear error on bad values.
 
     Without this wrapper, a single malformed env var (e.g. TERMINAL_TIMEOUT=5m)
     causes an unhandled ValueError that kills every terminal command.
+
+    When *session_aware* is True, per-session overrides (set by the workspace
+    tool) take precedence over os.environ — see ``_term_env``.
     """
-    raw = os.getenv(name, default)
+    raw = _term_env(name, default) if session_aware else os.getenv(name, default)
     try:
         return converter(raw)
     except (ValueError, json.JSONDecodeError):
@@ -1006,11 +1010,32 @@ def _parse_env_var(name: str, default: str, converter=int, type_label: str = "in
         )
 
 
+def _term_env(name: str, default: str = "") -> str:
+    """Read a terminal config var, honoring per-session overrides first.
+
+    The workspace tool switches the terminal backend (TERMINAL_ENV,
+    TERMINAL_DOCKER_IMAGE, docker args, etc.) for ONE session via
+    session_context overrides. get_session_env returns those when present and
+    otherwise falls back to os.environ — so CLI/cron behavior is unchanged.
+    Best-effort: if session_context can't be imported, fall back to os.getenv.
+    """
+    try:
+        from gateway.session_context import get_session_env
+        return get_session_env(name, default)
+    except Exception:
+        return os.getenv(name, default)
+
+
 def _get_env_config() -> Dict[str, Any]:
-    """Get terminal environment configuration from environment variables."""
+    """Get terminal environment configuration from environment variables.
+
+    Backend-selection keys are read via ``_term_env`` so the workspace tool
+    can switch the terminal into a Kali (or other) container for a single
+    session without affecting other lanes (DAEMON, parallel chats).
+    """
     # Default image with Python and Node.js for maximum compatibility
     default_image = "nikolaik/python-nodejs:python3.11-nodejs20"
-    env_type = os.getenv("TERMINAL_ENV", "local")
+    env_type = _term_env("TERMINAL_ENV", "local")
     
     mount_docker_cwd = os.getenv("TERMINAL_DOCKER_MOUNT_CWD_TO_WORKSPACE", "false").lower() in {"true", "1", "yes"}
 
@@ -1057,7 +1082,7 @@ def _get_env_config() -> Dict[str, Any]:
     return {
         "env_type": env_type,
         "modal_mode": coerce_modal_mode(os.getenv("TERMINAL_MODAL_MODE", "auto")),
-        "docker_image": os.getenv("TERMINAL_DOCKER_IMAGE", default_image),
+        "docker_image": _term_env("TERMINAL_DOCKER_IMAGE", default_image),
         "docker_forward_env": _parse_env_var("TERMINAL_DOCKER_FORWARD_ENV", "[]", json.loads, "valid JSON"),
         "singularity_image": os.getenv("TERMINAL_SINGULARITY_IMAGE", f"docker://{default_image}"),
         "modal_image": os.getenv("TERMINAL_MODAL_IMAGE", default_image),
@@ -1087,10 +1112,10 @@ def _get_env_config() -> Dict[str, Any]:
         "container_memory": _parse_env_var("TERMINAL_CONTAINER_MEMORY", "5120"),     # MB (default 5GB)
         "container_disk": _parse_env_var("TERMINAL_CONTAINER_DISK", "51200"),        # MB (default 50GB)
         "container_persistent": os.getenv("TERMINAL_CONTAINER_PERSISTENT", "true").lower() in {"true", "1", "yes"},
-        "docker_volumes": _parse_env_var("TERMINAL_DOCKER_VOLUMES", "[]", json.loads, "valid JSON"),
-        "docker_env": _parse_env_var("TERMINAL_DOCKER_ENV", "{}", json.loads, "valid JSON"),
+        "docker_volumes": _parse_env_var("TERMINAL_DOCKER_VOLUMES", "[]", json.loads, "valid JSON", session_aware=True),
+        "docker_env": _parse_env_var("TERMINAL_DOCKER_ENV", "{}", json.loads, "valid JSON", session_aware=True),
         "docker_run_as_host_user": os.getenv("TERMINAL_DOCKER_RUN_AS_HOST_USER", "false").lower() in {"true", "1", "yes"},
-        "docker_extra_args": _parse_env_var("TERMINAL_DOCKER_EXTRA_ARGS", "[]", json.loads, "valid JSON"),
+        "docker_extra_args": _parse_env_var("TERMINAL_DOCKER_EXTRA_ARGS", "[]", json.loads, "valid JSON", session_aware=True),
     }
 
 

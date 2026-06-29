@@ -163,10 +163,12 @@ def get_session_env(name: str, default: str = "") -> str:
        If the variable was explicitly set (even to ``""``) via
        ``set_session_vars`` or ``clear_session_vars``, that value is
        returned — **no fallback to os.environ**.
-    2. ``os.environ`` (only when the context variable was never set in
-       this context — i.e. CLI, cron scheduler, and test processes that
-       don't use ``set_session_vars`` at all).
-    3. *default*
+    2. Generic per-session overrides (set via ``set_session_override`` —
+       used by the workspace tool to switch the terminal backend for one
+       session without leaking to others).
+    3. ``os.environ`` (only when neither context source was set — i.e. CLI,
+       cron scheduler, and test processes that don't use the session vars).
+    4. *default*
     """
     import os
 
@@ -175,5 +177,48 @@ def get_session_env(name: str, default: str = "") -> str:
         value = var.get()
         if value is not _UNSET:
             return value
+
+    # Generic per-session overrides (workspace backend switching, etc.).
+    overrides = _SESSION_OVERRIDES.get()
+    if overrides is not _UNSET and name in overrides:
+        return overrides[name]
+
     # Fall back to os.environ for CLI, cron, and test compatibility
     return os.getenv(name, default)
+
+
+# ---------------------------------------------------------------------------
+# Generic per-session overrides
+# ---------------------------------------------------------------------------
+# Unlike the fixed HERMES_SESSION_* vars above, this holds an arbitrary
+# {name: value} dict scoped to the current asyncio task. The workspace tool
+# uses it to switch TERMINAL_ENV / TERMINAL_DOCKER_IMAGE / etc. for a single
+# session (so "go into Kali" affects only that conversation, not DAEMON or
+# other lanes). Readers go through get_session_env, which already falls back
+# to os.environ for CLI/cron.
+
+_SESSION_OVERRIDES: ContextVar = ContextVar("HERMES_SESSION_OVERRIDES", default=_UNSET)
+
+
+def set_session_override(name: str, value: str) -> None:
+    """Set a generic per-session override for *name* (visible via get_session_env)."""
+    current = _SESSION_OVERRIDES.get()
+    new = dict(current) if current is not _UNSET else {}
+    new[name] = value
+    _SESSION_OVERRIDES.set(new)
+
+
+def clear_session_override(name: str) -> None:
+    """Remove a generic per-session override for *name* (revert to os.environ)."""
+    current = _SESSION_OVERRIDES.get()
+    if current is _UNSET or name not in current:
+        return
+    new = dict(current)
+    new.pop(name, None)
+    _SESSION_OVERRIDES.set(new)
+
+
+def get_session_overrides() -> dict:
+    """Return a copy of the current session's generic overrides (for diagnostics)."""
+    current = _SESSION_OVERRIDES.get()
+    return dict(current) if current is not _UNSET else {}

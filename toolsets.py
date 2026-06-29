@@ -138,6 +138,10 @@ _HERMES_CORE_TOOLS = [
     # GROUND — фоновый наблюдатель экрана; DAEMON — автономный проактивный ум
     "ground_start", "ground_stop", "ground_status",
     "daemon_start", "daemon_stop", "daemon_status",
+    # WORKSPACE — второй «рабочий стол» (Kali) для security/пентеста своих систем.
+    # Переключает терминал в изолированный контейнер per-session. Гейт авторизации
+    # раз-в-сессию (workspace_confirm). См. skill security-methodology.
+    "workspace_enter", "workspace_exit", "workspace_status", "workspace_confirm",
     # Kanban multi-agent coordination — only in schema when the agent is
     # spawned as a kanban worker (HERMES_KANBAN_TASK env set) or the current
     # profile explicitly enables the kanban toolset. Gated via check_fn in
