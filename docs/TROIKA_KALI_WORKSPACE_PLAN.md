@@ -218,19 +218,50 @@ session-scoped state (`gateway/session_context.py`), а не только в г�
 
 ## Шаги на сервере (когда решишь катить)
 
-1. **Образ.** На VPS: `docker pull kalilinux/kali-rolling`, затем Dockerfile с
-   `kali-linux-headless` + privilege-drop user + том `/work`. Собрать как
-   `troika-kali:latest`.
-2. **Конфиг backendّа.** В config.yaml Тройки прописать docker-окружение
-   `kali`: image `troika-kali:latest`, ресурсы (CPU/RAM лимиты), network,
-   forward_env пустой (секреты не пробрасываем).
-3. **Деплой tool'а.** Выкатить ветку с `workspace_tool.py` (docker cp патчей
-   ПОСЛЕ recreate — recreate стирает /opt/hermes, это известная ловушка).
-4. **Регистрация.** Убедиться, что tool попал в toolsets.py + troika-voice +
-   skill voice-task-routing. Рестарт gateway `/command/s6-svc -r`.
-5. **Проверка.** Голосом: «перейди в кали» → «покажи версию nmap» →
-   «вернись обратно». Проверить, что в основном окружении инструментов Kali нет
-   (изоляция работает), а в kali — есть.
+КОД УЖЕ НАПИСАН (ветка `troika/anti-confusion-and-brain`, коммит e38f086):
+`workspace_tool.py`, session-overrides, terminal session-aware, регистрация.
+Осталось — образ на сервере + env-настройка + деплой.
+
+1. **Образ.** На VPS:
+   ```
+   docker pull kalilinux/kali-rolling
+   ```
+   Dockerfile (`troika-kali`):
+   ```dockerfile
+   FROM kalilinux/kali-rolling
+   RUN apt-get update && apt-get install -y kali-linux-headless && \
+       apt-get clean && rm -rf /var/lib/apt/lists/*
+   WORKDIR /work
+   ```
+   `docker build -t troika-kali:latest .`
+2. **Env-настройка** (host `.env` Тройки, напр. `/root/troika/.env` или
+   `/opt/data/.env`):
+   ```
+   WORKSPACE_KALI_IMAGE=troika-kali:latest
+   WORKSPACE_KALI_VOLUME=/opt/data/kali_work          # том /work, переживает recreate
+   # режим без лимитов (cap-add; либо ["--privileged"] если нужно совсем всё):
+   WORKSPACE_KALI_EXTRA_ARGS=["--cap-add","NET_RAW","--cap-add","NET_ADMIN"]
+   # необязательно — постоянные свои цели без сессионного вопроса:
+   # KALI_TARGET_ALLOWLIST=89.208.105.187,моя-точка-ssid
+   ```
+   Образ и аргументы читаются tool'ом из этих переменных — config.yaml трогать
+   НЕ нужно. forward_env жёстко пуст в коде (секреты не пробрасываются).
+3. **Деплой ветки.** Влить ветку → пересобрать/обновить контейнер Тройки.
+   ⚠️ recreate СТИРАЕТ /opt/hermes — патчи `docker cp` применять ПОСЛЕ recreate
+   (известная ловушка). Файлы: `tools/workspace_tool.py`, `gateway/
+   session_context.py`, `tools/terminal_tool.py`, `toolsets.py`, skill
+   `voice-task-routing` + `security/security-methodology`.
+4. **Docker-in-docker.** Тройка сама в контейнере → чтобы поднимать Kali-
+   контейнер, ей нужен доступ к docker-сокету хоста (`-v /var/run/docker.sock:
+   /var/run/docker.sock` в compose Тройки) ИЛИ DinD. Без этого `docker run`
+   изнутри не выполнится. Это единственная инфра-зависимость.
+5. **Рестарт + синк скилов.** `/command/s6-svc -r`; убедиться, что
+   `security-methodology` и обновлённый `voice-task-routing` синканы в
+   `~/.troika/skills/` (0-байтные скилы синк не лечит — проверить размер).
+6. **Проверка.** Голосом: «перейди в кали» → Тройка подтвердит вход и спросит
+   про авторизацию → «да, моё» → «покажи версию nmap» → должна вернуть версию
+   ИЗ Kali → «вернись обратно». Проверить, что вне стола nmap отсутствует
+   (изоляция). Глянуть `~/.troika/kali_audit.log` — должны быть enter/authorize.
 
 ---
 
