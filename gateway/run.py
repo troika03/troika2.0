@@ -1080,6 +1080,33 @@ def _resolve_runtime_agent_kwargs() -> dict:
     )
     from hermes_cli.auth import AuthError
 
+    # Session-scoped brain override: workspace_enter (Kali desktop) sets
+    # BRAIN_PROVIDER / BRAIN_BASE_URL / BRAIN_API_KEY in session overrides
+    # to route this one session at a security-tuned model without touching
+    # global config. Any of the three triggers the override branch.
+    try:
+        from gateway.session_context import get_session_env
+        _sess_provider = get_session_env("BRAIN_PROVIDER", "")
+        _sess_base_url = get_session_env("BRAIN_BASE_URL", "")
+        _sess_api_key = get_session_env("BRAIN_API_KEY", "")
+        if _sess_provider or _sess_base_url or _sess_api_key:
+            _rt = resolve_runtime_provider(
+                requested=_sess_provider or None,
+                explicit_base_url=_sess_base_url or None,
+                explicit_api_key=_sess_api_key or None,
+            )
+            return {
+                "api_key": _rt.get("api_key"),
+                "base_url": _rt.get("base_url"),
+                "provider": _rt.get("provider"),
+                "api_mode": _rt.get("api_mode"),
+                "command": _rt.get("command"),
+                "args": list(_rt.get("args") or []),
+                "credential_pool": _rt.get("credential_pool"),
+            }
+    except Exception as _sess_exc:
+        logger.debug("session brain override skipped: %s", _sess_exc)
+
     try:
         runtime = resolve_runtime_provider()
     except AuthError as auth_exc:
@@ -1449,7 +1476,21 @@ def _resolve_gateway_model(config: dict | None = None) -> str:
     Without this, temporary AIAgent instances (e.g. /compress) fall
     back to the hardcoded default which fails when the active provider is
     openai-codex.
+
+    Session-scoped override: if ``BRAIN_MODEL`` is set in the current
+    session's overrides (via ``session_context.set_session_override``),
+    it wins over config.yaml. Used by ``workspace_enter`` to hot-swap
+    the brain when Troika switches into the Kali desktop without touching
+    DAEMON or parallel chats.
     """
+    try:
+        from gateway.session_context import get_session_env
+        override = get_session_env("BRAIN_MODEL", "")
+        if override:
+            return override
+    except Exception:
+        pass
+
     cfg = config if config is not None else _load_gateway_config()
     model_cfg = cfg.get("model", {})
     if isinstance(model_cfg, str):

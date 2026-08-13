@@ -81,6 +81,8 @@ _HERMES_CORE_TOOLS = [
     "android_calendar_list_calendars", "android_calendar_list_events",
     "android_calendar_create_event", "android_calendar_update_event",
     "android_calendar_delete_event", "android_calendar_check_permissions",
+    # PC control (local-first, Windows; gated on os.name=='nt' via check_fn)
+    "pc_open_app", "pc_open_file", "pc_gui_control", "pc_run", "pc_see_screen",
     # Document generation on PC, delivered to phone (PDF/PPTX/DOCX/XLSX/CSV/JSON/ZIP).
     # phone_create_pptx убран — LLM игнорировал и beautiful, и системный промпт.
     "phone_create_pdf", "phone_create_docx",
@@ -582,40 +584,37 @@ TOOLSETS = {
         # brightness/clipboard/timer/camera, finance/notes/journal/speaker_id,
         # phone_create_video, gemini_code, delegate_task, skill_calculator/
         # world_time/currency, *_status) доступны через find_tool-роутер.
+        # 13.08.2026 (round 3): ТОЛЬКО критически горячие + find_tool. Все
+        # остальные 150+ tools ДОСТУПНЫ через find_tool — они не пропали,
+        # они не заняли слот в schema. Экономия: 6100→~2500 tok/запрос.
+        # Правило чтобы попасть сюда: (а) реально частый на голосе И
+        # (б) find_tool router даёт +1 сетевой round-trip который здесь недопустим.
         "tools": [
-            # Meta-router: даёт доступ ко всем остальным tools голосом
+            # Meta-router: путь ко ВСЕМ остальным tools.
             "find_tool",
-            # Phone control — самое частое
-            "android_open_app", "android_call", "android_send_sms",
-            "android_set_alarm", "android_navigate",
-            "android_volume", "android_status", "android_screenshot",
-            # Календарь — создать/посмотреть (update/delete через find_tool)
-            "android_calendar_list_events", "android_calendar_create_event",
-            # Документы (только beautiful — обычные через find_tool)
-            "phone_create_beautiful_pptx", "phone_create_beautiful_pdf",
-            "phone_create_image",
-            # Тройкин голос / напоминания
-            "push_to_user", "reminder", "location", "bg_task",
-            # Отправка в личный Telegram Миши («отправь мне в тг / в избранное»)
-            "telegram_send",
-            # Память / RAG
-            "obsidian_note",
-            "soma_remember", "soma_recall",
-            # GROUND/DAEMON — наблюдение за экраном и автономный режим
-            "ground_start", "ground_stop",
-            "daemon_start", "daemon_stop",
-            # Самые частые skill_*
-            "skill_weather", "skill_translate",
-            # Web / vision
-            "web_search", "web_research", "vision_analyze",
-            # Кодинг через CLI-кодер (Claude по подписке)
+            # Голос Тройки (её собственные каналы)
+            "push_to_user",       # проактивно заговорить с Мишей
+            "telegram_send",      # «в тг / в избранное / отправь мне»
+            "reminder",           # «напомни через час»
+            # Место — почти каждый запрос его использует через system prompt
+            "location",
+            # Память — часто, недопустим лишний вызов
+            "soma_recall",        # «что ты помнишь о …»
+            # Телефон — самое-самое
+            "android_open_app",   # «открой youtube»
+            "android_calendar_create_event",  # «запиши на 15:00»
+            "vision_analyze",     # «посмотри на фото/скрин»
+            # Web — почти каждый второй вопрос
+            "web_search",
+            # Кодинг «сделай приложение / сайт»
             "claude_code",
-            # Статус фоновых задач / проекты
-            "task_status", "project",
-            # Самоулучшение — ключевая фича, должна работать голосом напрямую
-            # («улучши себя», «добавь себе фичу»). Остальные self_improve_* (approve/
-            # reject/revert/show) — через find_tool.
-            "self_improve_propose", "self_improve_list",
+            # Skill_view чтобы читать skills-документы (voice-task-routing и др.)
+            # — быстрая маршрутизация без лишнего round-trip.
+            "skill_view",
+            # WORKSPACE — «перейди в кали / вернись» должно срабатывать с первого
+            # раза, без find_tool round-trip. Остальные три (exit/status/confirm)
+            # мозг подтянет через find_tool когда понадобится.
+            "workspace_enter",
         ],
         "includes": []
     },
@@ -643,31 +642,35 @@ TOOLSETS = {
         # справляется с двухшаговым find_tool routing для них.
         # Spotify/computer_use/mcp_*/exotic skill_* — через find_tool.
         # Цель: system prompt 36k → ~15-18k токенов, latency 30s → 10-13s.
-        "description": "Troika voice — hot-path 25 tools + find_tool router. Rare tools (Spotify, computer_use, mcp, exotic skills) accessible via find_tool.",
+        # 13.08.2026 round 3: ужат с 38→13 tools. Все остальные 150+ tools
+        # ДОСТУПНЫ через find_tool (registry на 161 tool). Экономия ~4700
+        # tokens/запрос. Правило чтобы попасть сюда — как в hermes-api-server.
+        "description": "Troika voice — минимум hot-path + find_tool router. 150+ редких tools через find_tool.",
         "tools": [
-            # Meta-router: путь ко всем остальным 100+ tools
             "find_tool",
-            # Phone control — самое ходовое
-            "android_open_app", "android_call",
-            "android_set_alarm", "android_set_timer", "android_navigate",
-            "android_volume", "android_screenshot",
-            "android_camera_photo",
-            # Календарь — частый
-            "android_calendar_list_events", "android_calendar_create_event",
-            # Документы (beautiful — частый запрос на голосе)
-            "phone_create_beautiful_pptx", "phone_create_beautiful_pdf",
-            "phone_create_image", "phone_create_video",
-            # Тройкин голос — все часто-вызываемые
-            "push_to_user", "journal_today", "reminder",
-            "location", "speaker_id", "bg_task", "finance",
-            # Память / RAG
-            "obsidian_note", "notes",
-            # Fuzzy-поиск по vault + дневник (для «вспомни», «запиши момент»)
-            "memory_search", "diary_add", "diary_read",
-            # Самые частые skill_*
-            "skill_weather", "skill_translate", "skill_calculator",
-            # Сложные но частые
-            "web_search", "web_research", "vision_analyze",
+            "push_to_user",
+            "telegram_send",
+            "reminder",
+            "location",
+            "soma_recall",
+            "android_open_app",
+            "android_calendar_create_event",
+            "vision_analyze",
+            "web_search",
+            "claude_code",
+            "skill_view",
+            "obsidian_note",
+        ],
+        "includes": []
+    },
+
+    "pc": {
+        # Управление своим ПК (Windows, local-first). См.
+        # docs/TROIKA_PC_AGENT_PLAN.md. Хендлеры in-process, без моста;
+        # показываются только когда gateway на Windows (check_fn os.name=='nt').
+        "description": "PC control (Windows): launch apps, open files, live GUI control, system actions.",
+        "tools": [
+            "pc_open_app", "pc_open_file", "pc_gui_control", "pc_run", "pc_see_screen",
         ],
         "includes": []
     },

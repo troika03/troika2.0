@@ -73,6 +73,20 @@ WORKSPACE_KALI_EXTRA_ARGS=["--cap-add","NET_RAW","--cap-add","NET_ADMIN"]
 # (необязательно) Постоянные свои цели — по ним даже сессионного вопроса не будет.
 # Через запятую: IP, домены, SSID своей точки.
 # KALI_TARGET_ALLOWLIST=89.208.105.187,моя-точка
+
+# --- Свой «мозг» на время Kali-сессии (опц.) ---
+# Тройка переключит мозг ТОЛЬКО когда работает в Kali-столе. На выходе
+# (`workspace_exit`) возвращается к основной модели. Влияет только на текущую
+# сессию — DAEMON и параллельные чаты продолжают жить на основном мозге.
+#
+# Заполняй столько, сколько нужно (минимум WORKSPACE_KALI_BRAIN):
+# WORKSPACE_KALI_BRAIN=openrouter/whiterabbitneo-33b
+# WORKSPACE_KALI_BRAIN_PROVIDER=openrouter
+# WORKSPACE_KALI_BRAIN_API_KEY=sk-...
+# WORKSPACE_KALI_BRAIN_BASE_URL=https://openrouter.ai/api/v1
+#
+# Если PROVIDER/API_KEY/BASE_URL не заданы — используется учётка основного
+# мозга (годится, если security-модель хостится там же).
 ```
 
 ---

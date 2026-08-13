@@ -49,9 +49,24 @@ _AUDIT_LOG = _TROIKA / "kali_audit.log"
 #                                 (напр. ["--cap-add","NET_RAW","--cap-add","NET_ADMIN"]
 #                                  или ["--privileged"] для режима без лимитов)
 #   WORKSPACE_KALI_VOLUME       — host-путь для тома /work (default ~/.troika/kali_work)
+# Опционально — свой «мозг» для Kali-стола (сети/пентест-модель). На вход
+# переключаемся, на выход возвращаемся к основному:
+#   WORKSPACE_KALI_BRAIN         — имя модели (напр. openrouter/whiterabbitneo-...)
+#   WORKSPACE_KALI_BRAIN_PROVIDER — провайдер, если отличается от основного
+#   WORKSPACE_KALI_BRAIN_API_KEY  — ключ провайдера (если своя учётка)
+#   WORKSPACE_KALI_BRAIN_BASE_URL — base_url (если своя точка, напр. HF Endpoint)
 _DEF_KALI_IMAGE = os.environ.get("WORKSPACE_KALI_IMAGE", "troika-kali:latest")
 _DEF_KALI_WORK = os.environ.get(
     "WORKSPACE_KALI_VOLUME", str(_TROIKA / "kali_work")
+)
+
+# Маппинг env → session-override для «мозга Kali-стола». Читается
+# gateway/run.py::_resolve_gateway_model / _resolve_runtime_agent_kwargs.
+_BRAIN_ENV_MAP = (
+    ("WORKSPACE_KALI_BRAIN",          "BRAIN_MODEL"),
+    ("WORKSPACE_KALI_BRAIN_PROVIDER", "BRAIN_PROVIDER"),
+    ("WORKSPACE_KALI_BRAIN_API_KEY",  "BRAIN_API_KEY"),
+    ("WORKSPACE_KALI_BRAIN_BASE_URL", "BRAIN_BASE_URL"),
 )
 
 
@@ -134,17 +149,33 @@ async def _handle_enter(args: Dict[str, Any], **_kw) -> Dict[str, Any]:
     # tirith не мешает легитимным пентест-командам внутри стола.
     s.set_session_override("TIRITH_ENABLED", "0")
 
-    _audit("enter", f"image={_DEF_KALI_IMAGE} extra={extra_args or '-'}")
+    # Опциональный переключатель мозга на security-модель — только для этой
+    # сессии. Читается gateway/run.py на создании AIAgent под каждый запрос.
+    brain_switched = False
+    brain_label = ""
+    for src, dst in _BRAIN_ENV_MAP:
+        v = os.environ.get(src, "").strip()
+        if v:
+            s.set_session_override(dst, v)
+            if dst == "BRAIN_MODEL":
+                brain_switched = True
+                brain_label = v
+
+    _audit("enter", f"image={_DEF_KALI_IMAGE} extra={extra_args or '-'} "
+                    f"brain={brain_label or '-'}")
 
     already = _is_authorized()
     msg = "Перешла в Kali. Рабочая папка /work."
+    if brain_switched:
+        msg += f" Мозг переключён на security-модель ({brain_label})."
     if not already:
         msg += (" Один раз уточню: всё, что тестируем в этот сеанс — твоё или "
                 "у тебя есть авторизация? Скажи «да» — и дальше работаю молча.")
     else:
         msg += " Авторизация на эту сессию уже подтверждена."
     return {"ok": True, "workspace": "kali", "authorized": already,
-            "image": _DEF_KALI_IMAGE, "say_to_user": msg}
+            "image": _DEF_KALI_IMAGE, "brain": brain_label or None,
+            "say_to_user": msg}
 
 
 async def _handle_exit(args: Dict[str, Any], **_kw) -> Dict[str, Any]:
@@ -154,7 +185,8 @@ async def _handle_exit(args: Dict[str, Any], **_kw) -> Dict[str, Any]:
         return {"ok": True, "say_to_user": "Уже в обычном режиме."}
     for key in ("TERMINAL_ENV", "TERMINAL_DOCKER_IMAGE", "TERMINAL_DOCKER_VOLUMES",
                 "TERMINAL_DOCKER_FORWARD_ENV", "TERMINAL_DOCKER_EXTRA_ARGS",
-                "TIRITH_ENABLED"):
+                "TIRITH_ENABLED",
+                "BRAIN_MODEL", "BRAIN_PROVIDER", "BRAIN_API_KEY", "BRAIN_BASE_URL"):
         s.clear_session_override(key)
     _audit("exit", "")
     return {"ok": True, "say_to_user": "Вышла из Kali. Снова в обычном режиме."}
@@ -165,17 +197,22 @@ async def _handle_status(args: Dict[str, Any], **_kw) -> Dict[str, Any]:
         s = _sess()
         env_type = s.get_session_env("TERMINAL_ENV", "local")
         image = s.get_session_env("TERMINAL_DOCKER_IMAGE", "")
+        brain = s.get_session_env("BRAIN_MODEL", "")
     except Exception:
         env_type = os.environ.get("TERMINAL_ENV", "local")
         image = ""
+        brain = ""
     in_kali = env_type == "docker" and "kali" in (image or "").lower()
     if in_kali:
         say = (f"Я в Kali ({image}), "
                f"{'авторизация подтверждена' if _is_authorized() else 'жду подтверждения авторизации'}.")
+        if brain:
+            say += f" Мозг: {brain}."
     else:
         say = "Я в обычном режиме, не в Kali."
     return {"ok": True, "in_kali": in_kali, "env_type": env_type,
-            "image": image, "authorized": _is_authorized(), "say_to_user": say}
+            "image": image, "brain": brain or None,
+            "authorized": _is_authorized(), "say_to_user": say}
 
 
 async def _handle_confirm(args: Dict[str, Any], **_kw) -> Dict[str, Any]:
