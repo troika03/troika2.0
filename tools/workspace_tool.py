@@ -174,7 +174,7 @@ async def _handle_enter(args: Dict[str, Any], **_kw) -> Dict[str, Any]:
     else:
         msg += " Авторизация на эту сессию уже подтверждена."
     return {"ok": True, "workspace": "kali", "authorized": already,
-            "image": _DEF_KALI_IMAGE, "brain": brain_label or None,
+            "image": _DEF_KALI_IMAGE, "brain": brain_label,
             "say_to_user": msg}
 
 
@@ -211,7 +211,7 @@ async def _handle_status(args: Dict[str, Any], **_kw) -> Dict[str, Any]:
     else:
         say = "Я в обычном режиме, не в Kali."
     return {"ok": True, "in_kali": in_kali, "env_type": env_type,
-            "image": image, "brain": brain or None,
+            "image": image, "brain": brain,
             "authorized": _is_authorized(), "say_to_user": say}
 
 
