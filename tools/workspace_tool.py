@@ -245,7 +245,7 @@ ENTER_SCHEMA = {
     "parameters": {
         "type": "object",
         "properties": {
-            "name": {"type": "string", "description": "Имя рабочего стола. Сейчас только 'kali' (default)."},
+            "name": {"type": "string", "enum": ["kali"], "description": "Имя рабочего стола. Сейчас единственное допустимое значение — 'kali'. Не передавай ничего другого."},
         },
     },
 }
