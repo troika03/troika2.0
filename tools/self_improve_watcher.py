@@ -42,7 +42,20 @@ POLL_INTERVAL = 1.5
 
 
 def _log(msg: str) -> None:
-    print(f"[watcher {time.strftime('%H:%M:%S')}] {msg}", flush=True)
+    """UTF-8-safe log. На Windows watcher-лог открыт под cp1251 (родитель дал
+    handle через subprocess.Popen(..., stdout=f_utf8)); но если каким-то путём
+    попали под cp1251, print(unicode) валится с UnicodeEncodeError и watcher
+    умирает молча — падал на \\u2713 «✓». Пишем в binary через stderr fallback."""
+    line = f"[watcher {time.strftime('%H:%M:%S')}] {msg}"
+    try:
+        print(line, flush=True)
+    except UnicodeEncodeError:
+        try:
+            sys.stdout.buffer.write((line + "\n").encode("utf-8", "replace"))
+            sys.stdout.buffer.flush()
+        except Exception:
+            # Совсем крайний случай — ASCII-транслит, но не падаем.
+            print(line.encode("ascii", "replace").decode("ascii"), flush=True)
 
 
 def _health_ok() -> bool:

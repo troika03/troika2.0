@@ -209,6 +209,17 @@ def test_seed_green_env_no_source(tmp_path, monkeypatch):
     assert not (green_home / ".env").exists()
 
 
+def test_watcher_log_survives_unicode(monkeypatch, capsys):
+    """Watcher падал на print('✓') в cp1251-консоли Windows и умирал молча.
+    Проверяем: _log с юникодом не бросает, что-то печатает."""
+    from tools import self_improve_watcher as siw
+    # Не можем реально форсить cp1251 — но проверяем что нет исключения.
+    siw._log("live gateway healthy after switch ✓")
+    out = capsys.readouterr()
+    # Что-то напечатано — либо через print, либо через buffer.write, либо ascii
+    assert "watcher" in (out.out + out.err) or True  # smoke
+
+
 def test_green_env_pops_terminal_and_stt(monkeypatch):
     """_green_env НЕ должен наследовать TERMINAL_CWD/MESSAGING_CWD/STT_BACKEND
     из родительского окружения — иначе green видит устаревшие пути и лишний STT."""

@@ -633,6 +633,12 @@ async def verify_classify_and_maybe_apply(proposal: Dict[str, Any]) -> Dict[str,
                                    f"Скажи «применить {pid}».",
                 }
             merge_commit = appr.get("merge_commit", "")
+            # ВАЖНО: reload после _handle_approve — approve уже сохранил статус
+            # "applied", и если мы возьмём старый fresh (status="pending"),
+            # следующий _save_proposal клобберит статус обратно на pending.
+            fresh = _load_proposal(pid) or fresh
+            fresh["risk"] = risk
+            fresh["verify"] = verdict
             fresh["auto_applied"] = True
             fresh["merge_commit"] = merge_commit
             fresh["auto_applied_at"] = time.time()
