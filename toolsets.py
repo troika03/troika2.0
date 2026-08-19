@@ -133,6 +133,8 @@ _HERMES_CORE_TOOLS = [
     "self_improve_propose", "self_improve_list", "self_improve_show",
     "self_improve_approve", "self_improve_reject", "self_improve_revert",
     "code_review",
+    # «Нет тула для задачи» → сама пишет tool и возвращается к задаче
+    "ensure_capability",
     # Поиск по vault'у памяти + дневник
     "memory_search", "diary_add", "diary_read",
     # SOMA — память о пользователе с эмоц-весом и confidence
@@ -615,6 +617,10 @@ TOOLSETS = {
             # раза, без find_tool round-trip. Остальные три (exit/status/confirm)
             # мозг подтянет через find_tool когда понадобится.
             "workspace_enter",
+            # «Нет тула для задачи» — критично на голосе, где Миша даёт запросы
+            # с широким спектром действий. Без hot-path Тройка через find_tool
+            # не догадается, что можно САМА написать недостающее.
+            "ensure_capability",
         ],
         "includes": []
     },
@@ -660,6 +666,8 @@ TOOLSETS = {
             "claude_code",
             "skill_view",
             "obsidian_note",
+            # «Нет тула → сама пишу и продолжаю». Обязательно на голосе.
+            "ensure_capability",
         ],
         "includes": []
     },
