@@ -123,3 +123,109 @@ def test_count_changed_lines():
     diff = "+++ b/x\n+added\n-removed\n--- a/x\n unchanged\n"
     # +added и -removed считаются; +++/--- нет
     assert _count_changed_lines(diff) == 2
+
+
+# ── Seed green .env (LLM-ключи проходят, платформенные токены — нет) ───────
+
+def test_seed_green_env_filters_platform_and_infra_keys(tmp_path, monkeypatch):
+    """seed'алка LIVE ~/.troika/.env → green .env должна пропустить LLM-ключи
+    (без них gateway висит) и вырезать платформенные токены (иначе green
+    попробует подключиться к боевому Telegram), API_SERVER_* (мы задаём свои),
+    STT_*/TERMINAL_*/MESSAGING_*/WEBHOOK_* (не нужны/deprecated)."""
+    from tools import self_improve_verify as siv
+
+    live_home = tmp_path / "live"
+    live_home.mkdir()
+    (live_home / ".env").write_text(
+        "# comment line\n"
+        "OPENROUTER_API_KEY=or-abc\n"
+        "GROQ_API_KEY=gsk-xyz\n"
+        "HERMES_API_KEY=hak-123\n"
+        "STITCH_API_KEY=st-1\n"
+        "\n"
+        "TELEGRAM_BOT_TOKEN=tg-secret\n"
+        "TELEGRAM_ALLOWED_USERS=1,2,3\n"
+        "DISCORD_BOT_TOKEN=dc-secret\n"
+        "SLACK_BOT_TOKEN=sl-secret\n"
+        "WHATSAPP_TOKEN=wa-secret\n"
+        "TWILIO_ACCOUNT_SID=twx\n"
+        "\n"
+        "API_SERVER_ENABLED=true\n"
+        "API_SERVER_HOST=0.0.0.0\n"
+        "API_SERVER_KEY=live-key\n"
+        "API_SERVER_PORT=8642\n"
+        "\n"
+        "STT_BACKEND=groq\n"
+        "STT_PROXY_PORT=17999\n"
+        "TERMINAL_CWD=D:\\\\some\\\\path\n"
+        "MESSAGING_CWD=D:\\\\other\n"
+        "WEBHOOK_SECRET=hook-secret\n",
+        encoding="utf-8",
+    )
+    green_home = tmp_path / "green"
+    green_home.mkdir()
+
+    monkeypatch.setenv("HERMES_HOME", str(live_home))
+    monkeypatch.setattr(siv, "GREEN_HERMES_HOME", green_home)
+
+    siv._seed_green_env_file()
+
+    dst = green_home / ".env"
+    assert dst.exists()
+    content = dst.read_text(encoding="utf-8")
+    kept = {
+        line.split("=", 1)[0]
+        for line in content.splitlines()
+        if line.strip() and not line.startswith("#") and "=" in line
+    }
+
+    for k in ("OPENROUTER_API_KEY", "GROQ_API_KEY", "HERMES_API_KEY", "STITCH_API_KEY"):
+        assert k in kept, f"{k} должен остаться (LLM-ключ)"
+
+    for k in (
+        "TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_USERS",
+        "DISCORD_BOT_TOKEN", "SLACK_BOT_TOKEN", "WHATSAPP_TOKEN",
+        "TWILIO_ACCOUNT_SID",
+        "API_SERVER_ENABLED", "API_SERVER_HOST", "API_SERVER_KEY", "API_SERVER_PORT",
+        "STT_BACKEND", "STT_PROXY_PORT",
+        "TERMINAL_CWD", "MESSAGING_CWD", "WEBHOOK_SECRET",
+    ):
+        assert k not in kept, f"{k} должен быть отфильтрован (платформа/инфра)"
+
+
+def test_seed_green_env_no_source(tmp_path, monkeypatch):
+    """Если LIVE .env отсутствует — тихо no-op, не падаем."""
+    from tools import self_improve_verify as siv
+
+    live_home = tmp_path / "live"
+    live_home.mkdir()
+    green_home = tmp_path / "green"
+    green_home.mkdir()
+
+    monkeypatch.setenv("HERMES_HOME", str(live_home))
+    monkeypatch.setattr(siv, "GREEN_HERMES_HOME", green_home)
+
+    siv._seed_green_env_file()
+    assert not (green_home / ".env").exists()
+
+
+def test_green_env_pops_terminal_and_stt(monkeypatch):
+    """_green_env НЕ должен наследовать TERMINAL_CWD/MESSAGING_CWD/STT_BACKEND
+    из родительского окружения — иначе green видит устаревшие пути и лишний STT."""
+    from tools import self_improve_verify as siv
+
+    monkeypatch.setenv("TERMINAL_CWD", "D:\\\\parent\\\\cwd")
+    monkeypatch.setenv("MESSAGING_CWD", "D:\\\\parent\\\\msg")
+    monkeypatch.setenv("STT_BACKEND", "groq")
+    monkeypatch.setenv("STT_PROXY_PORT", "17999")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "tg-secret")
+
+    env = siv._green_env()
+
+    assert "TERMINAL_CWD" not in env
+    assert "MESSAGING_CWD" not in env
+    assert "STT_BACKEND" not in env
+    assert "STT_PROXY_PORT" not in env
+    assert "TELEGRAM_BOT_TOKEN" not in env
+    assert env["API_SERVER_ENABLED"] == "true"
+    assert env["API_SERVER_PORT"] == str(siv.GREEN_API_PORT)

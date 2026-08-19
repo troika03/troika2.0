@@ -37,7 +37,7 @@ import sys
 import time
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple  # noqa: F401 — Tuple используется в _SEED_FORBIDDEN_PREFIXES
 
 # Переиспользуем готовые хелперы движка предложений — не дублируем git/subprocess.
 from tools.self_improve_tool import (
@@ -71,10 +71,26 @@ _GREEN_ERR_LOG = _REPO_ROOT / "_green_gateway.err"
 _VERIFY_LOCK = _TROIKA_HOME / "verify.lock"
 _VERIFY_LOCK_STALE_SEC = 1800  # 30 мин: считаем лок протухшим (краш не снял)
 
-_BOOT_HEALTH_TIMEOUT = 30      # сколько ждём что green-gateway ответит на /health
+_BOOT_HEALTH_TIMEOUT = 90      # сколько ждём что green-gateway ответит на /health
+# (30с не хватало на cold-start Windows: gateway импортит tools/skills/LLM-клиент
+# ~40-60с до бинда api_server; 90с — с запасом)
 _IMPORT_SMOKE_TIMEOUT = 60
 _PYTEST_TIMEOUT = 240          # общий бюджет на scoped pytest
 _POST_SWITCH_HEALTH_TIMEOUT = 40  # сколько watcher ждёт боевую копию после прыжка
+
+# LIVE ~/.troika/.env содержит ключи (OPENROUTER/GROQ/…) без которых gateway
+# висит на инициализации LLM-клиента и api_server никогда не биндится. Пустой
+# green-HERMES_HOME + не-инициированный os.environ = точно эта ситуация. Поэтому
+# seed'им .env копией родительского с фильтром платформенных токенов.
+_SEED_FORBIDDEN_PREFIXES: Tuple[str, ...] = (
+    "TELEGRAM_", "DISCORD_", "SLACK_", "WHATSAPP_", "TWITTER_", "MATRIX_",
+    "SIGNAL_", "SMS_", "TWILIO_",
+    "API_SERVER_",  # свои ставим через env-vars _green_env → задают порт/host/key
+    "STT_",         # STT в песочнице не нужен — не даём ему стартовать/конфликтовать
+    "WEBHOOK_",     # webhook-платформа в green не нужна
+    "TERMINAL_",    # чтобы не тащить TERMINAL_CWD/TERMINAL_ENV из боевого профиля
+    "MESSAGING_",   # deprecated MESSAGING_CWD и т.п.
+)
 
 
 # ---------------------------------------------------------------------------
@@ -226,21 +242,64 @@ def _green_env() -> Dict[str, str]:
     env["HERMES_QUIET"] = "1"
     # STT в песочнице не нужен — не даём ему стартовать/конфликтовать.
     env.pop("STT_PROXY_PORT", None)
+    env.pop("STT_BACKEND", None)
     # Телефон/Telegram токены боевой копии в песочницу не тащим — green не должен
     # подключаться к платформам, только api_server.
     for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_USERS",
               "DISCORD_BOT_TOKEN", "SLACK_BOT_TOKEN", "WHATSAPP_TOKEN"):
         env.pop(k, None)
+    # TERMINAL_CWD/MESSAGING_CWD из родительского окружения — их fallback в
+    # gateway/run.py:1012 сработает и подставит правильное значение из green home.
+    # Если оставить унаследованный worktree-путь — сработает deprecation-warning
+    # (косметика, но шумит в логах).
+    env.pop("TERMINAL_CWD", None)
+    env.pop("MESSAGING_CWD", None)
     return env
 
 
+def _seed_green_env_file() -> None:
+    """Скопировать ключи из LIVE ~/.troika/.env в свежий ~/.troika-green/.env,
+    отфильтровав платформенные токены (иначе green подключится к боевому Telegram),
+    API_SERVER_* (их задаём через env-vars) и TERMINAL_*/STT_*/WEBHOOK_*/MESSAGING_*
+    (deprecated, дублирует ложные warning'и и/или конфликтует с песочницей).
+
+    Без seed'а: пустой .env → нет OPENROUTER/GROQ ключа → gateway висит на init
+    LLM-клиента → api_server никогда не биндится → verify falses out."""
+    live_home = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".troika"))
+    src = live_home / ".env"
+    dst = GREEN_HERMES_HOME / ".env"
+    if not src.exists() or src.resolve() == dst.resolve():
+        return
+    try:
+        raw = src.read_text(encoding="utf-8")
+    except Exception as e:
+        logger.warning("seed green .env: cannot read %s: %s", src, e)
+        return
+    kept: List[str] = []
+    for line in raw.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#") or "=" not in s:
+            # комментарии/пустые не тащим — только реальные ключи
+            continue
+        key = s.split("=", 1)[0].strip()
+        if any(key.startswith(p) for p in _SEED_FORBIDDEN_PREFIXES):
+            continue
+        kept.append(line)
+    try:
+        dst.write_text("\n".join(kept) + ("\n" if kept else ""), encoding="utf-8")
+    except Exception as e:
+        logger.warning("seed green .env: cannot write %s: %s", dst, e)
+
+
 def _reset_green_home() -> None:
-    """Свежий пустой HERMES_HOME — нет токенов телефона/Telegram, биндится только
-    api_server, чужого состояния не наследуем."""
+    """Свежий HERMES_HOME с засеянным .env — нет токенов телефона/Telegram, биндится
+    только api_server, но LLM-ключи из боевого профиля пробрасываются, иначе green
+    висит на init LLM."""
     try:
         if GREEN_HERMES_HOME.exists():
             shutil.rmtree(GREEN_HERMES_HOME, ignore_errors=True)
         GREEN_HERMES_HOME.mkdir(parents=True, exist_ok=True)
+        _seed_green_env_file()
     except Exception as e:
         logger.warning("reset green home failed: %s", e)
 
