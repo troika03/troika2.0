@@ -164,6 +164,116 @@ _SYNONYMS = {
     # MCP
     "сервер": "mcp server",
     "интеграция": "mcp",
+    # kanban / задачи / todo
+    "канбан": "kanban board task доска",
+    "канбана": "kanban board task",
+    "канбане": "kanban board task",
+    "kanban": "kanban board task",
+    "доска": "kanban board",
+    "доске": "kanban board",
+    "задача": "kanban task todo",
+    "задачу": "kanban task todo",
+    "задачи": "kanban task todo",
+    "тудушка": "todo task",
+    "todo": "todo task kanban",
+    "тудушку": "todo task",
+    # workspace / kali
+    "воркспейс": "workspace enter exit status",
+    "workspace": "workspace enter exit status",
+    "рабочий стол": "workspace enter kali",
+    "kali": "workspace kali enter",
+    "кали": "workspace kali enter",
+    # документы / офис
+    "ворд": "docx word document",
+    "word": "docx word document",
+    "документ": "docx document create",
+    "презентация": "pptx presentation slides",
+    "презентацию": "pptx presentation slides",
+    "слайды": "pptx slides",
+    "эксель": "xlsx spreadsheet excel",
+    "excel": "xlsx spreadsheet",
+    "таблица": "xlsx spreadsheet csv",
+    "таблицу": "xlsx spreadsheet",
+    "pdf": "pdf document",
+    "пдф": "pdf document",
+    # медиа
+    "картинку": "image create generate flux",
+    "нарисуй": "image create generate flux draw",
+    "сгенери": "generate image create",
+    "видео": "video generate youtube",
+    "сними": "video record generate",
+    "монтаж": "video edit",
+    # HuggingFace / генерация
+    "hf": "huggingface hugging face",
+    "flux": "flux image generate",
+    # crypto / финансы (расширяем)
+    "биткоин": "crypto bitcoin btc price",
+    "битка": "crypto bitcoin",
+    "btc": "crypto bitcoin price",
+    "крипта": "crypto price coin",
+    "курс": "rate price exchange currency",
+    "доллар": "currency usd rate exchange",
+    # веб-исследование
+    "разберись": "web research deep_research",
+    "покопай": "research deep_research web",
+    "изучи": "research deep_research web_research",
+    # звонки
+    "позвони": "call android_call phone",
+    "звонок": "call phone",
+    # SMS
+    "смс": "sms send android_send_sms",
+    "сообщение": "sms message send telegram",
+    # календарь
+    "календарь": "calendar event schedule",
+    "запиши на": "calendar create event schedule",
+    "напомни": "reminder alarm timer",
+    "разбуди": "alarm android_set_alarm",
+    "будильник": "alarm android_set_alarm",
+    "таймер": "timer android_set_timer",
+    # спикер (голос)
+    "голос": "speaker tts text_to_speech",
+    "озвучь": "tts text_to_speech speaker",
+    # ПК управление
+    "мышку": "pc mouse click move",
+    "клавиатуру": "pc keyboard type press",
+    "открой окно": "pc window open",
+    # ежедневник
+    "дневник": "journal diary",
+    "запись": "journal note diary",
+    # code / кодинг
+    "код": "code claude_code write coding",
+    "напиши код": "code claude_code coder",
+    "сайт": "code claude_code website",
+    "приложение": "code claude_code app",
+    # безопасность
+    "порт сканер": "security nmap port scan",
+    "уязвимости": "security vulnerability scan",
+    # финансы (уже есть, расширяем)
+    "бюджет": "finance budget expense",
+    # spotify (если появится)
+    "spotify": "spotify music player",
+    "спотифай": "spotify music player",
+    # погода (уже частично)
+    "погоду": "weather погода",
+    "погода": "weather погоду",
+    # yuanbao / китайские сервисы
+    "yuanbao": "yuanbao yb hermes-yuanbao",
+    "юаньбао": "yuanbao yb",
+    # discord
+    "discord": "discord channel message",
+    "дискорд": "discord channel message",
+    # telegram (уже есть, добавим)
+    "чат": "telegram chat message discord",
+    # feishu
+    "feishu": "feishu doc drive",
+    # что умею
+    "что умеешь": "what_can_i_do capabilities help",
+    "умеешь": "what_can_i_do capabilities",
+    "можешь": "what_can_i_do capabilities",
+    "возможности": "what_can_i_do capabilities help",
+    # find_tool сам себя
+    "найди инструмент": "find_tool search tool",
+    "поищи tool": "find_tool search",
 }
 
 
