@@ -417,7 +417,9 @@ _HEADLESS_RULES = (
     "happy users', 'Unlock your potential', 'The future of X is here'.\n"
     "  ✗ Lorem ipsum, placeholder.com, picsum.photos, Unsplash random.\n"
     "  ✗ Emoji as decoration on buttons/headers (🚀⚡✨💎🔥). Use real icons (Lucide, "
-    "Heroicons, Phosphor) via SVG or icon font.\n"
+    "Heroicons, Phosphor) via inline SVG.\n"
+    "  ✗ Stickers, mascot PNGs, cartoon avatars (dicebear/avataaars/notion-avatars). "
+    "Use real photos or self-drawn SVG (see MEDIA section below).\n"
     "  ✗ Three feature cards: 'FAST / SECURE / RELIABLE' or 'Easy / Powerful / Beautiful'. "
     "  ✗ Fake testimonials with stock-photo avatars.\n"
     "  ✗ Hero h1 in 96px gradient text centered on emoji-pattern background.\n"
@@ -480,11 +482,63 @@ _HEADLESS_RULES = (
     "  - Focus rings visible (accessibility) but tasteful.\n"
     "  - Smooth scroll, prefers-reduced-motion respected.\n\n"
 
-    "IMAGES & ICONS:\n"
-    "  - If real images aren't available, use inline SVG illustrations (geometric, "
-    "branded) NOT stock photos.\n"
-    "  - Icons: SVG inline (Lucide/Phosphor/Heroicons), stroke 1.5-2px, currentColor.\n"
-    "  - Never link to external image services with hotlinks unless explicitly OK.\n\n"
+    "═══ MEDIA — REAL PHOTOS/VIDEO vs SELF-DRAWN SVG ═══\n"
+    "The visual is built from THREE sources — pick the right one per element:\n\n"
+
+    "  A) REAL PHOTOS/VIDEO from the internet — for anything the user would expect "
+    "to be a real image of a real thing: hero shots of an actual place/product, "
+    "portfolio work, food/interior for a cafe, faces for testimonials, city/nature "
+    "backgrounds, product screenshots.\n"
+    "     HOW: use the `fetch` MCP server (or plain HTTP via requests) to download "
+    "from ONE of these WORKING sources:\n"
+    "       - Openverse (CC-images, no key, preferred): "
+    "GET https://api.openverse.engineering/v1/images/?q=<keyword>&license=cc0,by "
+    "→ JSON.results[i].url is the direct image URL. Set header User-Agent.\n"
+    "       - Wikimedia Commons (no key): 2-step — "
+    "GET https://commons.wikimedia.org/w/api.php?action=query&list=search&srnamespace=6"
+    "&srsearch=<keyword>&format=json (returns 'File:foo.jpg'), then "
+    "GET .../w/api.php?action=query&titles=File:foo.jpg&prop=imageinfo&iiprop=url&format=json "
+    "→ imageinfo[0].url is direct.\n"
+    "       - Pexels API (needs env PEXELS_API_KEY): "
+    "GET https://api.pexels.com/v1/search?query=... with header Authorization: <key>.\n"
+    "       - Unsplash Official API (needs env UNSPLASH_ACCESS_KEY): "
+    "GET https://api.unsplash.com/search/photos?query=... with header "
+    "Authorization: Client-ID <key>. Use .urls.regular.\n"
+    "     DO NOT use https://source.unsplash.com — it was retired and returns 503.\n"
+    "     Save under assets/img/*.jpg with descriptive names (cafe-interior.jpg, "
+    "not img1.jpg). Reference locally in HTML/CSS — do NOT hotlink into production. "
+    "For CC-BY images include creator credit in a small footer or an ATTRIBUTIONS.md.\n"
+    "     If web is unreachable — say so in README.md and leave the <img> with a "
+    "clear alt, DON'T fall back to picsum/placeholder/lorem-ipsum images.\n\n"
+
+    "  B) SELF-DRAWN INLINE SVG — for decorative, abstract, brand, iconography, "
+    "hero-graphic, background-pattern, section-divider, illustration for an idea. "
+    "Draw it yourself as inline <svg> with real <path>/<rect>/<circle>/<line> — "
+    "geometric shapes, single or two-color, thin strokes (1.5-2px), currentColor. "
+    "This is where the site stops looking AI-generated. Examples:\n"
+    "       - Hero: 2-3 overlapping geometric shapes with light stroke, one accent fill\n"
+    "       - Section divider: hand-drawn wavy path or angled polygon\n"
+    "       - Empty state: minimal line illustration (30-60 path commands)\n"
+    "       - Brand mark: simple monogram/glyph SVG, 40x40 to 80x80\n"
+    "     Icons: inline SVG from Lucide/Phosphor/Heroicons (copy the paths — do NOT "
+    "load a whole icon-font). stroke=1.5-2, stroke-linecap=round, currentColor.\n\n"
+
+    "  C) BANNED — never use these as substitutes for A or B:\n"
+    "       ✗ Emoji as a UI element (🚀⚡✨💎🔥 on cards, buttons, headers). Emoji is "
+    "content, not decoration.\n"
+    "       ✗ Sticker packs, Telegram-style stickers, cutesy mascot PNGs, cartoon "
+    "avatar generators (dicebear, avataaars, notion-avatars) — they scream 'AI made this'.\n"
+    "       ✗ AI-generated illustrations from unspecified sources (blob shapes with "
+    "purple-pink gradient fill, floating 3D geometric primitives, iridescent orbs).\n"
+    "       ✗ Emoji-flags for languages/countries — use SVG flag or text.\n"
+    "       ✗ Font-Awesome/Material-Icons as a decorative fill — inline SVG or nothing.\n"
+    "       ✗ picsum.photos, placeholder.com, via.placeholder, dummyimage, unsplash "
+    "random without a keyword — leaves the site looking unfinished.\n\n"
+
+    "Rule of thumb: if it's a REAL thing (a place, a face, a product) → download a "
+    "real photo (A). If it's an IDEA or DECOR → draw it yourself as SVG (B). If "
+    "neither fits → leave the space empty and use typography to fill it — much "
+    "better than a sticker.\n\n"
 
     "CONTENT:\n"
     "  - Real-world specific copy. If it's a bakery — name 5 real pastries with prices. "
@@ -525,7 +579,81 @@ _HEADLESS_RULES = (
     "  □ Backdrop-filter blur (unless theme requires)\n"
     "  □ crypto.randomUUID() without fallback (breaks on HTTP-by-IP)\n"
     "  □ navigator.clipboard.* without document.execCommand fallback\n"
+    "  □ Stickers / cartoon mascots / auto-generated avatars anywhere\n"
+    "  □ picsum.photos / placeholder.com / lorem-ipsum images\n"
+    "  □ Emoji used as icon on a button, card or header\n"
+    "  □ Decorative graphics that are neither a real photo nor a self-drawn SVG\n"
     "Pass = ship. Fail = rewrite that section.\n"
+)
+
+
+# ---------------------------------------------------------------------------
+# Presentation (.pptx) rules — overlaid on _HEADLESS_RULES when
+# output_kind='presentation_pptx'. Anti-AI-look extended to slideware.
+# ---------------------------------------------------------------------------
+_PRESENTATION_PPTX_RULES = (
+    "═══ OUTPUT FORMAT: PowerPoint (.pptx) ═══\n"
+    "Deliverable is a real .pptx file — NOT html slides, NOT reveal.js, NOT pdf. "
+    "Build it with `python-pptx` (add to requirements.txt if missing):\n"
+    "  pip install python-pptx pillow requests\n\n"
+
+    "STRUCTURE — write build_deck.py in the workspace root that:\n"
+    "  1. Creates Presentation() with slide_width=Inches(13.333), slide_height=Inches(7.5) (16:9).\n"
+    "  2. Uses SlideLayout(6) (Blank) for every slide — never the default template layouts, "
+    "they look like default PowerPoint.\n"
+    "  3. Draws every element from code: title textbox, body textbox, images, shapes. "
+    "Positions in Inches(); typography in Pt().\n"
+    "  4. Saves 'deck.pptx' in the workspace root.\n"
+    "  5. Runs itself at the end (call `python build_deck.py`) so a .pptx file exists when "
+    "the task finishes.\n\n"
+
+    "TYPOGRAPHY (must-hold; PPTX defaults look like a template):\n"
+    "  - Title: 44-54pt, weight 600-700, tracking -0.02em (font.size=Pt(48), font.bold=True).\n"
+    "  - Body / bullet: 20-24pt max, line-spacing 1.25.\n"
+    "  - Caption / label: 12-14pt, uppercase, letter-spacing.\n"
+    "  - Load ONE display face (Inter, Söhne, Space Grotesk, Fraunces) — set font.name "
+    "on runs; if the font isn't installed system-wide, embed via .pptx font-embed API "
+    "or fall back to Calibri and note it.\n"
+    "  - Numbers/data: tabular figures where the font supports it.\n\n"
+
+    "COLOR & LAYOUT:\n"
+    "  - 60/30/10 palette from the chosen design_style (see DESIGN DIRECTION section).\n"
+    "  - Fill the slide bg with a proper solid color (background.fill.solid + fore_color). "
+    "Never leave the default white.\n"
+    "  - Asymmetric layouts. Title/body pinned to a 12-column grid at Inches(0.6) margin.\n"
+    "  - Slide number in Pt(10) at bottom-right in muted color. Optional thin footer rule.\n\n"
+
+    "MEDIA — same three-source rule as web (A real photos / B self-drawn / C banned):\n"
+    "  A) REAL PHOTOS: download via `requests`/fetch MCP from Unsplash/Pexels/Wikimedia "
+    "into assets/img/*.jpg, insert with slide.shapes.add_picture(path, left, top, "
+    "width=..., height=...). Full-bleed hero photos > small decorative photos. Never "
+    "hotlink — embed the bytes into the .pptx (add_picture reads a local path).\n"
+    "  B) SELF-DRAWN SHAPES: build decorative graphics from python-pptx primitives — "
+    "add_shape (rectangles, ellipses, lines, arrows), add_connector, freeform. Match the "
+    "design_style palette. Charts: use pptx.chart.data.CategoryChartData + add_chart, "
+    "style the series colors explicitly — never accept default Office chart colors.\n"
+    "  C) BANNED: no clipart, no stock icon sets baked as PNG, no emoji as slide "
+    "decoration (only inside body text if the content truly is an emoji), no cartoon "
+    "avatars, no 'SmartArt'-looking three-arrow diagrams, no stock 'business people "
+    "handshaking' photos.\n\n"
+
+    "CONTENT DENSITY:\n"
+    "  - Max 6 bullets per slide; if you have more, split into two slides.\n"
+    "  - Prefer 1 big statement + 1 supporting visual per slide over dense bullet lists.\n"
+    "  - Real, specific content matching the request (prices, names, numbers). No 'Lorem ipsum'.\n"
+    "  - Speaker notes optional but welcomed via slide.notes_slide.notes_text_frame.text.\n\n"
+
+    "FINAL CHECK before stopping — re-open deck.pptx (or re-read build_deck.py) and "
+    "confirm all of these:\n"
+    "  □ File deck.pptx exists in workspace root, > 20 KB, opens without repair prompt\n"
+    "  □ Slide size 13.333 × 7.5 inches (16:9)\n"
+    "  □ No default PowerPoint template layout (all Blank + code-drawn)\n"
+    "  □ ≤ 1 display font + ≤ 1 body font (2 total), never system default\n"
+    "  □ Bg is a solid brand color, not default white\n"
+    "  □ All images are local files in assets/img/, none hotlinked\n"
+    "  □ No clipart, no emoji as icon, no stickers, no cartoon avatars\n"
+    "  □ Charts (if any) have palette matching design_style, not Office defaults\n"
+    "Pass = ship. Fail = rewrite build_deck.py and regenerate.\n"
 )
 
 
@@ -641,6 +769,7 @@ async def _run_gemini(workspace: Path, task: str, timeout: int, *,
                      mcp_servers: Optional[list] = None,
                      design_style: Optional[str] = None,
                      extra_constraints: Optional[str] = None,
+                     output_kind: Optional[str] = None,
                      model: Optional[str] = None,
                      stall_timeout: int = 420) -> Dict[str, Any]:
     cli = _find_gemini_cli()
@@ -669,6 +798,8 @@ async def _run_gemini(workspace: Path, task: str, timeout: int, *,
     prefix = _HEADLESS_RULES
     if design_style and design_style in _DESIGN_STYLE_DIRECTIVES:
         prefix += "\n\n═══ CHOSEN DIRECTION (overrides defaults) ═══\n" + _DESIGN_STYLE_DIRECTIVES[design_style] + "\n"
+    if (output_kind or "").lower() == "presentation_pptx":
+        prefix += "\n\n" + _PRESENTATION_PPTX_RULES
     if extra_constraints:
         prefix += f"\n\nADDITIONAL CONSTRAINTS FROM USER:\n{extra_constraints}\n"
     if iterate:
@@ -877,6 +1008,7 @@ async def _run_gemini_resilient(
     mcp_servers: Optional[list] = None,
     design_style: Optional[str] = None,
     extra_constraints: Optional[str] = None,
+    output_kind: Optional[str] = None,
     stall_timeout: int = 420,
     escalate_model: Optional[str] = _ESCALATE_MODEL,
     max_attempts: int = 3,
@@ -909,6 +1041,7 @@ async def _run_gemini_resilient(
             iterate=iterate or attempt > 1,  # со 2-й попытки workspace уже не пустой
             use_mcp=use_mcp, mcp_servers=mcp_servers,
             design_style=design_style, extra_constraints=extra_constraints,
+            output_kind=output_kind,
             model=model, stall_timeout=stall_timeout,
         )
         files_after = set(_list_files(workspace))
@@ -1011,6 +1144,7 @@ async def _do_create_work(payload: Dict[str, Any]) -> Dict[str, Any]:
     want_preview = payload["want_preview"]
     design_style = payload.get("design_style")
     extra_constraints = payload.get("extra_constraints")
+    output_kind = payload.get("output_kind")
     coder = (payload.get("coder") or "gemini").strip().lower()
 
     if coder == "claude":
@@ -1020,18 +1154,29 @@ async def _do_create_work(payload: Dict[str, Any]) -> Dict[str, Any]:
         ctask = task
         if design_style:
             ctask += f"\n\nDESIGN STYLE: {design_style} (никакого AI-look — без фиолетовых градиентов, glassy-карточек, эмодзи на кнопках)."
+        if (output_kind or "").lower() == "presentation_pptx":
+            ctask += ("\n\nOUTPUT FORMAT: PowerPoint .pptx (не HTML, не reveal.js). "
+                      "Собери через python-pptx, положи deck.pptx в корень workspace. "
+                      "Полные правила в блоке 'OUTPUT FORMAT: PowerPoint (.pptx)' выше.")
         if extra_constraints:
             ctask += f"\n\nДОП. ТРЕБОВАНИЯ: {extra_constraints}"
-        gemini = await _run_coder("claude", workspace, ctask, timeout)
+        # Claude-кодеру нужен тот же presentation-блок в HEADLESS_RULES, что и Gemini.
+        rules = _HEADLESS_RULES
+        if (output_kind or "").lower() == "presentation_pptx":
+            rules = rules + "\n\n" + _PRESENTATION_PPTX_RULES
+        gemini = await _run_coder("claude", workspace, ctask, timeout,
+                                  headless_rules=rules)
         if not gemini.get("ok") and "not_found" in str(gemini.get("error", "")):
             # Claude CLI не установлен/не залогинен — не валим задачу, падаем на Gemini.
             gemini = await _run_gemini(workspace, task, timeout, use_mcp=use_mcp,
                                        design_style=design_style,
-                                       extra_constraints=extra_constraints)
+                                       extra_constraints=extra_constraints,
+                                       output_kind=output_kind)
     else:
         gemini = await _run_gemini(workspace, task, timeout, use_mcp=use_mcp,
                                   design_style=design_style,
-                                  extra_constraints=extra_constraints)
+                                  extra_constraints=extra_constraints,
+                                  output_kind=output_kind)
     files = _list_files(workspace)
 
     # Сохраняем указатель на workspace ВСЕГДА, если там есть пользовательские файлы.
@@ -1103,6 +1248,7 @@ async def _action_create(args: Dict[str, Any]) -> Dict[str, Any]:
         "timeout": timeout, "use_mcp": use_mcp, "deliver": deliver, "want_preview": want_preview,
         "design_style": (args.get("design_style") or "").strip().lower() or None,
         "extra_constraints": (args.get("extra_constraints") or "").strip() or None,
+        "output_kind": (args.get("output_kind") or "").strip().lower() or None,
         # Дефолтный кодер — Claude (надёжнее Gemini, без Invalid stream). Можно
         # переопределить coder="gemini" в аргументах.
         "coder": (args.get("coder") or "claude").strip().lower(),
@@ -1146,6 +1292,7 @@ async def _action_iterate(args: Dict[str, Any]) -> Dict[str, Any]:
         "timeout": timeout, "use_mcp": use_mcp, "deliver": deliver,
         "design_style": (args.get("design_style") or "").strip().lower() or None,
         "extra_constraints": (args.get("extra_constraints") or "").strip() or None,
+        "output_kind": (args.get("output_kind") or "").strip().lower() or None,
         "coder": (args.get("coder") or "claude").strip().lower(),
     }
 
@@ -1172,6 +1319,7 @@ async def _do_iterate_work(payload: Dict[str, Any]) -> Dict[str, Any]:
     deliver = payload["deliver"]
     design_style = payload.get("design_style")
     extra_constraints = payload.get("extra_constraints")
+    output_kind = payload.get("output_kind")
     coder = (payload.get("coder") or "gemini").strip().lower()
 
     if coder == "claude":
@@ -1180,17 +1328,26 @@ async def _do_iterate_work(payload: Dict[str, Any]) -> Dict[str, Any]:
                  "файлы на месте, не пересоздавай с нуля.\n\n" + task)
         if design_style:
             ctask += f"\n\nDESIGN STYLE: {design_style} (никакого AI-look — без фиолетовых градиентов, glassy-карточек, эмодзи на кнопках)."
+        if (output_kind or "").lower() == "presentation_pptx":
+            ctask += ("\n\nOUTPUT FORMAT: правки в существующем deck.pptx (python-pptx, "
+                      "16:9). Полные правила в блоке 'OUTPUT FORMAT: PowerPoint (.pptx)' выше.")
         if extra_constraints:
             ctask += f"\n\nДОП. ТРЕБОВАНИЯ: {extra_constraints}"
-        gemini = await _run_coder("claude", workspace, ctask, timeout)
+        rules = _HEADLESS_RULES
+        if (output_kind or "").lower() == "presentation_pptx":
+            rules = rules + "\n\n" + _PRESENTATION_PPTX_RULES
+        gemini = await _run_coder("claude", workspace, ctask, timeout,
+                                  headless_rules=rules)
         if not gemini.get("ok") and "not_found" in str(gemini.get("error", "")):
             gemini = await _run_gemini(workspace, task, timeout, iterate=True, use_mcp=use_mcp,
                                        design_style=design_style,
-                                       extra_constraints=extra_constraints)
+                                       extra_constraints=extra_constraints,
+                                       output_kind=output_kind)
     else:
         gemini = await _run_gemini(workspace, task, timeout, iterate=True, use_mcp=use_mcp,
                                   design_style=design_style,
-                                  extra_constraints=extra_constraints)
+                                  extra_constraints=extra_constraints,
+                                  output_kind=output_kind)
     files = _list_files(workspace)
 
     if files:
@@ -1429,6 +1586,17 @@ GEMINI_CODE_SCHEMA = {
             "extra_constraints": {
                 "type": "string",
                 "description": "Дополнительные ограничения: палитра, шрифты, референсы ('как у Linear'), что НЕ хотим. Передаётся как есть в prompt.",
+            },
+            "output_kind": {
+                "type": "string",
+                "enum": ["web", "presentation_pptx"],
+                "description": (
+                    "Что за артефакт делать. 'web' (default) — сайт/лендинг/приложение "
+                    "(HTML/CSS/JS или React). 'presentation_pptx' — реальный .pptx файл через "
+                    "python-pptx, 16:9, свои фигуры для декора, реальные фото через fetch — "
+                    "передавай КОГДА Миша просит презентацию/слайды/питч-дек. "
+                    "Design_style применяется к обоим типам."
+                ),
             },
             "async_mode": {
                 "type": "boolean",
