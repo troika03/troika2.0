@@ -67,6 +67,14 @@ dependencies = [
   # (which is a silent killer on Windows — see CONTRIBUTING.md) and
   # `os.killpg` (which doesn't exist on Windows).
   "psutil==7.2.2",
+  # Троика делает .pptx-презентации через кодера (gemini_code / claude_code)
+  # с output_kind=presentation_pptx: сборка через python-pptx (16:9 / свои
+  # фигуры для декора / реальные фото через add_picture). Vendor'им пакет,
+  # чтобы кодеру в docker-контейнере на сервере не приходилось `pip install`.
+  "python-pptx>=1.0.2,<2",
+  # Pillow нужен python-pptx для обработки картинок (add_picture) и
+  # напрямую кодеру когда он ресайзит фото под слайд.
+  "pillow>=10.4,<12",
 ]
 
 [project.optional-dependencies]
