@@ -1,0 +1,392 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" role="img" aria-label="Тройка — личный AI-агент">
+  <defs>
+    <!-- ============ palette ============ -->
+    <radialGradient id="bgRad" cx="35%" cy="45%" r="85%">
+      <stop offset="0%"  stop-color="#12294a"/>
+      <stop offset="45%" stop-color="#0a1628"/>
+      <stop offset="100%" stop-color="#030610"/>
+    </radialGradient>
+    <linearGradient id="cyanGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#67e8f9"/>
+      <stop offset="55%"  stop-color="#22d3ee"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="cyanGradSoft" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#22d3ee" stop-opacity="0"/>
+      <stop offset="50%"  stop-color="#22d3ee" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="rimGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#22d3ee"/>
+      <stop offset="50%"  stop-color="#38bdf8" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="eqGrad" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%"   stop-color="#22d3ee" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#7c3aed" stop-opacity="0.95"/>
+    </linearGradient>
+
+    <radialGradient id="orbGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#22d3ee" stop-opacity="0.55"/>
+      <stop offset="55%" stop-color="#22d3ee" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#22d3ee" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="purGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#7c3aed" stop-opacity="0.45"/>
+      <stop offset="55%" stop-color="#7c3aed" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="coreGrad" cx="35%" cy="35%" r="80%">
+      <stop offset="0%"  stop-color="#1e3a5f"/>
+      <stop offset="55%" stop-color="#0b1a2c"/>
+      <stop offset="100%" stop-color="#040810"/>
+    </radialGradient>
+
+    <!-- dot grid -->
+    <pattern id="dots" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r="1" fill="#67e8f9" opacity="0.08"/>
+    </pattern>
+
+    <!-- filters -->
+    <filter id="glowStrong" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glowSoft" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glowTiny" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="haze" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="30"/>
+    </filter>
+
+    <!-- subtle noise for texture -->
+    <filter id="grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7"/>
+      <feColorMatrix values="0 0 0 0 0.4
+                             0 0 0 0 0.8
+                             0 0 0 0 1
+                             0 0 0 0.05 0"/>
+    </filter>
+
+    <!-- perspective grid clip -->
+    <clipPath id="floorClip">
+      <polygon points="0,400 1200,400 1200,300 0,300"/>
+    </clipPath>
+    <clipPath id="rightClip">
+      <rect x="470" y="0" width="730" height="400"/>
+    </clipPath>
+
+    <!-- reusable star -->
+    <symbol id="star" overflow="visible">
+      <circle r="1.2" fill="#67e8f9" opacity="0.9"/>
+    </symbol>
+  </defs>
+
+  <!-- ==================== background ==================== -->
+  <rect width="1200" height="400" fill="url(#bgRad)"/>
+  <rect width="1200" height="400" fill="url(#dots)"/>
+  <rect width="1200" height="400" fill="url(#dots)" filter="url(#grain)" opacity="0.4"/>
+
+  <!-- ambient orbs -->
+  <circle cx="220" cy="200" r="300" fill="url(#orbGlow)"/>
+  <circle cx="900" cy="80"  r="240" fill="url(#purGlow)"/>
+  <circle cx="1100" cy="360" r="180" fill="url(#purGlow)"/>
+
+  <!-- scattered stars -->
+  <g>
+    <use href="#star" x="70"   y="60"/>
+    <use href="#star" x="130"  y="330" opacity="0.6"/>
+    <use href="#star" x="460"  y="40"/>
+    <use href="#star" x="620"  y="55"  opacity="0.7"/>
+    <use href="#star" x="820"  y="30"/>
+    <use href="#star" x="1050" y="120" opacity="0.5"/>
+    <use href="#star" x="1130" y="220"/>
+    <use href="#star" x="990"  y="250" opacity="0.6"/>
+    <use href="#star" x="380"  y="360" opacity="0.5"/>
+    <use href="#star" x="740"  y="380" opacity="0.4"/>
+  </g>
+
+  <!-- ==================== perspective grid floor ==================== -->
+  <g clip-path="url(#floorClip)" opacity="0.55">
+    <!-- horizontal receding lines -->
+    <g stroke="url(#cyanGradSoft)" stroke-width="0.8" fill="none">
+      <line x1="0" y1="308" x2="1200" y2="308"/>
+      <line x1="0" y1="320" x2="1200" y2="320" opacity="0.85"/>
+      <line x1="0" y1="336" x2="1200" y2="336" opacity="0.75"/>
+      <line x1="0" y1="356" x2="1200" y2="356" opacity="0.65"/>
+      <line x1="0" y1="380" x2="1200" y2="380" opacity="0.55"/>
+    </g>
+    <!-- vanishing lines toward horizon ~ (600, 300) -->
+    <g stroke="#22d3ee" stroke-width="0.6" opacity="0.35">
+      <line x1="600" y1="300" x2="-200"  y2="400"/>
+      <line x1="600" y1="300" x2="60"    y2="400"/>
+      <line x1="600" y1="300" x2="240"   y2="400"/>
+      <line x1="600" y1="300" x2="420"   y2="400"/>
+      <line x1="600" y1="300" x2="600"   y2="400"/>
+      <line x1="600" y1="300" x2="780"   y2="400"/>
+      <line x1="600" y1="300" x2="960"   y2="400"/>
+      <line x1="600" y1="300" x2="1140"  y2="400"/>
+      <line x1="600" y1="300" x2="1400"  y2="400"/>
+    </g>
+  </g>
+  <!-- horizon glow -->
+  <rect x="0" y="299" width="1200" height="2" fill="url(#cyanGradSoft)" opacity="0.9" filter="url(#glowSoft)"/>
+
+  <!-- ==================== NEURAL CONNECTIONS: from core to right side ==================== -->
+  <g stroke="url(#cyanGradSoft)" stroke-width="1" fill="none" opacity="0.7">
+    <path d="M 340 145 C 460 120, 560 105, 720 100"/>
+    <path d="M 350 175 C 480 180, 600 170, 780 170" opacity="0.85"/>
+    <path d="M 350 205 C 500 220, 640 235, 820 240" opacity="0.7"/>
+    <path d="M 340 235 C 470 265, 600 290, 760 300" opacity="0.55"/>
+    <path d="M 320 260 C 420 300, 540 330, 680 340" opacity="0.4"/>
+  </g>
+  <!-- connection nodes -->
+  <g fill="#67e8f9" filter="url(#glowSoft)">
+    <circle cx="720"  cy="100" r="3"/>
+    <circle cx="780"  cy="170" r="3.5"/>
+    <circle cx="820"  cy="240" r="3"/>
+    <circle cx="760"  cy="300" r="2.5" opacity="0.8"/>
+    <circle cx="680"  cy="340" r="2"   opacity="0.6"/>
+    <circle cx="500"  cy="130" r="2"/>
+    <circle cx="620"  cy="215" r="2.5"/>
+    <circle cx="450"  cy="245" r="2" opacity="0.7"/>
+  </g>
+
+  <!-- ==================== CORE: "3" with concentric rings ==================== -->
+  <g transform="translate(220 200)">
+    <!-- outer haze -->
+    <circle r="160" fill="url(#orbGlow)" filter="url(#haze)"/>
+
+    <!-- outermost thin ring w/ dashed data-flow -->
+    <circle r="150" fill="none" stroke="#22d3ee" stroke-width="0.8" opacity="0.35"/>
+    <circle r="150" fill="none" stroke="#67e8f9" stroke-width="1.2" opacity="0.85"
+            stroke-dasharray="2 12" transform="rotate(-20)"/>
+
+    <!-- mid ring w/ gradient rim -->
+    <circle r="130" fill="none" stroke="url(#rimGrad)" stroke-width="1.6" opacity="0.85"/>
+
+    <!-- accent arc glowing -->
+    <path d="M 0 -130 A 130 130 0 0 1 92 92" fill="none"
+          stroke="url(#cyanGrad)" stroke-width="3" stroke-linecap="round" filter="url(#glowStrong)"/>
+    <!-- secondary arc other direction -->
+    <path d="M -92 -92 A 130 130 0 0 0 -130 0" fill="none"
+          stroke="#7c3aed" stroke-width="2.5" stroke-linecap="round" opacity="0.85" filter="url(#glowSoft)"/>
+
+    <!-- tick marks major -->
+    <g stroke="#67e8f9" stroke-linecap="round" opacity="0.95" stroke-width="2.5">
+      <line x1="0" y1="-160" x2="0" y2="-142"/>
+      <line x1="0" y1="160"  x2="0" y2="142"/>
+      <line x1="-160" y1="0" x2="-142" y2="0"/>
+      <line x1="160"  y1="0" x2="142"  y2="0"/>
+    </g>
+    <!-- tick marks minor -->
+    <g stroke="#67e8f9" stroke-linecap="round" opacity="0.5" stroke-width="1.5">
+      <line x1="0" y1="-155" x2="0" y2="-144" transform="rotate(15)"/>
+      <line x1="0" y1="-155" x2="0" y2="-144" transform="rotate(30)"/>
+      <line x1="0" y1="-155" x2="0" y2="-144" transform="rotate(45)"/>
+      <line x1="0" y1="-155" x2="0" y2="-144" transform="rotate(60)"/>
+      <line x1="0" y1="-155" x2="0" y2="-144" transform="rotate(75)"/>
+      <line x1="0" y1="-155" x2="0" y2="-144" transform="rotate(105)"/>
+      <line x1="0" y1="-155" x2="0" y2="-144" transform="rotate(120)"/>
+      <line x1="0" y1="-155" x2="0" y2="-144" transform="rotate(135)"/>
+      <line x1="0" y1="-155" x2="0" y2="-144" transform="rotate(150)"/>
+      <line x1="0" y1="-155" x2="0" y2="-144" transform="rotate(165)"/>
+      <line x1="0" y1="-155" x2="0" y2="-144" transform="rotate(195)"/>
+      <line x1="0" y1="-155" x2="0" y2="-144" transform="rotate(210)"/>
+      <line x1="0" y1="-155" x2="0" y2="-144" transform="rotate(225)"/>
+      <line x1="0" y1="-155" x2="0" y2="-144" transform="rotate(240)"/>
+      <line x1="0" y1="-155" x2="0" y2="-144" transform="rotate(255)"/>
+      <line x1="0" y1="-155" x2="0" y2="-144" transform="rotate(285)"/>
+      <line x1="0" y1="-155" x2="0" y2="-144" transform="rotate(300)"/>
+      <line x1="0" y1="-155" x2="0" y2="-144" transform="rotate(315)"/>
+      <line x1="0" y1="-155" x2="0" y2="-144" transform="rotate(330)"/>
+      <line x1="0" y1="-155" x2="0" y2="-144" transform="rotate(345)"/>
+    </g>
+
+    <!-- orbit satellites -->
+    <circle cx="92"   cy="-92" r="6"   fill="#67e8f9" filter="url(#glowStrong)"/>
+    <circle cx="92"   cy="-92" r="2.5" fill="#ffffff"/>
+    <circle cx="-130" cy="0"   r="4.5" fill="#a78bfa" filter="url(#glowStrong)"/>
+    <circle cx="-130" cy="0"   r="1.8" fill="#ffffff"/>
+    <circle cx="65"   cy="113" r="4"   fill="#67e8f9" filter="url(#glowSoft)"/>
+
+    <!-- inner disc -->
+    <circle r="112" fill="url(#coreGrad)" stroke="url(#rimGrad)" stroke-width="1.2" opacity="1"/>
+    <!-- inner rim highlight -->
+    <circle r="108" fill="none" stroke="#67e8f9" stroke-width="0.6" opacity="0.35"/>
+
+    <!-- glowing "3": drop-shadow layer + solid -->
+    <text x="0" y="8"
+          font-family="'Segoe UI', 'Inter', system-ui, sans-serif"
+          font-size="180" font-weight="900"
+          text-anchor="middle" dominant-baseline="central"
+          fill="url(#cyanGrad)" opacity="0.6" filter="url(#glowStrong)">3</text>
+    <text x="0" y="8"
+          font-family="'Segoe UI', 'Inter', system-ui, sans-serif"
+          font-size="180" font-weight="900"
+          text-anchor="middle" dominant-baseline="central"
+          fill="#f8fafc">3</text>
+    <!-- highlight rim on the 3 -->
+    <text x="0" y="8"
+          font-family="'Segoe UI', 'Inter', system-ui, sans-serif"
+          font-size="180" font-weight="900"
+          text-anchor="middle" dominant-baseline="central"
+          fill="none" stroke="#67e8f9" stroke-width="0.6" opacity="0.6">3</text>
+  </g>
+
+  <!-- ==================== RIGHT: wordmark, tagline, equalizer, chips ==================== -->
+  <g clip-path="url(#rightClip)">
+
+    <!-- kicker line above wordmark -->
+    <g transform="translate(490 100)">
+      <line x1="0" y1="0" x2="34" y2="0" stroke="url(#cyanGrad)" stroke-width="2" stroke-linecap="round" filter="url(#glowTiny)"/>
+      <text x="46" y="4"
+            font-family="'Segoe UI', 'Inter', system-ui, sans-serif"
+            font-size="13" font-weight="700" letter-spacing="6"
+            fill="#67e8f9">ЛИЧНЫЙ AI-АГЕНТ</text>
+    </g>
+
+    <!-- big wordmark: glow + gradient fill + subtle stroke -->
+    <g transform="translate(490 195)">
+      <text x="0" y="0"
+            font-family="'Segoe UI', 'Inter', system-ui, sans-serif"
+            font-size="140" font-weight="900" letter-spacing="-4"
+            fill="url(#cyanGrad)" opacity="0.35" filter="url(#glowStrong)">ТРОЙКА</text>
+      <text x="0" y="0"
+            font-family="'Segoe UI', 'Inter', system-ui, sans-serif"
+            font-size="140" font-weight="900" letter-spacing="-4"
+            fill="url(#cyanGrad)">ТРОЙКА</text>
+      <text x="0" y="0"
+            font-family="'Segoe UI', 'Inter', system-ui, sans-serif"
+            font-size="140" font-weight="900" letter-spacing="-4"
+            fill="none" stroke="#f8fafc" stroke-opacity="0.10" stroke-width="1">ТРОЙКА</text>
+    </g>
+
+    <!-- underline accent -->
+    <g transform="translate(492 213)">
+      <rect x="0" y="0" width="260" height="3" rx="2" fill="url(#cyanGrad)" filter="url(#glowSoft)"/>
+      <circle cx="272" cy="1.5" r="4" fill="#67e8f9" filter="url(#glowStrong)"/>
+    </g>
+
+    <!-- tagline -->
+    <text x="492" y="248"
+          font-family="'Segoe UI', 'Inter', system-ui, sans-serif"
+          font-size="24" font-weight="600" fill="#e2e8f0">
+      Живой голос. Своя голова. Работает 24/7.
+    </text>
+    <text x="492" y="274"
+          font-family="'Segoe UI', 'Inter', system-ui, sans-serif"
+          font-size="15" font-weight="400" fill="#94a3b8">
+      Скажи «тройка» — она услышит. Ответит голосом, покажет мысли, сделает работу.
+    </text>
+
+    <!-- equalizer bars (voice hint) -->
+    <g transform="translate(492 348)" filter="url(#glowSoft)">
+      <g fill="url(#eqGrad)">
+        <rect x="0"   y="-14" width="4" height="14" rx="2"/>
+        <rect x="8"   y="-26" width="4" height="26" rx="2"/>
+        <rect x="16"  y="-10" width="4" height="10" rx="2"/>
+        <rect x="24"  y="-32" width="4" height="32" rx="2"/>
+        <rect x="32"  y="-18" width="4" height="18" rx="2"/>
+        <rect x="40"  y="-40" width="4" height="40" rx="2"/>
+        <rect x="48"  y="-22" width="4" height="22" rx="2"/>
+        <rect x="56"  y="-30" width="4" height="30" rx="2"/>
+        <rect x="64"  y="-12" width="4" height="12" rx="2"/>
+        <rect x="72"  y="-36" width="4" height="36" rx="2"/>
+        <rect x="80"  y="-20" width="4" height="20" rx="2"/>
+        <rect x="88"  y="-28" width="4" height="28" rx="2"/>
+        <rect x="96"  y="-16" width="4" height="16" rx="2"/>
+        <rect x="104" y="-24" width="4" height="24" rx="2"/>
+        <rect x="112" y="-10" width="4" height="10" rx="2"/>
+        <rect x="120" y="-22" width="4" height="22" rx="2"/>
+        <rect x="128" y="-18" width="4" height="18" rx="2"/>
+        <rect x="136" y="-30" width="4" height="30" rx="2"/>
+        <rect x="144" y="-14" width="4" height="14" rx="2"/>
+        <rect x="152" y="-22" width="4" height="22" rx="2"/>
+        <rect x="160" y="-8"  width="4" height="8"  rx="2"/>
+      </g>
+    </g>
+
+    <!-- capability chips with mini-icons -->
+    <g font-family="'Segoe UI', 'Inter', system-ui, sans-serif" font-size="13" font-weight="600">
+      <!-- голос -->
+      <g transform="translate(690 320)">
+        <rect width="98"  height="28" rx="14" fill="#0b1a2a" stroke="url(#rimGrad)" stroke-width="1"/>
+        <g transform="translate(12 14)" stroke="#67e8f9" stroke-width="1.4" fill="none" stroke-linecap="round">
+          <rect x="-3" y="-6" width="6" height="10" rx="3" fill="#0b1a2a"/>
+          <path d="M -6 2 A 6 6 0 0 0 6 2"/>
+          <line x1="0" y1="8" x2="0" y2="10"/>
+        </g>
+        <text x="58" y="19" text-anchor="middle" fill="#e2e8f0">голос</text>
+      </g>
+      <!-- мысли -->
+      <g transform="translate(796 320)">
+        <rect width="98"  height="28" rx="14" fill="#0b1a2a" stroke="url(#rimGrad)" stroke-width="1"/>
+        <g transform="translate(12 14)" stroke="#67e8f9" stroke-width="1.4" fill="none">
+          <circle r="6"/>
+          <path d="M -4 -1 L -1 2 L 5 -3" stroke-linecap="round"/>
+        </g>
+        <text x="58" y="19" text-anchor="middle" fill="#e2e8f0">мысли</text>
+      </g>
+      <!-- бизнес -->
+      <g transform="translate(902 320)">
+        <rect width="108" height="28" rx="14" fill="#0b1a2a" stroke="url(#rimGrad)" stroke-width="1"/>
+        <g transform="translate(12 14)" stroke="#67e8f9" stroke-width="1.4" fill="none" stroke-linecap="round">
+          <polyline points="-6,4 -2,-1 2,2 6,-4"/>
+          <line x1="-6" y1="6" x2="6" y2="6" opacity="0.5"/>
+        </g>
+        <text x="63" y="19" text-anchor="middle" fill="#e2e8f0">бизнес</text>
+      </g>
+      <!-- код -->
+      <g transform="translate(1018 320)">
+        <rect width="82"  height="28" rx="14" fill="#0b1a2a" stroke="url(#rimGrad)" stroke-width="1"/>
+        <g transform="translate(12 14)" stroke="#67e8f9" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="-5,-4 -8,0 -5,4"/>
+          <polyline points="5,-4 8,0 5,4"/>
+        </g>
+        <text x="52" y="19" text-anchor="middle" fill="#e2e8f0">код</text>
+      </g>
+      <!-- Kali (second row) -->
+      <g transform="translate(690 360)">
+        <rect width="120" height="28" rx="14" fill="#0b1a2a" stroke="url(#rimGrad)" stroke-width="1"/>
+        <g transform="translate(12 14)" stroke="#67e8f9" stroke-width="1.4" fill="none" stroke-linecap="round">
+          <path d="M -6 -4 L -6 3 A 6 6 0 0 0 6 3 L 6 -4 Z"/>
+          <line x1="0" y1="-1" x2="0" y2="3"/>
+        </g>
+        <text x="65" y="19" text-anchor="middle" fill="#e2e8f0">Kali-стол</text>
+      </g>
+      <!-- само-улучшение -->
+      <g transform="translate(818 360)">
+        <rect width="158" height="28" rx="14" fill="#0b1a2a" stroke="url(#rimGrad)" stroke-width="1"/>
+        <g transform="translate(12 14)" stroke="#67e8f9" stroke-width="1.4" fill="none" stroke-linecap="round">
+          <path d="M -6 0 A 6 6 0 1 1 4 4"/>
+          <polyline points="4,4 6,4 6,2"/>
+        </g>
+        <text x="84" y="19" text-anchor="middle" fill="#e2e8f0">самоулучшение</text>
+      </g>
+      <!-- зрение (GROUND) -->
+      <g transform="translate(984 360)">
+        <rect width="116" height="28" rx="14" fill="#0b1a2a" stroke="url(#rimGrad)" stroke-width="1"/>
+        <g transform="translate(12 14)" stroke="#67e8f9" stroke-width="1.4" fill="none">
+          <path d="M -7 0 Q 0 -6 7 0 Q 0 6 -7 0 Z"/>
+          <circle r="2" fill="#67e8f9"/>
+        </g>
+        <text x="63" y="19" text-anchor="middle" fill="#e2e8f0">зрение</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ==================== corner 24/7 pill ==================== -->
+  <g transform="translate(1130 36)">
+    <rect x="-64" y="-15" width="80" height="30" rx="15" fill="#0b1a2a" stroke="url(#rimGrad)" stroke-width="1.2"/>
+    <circle cx="-48" cy="0" r="3.5" fill="#22c55e" filter="url(#glowSoft)"/>
+    <text x="-14" y="5" text-anchor="middle"
+          font-family="'Segoe UI', 'Inter', system-ui, sans-serif"
+          font-size="14" font-weight="800" fill="#e2e8f0" letter-spacing="1">24/7</text>
+  </g>
+</svg>
