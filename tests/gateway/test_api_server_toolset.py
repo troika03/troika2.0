@@ -18,34 +18,33 @@ class TestHermesApiServerToolset:
     def test_toolset_validates(self):
         assert validate_toolset("hermes-api-server")
 
-    def test_toolset_includes_web_tools(self):
+    def test_toolset_includes_hot_path_web_tool(self):
         tools = resolve_toolset("hermes-api-server")
         assert "web_search" in tools
-        assert "web_extract" in tools
 
-    def test_toolset_includes_core_tools(self):
+    def test_toolset_includes_slim_voice_tools(self):
         tools = resolve_toolset("hermes-api-server")
         expected = [
-            "terminal", "process",
-            "read_file", "write_file", "patch", "search_files",
-            "vision_analyze", "image_generate",
-            "execute_code", "delegate_task",
-            "todo", "memory", "session_search", "cronjob",
+            "find_tool", "run_tool", "what_can_i_do",
+            "location", "soma_recall",
+            "android_open_app", "android_calendar_create_event",
+            "vision_analyze", "web_search", "claude_code",
+            "skill_view", "workspace_enter", "ensure_capability",
         ]
         for tool in expected:
             assert tool in tools, f"Missing expected tool: {tool}"
 
-    def test_toolset_includes_browser_tools(self):
+    def test_toolset_excludes_browser_automation_from_hot_path(self):
         tools = resolve_toolset("hermes-api-server")
         for tool in ["browser_navigate", "browser_snapshot", "browser_click",
                       "browser_type", "browser_scroll", "browser_back",
                       "browser_press"]:
-            assert tool in tools, f"Missing browser tool: {tool}"
+            assert tool not in tools, f"Unexpected browser tool: {tool}"
 
-    def test_toolset_includes_homeassistant_tools(self):
+    def test_toolset_excludes_homeassistant_from_hot_path(self):
         tools = resolve_toolset("hermes-api-server")
         for tool in ["ha_list_entities", "ha_get_state", "ha_list_services", "ha_call_service"]:
-            assert tool in tools, f"Missing HA tool: {tool}"
+            assert tool not in tools, f"Unexpected Home Assistant tool: {tool}"
 
     def test_toolset_excludes_clarify(self):
         tools = resolve_toolset("hermes-api-server")

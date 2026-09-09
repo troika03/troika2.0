@@ -69,6 +69,11 @@
 - Gateway фиксирует claim/denial сессии, начало запроса, исчерпание квоты, создание/stop run и approval. Доступ к raw SQLite остаётся ограничением beta: это не WORM-хранилище.
 - Добавлен операторский просмотр `python -m troika_product … audit --user-id …`; тесты проверяют отсутствие raw session/run и запрет prompt в audit details.
 
+## Выполнено: безопасный tool boundary product API (2026-09-09)
+
+- Product mode принудительно использует `troika-product` toolset, не конфиг оператора. Доступны только web/vision/image generation.
+- Terminal, server files, PC/Android control и dynamic routers `find_tool`/`run_tool` недоступны пользователю подписки. Для них нужен отдельный paired companion и модель явного approval.
+
 ## Ближайший порядок работы
 
 1. Настроить воспроизводимую среду и минимальный зелёный CI baseline.

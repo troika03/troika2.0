@@ -1301,6 +1301,11 @@ class APIServerAdapter(BasePlatformAdapter):
 
         user_config = _load_gateway_config()
         enabled_toolsets = sorted(_get_platform_tools(user_config, "api_server"))
+        if self._access_registry is not None:
+            # Product API must never inherit a local operator's broad toolset.
+            # Device/PC/server actions need a separately paired companion and
+            # explicit product approval model before product exposure.
+            enabled_toolsets = ["troika-product"]
 
         max_iterations = int(os.getenv("HERMES_MAX_ITERATIONS", "90"))
 

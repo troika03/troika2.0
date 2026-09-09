@@ -5,6 +5,7 @@ import json
 
 from gateway.config import PlatformConfig
 from gateway.platforms.api_server import APIServerAdapter
+from toolsets import resolve_toolset
 
 
 class _Request(dict):
@@ -109,3 +110,58 @@ def test_product_capabilities_do_not_advertise_global_responses_api(tmp_path) ->
 
     assert payload["features"]["responses_api"] is False
     assert "responses" not in payload["endpoints"]
+
+
+def test_product_toolset_cannot_control_server_or_user_devices() -> None:
+    tools = resolve_toolset("troika-product")
+    assert {"web_search", "vision_analyze", "image_generate"} <= set(tools)
+    forbidden = {
+        "terminal",
+        "process",
+        "read_file",
+        "write_file",
+        "pc_gui_control",
+        "pc_see_screen",
+        "android_open_app",
+        "android_send_sms",
+        "find_tool",
+        "run_tool",
+    }
+    assert not forbidden.intersection(tools)
+
+
+def test_product_mode_ignores_operator_toolset_override(tmp_path, monkeypatch) -> None:
+    captured = {}
+
+    class FakeAgent:
+        def __init__(self, **kwargs) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr("run_agent.AIAgent", FakeAgent)
+    monkeypatch.setattr(
+        "gateway.run._resolve_runtime_agent_kwargs", lambda: {"api_key": "test"}
+    )
+    monkeypatch.setattr("gateway.run._resolve_gateway_model", lambda: "test/model")
+    monkeypatch.setattr(
+        "gateway.run._load_gateway_config",
+        lambda: {"platform_toolsets": {"api_server": ["terminal", "pc"]}},
+    )
+    monkeypatch.setattr(
+        "gateway.run.GatewayRunner._load_reasoning_config", staticmethod(dict)
+    )
+    monkeypatch.setattr(
+        "gateway.run.GatewayRunner._load_fallback_model", staticmethod(lambda: None)
+    )
+    adapter = APIServerAdapter(
+        PlatformConfig(
+            enabled=True,
+            extra={
+                "product_auth_enabled": True,
+                "product_auth_db": str(tmp_path / "access.db"),
+            },
+        )
+    )
+    monkeypatch.setattr(adapter, "_ensure_session_db", lambda: None)
+
+    adapter._create_agent()
+    assert captured["enabled_toolsets"] == ["troika-product"]

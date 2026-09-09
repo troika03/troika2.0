@@ -546,6 +546,12 @@ TOOLSETS = {
         "tools": [],
         "includes": ["web", "vision", "image_gen"]
     },
+
+    "troika-product": {
+        "description": "Hosted Troika product toolkit without device, PC, or server control.",
+        "tools": [],
+        "includes": ["safe"],
+    },
     
     # ==========================================================================
     # Full Hermes toolsets (CLI + messaging platforms)

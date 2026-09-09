@@ -71,5 +71,8 @@ python -m troika_product --database /opt/data/troika_access.db audit \
   user/device token.
 - Legacy `/v1/responses` временно отключён: его старое хранилище не имеет
   tenant ownership. Клиент beta использует `/v1/runs` или `/v1/chat/completions`.
+- Product API использует только safe toolset: web search/extract, vision и image
+  generation. Он не получает terminal, файлы сервера, PC control, Android control,
+  `find_tool` или `run_tool`, даже если локальный оператор включил их в конфиге.
 - Глобальные jobs и управление телефоном намеренно отключены до появления
   адресной маршрутизации конкретного устройства.
