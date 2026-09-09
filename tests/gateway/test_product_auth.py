@@ -112,6 +112,16 @@ def test_product_capabilities_do_not_advertise_global_responses_api(tmp_path) ->
     assert "responses" not in payload["endpoints"]
 
 
+def test_product_device_context_requires_explicit_consent(tmp_path) -> None:
+    adapter, first_token, _ = _adapter_with_two_users(tmp_path)
+    request = _Request(first_token)
+    assert adapter._check_auth(request) is None
+    assert not adapter._product_device_context_allowed(request)
+
+    request.headers["X-Troika-Device-Context-Consent"] = "granted"
+    assert adapter._product_device_context_allowed(request)
+
+
 def test_product_toolset_cannot_control_server_or_user_devices() -> None:
     tools = resolve_toolset("troika-product")
     assert {"web_search", "vision_analyze", "image_generate"} <= set(tools)

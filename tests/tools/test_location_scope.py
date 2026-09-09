@@ -28,3 +28,23 @@ def test_named_locations_are_scoped_to_the_current_session(tmp_path, monkeypatch
     assert location_tool._forget({"name": "home"}, "user-one")["deleted"] == 1
     assert location_tool._list("user-one")["count"] == 0
     assert location_tool._list("user-two")["count"] == 1
+
+
+def test_location_context_can_be_cleared_after_consent_revocation(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(location_tool, "_cache_file", lambda: tmp_path / "context.json")
+    location_tool._DEVICE_CONTEXT_CACHE.clear()
+    location_tool.remember_device_context("user-one", {"lat": 55.7, "lon": 37.6})
+
+    location_tool.clear_device_context("user-one")
+    assert location_tool.get_device_context("user-one") == {}
+
+
+def test_reverse_geocoding_is_off_without_operator_feature_flag(monkeypatch) -> None:
+    location_tool._GEOCODE_CACHE.clear()
+    monkeypatch.delenv("TROIKA_EXTERNAL_GEOCODING_ENABLED", raising=False)
+
+    def should_not_connect(*_args, **_kwargs):
+        raise AssertionError("external geocoding must be disabled")
+
+    monkeypatch.setattr(location_tool.urllib.request, "build_opener", should_not_connect)
+    assert location_tool.reverse_geocode(55.7, 37.6) is None

@@ -63,6 +63,18 @@ python -m troika_product --database /opt/data/troika_access.db audit \
 значения. Записи — продуктовый журнал beta, но не WORM-хранилище: доступ
 операторов к серверной SQLite-базе должен быть ограничен.
 
+## Privacy местоположения
+
+Передача device context в Android выключена по умолчанию. Системное разрешение
+на геолокацию само не включает её: пользователь отдельно включает переключатель
+в «Настройки → Местоположение». Только тогда приложение отправляет GPS, Wi-Fi и
+Bluetooth context. При выключении следующий запрос очищает временный context на
+сервере. Product server игнорирует context без явного `granted` consent header.
+
+Точные координаты не отправляются во внешний reverse-geocoding сервис по
+умолчанию. `TROIKA_EXTERNAL_GEOCODING_ENABLED=false` оставь выключенным до
+отдельного consent flow, privacy policy и оценки провайдера.
+
 ## Ограничения beta
 
 - Нет публичной регистрации, платежей, восстановления доступа или push-delivery.

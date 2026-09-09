@@ -1001,6 +1001,12 @@ class APIServerAdapter(BasePlatformAdapter):
             return None
         return request.get("troika_product_principal")
 
+    def _product_device_context_allowed(self, request: "web.Request") -> bool:
+        """Require explicit app consent before product device context is accepted."""
+        if self._access_registry is None:
+            return True
+        return request.headers.get("X-Troika-Device-Context-Consent", "").lower() == "granted"
+
     def _record_product_audit(
         self,
         request: "web.Request",
@@ -1841,12 +1847,27 @@ class APIServerAdapter(BasePlatformAdapter):
         if key_err is not None:
             return key_err
 
+        if (
+            self._access_registry is not None
+            and request.headers.get("X-Troika-Device-Context-Consent", "").lower()
+            == "revoked"
+            and gateway_session_key
+        ):
+            from tools.location_tool import clear_device_context
+
+            clear_device_context(gateway_session_key)
+            self._record_product_audit(
+                request,
+                "device_context.revoked",
+                session_id=gateway_session_key,
+            )
+
         # X-Hermes-Device-Context: JSON {bssid, ssid, network_type,
         # bluetooth: [...], device_name}. Кладём в кэш location_tool по
         # session_key и подмешиваем подсказку про место (дом/работа/машина)
         # в system prompt.
         raw_ctx = request.headers.get("X-Hermes-Device-Context", "").strip()
-        if raw_ctx:
+        if raw_ctx and self._product_device_context_allowed(request):
             try:
                 if re.search(r"[\r\n\x00]", raw_ctx):
                     raise ValueError("control chars in header")
@@ -1872,6 +1893,11 @@ class APIServerAdapter(BasePlatformAdapter):
                         )
             except Exception as e:
                 logger.debug("device_context header ignored: %s", e)
+        elif raw_ctx:
+            logger.info(
+                "device_context header ignored: explicit product consent missing: %s",
+                self._request_audit_log_suffix(request),
+            )
 
         # Active project context: добавляем краткую сводку об активном проекте
         # в system prompt, чтобы LLM на каждом turn знала «сейчас работаем над X».

@@ -29,6 +29,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   bool _bargeInEnabled = true;
   int _bargeInThreshold = 1200;
+  bool _locationContextEnabled = false;
 
   // Список доступных голосов Edge TTS с человекочитаемыми описаниями
   static const _voices = [
@@ -84,6 +85,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadCurrentVoice();
     _loadPresets();
     _loadBargeIn();
+    _locationContextEnabled = HermesConfig.locationContextEnabled;
   }
 
   Future<void> _loadBargeIn() async {
@@ -115,8 +117,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
 
     // Проверка на первый запуск (если активен Claude и настройки по умолчанию)
-    final wasFirstLaunch =
-        active == 'Claude' &&
+    final wasFirstLaunch = active == 'Claude' &&
         list.any((p) => p.name == 'Claude') &&
         _currentVoice == 'ru-RU-SvetlanaNeural' &&
         _rate == 1.0 &&
@@ -271,11 +272,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Map<String, dynamic> _voiceArgs(String voice) => {
-    'voice': voice,
-    'rate': _rate,
-    'pitch': _pitch,
-    'volume': _volume,
-  };
+        'voice': voice,
+        'rate': _rate,
+        'pitch': _pitch,
+        'volume': _volume,
+      };
 
   Future<void> _previewVoice(String voice) async {
     try {
@@ -450,6 +451,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _setLocationContextEnabled(bool enabled) async {
+    if (enabled) await _requestLocationPermission();
+    await HermesConfig.setLocationContextEnabled(enabled);
+    if (!mounted) return;
+    setState(() => _locationContextEnabled = enabled);
+  }
+
   void _save() {
     HermesConfig.serverUrl = _normalizeUrl(_urlController.text);
     HermesConfig.apiKey = _apiKeyController.text.trim();
@@ -519,11 +527,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: const TextStyle(color: Colors.white70, fontSize: 13),
             ),
           ],
-
           const SizedBox(height: 24),
           const Divider(color: Colors.white10),
           const SizedBox(height: 16),
-
           _sectionHeader('Wake-word'),
           SwitchListTile(
             title: const Text(
@@ -538,11 +544,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onChanged: (v) => assistant.setWakeWordEnabled(v),
             activeColor: const Color(0xFFF5A623),
           ),
-
           const SizedBox(height: 24),
           const Divider(color: Colors.white10),
           const SizedBox(height: 16),
-
           _sectionHeader('Пресеты голоса'),
           if (_presets.isNotEmpty)
             Container(
@@ -633,11 +637,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'Тап — применить, долгий тап — удалить.',
             style: TextStyle(color: Colors.white38, fontSize: 11),
           ),
-
           const SizedBox(height: 24),
           const Divider(color: Colors.white10),
           const SizedBox(height: 16),
-
           _sectionHeader('Голос Тройки'),
           const Text(
             'Слушай образец и выбирай. Edge TTS на PC, играет на телефоне.',
@@ -654,9 +656,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     : const Color(0xFF17150F),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isSelected
-                      ? const Color(0xFFF5A623)
-                      : Colors.transparent,
+                  color:
+                      isSelected ? const Color(0xFFF5A623) : Colors.transparent,
                   width: 1.5,
                 ),
               ),
@@ -670,9 +671,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 14,
-                    fontWeight: isSelected
-                        ? FontWeight.w600
-                        : FontWeight.normal,
+                    fontWeight:
+                        isSelected ? FontWeight.w600 : FontWeight.normal,
                   ),
                 ),
                 subtitle: Text(
@@ -704,7 +704,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             );
           }),
-
           const SizedBox(height: 16),
           _sectionHeader('Настройки звучания'),
           const Text(
@@ -778,11 +777,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: TextStyle(fontSize: 12),
             ),
           ),
-
           const SizedBox(height: 16),
           const Divider(color: Colors.white10),
           const SizedBox(height: 16),
-
           _sectionHeader('Прерывание речи (barge-in)'),
           SwitchListTile(
             title: const Text(
@@ -809,8 +806,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               display: _bargeInThreshold <= 900
                   ? '$_bargeInThreshold (высокая)'
                   : _bargeInThreshold >= 1800
-                  ? '$_bargeInThreshold (низкая)'
-                  : '$_bargeInThreshold (средняя)',
+                      ? '$_bargeInThreshold (низкая)'
+                      : '$_bargeInThreshold (средняя)',
               onChanged: (v) => _saveBargeInThreshold(v.toInt()),
             ),
             const Text(
@@ -823,11 +820,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ],
-
           const SizedBox(height: 16),
           const Divider(color: Colors.white10),
           const SizedBox(height: 16),
-
           _sectionHeader('Управление телефоном'),
           const Text(
             'Чтобы Тройка мог нажимать кнопки и писать в приложениях, '
@@ -844,11 +839,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: const Icon(Icons.accessibility_new, size: 18),
             label: const Text('Открыть спец. возможности'),
           ),
-
           const SizedBox(height: 24),
           const Divider(color: Colors.white10),
           const SizedBox(height: 16),
-
           _sectionHeader('Файловая система'),
           const Text(
             'По умолчанию Тройка видит общедоступные папки: Downloads, '
@@ -867,11 +860,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: const Icon(Icons.folder_open, size: 18),
             label: const Text('Открыть доступ ко всем файлам'),
           ),
-
           const SizedBox(height: 24),
           const Divider(color: Colors.white10),
           const SizedBox(height: 16),
-
           _sectionHeader('Календарь'),
           const Text(
             'Чтобы Тройка мог ставить встречи и читать события из '
@@ -889,18 +880,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: const Icon(Icons.event_available, size: 18),
             label: const Text('Разрешить доступ к календарю'),
           ),
-
           const SizedBox(height: 16),
           const Divider(color: Colors.white10),
           const SizedBox(height: 16),
-
           _sectionHeader('Местоположение'),
           const Text(
-            'Чтобы Тройка знала где ты — погода рядом, места поблизости, '
-            'маршруты, «где я». Для работы в фоне выбери «Разрешать всегда».',
+            'Только после включения Тройка получает GPS, Wi-Fi и Bluetooth '
+            'контекст вместе с запросами. Разрешение Android само ничего не отправляет.',
             style: TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
           ),
           const SizedBox(height: 12),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
+              'Передавать контекст местоположения',
+              style: TextStyle(color: Colors.white70),
+            ),
+            subtitle: const Text(
+              'Выключение останавливает передачу и очищает временный контекст на сервере.',
+              style: TextStyle(color: Colors.white38, fontSize: 12),
+            ),
+            value: _locationContextEnabled,
+            activeColor: const Color(0xFFF5A623),
+            onChanged: _setLocationContextEnabled,
+          ),
           OutlinedButton.icon(
             onPressed: _requestLocationPermission,
             style: OutlinedButton.styleFrom(
@@ -910,7 +913,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: const Icon(Icons.my_location, size: 18),
             label: const Text('Разрешить местоположение'),
           ),
-
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: _save,

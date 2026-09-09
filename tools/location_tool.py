@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 import sqlite3
 import time
 import urllib.parse
@@ -96,6 +97,16 @@ def _geocode_key(lat: float, lon: float) -> Tuple[float, float]:
     return (round(lat, 3), round(lon, 3))
 
 
+def _external_geocoding_enabled() -> bool:
+    """Keep exact coordinates on the product server unless operator opts in."""
+    return os.getenv("TROIKA_EXTERNAL_GEOCODING_ENABLED", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def reverse_geocode(lat: float, lon: float) -> Optional[str]:
     """Координаты → человекочитаемый адрес (RU). None при ошибке/таймауте.
 
@@ -104,6 +115,8 @@ def reverse_geocode(lat: float, lon: float) -> Optional[str]:
     stdlib не умеет socks и падает «Tor is not an HTTP Proxy». Nominatim
     публичный сервис — Tor не нужен.
     """
+    if not _external_geocoding_enabled():
+        return None
     key = _geocode_key(lat, lon)
     now = time.time()
     cached = _GEOCODE_CACHE.get(key)
@@ -217,6 +230,14 @@ def remember_device_context(session_key: str, ctx: Dict[str, Any]) -> None:
     # рестарта Тройка не знает где Миша, пока он снова не заговорит wake-word'ом
     # (Flutter-путь пока не шлёт X-Hermes-Device-Context header).
     _save_cache_to_disk()
+
+
+def clear_device_context(session_key: str) -> None:
+    """Remove transient device context when a product user revokes consent."""
+    if not session_key:
+        return
+    if _DEVICE_CONTEXT_CACHE.pop(session_key, None) is not None:
+        _save_cache_to_disk()
 
 
 def get_device_context(session_key: Optional[str] = None) -> Dict[str, Any]:

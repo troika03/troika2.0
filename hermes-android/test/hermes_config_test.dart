@@ -24,4 +24,10 @@ void main() {
       HermesConfig.sessionId,
     );
   });
+
+  test('does not send device context without explicit consent', () async {
+    expect(HermesConfig.locationContextEnabled, isFalse);
+    await HermesConfig.setLocationContextEnabled(true);
+    expect(HermesConfig.locationContextEnabled, isTrue);
+  });
 }

@@ -74,11 +74,17 @@
 - Product mode принудительно использует `troika-product` toolset, не конфиг оператора. Доступны только web/vision/image generation.
 - Terminal, server files, PC/Android control и dynamic routers `find_tool`/`run_tool` недоступны пользователю подписки. Для них нужен отдельный paired companion и модель явного approval.
 
+## Выполнено: consent location beta (2026-09-09)
+
+- Android по умолчанию не передаёт GPS/Wi-Fi/Bluetooth context. Android permission не равен consent: пользователь включает отдельный переключатель.
+- Product API принимает device context только с `X-Troika-Device-Context-Consent: granted`; при `revoked` очищает временный контекст и пишет audit event.
+- Reverse geocoding наружу выключен feature flag `TROIKA_EXTERNAL_GEOCODING_ENABLED=false`. Точные координаты не покидают сервер без будущего отдельного consent flow.
+
 ## Ближайший порядок работы
 
 1. Настроить воспроизводимую среду и минимальный зелёный CI baseline.
 2. Заменить legacy response store на tenant-owned storage либо оставить endpoint выключенным до этой миграции.
-3. Реализовать privacy controls и lifecycle удаления данных для device context/location.
+3. Добавить lifecycle удаления данных: saved locations, диалоги, memory и account deletion.
 4. Спроектировать subscription billing: продукты, платежные периоды, webhooks, отмена, возвраты и поддержка.
 5. Затем стабилизировать Android core loop и провести закрытую beta с измерением cost/request и retention.
 

@@ -15,6 +15,8 @@ class HermesConfig {
   static const String _keyOnboardingDone = 'hermes_onboarding_done';
   static const String _keySessionKey = 'hermes_session_key';
   static const String _keySessionId = 'hermes_session_id';
+  static const String _keyLocationContextEnabled =
+      'hermes_location_context_enabled';
 
   // Дефолтные значения.
   // Мобильный клиент не содержит адрес общего production-сервера. Его задаёт
@@ -92,6 +94,15 @@ class HermesConfig {
 
   static set onboardingDone(bool v) => _prefs.setBool(_keyOnboardingDone, v);
 
+  /// Explicit user consent for sending GPS/Wi-Fi/Bluetooth context to server.
+  /// System location permission alone never enables data transfer.
+  static bool get locationContextEnabled =>
+      _prefs.getBool(_keyLocationContextEnabled) ?? false;
+
+  static Future<void> setLocationContextEnabled(bool value) async {
+    await _prefs.setBool(_keyLocationContextEnabled, value);
+  }
+
   /// URL для WebSocket канала команд (управление телефоном)
   static String get phoneCommandsWsUrl =>
       '${serverUrl.replaceFirst('http', 'ws')}/v1/phone/commands';
@@ -139,6 +150,12 @@ class HermesConfig {
   static Future<Map<String, String>> chatHeadersAsync() async {
     final base = chatHeaders;
     if (!Platform.isAndroid) return base;
+    if (!locationContextEnabled) {
+      // Server removes its transient cache on this signal in product mode.
+      base['X-Troika-Device-Context-Consent'] = 'revoked';
+      return base;
+    }
+    base['X-Troika-Device-Context-Consent'] = 'granted';
     try {
       const platform = MethodChannel('com.troika.hermes/background');
       final ctx = await platform.invokeMethod<String>('getDeviceContext');
