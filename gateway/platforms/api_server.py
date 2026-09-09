@@ -865,6 +865,9 @@ class APIServerAdapter(BasePlatformAdapter):
         self._active_run_tasks: Dict[str, "asyncio.Task"] = {}
         # Pollable run status for dashboards and external control-plane UIs.
         self._run_statuses: Dict[str, Dict[str, Any]] = {}
+        # Product-mode run ownership.  Runs are transient server objects, so
+        # retain their owner only for the same lifetime as _run_statuses.
+        self._run_owners: Dict[str, tuple[str, str]] = {}
         # Active approval session key for each run_id.  The approval core
         # resolves requests by session key, while API clients address the
         # in-flight run by run_id.
@@ -1020,6 +1023,81 @@ class APIServerAdapter(BasePlatformAdapter):
         )
         return web.json_response(
             _openai_error("This session belongs to another user"), status=403
+        )
+
+    def _consume_product_request_quota(
+        self, request: "web.Request"
+    ) -> Optional["web.Response"]:
+        """Reserve one paid/beta request before starting agent work."""
+        if self._access_registry is None:
+            return None
+        principal = self._product_principal(request)
+        if principal is None:
+            return web.json_response(
+                _openai_error("Product authentication is required"), status=401
+            )
+        try:
+            decision = self._access_registry.consume_chat_request(principal)
+        except Exception:
+            logger.exception(
+                "Product quota lookup failed: %s",
+                self._request_audit_log_suffix(request),
+            )
+            # Product billing/access failures must not fall through to an
+            # unmetered agent run.
+            return web.json_response(
+                _openai_error("Usage service is temporarily unavailable"), status=503
+            )
+        request["troika_usage"] = decision
+        if decision.allowed:
+            return None
+        logger.info(
+            "Product daily quota exhausted: %s",
+            self._request_audit_log_suffix(request),
+        )
+        return web.json_response(
+            _openai_error(
+                "Daily request limit reached. Try again after the next UTC day.",
+                code="daily_request_limit_exceeded",
+            ),
+            status=429,
+            headers={
+                "X-Troika-Daily-Request-Limit": str(decision.limit),
+                "X-Troika-Requests-Remaining": "0",
+            },
+        )
+
+    def _product_quota_headers(self, request: "web.Request") -> Dict[str, str]:
+        """Expose non-sensitive quota state to the authenticated client."""
+        decision = request.get("troika_usage")
+        if decision is None:
+            return {}
+        return {
+            "X-Troika-Daily-Request-Limit": str(decision.limit),
+            "X-Troika-Requests-Remaining": str(decision.remaining),
+        }
+
+    def _authorize_product_run(
+        self, request: "web.Request", run_id: str
+    ) -> Optional["web.Response"]:
+        """Restrict run status, SSE, approval, and stop to its owner."""
+        if self._access_registry is None:
+            return None
+        principal = self._product_principal(request)
+        owner = self._run_owners.get(run_id)
+        if (
+            principal is not None
+            and owner is not None
+            and owner == (principal.user_id, principal.device_id)
+        ):
+            return None
+        # Return 404 rather than revealing that another user's run exists.
+        logger.warning(
+            "Product run access rejected: %s",
+            self._request_audit_log_suffix(request),
+        )
+        return web.json_response(
+            _openai_error(f"Run not found: {run_id}", code="run_not_found"), status=404
         )
 
     def _check_auth(self, request: "web.Request") -> Optional["web.Response"]:
@@ -1270,6 +1348,8 @@ class APIServerAdapter(BasePlatformAdapter):
         if auth_err:
             return auth_err
 
+        responses_enabled = self._access_registry is None
+
         return web.json_response({
             "object": "hermes.api_server.capabilities",
             "platform": "hermes-agent",
@@ -1292,8 +1372,11 @@ class APIServerAdapter(BasePlatformAdapter):
             "features": {
                 "chat_completions": True,
                 "chat_completions_streaming": True,
-                "responses_api": True,
-                "responses_streaming": True,
+                # The legacy Responses store has global response IDs and has
+                # not yet been migrated to tenant-owned storage. Do not
+                # advertise it to product tokens where it could cross users.
+                "responses_api": responses_enabled,
+                "responses_streaming": responses_enabled,
                 "run_submission": True,
                 "run_status": True,
                 "run_events_sse": True,
@@ -1310,7 +1393,11 @@ class APIServerAdapter(BasePlatformAdapter):
                 "health_detailed": {"method": "GET", "path": "/health/detailed"},
                 "models": {"method": "GET", "path": "/v1/models"},
                 "chat_completions": {"method": "POST", "path": "/v1/chat/completions"},
-                "responses": {"method": "POST", "path": "/v1/responses"},
+                **(
+                    {"responses": {"method": "POST", "path": "/v1/responses"}}
+                    if responses_enabled
+                    else {}
+                ),
                 "runs": {"method": "POST", "path": "/v1/runs"},
                 "run_status": {"method": "GET", "path": "/v1/runs/{run_id}"},
                 "run_events": {"method": "GET", "path": "/v1/runs/{run_id}/events"},
@@ -1826,6 +1913,10 @@ class APIServerAdapter(BasePlatformAdapter):
         )
         if session_auth_err:
             return session_auth_err
+
+        quota_err = self._consume_product_request_quota(request)
+        if quota_err:
+            return quota_err
 
         completion_id = f"chatcmpl-{uuid.uuid4().hex[:29]}"
         model_name = body.get("model", self._model_name)
@@ -2787,6 +2878,15 @@ class APIServerAdapter(BasePlatformAdapter):
         auth_err = self._check_auth(request)
         if auth_err:
             return auth_err
+        if self._access_registry is not None:
+            return web.json_response(
+                _openai_error(
+                    "Responses API is unavailable in product mode until its "
+                    "stored-response ownership is tenant-scoped",
+                    code="endpoint_unavailable",
+                ),
+                status=404,
+            )
 
         # Long-term memory scope header (see chat_completions for details).
         gateway_session_key, key_err = self._parse_session_key_header(request)
@@ -3071,6 +3171,10 @@ class APIServerAdapter(BasePlatformAdapter):
         auth_err = self._check_auth(request)
         if auth_err:
             return auth_err
+        if self._access_registry is not None:
+            return web.json_response(
+                _openai_error("Response not found", code="response_not_found"), status=404
+            )
 
         response_id = request.match_info["response_id"]
         stored = self._response_store.get(response_id)
@@ -3084,6 +3188,10 @@ class APIServerAdapter(BasePlatformAdapter):
         auth_err = self._check_auth(request)
         if auth_err:
             return auth_err
+        if self._access_registry is not None:
+            return web.json_response(
+                _openai_error("Response not found", code="response_not_found"), status=404
+            )
 
         response_id = request.match_info["response_id"]
         deleted = self._response_store.delete(response_id)
@@ -3638,6 +3746,16 @@ class APIServerAdapter(BasePlatformAdapter):
 
         run_id = f"run_{uuid.uuid4().hex}"
         session_id = body.get("session_id") or stored_session_id or run_id
+        session_auth_err = self._authorize_product_session(
+            request, str(session_id), claim=True
+        )
+        if session_auth_err:
+            return session_auth_err
+
+        quota_err = self._consume_product_request_quota(request)
+        if quota_err:
+            return quota_err
+
         approval_session_key = gateway_session_key or session_id or run_id
         ephemeral_system_prompt = instructions
         loop = asyncio.get_running_loop()
@@ -3646,6 +3764,9 @@ class APIServerAdapter(BasePlatformAdapter):
         self._run_streams[run_id] = q
         self._run_streams_created[run_id] = created_at
         self._run_approval_sessions[run_id] = approval_session_key
+        principal = self._product_principal(request)
+        if principal is not None:
+            self._run_owners[run_id] = (principal.user_id, principal.device_id)
 
         event_cb = self._make_run_event_callback(run_id, loop)
 
@@ -3848,6 +3969,7 @@ class APIServerAdapter(BasePlatformAdapter):
         response_headers = (
             {"X-Hermes-Session-Key": gateway_session_key} if gateway_session_key else {}
         )
+        response_headers.update(self._product_quota_headers(request))
         return web.json_response(
             {"run_id": run_id, "status": "started"},
             status=202,
@@ -3861,6 +3983,9 @@ class APIServerAdapter(BasePlatformAdapter):
             return auth_err
 
         run_id = request.match_info["run_id"]
+        run_auth_err = self._authorize_product_run(request, run_id)
+        if run_auth_err:
+            return run_auth_err
         status = self._run_statuses.get(run_id)
         if status is None:
             return web.json_response(
@@ -3876,6 +4001,9 @@ class APIServerAdapter(BasePlatformAdapter):
             return auth_err
 
         run_id = request.match_info["run_id"]
+        run_auth_err = self._authorize_product_run(request, run_id)
+        if run_auth_err:
+            return run_auth_err
 
         # Allow subscribing slightly before the run is registered (race condition window)
         for _ in range(20):
@@ -3926,6 +4054,9 @@ class APIServerAdapter(BasePlatformAdapter):
             return auth_err
 
         run_id = request.match_info["run_id"]
+        run_auth_err = self._authorize_product_run(request, run_id)
+        if run_auth_err:
+            return run_auth_err
         status = self._run_statuses.get(run_id)
         if status is None:
             return web.json_response(
@@ -4014,6 +4145,9 @@ class APIServerAdapter(BasePlatformAdapter):
             return auth_err
 
         run_id = request.match_info["run_id"]
+        run_auth_err = self._authorize_product_run(request, run_id)
+        if run_auth_err:
+            return run_auth_err
         agent = self._active_run_agents.get(run_id)
         task = self._active_run_tasks.get(run_id)
 
@@ -4081,6 +4215,7 @@ class APIServerAdapter(BasePlatformAdapter):
             ]
             for run_id in stale_statuses:
                 self._run_statuses.pop(run_id, None)
+                self._run_owners.pop(run_id, None)
 
     # ------------------------------------------------------------------
     # BasePlatformAdapter interface

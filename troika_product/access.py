@@ -9,6 +9,7 @@ the clear-text token is returned exactly once when it is issued.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
 import secrets
@@ -32,6 +33,17 @@ class AccessPrincipal:
     def memory_scope(self) -> str:
         """Stable opaque scope for memory and device-context storage."""
         return f"troika:{self.user_id}:{self.device_id}"
+
+
+@dataclass(frozen=True)
+class UsageDecision:
+    """The result of atomically reserving one request from a daily quota."""
+
+    allowed: bool
+    usage_date: str
+    limit: int
+    used: int
+    remaining: int
 
 
 class AccessRegistry:
@@ -84,12 +96,29 @@ class AccessRegistry:
                     created_at REAL NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS troika_entitlements (
+                    user_id TEXT PRIMARY KEY REFERENCES troika_users(id),
+                    plan TEXT NOT NULL,
+                    daily_request_limit INTEGER NOT NULL,
+                    updated_at REAL NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS troika_usage_daily (
+                    user_id TEXT NOT NULL REFERENCES troika_users(id),
+                    usage_date TEXT NOT NULL,
+                    requests INTEGER NOT NULL DEFAULT 0,
+                    updated_at REAL NOT NULL,
+                    PRIMARY KEY (user_id, usage_date)
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_troika_devices_user
                     ON troika_devices(user_id);
                 CREATE INDEX IF NOT EXISTS idx_troika_tokens_device
                     ON troika_api_tokens(device_id);
                 CREATE INDEX IF NOT EXISTS idx_troika_sessions_user
                     ON troika_sessions(user_id);
+                CREATE INDEX IF NOT EXISTS idx_troika_usage_daily_date
+                    ON troika_usage_daily(usage_date);
                 """
             )
 
@@ -108,15 +137,129 @@ class AccessRegistry:
             raise ValueError("a valid email address is required")
         return normalized
 
-    def create_user(self, email: str) -> str:
+    @staticmethod
+    def _validate_daily_request_limit(value: int) -> int:
+        if isinstance(value, bool):
+            raise ValueError("daily request limit must be an integer")
+        try:
+            limit = int(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("daily request limit must be an integer") from exc
+        if not 1 <= limit <= 10_000:
+            raise ValueError("daily request limit must be between 1 and 10000")
+        return limit
+
+    @staticmethod
+    def _normalize_plan(plan: str) -> str:
+        cleaned = str(plan).strip().lower()
+        if not cleaned or len(cleaned) > 60 or not cleaned.replace("_", "").replace("-", "").isalnum():
+            raise ValueError("plan must contain only letters, numbers, hyphens, or underscores")
+        return cleaned
+
+    def create_user(
+        self,
+        email: str,
+        *,
+        plan: str = "beta",
+        daily_request_limit: int = 50,
+    ) -> str:
         """Create an active beta user and return its opaque ID."""
         user_id = self._new_id("usr")
+        normalized_email = self._normalize_email(email)
+        clean_plan = self._normalize_plan(plan)
+        limit = self._validate_daily_request_limit(daily_request_limit)
+        now = time.time()
         with self._connect() as connection:
             connection.execute(
                 "INSERT INTO troika_users (id, email, created_at) VALUES (?, ?, ?)",
-                (user_id, self._normalize_email(email), time.time()),
+                (user_id, normalized_email, now),
+            )
+            connection.execute(
+                "INSERT INTO troika_entitlements "
+                "(user_id, plan, daily_request_limit, updated_at) VALUES (?, ?, ?, ?)",
+                (user_id, clean_plan, limit, now),
             )
         return user_id
+
+    def set_entitlement(
+        self, user_id: str, *, plan: str, daily_request_limit: int
+    ) -> None:
+        """Set an operator-approved plan and daily request limit for one user."""
+        clean_plan = self._normalize_plan(plan)
+        limit = self._validate_daily_request_limit(daily_request_limit)
+        with self._connect() as connection:
+            user = connection.execute(
+                "SELECT id FROM troika_users WHERE id = ?", (user_id,)
+            ).fetchone()
+            if user is None:
+                raise ValueError("user does not exist")
+            connection.execute(
+                "INSERT INTO troika_entitlements "
+                "(user_id, plan, daily_request_limit, updated_at) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET "
+                "plan = excluded.plan, "
+                "daily_request_limit = excluded.daily_request_limit, "
+                "updated_at = excluded.updated_at",
+                (user_id, clean_plan, limit, time.time()),
+            )
+
+    def consume_chat_request(
+        self, principal: AccessPrincipal, *, now: datetime | None = None
+    ) -> UsageDecision:
+        """Atomically consume one request from the user's UTC daily quota.
+
+        A rejected request is not recorded.  ``BEGIN IMMEDIATE`` serializes
+        concurrent requests against the same SQLite database, so two devices
+        cannot both spend the last available request.
+        """
+        timestamp = now or datetime.now(timezone.utc)
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+        usage_date = timestamp.astimezone(timezone.utc).date().isoformat()
+        current_time = time.time()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            entitlement = connection.execute(
+                "SELECT daily_request_limit FROM troika_entitlements "
+                "WHERE user_id = ?",
+                (principal.user_id,),
+            ).fetchone()
+            if entitlement is None:
+                raise ValueError("user has no active entitlement")
+            limit = self._validate_daily_request_limit(
+                entitlement["daily_request_limit"]
+            )
+            row = connection.execute(
+                "SELECT requests FROM troika_usage_daily "
+                "WHERE user_id = ? AND usage_date = ?",
+                (principal.user_id, usage_date),
+            ).fetchone()
+            used = int(row["requests"]) if row is not None else 0
+            if used >= limit:
+                return UsageDecision(False, usage_date, limit, used, 0)
+            used += 1
+            connection.execute(
+                "INSERT INTO troika_usage_daily "
+                "(user_id, usage_date, requests, updated_at) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(user_id, usage_date) DO UPDATE SET "
+                "requests = excluded.requests, updated_at = excluded.updated_at",
+                (principal.user_id, usage_date, used, current_time),
+            )
+        return UsageDecision(True, usage_date, limit, used, limit - used)
+
+    def daily_usage(self, user_id: str, *, now: datetime | None = None) -> int:
+        """Return recorded requests for an operator's current UTC day view."""
+        timestamp = now or datetime.now(timezone.utc)
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+        usage_date = timestamp.astimezone(timezone.utc).date().isoformat()
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT requests FROM troika_usage_daily "
+                "WHERE user_id = ? AND usage_date = ?",
+                (user_id, usage_date),
+            ).fetchone()
+        return int(row["requests"]) if row is not None else 0
 
     def create_device(self, user_id: str, *, name: str, platform: str) -> str:
         """Register one device for an active user."""

@@ -23,16 +23,38 @@ TROIKA_PRODUCT_AUTH_DB=/opt/data/troika_access.db
 
 ```bash
 python -m troika_product --database /opt/data/troika_access.db provision \
-  --email user@example.com --device-name "Pixel 9" --platform android
+  --email user@example.com --device-name "Pixel 9" --platform android \
+  --plan beta --daily-request-limit 50
 ```
 
 Передай значение `token=` пользователю безопасным каналом. Он вводит его в
 Android-приложении в «Настройки → API ключ». База хранит только SHA-256 digest
 токена, поэтому восстановить его после выдачи нельзя.
 
+Оператор может изменить лимит существующего пользователя без перевыпуска токена:
+
+```bash
+python -m troika_product --database /opt/data/troika_access.db set-limit \
+  --user-id usr_... --plan pro --daily-request-limit 200
+```
+
+## Usage в beta
+
+Каждый запрос в `/v1/runs` и `/v1/chat/completions` атомарно списывает один
+запрос из дневного лимита пользователя (UTC). Лимит beta по умолчанию — 50
+запросов в сутки; успешный запуск возвращает оставшееся число в заголовках
+`X-Troika-Daily-Request-Limit` и `X-Troika-Requests-Remaining`. При исчерпании
+сервер возвращает `429` и не запускает агента. Это временный cost cap, а не
+финальная биллинговая система: платежи, платежные периоды и возвраты пока не
+реализованы.
+
 ## Ограничения beta
 
 - Нет публичной регистрации, платежей, восстановления доступа или push-delivery.
 - История чата и location fingerprints изолированы по user/device token.
+- Доступ к status, events, approval и stop конкретного run изолирован по
+  user/device token.
+- Legacy `/v1/responses` временно отключён: его старое хранилище не имеет
+  tenant ownership. Клиент beta использует `/v1/runs` или `/v1/chat/completions`.
 - Глобальные jobs и управление телефоном намеренно отключены до появления
   адресной маршрутизации конкретного устройства и audit log.

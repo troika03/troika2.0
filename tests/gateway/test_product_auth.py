@@ -1,5 +1,8 @@
 """Product-auth integration checks for the OpenAI-compatible API server."""
 
+import asyncio
+import json
+
 from gateway.config import PlatformConfig
 from gateway.platforms.api_server import APIServerAdapter
 
@@ -62,3 +65,47 @@ def test_product_session_owner_cannot_be_impersonated(tmp_path) -> None:
 
     assert adapter._authorize_product_session(first, "private-session", claim=True) is None
     assert adapter._authorize_product_session(second, "private-session", claim=True).status == 403
+
+
+def test_product_quota_and_run_status_are_isolated(tmp_path) -> None:
+    adapter, first_token, second_token = _adapter_with_two_users(tmp_path)
+    first = _Request(first_token)
+    second = _Request(second_token)
+    assert adapter._check_auth(first) is None
+    assert adapter._check_auth(second) is None
+    first_principal = first["troika_product_principal"]
+    adapter._access_registry.set_entitlement(
+        first_principal.user_id, plan="beta", daily_request_limit=1
+    )
+
+    assert adapter._consume_product_request_quota(first) is None
+    assert first["troika_usage"].remaining == 0
+    exhausted = adapter._consume_product_request_quota(first)
+    assert exhausted is not None and exhausted.status == 429
+
+    adapter._run_owners["run_private"] = (
+        first_principal.user_id,
+        first_principal.device_id,
+    )
+    assert adapter._authorize_product_run(first, "run_private") is None
+    hidden = adapter._authorize_product_run(second, "run_private")
+    assert hidden is not None and hidden.status == 404
+
+
+def test_product_mode_hides_global_responses_api(tmp_path) -> None:
+    adapter, first_token, _ = _adapter_with_two_users(tmp_path)
+    request = _Request(first_token)
+    assert adapter._check_auth(request) is None
+
+    response = asyncio.run(adapter._handle_responses(request))
+    assert response.status == 404
+
+
+def test_product_capabilities_do_not_advertise_global_responses_api(tmp_path) -> None:
+    adapter, first_token, _ = _adapter_with_two_users(tmp_path)
+    request = _Request(first_token)
+    response = asyncio.run(adapter._handle_capabilities(request))
+    payload = json.loads(response.body)
+
+    assert payload["features"]["responses_api"] is False
+    assert "responses" not in payload["endpoints"]

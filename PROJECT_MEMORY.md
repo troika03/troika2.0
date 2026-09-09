@@ -28,7 +28,7 @@
 
 ## Известные критические проблемы baseline
 
-- Не реализованы учётные записи, pairing устройств, entitlement и quota ledger: один API-key пока не является моделью подписок.
+- Закрытая beta имеет users/devices/tokens/entitlements/quota ledger, но ещё нет self-service регистрации, pairing UI, billing, платежей и поддержки подписок.
 - Точный device context всё ещё требует отдельного opt-in, политики хранения и удаления. Его внешний reverse-geocoding вызов нужно убрать за consent/feature flag.
 - PC tools включены в core toolset; `tools/pc_tool.py` и `troika_voice_daemon.py` были незакоммичены в исходной копии.
 - PC/voice зависимости (`mss`, `pyautogui`, `scipy`, `pyttsx3`) не описаны в dependency manifest.
@@ -54,14 +54,22 @@
 - В product mode отключены legacy global jobs и phone-control, пока они не получат user/device routing и audit log.
 - Проверено: 9 focused pytest tests passed, включая token revocation, session isolation, API integration и provisioning CLI. Android `hermes_config_test.dart`: 2/2 passed. Полный `flutter analyze` не завершился в лимит текущей среды.
 
+## Выполнено: usage cap для закрытой beta (2026-09-09)
+
+- Добавлены сущности `Entitlement → Usage`: у каждого beta-пользователя есть план и дневной лимит запросов; по умолчанию — 50 запросов в сутки UTC.
+- Списание для `/v1/runs` и `/v1/chat/completions` атомарно в SQLite. Одновременно запущенные запросы не могут потратить один и тот же последний лимит; при исчерпании агент не запускается и получает `429`.
+- Оператор может задать план и лимит при выдаче доступа или изменить их через `python -m troika_product … set-limit …`; это cost cap beta, не биллинг и не обещание безлимита.
+- Запущенные runs теперь принадлежат user/device: другой токен не может читать status/SSE, подтверждать действие или останавливать чужой run.
+- Legacy `/v1/responses` отключён в product mode, пока его глобальное хранилище не будет заменено tenant-owned storage; этим нельзя обойти лимит или изоляцию.
+- Проверено: `14 passed` focused pytest; `compileall` и targeted `ruff check` прошли.
+
 ## Ближайший порядок работы
 
-1. Провести чистую инвентаризацию текущих локальных изменений и разделить их на коммиты/удаление.
-2. Настроить воспроизводимую среду и минимальный зелёный CI baseline.
-3. Спроектировать `User → Device → Session → Entitlement → Usage` и user-scoped storage до реализации UI/billing.
-4. Убрать опасные/персональные defaults из public configuration.
-5. Реализовать auth, tenant isolation, quota ledger, audit log и privacy controls.
-6. Затем стабилизировать Android core loop и закрытую beta.
+1. Настроить воспроизводимую среду и минимальный зелёный CI baseline.
+2. Заменить legacy response store на tenant-owned storage либо оставить endpoint выключенным до этой миграции.
+3. Реализовать audit log, privacy controls и lifecycle удаления данных для device context/location.
+4. Спроектировать subscription billing: продукты, платежные периоды, webhooks, отмена, возвраты и поддержка.
+5. Затем стабилизировать Android core loop и провести закрытую beta с измерением cost/request и retention.
 
 ## Правила изменения проекта
 
@@ -78,7 +86,7 @@
 - [x] Скопирован актуальный код и WIP из исходного репозитория.
 - [x] Зафиксирован план productization.
 - [x] Создана отдельная продуктовая ветка.
-- [ ] Стабилизирован Git baseline новой копии и опубликован в новом GitHub repo.
+- [x] Стабилизирован Git baseline новой копии и опубликован в новом GitHub repo.
 - [x] Запущена P0 security foundation.
 - [ ] Восстановлены Flutter/TUI проверки.
-- [ ] Спроектированы и реализованы account/device/pairing foundation.
+- [x] Реализованы beta account/device/session/entitlement/usage foundation.
