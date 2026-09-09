@@ -639,6 +639,10 @@ class HermesListenerService : Service() {
     private fun startPhoneBridge() {
         if (phoneBridge != null) return
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (!prefs.getBoolean("flutter.hermes_phone_control_enabled", false)) {
+            android.util.Log.i("HermesListener", "PhoneBridge disabled until the user opts in")
+            return
+        }
         val url = resolvedUrl(prefs)
         if (url.isBlank()) {
             android.util.Log.i("HermesListener", "PhoneBridge not started: server is not configured")

@@ -45,6 +45,15 @@
 - Убрана небезопасная общая доставка reminders: создание временно честно отклоняется до реализации личного push/in-app channel.
 - Проверено: 4 targeted pytest tests passed; Python compilation passed; Dart files formatted. Flutter test ещё не запускался из-за отсутствующих packages.
 
+## Выполнено: P0 beta access foundation (2026-09-09)
+
+- Добавлен `troika_product.access`: SQLite registry для users, devices, digest-only device tokens и ownership сессий.
+- В product mode (`TROIKA_PRODUCT_AUTH_ENABLED=true`) gateway принимает только `trk_live_…` токены устройств, принудительно выводит memory scope на сервере и запрещает чужие session IDs.
+- STT proxy использует тот же registry, поэтому голосовой путь не возвращается к общему API key.
+- Добавлен операторский CLI: `python -m troika_product --database … provision …`; пошаговый runbook — `docs/TROIKA_CLOSED_BETA_SETUP.md`.
+- В product mode отключены legacy global jobs и phone-control, пока они не получат user/device routing и audit log.
+- Проверено: 9 focused pytest tests passed, включая token revocation, session isolation, API integration и provisioning CLI. Android `hermes_config_test.dart`: 2/2 passed. Полный `flutter analyze` не завершился в лимит текущей среды.
+
 ## Ближайший порядок работы
 
 1. Провести чистую инвентаризацию текущих локальных изменений и разделить их на коммиты/удаление.

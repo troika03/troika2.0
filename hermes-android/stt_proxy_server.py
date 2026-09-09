@@ -64,6 +64,19 @@ GROQ_API_KEY = GROQ_KEYS[0] if GROQ_KEYS else ""  # обратная совме�
 API_SERVER_KEY = os.getenv("API_SERVER_KEY", "").strip()
 PORT = int(os.getenv("STT_PROXY_PORT", "8643"))
 HOST = "0.0.0.0"
+PRODUCT_AUTH_ENABLED = os.getenv("TROIKA_PRODUCT_AUTH_ENABLED", "").strip().lower() in {
+    "1", "true", "yes", "on",
+}
+PRODUCT_AUTH_ERROR = ""
+ACCESS_REGISTRY = None
+if PRODUCT_AUTH_ENABLED:
+    try:
+        from troika_product.access import AccessRegistry
+
+        raw_database = os.getenv("TROIKA_PRODUCT_AUTH_DB", "").strip()
+        ACCESS_REGISTRY = AccessRegistry(Path(raw_database) if raw_database else None)
+    except Exception as exc:
+        PRODUCT_AUTH_ERROR = str(exc)
 
 _PLACEHOLDER_KEYS = {
     "hermes-2024", "your_api_key", "your_api_key_here", "changeme",
@@ -315,17 +328,25 @@ async def health(request):
 
 
 async def transcribe(request):
-    if not API_KEY_CONFIGURED:
-        return web.json_response(
-            {"error": "STT proxy is not configured with a valid API_SERVER_KEY"},
-            status=503,
-        )
     auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Bearer "):
-        return web.json_response({"error": "Missing Authorization header"}, status=401)
-    token = auth.replace("Bearer ", "").strip()
-    if not hmac.compare_digest(token, API_SERVER_KEY):
-        return web.json_response({"error": "Invalid API key"}, status=401)
+    token = auth.replace("Bearer ", "", 1).strip() if auth.startswith("Bearer ") else ""
+    if PRODUCT_AUTH_ENABLED:
+        if ACCESS_REGISTRY is None:
+            return web.json_response(
+                {"error": "STT proxy product authentication is unavailable"}, status=503
+            )
+        if ACCESS_REGISTRY.authenticate(token) is None:
+            return web.json_response({"error": "Invalid API key"}, status=401)
+    else:
+        if not API_KEY_CONFIGURED:
+            return web.json_response(
+                {"error": "STT proxy is not configured with a valid API_SERVER_KEY"},
+                status=503,
+            )
+        if not auth.startswith("Bearer "):
+            return web.json_response({"error": "Missing Authorization header"}, status=401)
+        if not hmac.compare_digest(token, API_SERVER_KEY):
+            return web.json_response({"error": "Invalid API key"}, status=401)
 
     reader = await request.multipart()
     audio_data = None
@@ -407,8 +428,13 @@ def main():
         app.on_startup.append(_on_startup)
 
     log.info(f"🎙️  Hermes STT Proxy запущен на http://{HOST}:{PORT}")
-    log.info("    API ключ настроен: %s", "да" if API_KEY_CONFIGURED else "нет")
-    if not API_KEY_CONFIGURED:
+    log.info(
+        "    Auth mode: %s",
+        "product device tokens" if PRODUCT_AUTH_ENABLED else "legacy API_SERVER_KEY",
+    )
+    if PRODUCT_AUTH_ENABLED and ACCESS_REGISTRY is None:
+        log.error("STT proxy product auth unavailable: %s", PRODUCT_AUTH_ERROR or "unknown error")
+    elif not PRODUCT_AUTH_ENABLED and not API_KEY_CONFIGURED:
         log.error("STT proxy will reject requests until API_SERVER_KEY is a unique secret")
     log.info(f"    STT_BACKEND={STT_BACKEND}  GROQ_API_KEY={'✓' if GROQ_API_KEY else '✗'}")
     log.info(f"    Local model: {LOCAL_MODEL_SIZE} (device={LOCAL_DEVICE}, compute={LOCAL_COMPUTE or 'auto'})")

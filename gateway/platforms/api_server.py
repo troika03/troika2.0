@@ -101,6 +101,11 @@ def _coerce_request_bool(value: Any, default: bool = False) -> bool:
     return default
 
 
+def _coerce_config_bool(value: Any, default: bool = False) -> bool:
+    """Interpret config/env booleans without treating ``'false'`` as true."""
+    return _coerce_request_bool(value, default=default)
+
+
 def _normalize_chat_content(
     content: Any, *, _max_depth: int = 10, _depth: int = 0,
 ) -> str:
@@ -820,6 +825,27 @@ class APIServerAdapter(BasePlatformAdapter):
             raw_port = os.getenv("API_SERVER_PORT", str(DEFAULT_PORT))
         self._port: int = _coerce_port(raw_port, DEFAULT_PORT)
         self._api_key: str = extra.get("key", os.getenv("API_SERVER_KEY", ""))
+        self._product_auth_enabled = _coerce_config_bool(
+            extra.get(
+                "product_auth_enabled",
+                os.getenv("TROIKA_PRODUCT_AUTH_ENABLED", "false"),
+            )
+        )
+        self._access_registry = None
+        self._product_auth_error: Optional[str] = None
+        if self._product_auth_enabled:
+            try:
+                from troika_product.access import AccessRegistry
+
+                raw_database = extra.get(
+                    "product_auth_db", os.getenv("TROIKA_PRODUCT_AUTH_DB", "")
+                )
+                database_path = Path(str(raw_database)) if raw_database else None
+                self._access_registry = AccessRegistry(database_path)
+            except Exception as exc:
+                # Product auth must fail closed at connect time; never silently
+                # fall back to the legacy shared-key mode.
+                self._product_auth_error = str(exc)
         self._cors_origins: tuple[str, ...] = self._parse_cors_origins(
             extra.get("cors_origins", os.getenv("API_SERVER_CORS_ORIGINS", "")),
         )
@@ -966,6 +992,36 @@ class APIServerAdapter(BasePlatformAdapter):
     # Auth helper
     # ------------------------------------------------------------------
 
+    def _product_principal(self, request: "web.Request") -> Optional[Any]:
+        """Return the request's authenticated product principal, if enabled."""
+        if self._access_registry is None:
+            return None
+        return request.get("troika_product_principal")
+
+    def _authorize_product_session(
+        self, request: "web.Request", session_id: str, *, claim: bool
+    ) -> Optional["web.Response"]:
+        """Bind or validate session ownership when product auth is enabled."""
+        if self._access_registry is None:
+            return None
+        principal = self._product_principal(request)
+        if principal is None:
+            return web.json_response(_openai_error("Product authentication is required"), status=401)
+        permitted = (
+            self._access_registry.claim_session(principal, session_id)
+            if claim
+            else self._access_registry.session_belongs_to(principal, session_id)
+        )
+        if permitted:
+            return None
+        logger.warning(
+            "Product session access rejected: %s",
+            self._request_audit_log_suffix(request),
+        )
+        return web.json_response(
+            _openai_error("This session belongs to another user"), status=403
+        )
+
     def _check_auth(self, request: "web.Request") -> Optional["web.Response"]:
         """
         Validate Bearer token from Authorization header.
@@ -974,11 +1030,16 @@ class APIServerAdapter(BasePlatformAdapter):
         If no API key is configured, all requests are allowed (only when API
         server is local).
         """
-        if not self._api_key:
-            return None  # No key configured — allow all (local-only use)
-
         auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
+        if self._access_registry is not None:
+            token = auth_header[7:].strip() if auth_header.startswith("Bearer ") else ""
+            principal = self._access_registry.authenticate(token)
+            if principal is not None:
+                request["troika_product_principal"] = principal
+                return None
+        elif not self._api_key:
+            return None  # No key configured — allow all (local-only use)
+        elif auth_header.startswith("Bearer "):
             token = auth_header[7:].strip()
             if hmac.compare_digest(token, self._api_key):
                 return None  # Auth OK
@@ -1024,11 +1085,17 @@ class APIServerAdapter(BasePlatformAdapter):
         unauthenticated client on a local-only server can't inject itself
         into another user's long-term memory scope by guessing a key.
         """
+        principal = self._product_principal(request)
+        if principal is not None:
+            # The device token is the identity boundary.  Ignore a header that
+            # might be forged by a client and use a server-derived scope.
+            return principal.memory_scope, None
+
         raw = request.headers.get("X-Hermes-Session-Key", "").strip()
         if not raw:
             return None, None
 
-        if not self._api_key:
+        if not self._api_key and self._access_registry is None:
             logger.warning(
                 "X-Hermes-Session-Key rejected: no API key configured. "
                 "Set API_SERVER_KEY to enable long-term memory scoping."
@@ -1209,7 +1276,8 @@ class APIServerAdapter(BasePlatformAdapter):
             "model": self._model_name,
             "auth": {
                 "type": "bearer",
-                "required": bool(self._api_key),
+                "required": bool(self._api_key or self._access_registry),
+                "mode": "product" if self._access_registry is not None else "legacy",
             },
             "runtime": {
                 "mode": "server_agent",
@@ -1256,6 +1324,13 @@ class APIServerAdapter(BasePlatformAdapter):
         auth_err = self._check_auth(request)
         if auth_err:
             return auth_err
+        if self._access_registry is not None:
+            return web.json_response(
+                _openai_error(
+                    "Phone control is unavailable in product mode until device routing is implemented"
+                ),
+                status=403,
+            )
         from gateway.platforms.phone_bridge import bridge
         logger.info("Phone WS handshake from %s, bridge id=%s", request.remote, id(bridge))
         return await bridge.handle_connection(request)
@@ -1265,6 +1340,8 @@ class APIServerAdapter(BasePlatformAdapter):
         auth_err = self._check_auth(request)
         if auth_err:
             return auth_err
+        if self._access_registry is not None:
+            return web.json_response(_openai_error("Phone control is unavailable in product mode"), status=403)
         from gateway.platforms.phone_bridge import bridge
         return web.json_response({"connected": bridge.is_connected(), "bridge_id": id(bridge)})
 
@@ -1292,18 +1369,26 @@ class APIServerAdapter(BasePlatformAdapter):
 
         source = request.query.get("source") or None
         try:
+            fetch_limit = 200 if self._access_registry is not None else limit
+            fetch_offset = 0 if self._access_registry is not None else offset
             sessions = db.list_sessions_rich(
                 source=source,
-                limit=limit,
-                offset=offset,
+                limit=fetch_limit,
+                offset=fetch_offset,
                 order_by_last_active=True,
             )
         except Exception as e:
             logger.error("list_sessions failed: %s", e, exc_info=True)
             return web.json_response({"error": f"list_failed: {e}"}, status=500)
 
+        allowed_session_ids = None
+        principal = self._product_principal(request)
+        if principal is not None:
+            allowed_session_ids = self._access_registry.user_session_ids(principal)
         items: List[Dict[str, Any]] = []
         for s in sessions or []:
+            if allowed_session_ids is not None and s.get("id") not in allowed_session_ids:
+                continue
             items.append({
                 "id": s.get("id"),
                 "source": s.get("source"),
@@ -1313,6 +1398,8 @@ class APIServerAdapter(BasePlatformAdapter):
                 "started_at": s.get("started_at"),
                 "last_active": s.get("last_active"),
             })
+        if allowed_session_ids is not None:
+            items = items[offset:offset + limit]
         return web.json_response({"sessions": items, "count": len(items)})
 
     async def _handle_get_session_messages(self, request: "web.Request") -> "web.Response":
@@ -1324,6 +1411,11 @@ class APIServerAdapter(BasePlatformAdapter):
         session_id = request.match_info.get("session_id", "").strip()
         if not session_id or re.search(r"[\r\n\x00]", session_id):
             return web.json_response({"error": "bad_session_id"}, status=400)
+        session_auth_err = self._authorize_product_session(
+            request, session_id, claim=False
+        )
+        if session_auth_err:
+            return session_auth_err
 
         db = self._ensure_session_db()
         if db is None:
@@ -1368,6 +1460,8 @@ class APIServerAdapter(BasePlatformAdapter):
         auth_err = self._check_auth(request)
         if auth_err:
             return auth_err
+        if self._access_registry is not None:
+            return web.json_response(_openai_error("Phone control is unavailable in product mode"), status=403)
         try:
             body = await request.json()
         except Exception:
@@ -1664,7 +1758,7 @@ class APIServerAdapter(BasePlatformAdapter):
         # read arbitrary session history by guessing/enumerating session IDs.
         provided_session_id = request.headers.get("X-Hermes-Session-Id", "").strip()
         if provided_session_id:
-            if not self._api_key:
+            if not self._api_key and self._access_registry is None:
                 logger.warning(
                     "Session continuation via X-Hermes-Session-Id rejected: "
                     "no API key configured.  Set API_SERVER_KEY to enable "
@@ -1726,6 +1820,12 @@ class APIServerAdapter(BasePlatformAdapter):
                     break
             session_id = _derive_chat_session_id(system_prompt, first_user)
             # history already set from request body above
+
+        session_auth_err = self._authorize_product_session(
+            request, session_id, claim=True
+        )
+        if session_auth_err:
+            return session_auth_err
 
         completion_id = f"chatcmpl-{uuid.uuid4().hex[:29]}"
         model_name = body.get("model", self._model_name)
@@ -3992,6 +4092,14 @@ class APIServerAdapter(BasePlatformAdapter):
             logger.warning("[%s] aiohttp not installed", self.name)
             return False
 
+        if self._product_auth_enabled and self._access_registry is None:
+            logger.error(
+                "[%s] Refusing to start: Troika product auth could not initialize: %s",
+                self.name,
+                self._product_auth_error or "unknown error",
+            )
+            return False
+
         try:
             mws = [mw for mw in (cors_middleware, body_limit_middleware, security_headers_middleware) if mw is not None]
             self._app = web.Application(middlewares=mws, client_max_size=MAX_REQUEST_BYTES)
@@ -4002,24 +4110,28 @@ class APIServerAdapter(BasePlatformAdapter):
             self._app.router.add_get("/v1/models", self._handle_models)
             self._app.router.add_get("/v1/capabilities", self._handle_capabilities)
             self._app.router.add_post("/v1/chat/completions", self._handle_chat_completions)
-            self._app.router.add_get("/v1/phone/commands", self._handle_phone_ws)
-            self._app.router.add_get("/v1/phone/status", self._handle_phone_status)
-            self._app.router.add_post("/v1/phone/notify", self._handle_phone_notify)
+            if self._access_registry is None:
+                self._app.router.add_get("/v1/phone/commands", self._handle_phone_ws)
+                self._app.router.add_get("/v1/phone/status", self._handle_phone_status)
+                self._app.router.add_post("/v1/phone/notify", self._handle_phone_notify)
             self._app.router.add_get("/v1/sessions", self._handle_list_sessions)
             self._app.router.add_get("/v1/sessions/{session_id}/messages", self._handle_get_session_messages)
             self._app.router.add_post("/v1/audio/speech", self._handle_audio_speech)
             self._app.router.add_post("/v1/responses", self._handle_responses)
             self._app.router.add_get("/v1/responses/{response_id}", self._handle_get_response)
             self._app.router.add_delete("/v1/responses/{response_id}", self._handle_delete_response)
-            # Cron jobs management API
-            self._app.router.add_get("/api/jobs", self._handle_list_jobs)
-            self._app.router.add_post("/api/jobs", self._handle_create_job)
-            self._app.router.add_get("/api/jobs/{job_id}", self._handle_get_job)
-            self._app.router.add_patch("/api/jobs/{job_id}", self._handle_update_job)
-            self._app.router.add_delete("/api/jobs/{job_id}", self._handle_delete_job)
-            self._app.router.add_post("/api/jobs/{job_id}/pause", self._handle_pause_job)
-            self._app.router.add_post("/api/jobs/{job_id}/resume", self._handle_resume_job)
-            self._app.router.add_post("/api/jobs/{job_id}/run", self._handle_run_job)
+            # Jobs need a user-owned scheduler and delivery channel before they
+            # can be exposed to product users.  The legacy global scheduler is
+            # deliberately unavailable in product mode.
+            if self._access_registry is None:
+                self._app.router.add_get("/api/jobs", self._handle_list_jobs)
+                self._app.router.add_post("/api/jobs", self._handle_create_job)
+                self._app.router.add_get("/api/jobs/{job_id}", self._handle_get_job)
+                self._app.router.add_patch("/api/jobs/{job_id}", self._handle_update_job)
+                self._app.router.add_delete("/api/jobs/{job_id}", self._handle_delete_job)
+                self._app.router.add_post("/api/jobs/{job_id}/pause", self._handle_pause_job)
+                self._app.router.add_post("/api/jobs/{job_id}/resume", self._handle_resume_job)
+                self._app.router.add_post("/api/jobs/{job_id}/run", self._handle_run_job)
             # Structured event streaming
             self._app.router.add_post("/v1/runs", self._handle_runs)
             self._app.router.add_get("/v1/runs/{run_id}", self._handle_get_run)
@@ -4046,7 +4158,11 @@ class APIServerAdapter(BasePlatformAdapter):
                 logger.warning("[%s] job_runner init failed: %s", self.name, _e)
 
             # Refuse to start network-accessible without authentication
-            if is_network_accessible(self._host) and not self._api_key:
+            if (
+                is_network_accessible(self._host)
+                and not self._api_key
+                and self._access_registry is None
+            ):
                 logger.error(
                     "[%s] Refusing to start: binding to %s requires API_SERVER_KEY. "
                     "Set API_SERVER_KEY or use the default 127.0.0.1.",
@@ -4056,7 +4172,11 @@ class APIServerAdapter(BasePlatformAdapter):
 
             # Refuse to start network-accessible with a placeholder key.
             # Ported from openclaw/openclaw#64586.
-            if is_network_accessible(self._host) and self._api_key:
+            if (
+                is_network_accessible(self._host)
+                and self._api_key
+                and self._access_registry is None
+            ):
                 try:
                     from hermes_cli.auth import has_usable_secret
                     if not has_usable_secret(self._api_key, min_length=8):
