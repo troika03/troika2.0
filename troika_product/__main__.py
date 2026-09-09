@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 from troika_product.access import AccessRegistry
@@ -22,6 +23,9 @@ def main() -> int:
     set_limit.add_argument("--user-id", required=True)
     set_limit.add_argument("--plan", required=True)
     set_limit.add_argument("--daily-request-limit", type=int, required=True)
+    audit = subcommands.add_parser("audit", help="Show privacy-safe audit events for one user")
+    audit.add_argument("--user-id", required=True)
+    audit.add_argument("--limit", type=int, default=100)
     args = parser.parse_args()
 
     registry = AccessRegistry(args.database)
@@ -51,6 +55,24 @@ def main() -> int:
         print(f"user_id={args.user_id}")
         print(f"plan={args.plan}")
         print(f"daily_request_limit={args.daily_request_limit}")
+        return 0
+    if args.command == "audit":
+        for event in registry.list_audit_events(args.user_id, limit=args.limit):
+            print(
+                json.dumps(
+                    {
+                        "id": event.id,
+                        "occurred_at": event.occurred_at,
+                        "event_type": event.event_type,
+                        "user_id": event.user_id,
+                        "device_id": event.device_id,
+                        "session_digest": event.session_digest,
+                        "run_digest": event.run_digest,
+                        "details": event.details,
+                    },
+                    sort_keys=True,
+                )
+            )
         return 0
     return 2
 

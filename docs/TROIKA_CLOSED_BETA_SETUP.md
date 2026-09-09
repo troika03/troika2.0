@@ -48,6 +48,21 @@ python -m troika_product --database /opt/data/troika_access.db set-limit \
 финальная биллинговая система: платежи, платежные периоды и возвраты пока не
 реализованы.
 
+## Audit beta
+
+База сохраняет append-only события без текста запросов, токенов и raw session
+IDs: выдача лимита, запуск и остановка run, approval, отказ доступа, исчерпание
+лимита. Для диагностики одного пользователя используй:
+
+```bash
+python -m troika_product --database /opt/data/troika_access.db audit \
+  --user-id usr_... --limit 100
+```
+
+`session_digest` и `run_digest` — односторонние ссылки для корреляции, не исходные
+значения. Записи — продуктовый журнал beta, но не WORM-хранилище: доступ
+операторов к серверной SQLite-базе должен быть ограничен.
+
 ## Ограничения beta
 
 - Нет публичной регистрации, платежей, восстановления доступа или push-delivery.
@@ -57,4 +72,4 @@ python -m troika_product --database /opt/data/troika_access.db set-limit \
 - Legacy `/v1/responses` временно отключён: его старое хранилище не имеет
   tenant ownership. Клиент beta использует `/v1/runs` или `/v1/chat/completions`.
 - Глобальные jobs и управление телефоном намеренно отключены до появления
-  адресной маршрутизации конкретного устройства и audit log.
+  адресной маршрутизации конкретного устройства.

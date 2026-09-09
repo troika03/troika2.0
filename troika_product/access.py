@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
+import json
 from pathlib import Path
 import secrets
 import sqlite3
@@ -44,6 +45,20 @@ class UsageDecision:
     limit: int
     used: int
     remaining: int
+
+
+@dataclass(frozen=True)
+class AuditEvent:
+    """Append-only product audit entry with no prompts, tokens, or raw IDs."""
+
+    id: int
+    occurred_at: float
+    event_type: str
+    user_id: str | None
+    device_id: str | None
+    session_digest: str | None
+    run_digest: str | None
+    details: dict[str, str | int | float | bool | None]
 
 
 class AccessRegistry:
@@ -111,6 +126,17 @@ class AccessRegistry:
                     PRIMARY KEY (user_id, usage_date)
                 );
 
+                CREATE TABLE IF NOT EXISTS troika_audit_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    occurred_at REAL NOT NULL,
+                    event_type TEXT NOT NULL,
+                    user_id TEXT REFERENCES troika_users(id),
+                    device_id TEXT REFERENCES troika_devices(id),
+                    session_digest TEXT,
+                    run_digest TEXT,
+                    details_json TEXT NOT NULL
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_troika_devices_user
                     ON troika_devices(user_id);
                 CREATE INDEX IF NOT EXISTS idx_troika_tokens_device
@@ -119,6 +145,10 @@ class AccessRegistry:
                     ON troika_sessions(user_id);
                 CREATE INDEX IF NOT EXISTS idx_troika_usage_daily_date
                     ON troika_usage_daily(usage_date);
+                CREATE INDEX IF NOT EXISTS idx_troika_audit_events_user_time
+                    ON troika_audit_events(user_id, occurred_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_troika_audit_events_device_time
+                    ON troika_audit_events(device_id, occurred_at DESC);
                 """
             )
 
@@ -129,6 +159,16 @@ class AccessRegistry:
     @staticmethod
     def _token_digest(token: str) -> str:
         return sha256(token.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _audit_reference_digest(value: str | None) -> str | None:
+        """Keep an auditable correlation reference without storing raw client IDs."""
+        if value is None:
+            return None
+        clean_value = str(value).strip()
+        if not clean_value:
+            return None
+        return sha256(clean_value.encode("utf-8")).hexdigest()[:32]
 
     @staticmethod
     def _normalize_email(email: str) -> str:
@@ -260,6 +300,97 @@ class AccessRegistry:
                 (user_id, usage_date),
             ).fetchone()
         return int(row["requests"]) if row is not None else 0
+
+    @staticmethod
+    def _normalize_audit_details(
+        details: dict[str, str | int | float | bool | None] | None,
+    ) -> dict[str, str | int | float | bool | None]:
+        """Reject message-like fields so audit rows cannot become a shadow chat log."""
+        if details is None:
+            return {}
+        if not isinstance(details, dict) or len(details) > 16:
+            raise ValueError("audit details must contain at most 16 scalar values")
+        normalized: dict[str, str | int | float | bool | None] = {}
+        forbidden = {"api_key", "authorization", "content", "message", "prompt", "token"}
+        for key, value in details.items():
+            clean_key = str(key).strip().lower()
+            if (
+                not clean_key
+                or len(clean_key) > 64
+                or clean_key in forbidden
+                or not clean_key.replace("_", "").replace("-", "").isalnum()
+            ):
+                raise ValueError("audit detail key is not allowed")
+            if isinstance(value, str):
+                if len(value) > 120:
+                    raise ValueError("audit detail value is too long")
+                normalized[clean_key] = value
+            elif value is None or isinstance(value, (bool, int, float)):
+                normalized[clean_key] = value
+            else:
+                raise ValueError("audit details must use scalar values")
+        return normalized
+
+    def record_audit_event(
+        self,
+        event_type: str,
+        *,
+        principal: AccessPrincipal | None = None,
+        session_id: str | None = None,
+        run_id: str | None = None,
+        details: dict[str, str | int | float | bool | None] | None = None,
+    ) -> int:
+        """Append a privacy-preserving product event and return its database ID."""
+        clean_event_type = str(event_type).strip().lower()
+        if (
+            not clean_event_type
+            or len(clean_event_type) > 100
+            or not clean_event_type.replace("_", "").replace("-", "").replace(".", "").isalnum()
+        ):
+            raise ValueError("audit event type is invalid")
+        normalized_details = self._normalize_audit_details(details)
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "INSERT INTO troika_audit_events "
+                "(occurred_at, event_type, user_id, device_id, session_digest, run_digest, details_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    time.time(),
+                    clean_event_type,
+                    principal.user_id if principal else None,
+                    principal.device_id if principal else None,
+                    self._audit_reference_digest(session_id),
+                    self._audit_reference_digest(run_id),
+                    json.dumps(normalized_details, sort_keys=True, separators=(",", ":")),
+                ),
+            )
+        return int(cursor.lastrowid)
+
+    def list_audit_events(self, user_id: str, *, limit: int = 100) -> list[AuditEvent]:
+        """Return a bounded operator view of one user's privacy-safe audit trail."""
+        if isinstance(limit, bool) or not 1 <= int(limit) <= 500:
+            raise ValueError("audit event limit must be between 1 and 500")
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT id, occurred_at, event_type, user_id, device_id, "
+                "session_digest, run_digest, details_json "
+                "FROM troika_audit_events WHERE user_id = ? "
+                "ORDER BY id DESC LIMIT ?",
+                (user_id, int(limit)),
+            ).fetchall()
+        return [
+            AuditEvent(
+                id=int(row["id"]),
+                occurred_at=float(row["occurred_at"]),
+                event_type=str(row["event_type"]),
+                user_id=row["user_id"],
+                device_id=row["device_id"],
+                session_digest=row["session_digest"],
+                run_digest=row["run_digest"],
+                details=json.loads(row["details_json"]),
+            )
+            for row in rows
+        ]
 
     def create_device(self, user_id: str, *, name: str, platform: str) -> str:
         """Register one device for an active user."""

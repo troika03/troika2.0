@@ -1001,6 +1001,37 @@ class APIServerAdapter(BasePlatformAdapter):
             return None
         return request.get("troika_product_principal")
 
+    def _record_product_audit(
+        self,
+        request: "web.Request",
+        event_type: str,
+        *,
+        session_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Record product security events without retaining request content."""
+        if self._access_registry is None:
+            return
+        principal = self._product_principal(request)
+        if principal is None:
+            return
+        try:
+            self._access_registry.record_audit_event(
+                event_type,
+                principal=principal,
+                session_id=session_id,
+                run_id=run_id,
+                details=details,
+            )
+        except Exception:
+            # The agent flow is still available if an optional beta audit write
+            # fails, but operators get a high-severity signal to investigate.
+            logger.exception(
+                "Product audit write failed: %s",
+                self._request_audit_log_suffix(request),
+            )
+
     def _authorize_product_session(
         self, request: "web.Request", session_id: str, *, claim: bool
     ) -> Optional["web.Response"]:
@@ -1016,7 +1047,12 @@ class APIServerAdapter(BasePlatformAdapter):
             else self._access_registry.session_belongs_to(principal, session_id)
         )
         if permitted:
+            if claim:
+                self._record_product_audit(
+                    request, "session.claimed", session_id=session_id
+                )
             return None
+        self._record_product_audit(request, "session.denied", session_id=session_id)
         logger.warning(
             "Product session access rejected: %s",
             self._request_audit_log_suffix(request),
@@ -1051,6 +1087,11 @@ class APIServerAdapter(BasePlatformAdapter):
         request["troika_usage"] = decision
         if decision.allowed:
             return None
+        self._record_product_audit(
+            request,
+            "request.quota_exhausted",
+            details={"limit": decision.limit, "used": decision.used},
+        )
         logger.info(
             "Product daily quota exhausted: %s",
             self._request_audit_log_suffix(request),
@@ -1091,6 +1132,7 @@ class APIServerAdapter(BasePlatformAdapter):
             and owner == (principal.user_id, principal.device_id)
         ):
             return None
+        self._record_product_audit(request, "run.access_denied", run_id=run_id)
         # Return 404 rather than revealing that another user's run exists.
         logger.warning(
             "Product run access rejected: %s",
@@ -1917,6 +1959,18 @@ class APIServerAdapter(BasePlatformAdapter):
         quota_err = self._consume_product_request_quota(request)
         if quota_err:
             return quota_err
+        usage = request.get("troika_usage")
+        if usage is not None:
+            self._record_product_audit(
+                request,
+                "request.accepted",
+                session_id=session_id,
+                details={
+                    "endpoint": "chat_completions",
+                    "limit": usage.limit,
+                    "remaining": usage.remaining,
+                },
+            )
 
         completion_id = f"chatcmpl-{uuid.uuid4().hex[:29]}"
         model_name = body.get("model", self._model_name)
@@ -3756,6 +3810,19 @@ class APIServerAdapter(BasePlatformAdapter):
         if quota_err:
             return quota_err
 
+        usage = request.get("troika_usage")
+        if usage is not None:
+            self._record_product_audit(
+                request,
+                "request.accepted",
+                session_id=str(session_id),
+                details={
+                    "endpoint": "runs",
+                    "limit": usage.limit,
+                    "remaining": usage.remaining,
+                },
+            )
+
         approval_session_key = gateway_session_key or session_id or run_id
         ephemeral_system_prompt = instructions
         loop = asyncio.get_running_loop()
@@ -3767,6 +3834,9 @@ class APIServerAdapter(BasePlatformAdapter):
         principal = self._product_principal(request)
         if principal is not None:
             self._run_owners[run_id] = (principal.user_id, principal.device_id)
+        self._record_product_audit(
+            request, "run.started", session_id=str(session_id), run_id=run_id
+        )
 
         event_cb = self._make_run_event_callback(run_id, loop)
 
@@ -4118,6 +4188,12 @@ class APIServerAdapter(BasePlatformAdapter):
             )
 
         self._set_run_status(run_id, "running", last_event="approval.responded")
+        self._record_product_audit(
+            request,
+            "run.approval_responded",
+            run_id=run_id,
+            details={"choice": choice, "resolved": resolved},
+        )
         q = self._run_streams.get(run_id)
         if q is not None:
             try:
@@ -4155,6 +4231,7 @@ class APIServerAdapter(BasePlatformAdapter):
             return web.json_response(_openai_error(f"Run not found: {run_id}", code="run_not_found"), status=404)
 
         self._set_run_status(run_id, "stopping", last_event="run.stopping")
+        self._record_product_audit(request, "run.stop_requested", run_id=run_id)
 
         if agent is not None:
             try:

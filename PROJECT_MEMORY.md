@@ -63,11 +63,17 @@
 - Legacy `/v1/responses` отключён в product mode, пока его глобальное хранилище не будет заменено tenant-owned storage; этим нельзя обойти лимит или изоляцию.
 - Проверено: `14 passed` focused pytest; `compileall` и targeted `ruff check` прошли.
 
+## Выполнено: privacy-safe audit beta (2026-09-09)
+
+- Добавлен append-only `troika_audit_events`: user/device, event type, хэши session/run и короткие технические details. Текст переписки, API token, prompt и raw session ID отклоняются.
+- Gateway фиксирует claim/denial сессии, начало запроса, исчерпание квоты, создание/stop run и approval. Доступ к raw SQLite остаётся ограничением beta: это не WORM-хранилище.
+- Добавлен операторский просмотр `python -m troika_product … audit --user-id …`; тесты проверяют отсутствие raw session/run и запрет prompt в audit details.
+
 ## Ближайший порядок работы
 
 1. Настроить воспроизводимую среду и минимальный зелёный CI baseline.
 2. Заменить legacy response store на tenant-owned storage либо оставить endpoint выключенным до этой миграции.
-3. Реализовать audit log, privacy controls и lifecycle удаления данных для device context/location.
+3. Реализовать privacy controls и lifecycle удаления данных для device context/location.
 4. Спроектировать subscription billing: продукты, платежные периоды, webhooks, отмена, возвраты и поддержка.
 5. Затем стабилизировать Android core loop и провести закрытую beta с измерением cost/request и retention.
 
