@@ -32,6 +32,8 @@ class AssistantService extends ChangeNotifier {
   String _errorMessage = '';
   String _debugHeard = '';
   bool _wakeWordEnabled = true;
+  RunApprovalRequest? _pendingApproval;
+  Completer<String>? _approvalCompleter;
 
   // Единая лента диалога — голос и текст вперемешку, как в мессенджере.
   final List<ChatMessage> _messages = [];
@@ -48,6 +50,7 @@ class AssistantService extends ChangeNotifier {
   String get errorMessage => _errorMessage;
   String get debugHeard => _debugHeard;
   bool get wakeWordEnabled => _wakeWordEnabled;
+  RunApprovalRequest? get pendingApproval => _pendingApproval;
   List<ChatMessage> get messages => List.unmodifiable(_messages);
   bool get historyLoaded => _historyLoaded;
 
@@ -61,7 +64,9 @@ class AssistantService extends ChangeNotifier {
 
     // Запросить отключение оптимизации батареи (нужно для фона)
     try {
-      final ignored = await _platform.invokeMethod<bool>('isBatteryOptimizationIgnored') ?? false;
+      final ignored =
+          await _platform.invokeMethod<bool>('isBatteryOptimizationIgnored') ??
+              false;
       if (!ignored) {
         await _platform.invokeMethod('requestBatteryOptimizationDisable');
       }
@@ -71,7 +76,8 @@ class AssistantService extends ChangeNotifier {
 
     // Запросить разрешение на overlay (для bottom sheet поверх приложений)
     try {
-      final hasOverlay = await _platform.invokeMethod<bool>('hasOverlayPermission') ?? false;
+      final hasOverlay =
+          await _platform.invokeMethod<bool>('hasOverlayPermission') ?? false;
       if (!hasOverlay) {
         await _platform.invokeMethod('requestOverlayPermission');
       }
@@ -252,14 +258,15 @@ class AssistantService extends ChangeNotifier {
       }
 
       _lastUserText = userText;
-      final userMsg = ChatMessage(role: 'user', text: userText, fromVoice: true);
+      final userMsg =
+          ChatMessage(role: 'user', text: userText, fromVoice: true);
       _messages.add(userMsg);
       final pending = ChatMessage(role: 'assistant', pending: true);
       _messages.add(pending);
       notifyListeners();
 
-      final response =
-          _stripEmoTag(await _hermes.sendMessage(userMsg, recent: _recentContext()));
+      final response = _stripEmoTag(
+          await _hermes.sendMessage(userMsg, recent: _recentContext()));
       _lastHermesText = response;
       pending
         ..text = response
@@ -281,17 +288,45 @@ class AssistantService extends ChangeNotifier {
   List<ChatMessage> _recentContext({int n = 6}) {
     final done = _messages.where((m) => !m.pending).toList();
     if (done.length <= 1) return const [];
-    final slice = done.sublist(0, done.length - 1); // без только что добавленного user
+    final slice =
+        done.sublist(0, done.length - 1); // без только что добавленного user
     return slice.length > n ? slice.sublist(slice.length - n) : slice;
   }
 
   Future<void> interrupt() async {
     // Останавливаем И Flutter-side TTS, И нативный Edge TTS player из
     // HermesListenerService — Тройка молчит сразу.
-    try { await _platform.invokeMethod('interruptTts'); } catch (_) {}
+    try {
+      await _platform.invokeMethod('interruptTts');
+    } catch (_) {}
     await _tts.stop();
     await _recorder.cancelRecording();
     _setState(AssistantState.idle);
+  }
+
+  Future<String> _waitForApproval(RunApprovalRequest request) async {
+    // A run is tied to the current device token.  Still require a visible,
+    // one-time decision before changing anything on the phone.
+    final completer = Completer<String>();
+    _pendingApproval = request;
+    _approvalCompleter = completer;
+    notifyListeners();
+    try {
+      return await completer.future;
+    } finally {
+      if (identical(_approvalCompleter, completer)) {
+        _approvalCompleter = null;
+        _pendingApproval = null;
+        notifyListeners();
+      }
+    }
+  }
+
+  void resolvePendingApproval(String choice) {
+    final completer = _approvalCompleter;
+    if (completer == null || completer.isCompleted) return;
+    final allowed = _pendingApproval?.choices ?? const <String>['deny'];
+    completer.complete(allowed.contains(choice) ? choice : 'deny');
   }
 
   /// Отправить текст и/или картинки из чата.
@@ -341,6 +376,7 @@ class AssistantService extends ChangeNotifier {
           pending.text = _stripEmoTag(pending.text + d);
           notifyListeners();
         },
+        onApproval: _waitForApproval,
       );
       final cleanResponse = _stripEmoTag(response);
       _lastHermesText = cleanResponse;
@@ -391,6 +427,7 @@ class AssistantService extends ChangeNotifier {
 
   @override
   void dispose() {
+    resolvePendingApproval('deny');
     _recorder.dispose();
     _tts.dispose();
     _wakeWord.dispose();

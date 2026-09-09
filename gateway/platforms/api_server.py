@@ -1465,11 +1465,20 @@ class APIServerAdapter(BasePlatformAdapter):
         if auth_err:
             return auth_err
         if self._access_registry is not None:
-            return web.json_response(
-                _openai_error(
-                    "Phone control is unavailable in product mode until device routing is implemented"
-                ),
-                status=403,
+            principal = self._product_principal(request)
+            if principal is None:
+                return web.json_response(
+                    _openai_error("Product authentication is required"), status=401
+                )
+            from gateway.platforms.phone_bridge import product_bridge
+
+            def _record_lifecycle(state: str) -> None:
+                self._record_product_audit(request, f"phone.{state}")
+
+            return await product_bridge.handle_connection(
+                request,
+                principal.device_id,
+                lifecycle_callback=_record_lifecycle,
             )
         from gateway.platforms.phone_bridge import bridge
         logger.info("Phone WS handshake from %s, bridge id=%s", request.remote, id(bridge))
@@ -1481,7 +1490,16 @@ class APIServerAdapter(BasePlatformAdapter):
         if auth_err:
             return auth_err
         if self._access_registry is not None:
-            return web.json_response(_openai_error("Phone control is unavailable in product mode"), status=403)
+            principal = self._product_principal(request)
+            if principal is None:
+                return web.json_response(
+                    _openai_error("Product authentication is required"), status=401
+                )
+            from gateway.platforms.phone_bridge import product_bridge
+
+            return web.json_response(
+                {"connected": product_bridge.is_connected(principal.device_id)}
+            )
         from gateway.platforms.phone_bridge import bridge
         return web.json_response({"connected": bridge.is_connected(), "bridge_id": id(bridge)})
 
@@ -1787,6 +1805,8 @@ class APIServerAdapter(BasePlatformAdapter):
         auth_err = self._check_auth(request)
         if auth_err:
             return auth_err
+        product_principal = self._product_principal(request)
+        product_device_id = product_principal.device_id if product_principal else None
 
         # Parse request body
         try:
@@ -2089,6 +2109,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 tool_complete_callback=_on_tool_complete,
                 agent_ref=agent_ref,
                 gateway_session_key=gateway_session_key,
+                product_device_id=product_device_id,
             ))
             # Ensure SSE drain loops can terminate without relying on polling
             # agent_task.done(), which can race with queue timeout checks.
@@ -2108,6 +2129,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 ephemeral_system_prompt=system_prompt,
                 session_id=session_id,
                 gateway_session_key=gateway_session_key,
+                product_device_id=product_device_id,
             )
 
         idempotency_key = request.headers.get("Idempotency-Key")
@@ -3635,6 +3657,7 @@ class APIServerAdapter(BasePlatformAdapter):
         tool_complete_callback=None,
         agent_ref: Optional[list] = None,
         gateway_session_key: Optional[str] = None,
+        product_device_id: Optional[str] = None,
     ) -> tuple:
         """
         Create an agent and run a conversation in a thread executor.
@@ -3650,35 +3673,51 @@ class APIServerAdapter(BasePlatformAdapter):
         loop = asyncio.get_running_loop()
 
         def _run():
-            agent = self._create_agent(
-                ephemeral_system_prompt=ephemeral_system_prompt,
-                session_id=session_id,
-                stream_delta_callback=stream_delta_callback,
-                tool_progress_callback=tool_progress_callback,
-                tool_start_callback=tool_start_callback,
-                tool_complete_callback=tool_complete_callback,
-                gateway_session_key=gateway_session_key,
+            from gateway.session_context import (
+                clear_session_override,
+                set_session_override,
             )
-            if agent_ref is not None:
-                agent_ref[0] = agent
-            effective_task_id = session_id or str(uuid.uuid4())
-            result = agent.run_conversation(
-                user_message=user_message,
-                conversation_history=conversation_history,
-                task_id=effective_task_id,
-            )
-            usage = {
-                "input_tokens": getattr(agent, "session_prompt_tokens", 0) or 0,
-                "output_tokens": getattr(agent, "session_completion_tokens", 0) or 0,
-                "total_tokens": getattr(agent, "session_total_tokens", 0) or 0,
-            }
-            # Include the effective session ID in the result so callers
-            # (e.g. X-Hermes-Session-Id header) can track compression-
-            # triggered session rotations. (#16938)
-            _eff_sid = getattr(agent, "session_id", session_id)
-            if isinstance(_eff_sid, str) and _eff_sid:
-                result["session_id"] = _eff_sid
-            return result, usage
+
+            if product_device_id:
+                # The device id is derived from the accepted bearer token,
+                # never from model arguments or caller-controlled headers.
+                # ContextVars propagate into parallel tool workers.
+                set_session_override("TROIKA_PRODUCT_MODE", "1")
+                set_session_override("TROIKA_PRODUCT_DEVICE_ID", product_device_id)
+            try:
+                agent = self._create_agent(
+                    ephemeral_system_prompt=ephemeral_system_prompt,
+                    session_id=session_id,
+                    stream_delta_callback=stream_delta_callback,
+                    tool_progress_callback=tool_progress_callback,
+                    tool_start_callback=tool_start_callback,
+                    tool_complete_callback=tool_complete_callback,
+                    gateway_session_key=gateway_session_key,
+                )
+                if agent_ref is not None:
+                    agent_ref[0] = agent
+                effective_task_id = session_id or str(uuid.uuid4())
+                result = agent.run_conversation(
+                    user_message=user_message,
+                    conversation_history=conversation_history,
+                    task_id=effective_task_id,
+                )
+                usage = {
+                    "input_tokens": getattr(agent, "session_prompt_tokens", 0) or 0,
+                    "output_tokens": getattr(agent, "session_completion_tokens", 0) or 0,
+                    "total_tokens": getattr(agent, "session_total_tokens", 0) or 0,
+                }
+                # Include the effective session ID in the result so callers
+                # (e.g. X-Hermes-Session-Id header) can track compression-
+                # triggered session rotations. (#16938)
+                _eff_sid = getattr(agent, "session_id", session_id)
+                if isinstance(_eff_sid, str) and _eff_sid:
+                    result["session_id"] = _eff_sid
+                return result, usage
+            finally:
+                if product_device_id:
+                    clear_session_override("TROIKA_PRODUCT_DEVICE_ID")
+                    clear_session_override("TROIKA_PRODUCT_MODE")
 
         return await loop.run_in_executor(None, _run)
 
@@ -3896,22 +3935,17 @@ class APIServerAdapter(BasePlatformAdapter):
         async def _run_and_close():
             try:
                 self._set_run_status(run_id, "running")
-                agent = self._create_agent(
-                    ephemeral_system_prompt=ephemeral_system_prompt,
-                    session_id=session_id,
-                    stream_delta_callback=_text_cb,
-                    tool_progress_callback=event_cb,
-                    gateway_session_key=gateway_session_key,
-                )
-                self._active_run_agents[run_id] = agent
 
                 def _approval_notify(approval_data: Dict[str, Any]) -> None:
                     event = dict(approval_data or {})
+                    choices = event.get("choices")
+                    if not isinstance(choices, list) or not choices:
+                        choices = ["once", "session", "always", "deny"]
                     event.update({
                         "event": "approval.request",
                         "run_id": run_id,
                         "timestamp": time.time(),
-                        "choices": ["once", "session", "always", "deny"],
+                        "choices": choices,
                     })
                     self._set_run_status(
                         run_id,
@@ -3924,7 +3958,12 @@ class APIServerAdapter(BasePlatformAdapter):
                         pass
 
                 def _run_sync():
-                    from gateway.session_context import clear_session_vars, set_session_vars
+                    from gateway.session_context import (
+                        clear_session_override,
+                        clear_session_vars,
+                        set_session_override,
+                        set_session_vars,
+                    )
                     from tools.approval import (
                         register_gateway_notify,
                         reset_current_session_key,
@@ -3935,6 +3974,7 @@ class APIServerAdapter(BasePlatformAdapter):
                     effective_task_id = session_id or run_id
                     approval_token = None
                     session_tokens = []
+                    product_context_bound = False
                     try:
                         # Bind approval/session identity for this API run via
                         # contextvars so concurrent runs do not share process
@@ -3944,6 +3984,23 @@ class APIServerAdapter(BasePlatformAdapter):
                             platform="api_server",
                             session_key=approval_session_key,
                         )
+                        if principal is not None:
+                            # Bind the device identity before agent creation:
+                            # availability checks and all tool workers see the
+                            # same server-derived device scope.
+                            set_session_override("TROIKA_PRODUCT_MODE", "1")
+                            set_session_override(
+                                "TROIKA_PRODUCT_DEVICE_ID", principal.device_id
+                            )
+                            product_context_bound = True
+                        agent = self._create_agent(
+                            ephemeral_system_prompt=ephemeral_system_prompt,
+                            session_id=session_id,
+                            stream_delta_callback=_text_cb,
+                            tool_progress_callback=event_cb,
+                            gateway_session_key=gateway_session_key,
+                        )
+                        self._active_run_agents[run_id] = agent
                         register_gateway_notify(approval_session_key, _approval_notify)
                         r = agent.run_conversation(
                             user_message=user_message,
@@ -3964,6 +4021,9 @@ class APIServerAdapter(BasePlatformAdapter):
                                     clear_session_vars(session_tokens)
                                 except Exception:
                                     pass
+                            if product_context_bound:
+                                clear_session_override("TROIKA_PRODUCT_DEVICE_ID")
+                                clear_session_override("TROIKA_PRODUCT_MODE")
                     u = {
                         "input_tokens": getattr(agent, "session_prompt_tokens", 0) or 0,
                         "output_tokens": getattr(agent, "session_completion_tokens", 0) or 0,
@@ -4170,19 +4230,6 @@ class APIServerAdapter(BasePlatformAdapter):
         except Exception:
             return web.json_response(_openai_error("Invalid JSON"), status=400)
 
-        raw_choice = str(body.get("choice", "")).strip().lower()
-        aliases = {"approve": "once", "approved": "once", "allow": "once"}
-        choice = aliases.get(raw_choice, raw_choice)
-        allowed = {"once", "session", "always", "deny"}
-        if choice not in allowed:
-            return web.json_response(
-                _openai_error(
-                    "Invalid approval choice; expected one of: once, session, always, deny",
-                    code="invalid_approval_choice",
-                ),
-                status=400,
-            )
-
         approval_session_key = self._run_approval_sessions.get(run_id)
         if not approval_session_key:
             return web.json_response(
@@ -4193,10 +4240,42 @@ class APIServerAdapter(BasePlatformAdapter):
                 status=409,
             )
 
+        raw_choice = str(body.get("choice", "")).strip().lower()
+        aliases = {"approve": "once", "approved": "once", "allow": "once"}
+        choice = aliases.get(raw_choice, raw_choice)
+        try:
+            from tools.approval import (
+                get_gateway_approval_choices,
+                is_product_gateway_approval,
+            )
+
+            allowed = set(get_gateway_approval_choices(approval_session_key))
+            product_action = is_product_gateway_approval(approval_session_key)
+        except Exception:
+            logger.exception("[api_server] approval choice lookup failed for run %s", run_id)
+            return web.json_response(_openai_error("Approval state unavailable"), status=503)
+        if allowed and choice not in allowed:
+            expected = ", ".join(sorted(allowed))
+            return web.json_response(
+                _openai_error(
+                    f"Invalid approval choice; expected one of: {expected}",
+                    code="invalid_approval_choice",
+                ),
+                status=400,
+            )
+
         resolve_all = (
             _coerce_request_bool(body.get("all"), default=False)
             or _coerce_request_bool(body.get("resolve_all"), default=False)
         )
+        if product_action and resolve_all:
+            return web.json_response(
+                _openai_error(
+                    "Product actions require separate one-time confirmations",
+                    code="invalid_approval_scope",
+                ),
+                status=400,
+            )
         try:
             from tools.approval import resolve_gateway_approval
 
@@ -4353,9 +4432,9 @@ class APIServerAdapter(BasePlatformAdapter):
             self._app.router.add_get("/v1/models", self._handle_models)
             self._app.router.add_get("/v1/capabilities", self._handle_capabilities)
             self._app.router.add_post("/v1/chat/completions", self._handle_chat_completions)
+            self._app.router.add_get("/v1/phone/commands", self._handle_phone_ws)
+            self._app.router.add_get("/v1/phone/status", self._handle_phone_status)
             if self._access_registry is None:
-                self._app.router.add_get("/v1/phone/commands", self._handle_phone_ws)
-                self._app.router.add_get("/v1/phone/status", self._handle_phone_status)
                 self._app.router.add_post("/v1/phone/notify", self._handle_phone_notify)
             self._app.router.add_get("/v1/sessions", self._handle_list_sessions)
             self._app.router.add_get("/v1/sessions/{session_id}/messages", self._handle_get_session_messages)

@@ -25,6 +25,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _input = TextEditingController();
   final ScrollController _scroll = ScrollController();
   final ImagePicker _picker = ImagePicker();
+  RunApprovalRequest? _shownApproval;
 
   // Прикреплённые, но ещё не отправленные картинки (data-url).
   final List<String> _pendingImages = [];
@@ -85,7 +86,8 @@ class _ChatScreenState extends State<ChatScreen> {
       // Картинки — отправляем как vision. Прочие файлы сервер как вложение
       // не принимает (только text/image) — шлём имя файла текстом.
       final ext = (f.extension ?? '').toLowerCase();
-      if (['jpg', 'jpeg', 'png', 'webp', 'gif'].contains(ext) && f.bytes != null) {
+      if (['jpg', 'jpeg', 'png', 'webp', 'gif'].contains(ext) &&
+          f.bytes != null) {
         final mime = 'image/${ext == 'jpg' ? 'jpeg' : ext}';
         final dataUrl = 'data:$mime;base64,${base64Encode(f.bytes!)}';
         setState(() => _pendingImages.add(dataUrl));
@@ -148,10 +150,57 @@ class _ChatScreenState extends State<ChatScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
+  Future<void> _showApprovalDialog(
+    AssistantService assistant,
+    RunApprovalRequest request,
+  ) async {
+    if (!mounted) {
+      assistant.resolvePendingApproval('deny');
+      return;
+    }
+    final allowOnce = request.choices.contains('once');
+    final choice = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: TroikaColors.surface,
+        title: const Text(
+          'Подтвердить действие?',
+          style: TextStyle(color: TroikaColors.text),
+        ),
+        content: Text(
+          request.description,
+          style: const TextStyle(color: TroikaColors.textMuted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, 'deny'),
+            child: const Text('Отмена'),
+          ),
+          if (allowOnce)
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, 'once'),
+              child: const Text('Разрешить один раз'),
+            ),
+        ],
+      ),
+    );
+    assistant.resolvePendingApproval(choice ?? 'deny');
+  }
+
   @override
   Widget build(BuildContext context) {
     final a = context.watch<AssistantService>();
     final messages = a.messages;
+    final approval = a.pendingApproval;
+    if (approval == null) {
+      _shownApproval = null;
+    } else if (!identical(_shownApproval, approval)) {
+      _shownApproval = approval;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showApprovalDialog(a, approval);
+      });
+    }
     if (messages.length != _lastCount) {
       _lastCount = messages.length;
       _scrollToBottom();
@@ -232,14 +281,17 @@ class _ChatScreenState extends State<ChatScreen> {
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: bytes != null
-                    ? Image.memory(bytes, width: 64, height: 64, fit: BoxFit.cover)
-                    : Container(width: 64, height: 64, color: TroikaColors.surfaceHi),
+                    ? Image.memory(bytes,
+                        width: 64, height: 64, fit: BoxFit.cover)
+                    : Container(
+                        width: 64, height: 64, color: TroikaColors.surfaceHi),
               ),
               Positioned(
                 top: -6,
                 right: -6,
                 child: IconButton(
-                  icon: const Icon(Icons.cancel, size: 18, color: Colors.white70),
+                  icon:
+                      const Icon(Icons.cancel, size: 18, color: Colors.white70),
                   onPressed: () => setState(() => _pendingImages.removeAt(i)),
                 ),
               ),
@@ -336,7 +388,8 @@ class _SendButton extends StatelessWidget {
           color: TroikaColors.brand,
           shape: BoxShape.circle,
         ),
-        child: const Icon(Icons.arrow_upward, color: Color(0xFF1A1206), size: 22),
+        child:
+            const Icon(Icons.arrow_upward, color: Color(0xFF1A1206), size: 22),
       ),
     );
   }
@@ -368,9 +421,8 @@ class _MessageBubble extends StatelessWidget {
             bottomRight: Radius.circular(isUser ? 4 : 16),
           ),
           border: Border.all(
-            color: isUser
-                ? TroikaColors.brand.withOpacity(0.28)
-                : Colors.white10,
+            color:
+                isUser ? TroikaColors.brand.withOpacity(0.28) : Colors.white10,
           ),
         ),
         child: Column(
@@ -430,9 +482,9 @@ class _TypingDots extends StatefulWidget {
 
 class _TypingDotsState extends State<_TypingDots>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _c =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 900))
-        ..repeat();
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 900))
+    ..repeat();
 
   @override
   void dispose() {
@@ -656,21 +708,20 @@ class _ThoughtsViewState extends State<_ThoughtsView> {
         children: [
           SizedBox(
             width: 18,
-            child: Text(icon,
-                style: TextStyle(fontSize: 12, color: color)),
+            child: Text(icon, style: TextStyle(fontSize: 12, color: color)),
           ),
           const SizedBox(width: 2),
           Expanded(
             child: s.kind == ThoughtKind.thinking
                 ? _TranslatedText(
                     text: text,
-                    style: TextStyle(
-                        color: color, fontSize: 12.5, height: 1.35),
+                    style:
+                        TextStyle(color: color, fontSize: 12.5, height: 1.35),
                   )
                 : Text(
                     text,
-                    style: TextStyle(
-                        color: color, fontSize: 12.5, height: 1.35),
+                    style:
+                        TextStyle(color: color, fontSize: 12.5, height: 1.35),
                   ),
           ),
         ],

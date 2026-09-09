@@ -81,9 +81,19 @@
 - Product API принимает device context только с `X-Troika-Device-Context-Consent: granted`; при `revoked` очищает временный контекст и пишет audit event.
 - Reverse geocoding наружу выключен feature flag `TROIKA_EXTERNAL_GEOCODING_ENABLED=false`. Точные координаты не покидают сервер без будущего отдельного consent flow.
 
+## Выполнено: безопасный paired-phone slice (2026-09-09)
+
+- Legacy single-phone bridge не включён для product mode. Новый `ProductPhoneBridge` привязывает WebSocket и каждую команду к device ID, полученному только из действующего `trk_live_…` токена.
+- Product mode возвращает лишь безопасный первый набор: status, battery, network и подтверждаемые действия открыть приложение/поиск/будильник/таймер/навигация/громкость/яркость/фонарик/камера. SMS, звонки, файлы, экран, clipboard и календарь остаются выключенными до отдельной модели данных и privacy review.
+- Любое изменяющее действие требует отдельного выбора «Разрешить один раз» в Android-приложении. Consent не переносится на другие действия; API отклоняет `session`, `always` и bulk-approval для product action.
+- Android обработал SSE `approval.request` и показывает понятный диалог. Если UI/канал подтверждения недоступен, действие отклоняется.
+- Проверено: 35 focused Python tests; `ruff` и `compileall` прошли; Flutter test 3/3 прошёл; `flutter analyze` без ошибок (40 прежних informational suggestions).
+
 ## Ближайший порядок работы
 
-1. Поэтапно вернуть ключевые функции Тройки: привязанный телефон с подтверждениями, затем документы и презентации, затем проактивный личный ассистент. Не включать legacy global bridges.
+1. Добавить создание и доставку документов/презентаций через отдельное user-owned storage, не через server filesystem или legacy push-file.
+2. Расширять paired-phone slice только после явного privacy review каждой категории (calendar, files, screen, calls/SMS).
+3. Вернуть проактивного личного ассистента через личные notification preferences и quiet hours, без global jobs.
 2. Настроить воспроизводимую среду и минимальный зелёный CI baseline.
 3. Заменить legacy response store на tenant-owned storage либо оставить endpoint выключенным до этой миграции.
 4. Добавить lifecycle удаления данных: saved locations, диалоги, memory и account deletion.

@@ -579,6 +579,127 @@ def has_blocking_approval(session_key: str) -> bool:
         return bool(_gateway_queues.get(session_key))
 
 
+def get_gateway_approval_choices(session_key: str) -> tuple[str, ...]:
+    """Return the allowed choices for the oldest pending gateway approval.
+
+    Older terminal approvals intentionally retain their ``once/session/always/
+    deny`` contract. Product actions can instead request a one-time-only
+    confirmation, which prevents a broad approval from silently carrying over
+    to a different phone action.
+    """
+    with _lock:
+        queue = _gateway_queues.get(session_key) or []
+        if not queue:
+            return ()
+        raw_choices = queue[0].data.get("choices")
+    if not isinstance(raw_choices, (list, tuple, set)):
+        return ("once", "session", "always", "deny")
+    choices = tuple(str(choice).strip().lower() for choice in raw_choices)
+    return choices or ("once", "session", "always", "deny")
+
+
+def is_product_gateway_approval(session_key: str) -> bool:
+    """Whether the oldest pending approval is a one-time product action."""
+    with _lock:
+        queue = _gateway_queues.get(session_key) or []
+        return bool(queue and queue[0].data.get("product_action") is True)
+
+
+def request_gateway_approval(
+    action: str,
+    description: str,
+    *,
+    choices: tuple[str, ...] = ("once", "deny"),
+) -> dict:
+    """Block for an explicit gateway confirmation of a non-shell action.
+
+    This is the product-safe counterpart to command approvals.  It fails
+    closed when there is no authenticated gateway session or no listener.  A
+    caller chooses the allowed response set; phone actions use only ``once``
+    and ``deny`` so consent cannot spill into a later action.
+    """
+    clean_action = str(action or "").strip().lower()
+    clean_description = " ".join(str(description or "").split())[:600]
+    clean_choices = tuple(
+        choice for choice in (str(item).strip().lower() for item in choices)
+        if choice in {"once", "session", "always", "deny"}
+    )
+    if not clean_action or not re.fullmatch(r"[a-z0-9_.-]{1,80}", clean_action):
+        return {"approved": False, "reason": "invalid_action"}
+    if not clean_description or "once" not in clean_choices or "deny" not in clean_choices:
+        return {"approved": False, "reason": "invalid_approval_request"}
+
+    session_key = get_current_session_key(default="")
+    if not session_key:
+        return {"approved": False, "reason": "approval_session_unavailable"}
+    with _lock:
+        notify_cb = _gateway_notify_cbs.get(session_key)
+    if notify_cb is None:
+        return {"approved": False, "reason": "approval_listener_unavailable"}
+
+    approval_data = {
+        "command": clean_action,
+        "pattern_key": f"product:{clean_action}",
+        "pattern_keys": [f"product:{clean_action}"],
+        "description": clean_description,
+        "choices": list(clean_choices),
+        "product_action": True,
+    }
+    entry = _ApprovalEntry(approval_data)
+    with _lock:
+        _gateway_queues.setdefault(session_key, []).append(entry)
+
+    _fire_approval_hook(
+        "pre_approval_request",
+        command=clean_action,
+        description=clean_description,
+        pattern_key=approval_data["pattern_key"],
+        pattern_keys=list(approval_data["pattern_keys"]),
+        session_key=session_key,
+        surface="gateway",
+    )
+    try:
+        notify_cb(approval_data)
+    except Exception:
+        logger.warning("Gateway product approval notify failed", exc_info=True)
+        with _lock:
+            queue = _gateway_queues.get(session_key, [])
+            if entry in queue:
+                queue.remove(entry)
+            if not queue:
+                _gateway_queues.pop(session_key, None)
+        return {"approved": False, "reason": "approval_notify_failed"}
+
+    timeout = _get_approval_config().get("gateway_timeout", 300)
+    try:
+        timeout = max(0, int(timeout))
+    except (TypeError, ValueError):
+        timeout = 300
+    resolved = entry.event.wait(timeout=timeout)
+    with _lock:
+        queue = _gateway_queues.get(session_key, [])
+        if entry in queue:
+            queue.remove(entry)
+        if not queue:
+            _gateway_queues.pop(session_key, None)
+
+    choice = entry.result if resolved else None
+    outcome = choice if choice in clean_choices else "timeout" if not resolved else "denied"
+    _fire_approval_hook(
+        "post_approval_response",
+        command=clean_action,
+        description=clean_description,
+        pattern_key=approval_data["pattern_key"],
+        pattern_keys=list(approval_data["pattern_keys"]),
+        session_key=session_key,
+        surface="gateway",
+        choice=outcome,
+    )
+    if choice != "once":
+        return {"approved": False, "reason": outcome, "user_consent": False}
+    return {"approved": True, "user_consent": True, "choice": "once"}
+
+
 def submit_pending(session_key: str, approval: dict):
     """Store a pending approval request for a session."""
     with _lock:

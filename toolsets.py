@@ -548,9 +548,24 @@ TOOLSETS = {
     },
 
     "troika-product": {
-        "description": "Hosted Troika product toolkit without device, PC, or server control.",
+        "description": "Hosted Troika toolkit with a paired-phone safe slice.",
         "tools": [],
-        "includes": ["safe"],
+        "includes": ["safe", "troika-phone"],
+    },
+
+    "troika-phone": {
+        "description": "Paired phone controls with per-action confirmation.",
+        "tools": [
+            # Device-owned read-only information.
+            "android_status", "android_battery", "android_network",
+            # Low-scope phone actions. ProductPhoneBridge rejects every
+            # other Android action and these require one-time confirmation.
+            "android_open_app", "android_web_search",
+            "android_set_alarm", "android_set_timer", "android_navigate",
+            "android_volume", "android_brightness", "android_torch",
+            "android_camera_photo",
+        ],
+        "includes": [],
     },
     
     # ==========================================================================

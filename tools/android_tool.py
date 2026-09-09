@@ -24,21 +24,98 @@ logger = logging.getLogger(__name__)
 
 
 def _bridge():
+    if _is_product_phone_context():
+        from gateway.platforms.phone_bridge import product_bridge
+
+        return product_bridge
     from gateway.platforms.phone_bridge import bridge
+
     return bridge
+
+
+def _product_device_id() -> str:
+    """Return the server-derived device identity for a product agent turn."""
+    try:
+        from gateway.session_context import get_session_env
+
+        return get_session_env("TROIKA_PRODUCT_DEVICE_ID", "").strip()
+    except Exception:
+        return ""
+
+
+def _is_product_phone_context() -> bool:
+    try:
+        from gateway.session_context import get_session_env
+
+        return get_session_env("TROIKA_PRODUCT_MODE", "") == "1"
+    except Exception:
+        return False
 
 
 def _check_phone_connected():
     """Возвращает True если телефон подключён (для check_fn в registry)."""
     try:
+        if _is_product_phone_context():
+            device_id = _product_device_id()
+            return bool(device_id and _bridge().is_connected(device_id))
         return _bridge().is_connected()
     except Exception:
         return False
 
 
+def _product_approval_description(action: str, params: Dict[str, Any]) -> str:
+    """Build a short, user-visible description without exposing server state."""
+    def text(name: str, fallback: str = "") -> str:
+        value = " ".join(str(params.get(name, fallback) or "").split())
+        return value[:160]
+
+    if action == "open_app":
+        return f"Открыть приложение «{text('app', 'выбранное')}» на вашем телефоне."
+    if action == "web_search":
+        return f"Открыть поиск «{text('query', 'запрос')}» на вашем телефоне."
+    if action == "set_alarm":
+        return f"Установить будильник на {text('hour', '0')}:{text('minute', '00')} на вашем телефоне."
+    if action == "set_timer":
+        return f"Запустить таймер на {text('seconds', '0')} секунд на вашем телефоне."
+    if action == "navigate":
+        return f"Открыть маршрут до «{text('destination', 'указанного места')}» на вашем телефоне."
+    if action == "volume":
+        return f"Изменить громкость телефона на «{text('level', 'указанный уровень')}»."
+    if action == "brightness":
+        return f"Изменить яркость экрана на «{text('level', 'указанный уровень')}»."
+    if action == "torch":
+        return "Изменить состояние фонарика на вашем телефоне."
+    if action == "camera_photo":
+        return "Открыть камеру на вашем телефоне."
+    return "Выполнить действие на вашем телефоне."
+
+
 async def _call_phone(action: str, params: Dict[str, Any] | None = None, timeout: float = 15.0) -> str:
     """Послать команду на телефон и вернуть JSON-результат для LLM."""
-    result = await _bridge().send_command(action, params or {}, timeout=timeout)
+    command_params = params or {}
+    if _is_product_phone_context():
+        device_id = _product_device_id()
+        if not device_id:
+            return json.dumps({"ok": False, "error": "product_device_required"}, ensure_ascii=False)
+        product_phone = _bridge()
+        if not product_phone.is_allowed_action(action):
+            return json.dumps({"ok": False, "error": "product_action_not_available"}, ensure_ascii=False)
+        if product_phone.requires_confirmation(action):
+            from tools.approval import request_gateway_approval
+
+            approval = request_gateway_approval(
+                f"phone.{action}", _product_approval_description(action, command_params)
+            )
+            if not approval.get("approved"):
+                return json.dumps(
+                    {"ok": False, "error": "phone_action_not_confirmed"},
+                    ensure_ascii=False,
+                )
+        result = await product_phone.send_command(
+            device_id, action, command_params, timeout=timeout
+        )
+    else:
+        result = await _bridge().send_command(action, command_params, timeout=timeout)
     return json.dumps(result, ensure_ascii=False)
 
 

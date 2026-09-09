@@ -19,7 +19,21 @@ class ThoughtStep {
   final DateTime time;
 
   ThoughtStep(this.kind, this.text, {this.isError = false, DateTime? time})
-    : time = time ?? DateTime.now();
+      : time = time ?? DateTime.now();
+}
+
+/// One server-requested confirmation for an action on the paired phone.
+/// The server has already bound the run to this installation's device token.
+class RunApprovalRequest {
+  final String action;
+  final String description;
+  final List<String> choices;
+
+  const RunApprovalRequest({
+    required this.action,
+    required this.description,
+    required this.choices,
+  });
 }
 
 /// Одно сообщение в чате (общая модель для голоса и текста).
@@ -28,7 +42,7 @@ class ChatMessage {
   final String role; // 'user' | 'assistant'
   String text;
   final List<String>
-  imageDataUrls; // data:image/...;base64,... (для отрисовки и отправки)
+      imageDataUrls; // data:image/...;base64,... (для отрисовки и отправки)
   final bool fromVoice;
   final DateTime time;
   bool pending; // ждём ответ сервера (для индикатора «печатает»)
@@ -45,9 +59,9 @@ class ChatMessage {
     DateTime? time,
     this.pending = false,
     List<ThoughtStep>? thoughts,
-  }) : imageDataUrls = imageDataUrls ?? [],
-       thoughts = thoughts ?? [],
-       time = time ?? DateTime.now();
+  })  : imageDataUrls = imageDataUrls ?? [],
+        thoughts = thoughts ?? [],
+        time = time ?? DateTime.now();
 
   bool get isUser => role == 'user';
   bool get hasImages => imageDataUrls.isNotEmpty;
@@ -157,6 +171,7 @@ class HermesApiService {
     void Function(String tool)? onToolStart,
     void Function(String tool, bool isError)? onToolDone,
     void Function(String delta)? onDelta,
+    Future<String> Function(RunApprovalRequest request)? onApproval,
   }) async {
     // 1) Стартуем run. input = только новое сообщение; историю сервер берёт
     //    из общей сессии. recent шлём как conversation_history для надёжности.
@@ -205,10 +220,9 @@ class HermesApiService {
       final answer = StringBuffer();
       String lastThought = '';
       bool runFailed = false;
-      await for (final raw
-          in evResp.stream
-              .transform(utf8.decoder)
-              .transform(const LineSplitter())) {
+      await for (final raw in evResp.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())) {
         final line = raw.trim();
         if (line.isEmpty || !line.startsWith('data:')) continue;
         final payload = line.substring(5).trim();
@@ -243,6 +257,28 @@ class HermesApiService {
               onDelta?.call(d);
             }
             break;
+          case 'approval.request':
+            final rawChoices = ev['choices'];
+            final choices = rawChoices is List
+                ? rawChoices.map((choice) => choice.toString()).toList()
+                : const <String>['once', 'deny'];
+            final request = RunApprovalRequest(
+              action: (ev['command'] ?? '').toString(),
+              description:
+                  (ev['description'] ?? 'Подтвердить действие?').toString(),
+              choices: choices,
+            );
+            String choice = 'deny';
+            if (onApproval != null) {
+              try {
+                choice = await onApproval(request);
+              } catch (_) {
+                choice = 'deny';
+              }
+            }
+            if (!choices.contains(choice)) choice = 'deny';
+            await _resolveRunApproval(client, runId, choice);
+            break;
           case 'run.failed':
             runFailed = true;
             break;
@@ -274,6 +310,24 @@ class HermesApiService {
       throw HermesApiException('Сервер не ответил вовремя.');
     } finally {
       client.close();
+    }
+  }
+
+  Future<void> _resolveRunApproval(
+    http.Client client,
+    String runId,
+    String choice,
+  ) async {
+    final uri = Uri.parse('${HermesConfig.runsUrl}/$runId/approval');
+    final response = await client
+        .post(uri,
+            headers: HermesConfig.headers,
+            body: json.encode({'choice': choice}))
+        .timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) {
+      throw HermesApiException(
+        'Не удалось подтвердить действие (${response.statusCode}).',
+      );
     }
   }
 
@@ -476,13 +530,13 @@ class SessionSummary {
   });
 
   factory SessionSummary.fromJson(Map<String, dynamic> j) => SessionSummary(
-    id: (j['id'] ?? '').toString(),
-    source: j['source']?.toString(),
-    title: j['title']?.toString(),
-    preview: j['preview']?.toString(),
-    messageCount: (j['message_count'] as num?)?.toInt() ?? 0,
-    lastActive: (j['last_active'] as num?)?.toDouble(),
-  );
+        id: (j['id'] ?? '').toString(),
+        source: j['source']?.toString(),
+        title: j['title']?.toString(),
+        preview: j['preview']?.toString(),
+        messageCount: (j['message_count'] as num?)?.toInt() ?? 0,
+        lastActive: (j['last_active'] as num?)?.toDouble(),
+      );
 }
 
 class SessionMessage {
@@ -493,10 +547,10 @@ class SessionMessage {
   SessionMessage({required this.role, required this.content, this.timestamp});
 
   factory SessionMessage.fromJson(Map<String, dynamic> j) => SessionMessage(
-    role: (j['role'] ?? 'user').toString(),
-    content: (j['content'] ?? '').toString(),
-    timestamp: (j['timestamp'] as num?)?.toDouble(),
-  );
+        role: (j['role'] ?? 'user').toString(),
+        content: (j['content'] ?? '').toString(),
+        timestamp: (j['timestamp'] as num?)?.toDouble(),
+      );
 }
 
 class HermesApiException implements Exception {
