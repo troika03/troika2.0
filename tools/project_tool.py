@@ -466,7 +466,9 @@ async def _action_generate_doc(args: Dict[str, Any]) -> Dict[str, Any]:
         "coder": (args.get("coder") or "claude").strip().lower(),
     }
     label = f"документ {doc_rel} ({meta.get('name')})"
-    session_id = args.get("_session_id") or "phone-misha-main"
+    session_id = args.get("_session_id") or ""
+    if not session_id:
+        return {"ok": False, "error": "session_scope_unavailable"}
     task_id = job_runner.submit("project_pm_doc", payload, session_id=session_id, short_label=label)
     return {"ok": True, "action": "generate_doc", "task_id": task_id,
             "say_to_user": f"PM-агент пишет {doc_rel}. Скажу когда готово."}
@@ -553,7 +555,9 @@ async def _action_build(args: Dict[str, Any]) -> Dict[str, Any]:
     }
     kind = "gemini_code_iterate" if iterate else "gemini_code_create"
     label = f"{'правка' if iterate else 'код'} {meta.get('name')[:30]}"
-    session_id = args.get("_session_id") or "phone-misha-main"
+    session_id = args.get("_session_id") or ""
+    if not session_id:
+        return {"ok": False, "error": "session_scope_unavailable"}
     task_id = job_runner.submit(kind, payload, session_id=session_id, short_label=label)
     return {"ok": True, "action": "build", "task_id": task_id,
             "say_to_user": f"Принял, кодинг идёт в фоне для «{meta.get('name')}». Скажу когда готово."}
@@ -1328,7 +1332,9 @@ async def _action_autopilot(args: Dict[str, Any]) -> Dict[str, Any]:
         active["phase"] = "building"
         _save_active(active)
 
-    session_id = args.get("_session_id") or "phone-misha-main"
+    session_id = args.get("_session_id") or ""
+    if not session_id:
+        return {"ok": False, "error": "session_scope_unavailable"}
     verify = args.get("verify")
     verify = True if verify is None else bool(verify)
     deploy = bool(args.get("deploy", False))
@@ -1374,7 +1380,9 @@ async def _action_deploy_project(args: Dict[str, Any]) -> Dict[str, Any]:
     if job_runner.active_count() >= 6:
         return {"ok": False, "error": "too_many_active",
                 "say_to_user": "У меня уже шесть задач в работе, подожди."}
-    session_id = args.get("_session_id") or "phone-misha-main"
+    session_id = args.get("_session_id") or ""
+    if not session_id:
+        return {"ok": False, "error": "session_scope_unavailable"}
     payload = {
         "project_path": str(project_path),
         "git": True,

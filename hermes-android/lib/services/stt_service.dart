@@ -25,7 +25,9 @@ class SttService {
         ..files.add(await http.MultipartFile.fromPath(
           'file',
           audioFile.path,
-          filename: 'voice.m4a',
+          // Имя с реальным расширением (wav на десктопе, m4a на мобилке) —
+          // Groq Whisper определяет формат по расширению файла.
+          filename: 'voice.${audioFile.path.split('.').last}',
         ));
 
       final streamed = await request.send().timeout(_timeout);

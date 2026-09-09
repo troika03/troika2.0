@@ -71,19 +71,21 @@ def _parse_when(when: str) -> str | None:
     return None
 
 
-def _build_reminder_prompt(text: str) -> str:
-    """LLM-prompt: отправить голосовое напоминание Мише на phone."""
-    return (
-        "Это напоминание для Миши. Скажи ему голосом через push на телефон: "
-        f"«Напоминаю: {text}». Используй tool send_message с platform='phone-misha-main'. "
-        "Ничего больше не делай — короткое напоминание и всё."
-    )
+def _session_scope(args: Dict[str, Any]) -> str:
+    """Return the framework-owned session scope, never a shared phone ID."""
+    value = args.get("_session_id")
+    return value.strip() if isinstance(value, str) else ""
 
 
 async def _handle(args: Dict[str, Any], **_kw) -> str:
-    from cron.jobs import create_job, list_jobs, remove_job
+    from cron.jobs import list_jobs, remove_job
 
     op = (args.get("operation") or "create").strip().lower()
+    session_id = _session_scope(args)
+    if not session_id:
+        return json.dumps(
+            {"ok": False, "error": "session_scope_unavailable"}, ensure_ascii=False
+        )
 
     if op == "create":
         text = (args.get("text") or "").strip()
@@ -101,27 +103,17 @@ async def _handle(args: Dict[str, Any], **_kw) -> str:
                 ensure_ascii=False,
             )
 
-        try:
-            job = create_job(
-                prompt=_build_reminder_prompt(text),
-                schedule=schedule,
-                name=f"⏰ {text[:40]}",
-                repeat=1,
-                deliver="phone-misha-main",
-                origin={"source": "reminder", "text": text},
-            )
-        except Exception as e:
-            return json.dumps({"ok": False, "error": f"create_failed: {e}"}, ensure_ascii=False)
-
         return json.dumps(
             {
-                "ok": True,
-                "action": "created",
-                "id": job.get("id"),
+                "ok": False,
+                "error": "delivery_channel_not_configured",
                 "text": text,
                 "when": when,
                 "schedule": schedule,
-                "next_run": job.get("next_run"),
+                "hint": (
+                    "Напоминания отключены до подключения личного канала доставки "
+                    "(push/in-app). Тройка не будет отправлять их в чужой или общий чат."
+                ),
             },
             ensure_ascii=False,
         )
@@ -131,7 +123,10 @@ async def _handle(args: Dict[str, Any], **_kw) -> str:
         reminders: List[Dict[str, Any]] = []
         for j in jobs:
             origin = j.get("origin") or {}
-            if origin.get("source") != "reminder":
+            if (
+                origin.get("source") != "reminder"
+                or origin.get("session_id") != session_id
+            ):
                 continue
             reminders.append({
                 "id": j.get("id"),
@@ -148,12 +143,23 @@ async def _handle(args: Dict[str, Any], **_kw) -> str:
         rid = (args.get("id") or "").strip()
         if not rid:
             jobs = list_jobs() or []
-            candidates = [j for j in jobs if (j.get("origin") or {}).get("source") == "reminder"]
+            candidates = [
+                j for j in jobs
+                if (j.get("origin") or {}).get("source") == "reminder"
+                and (j.get("origin") or {}).get("session_id") == session_id
+            ]
             if not candidates:
                 return json.dumps({"ok": False, "error": "no_reminders"}, ensure_ascii=False)
             candidates.sort(key=lambda j: j.get("next_run") or "")
             rid = candidates[0].get("id")
 
+        allowed_ids = {
+            j.get("id") for j in list_jobs() or []
+            if (j.get("origin") or {}).get("source") == "reminder"
+            and (j.get("origin") or {}).get("session_id") == session_id
+        }
+        if rid not in allowed_ids:
+            return json.dumps({"ok": False, "error": "reminder_not_found"}, ensure_ascii=False)
         try:
             removed = remove_job(rid)
         except Exception as e:
@@ -169,11 +175,9 @@ async def _handle(args: Dict[str, Any], **_kw) -> str:
 REMINDER_SCHEMA = {
     "name": "reminder",
     "description": (
-        "Голосовые напоминания. Создаёт one-shot cron job который отправит "
-        "push на телефон Миши в указанное время. "
-        "Использовать когда Миша говорит 'напомни через час позвонить маме', "
-        "'напомни в 19:00 забрать заказ', 'напомни завтра позвонить врачу'. "
-        "Операции: create (создать), list (показать активные), cancel (удалить)."
+        "Напоминания для текущего пользователя. Телефонная доставка временно "
+        "недоступна, пока не подключён личный push/in-app канал; не обещай "
+        "создать напоминание до этого. Операции: create, list, cancel."
     ),
     "parameters": {
         "type": "object",

@@ -766,6 +766,13 @@ def handle_function_call(
     """
     # Coerce string arguments to their schema-declared types (e.g. "42"→42)
     function_args = coerce_tool_args(function_name, function_args)
+    # Session scope is framework-owned metadata, never a model-controlled tool
+    # parameter.  It lets tools that read history or enqueue follow-up work stay
+    # within the active user's session instead of relying on a shared fallback.
+    function_args = dict(function_args)
+    function_args.pop("_session_id", None)
+    if session_id:
+        function_args["_session_id"] = session_id
 
     try:
         if function_name in _AGENT_LOOP_TOOLS:

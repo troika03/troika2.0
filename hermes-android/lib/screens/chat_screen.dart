@@ -291,7 +291,11 @@ class _ChatScreenState extends State<ChatScreen> {
               icon: Icon(isBusy ? Icons.stop_circle : Icons.mic_none),
               color: TroikaColors.brand,
               onPressed: () {
-                if (isBusy) {
+                // Десктопный push-to-talk: идёт запись → повторное нажатие
+                // останавливает и обрабатывает (STT → Hermes → TTS).
+                if (a.state == AssistantState.recording) {
+                  a.stopRecordingAndProcess();
+                } else if (isBusy) {
                   a.interrupt();
                 } else {
                   a.startManualRecording();

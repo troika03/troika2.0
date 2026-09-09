@@ -195,12 +195,24 @@ MISTRAL_API_KEY|Mistral|https://console.mistral.ai/api-keys
         [ -n "$VAL" ] && printf '%s=%s\n' "$VAR" "$VAL" >> /tmp/troika_extra_keys
     done
 
-    # --- API-ключ для приложения (по умолчанию hermes-2024) ---
+    # --- API-ключ для приложения (unique per installation) ---
     printf "\n  ${BOLD}4) Пароль доступа${NC}  ${DIM}(для приложения и API)${NC}\n"
-    printf "     ${DIM}Этот же ключ вводишь в приложении. Enter — оставить hermes-2024.${NC}\n"
-    printf "     ${BOLD}API_SERVER_KEY${NC} ${DIM}(Enter — hermes-2024):${NC} "
+    printf "     ${DIM}Этот же ключ вводишь в приложении. Enter — создать случайный ключ.${NC}\n"
+    printf "     ${BOLD}API_SERVER_KEY${NC} ${DIM}(Enter — сгенерировать):${NC} "
     read -r SERVER_KEY < "$TTY"
-    [ -z "$SERVER_KEY" ] && SERVER_KEY="hermes-2024"
+    if [ -z "$SERVER_KEY" ]; then
+        if command -v openssl >/dev/null 2>&1; then
+            SERVER_KEY="$(openssl rand -hex 32)"
+        else
+            SERVER_KEY="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+        fi
+        printf "     ${GREEN}Создан уникальный ключ. Сохрани его: он понадобится приложению.${NC}\n"
+    fi
+    case "${SERVER_KEY}" in
+        hermes-2024|your_api_key|your_api_key_here|changeme|placeholder)
+            error "API_SERVER_KEY содержит опубликованный шаблон. Укажи свой ключ или нажми Enter для генерации."
+            ;;
+    esac
 
     # --- Проверка: хоть один мозг должен быть ---
     if [ -z "$ANTHROPIC_KEY" ] && [ ! -s /tmp/troika_extra_keys ]; then

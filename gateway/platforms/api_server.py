@@ -565,25 +565,76 @@ def _naturalize_tts_text(text: str) -> str:
     return t.strip()
 
 
-# Тоны Тройки: смещения rate/pitch относительно базы. Привязаны к IRIS-профилям
-# (см. agent/iris_persona.py) — клиент может прислать "tone" в теле запроса, иначе
-# тон выводится из самого текста фразы (вопрос/восклицание/спокойствие).
-# (Δrate — множитель к базовой скорости, Δpitch — Hz поверх базового pitch.)
+# Тоны Тройки: смещения rate/pitch/volume относительно базы. Привязаны к
+# IRIS-профилям (см. agent/iris_persona.py), плюс набор чисто-эмоциональных
+# тонов, которые мозг помечает тегом [emo:...] в начале ответа.
+#
+# Раньше сдвиги были крошечными (±2-5 Hz, ±6% скорости) — на слух почти не
+# отличить «радость» от «поддержки», голос звучал ровно. Теперь разброс по
+# питчу до ±10 Hz, по скорости ±12%, плюс громкость — этого достаточно, чтобы
+# эмоция была реально слышна, но без «мультяшности» (Edge всё равно держит
+# Светлану в рамках естественности).
+#
+# Кортеж: (Δrate-множитель, Δpitch-Hz, Δvolume-%).
 _TTS_TONES = {
-    "spark":   (1.06, 4),    # бодрый/утро — чуть быстрее и выше
-    "playful": (1.05, 5),    # игривый — живо, выше
-    "focus":   (1.03, 0),    # рабочий — чуть быстрее, ровно
-    "steady":  (1.00, 0),    # нейтральный
-    "calm":    (0.94, -2),   # спокойный/вечер — медленнее, мягче
-    "support": (0.92, -3),   # поддержка/усталость — тише, теплее, ниже
+    # — IRIS-профили (общее настроение) —
+    "spark":   (1.09,  7,  4),   # бодрый/утро — быстрее, выше, звонче
+    "playful": (1.08,  9,  3),   # игривый — живо, заметно выше
+    "focus":   (1.04,  0,  0),   # рабочий — собранно, ровно
+    "steady":  (1.00,  0,  0),   # нейтральный
+    "calm":    (0.92, -4, -3),   # спокойный/вечер — медленнее, мягче, тише
+    "support": (0.88, -6, -6),   # поддержка/усталость — тихо, тепло, низко
+    # — чисто-эмоциональные тона (мозг помечает [emo:...]) —
+    "joy":     (1.10, 10,  6),   # радость/успех — быстро, высоко, громко
+    "excited": (1.12, 11,  7),   # восторг — на пике энергии
+    "warm":    (0.95,  2, -1),   # нежность/тепло — мягко, чуть выше, неспешно
+    "sad":     (0.86, -8, -7),   # грусть/сожаление — медленно, низко, тихо
+    "worried": (0.96, -3, -2),   # тревога/беспокойство — собранно, чуть ниже
+    "tender":  (0.93,  3, -3),   # ласково/успокаивающе — мягко и тихо
+    "proud":   (1.06,  6,  3),   # гордость за результат — уверенно, чуть выше
 }
+
+# Алиасы: русские/синонимичные метки, которые может выдать мозг → канон.
+_TTS_TONE_ALIASES = {
+    "радость": "joy", "рад": "joy", "happy": "joy", "восторг": "excited",
+    "грусть": "sad", "грустно": "sad", "жаль": "sad", "sorry": "sad",
+    "тепло": "warm", "нежно": "warm", "ласково": "tender",
+    "тревога": "worried", "беспокойство": "worried", "worry": "worried",
+    "гордость": "proud", "горжусь": "proud",
+    "игриво": "playful", "бодро": "spark", "спокойно": "calm",
+    "поддержка": "support", "сочувствие": "support",
+}
+
+# Тег эмоции от мозга: [emo:joy] / [emo: грусть] в начале ответа. Сервер его
+# читает (приоритетнее времени суток) и ВЫРЕЗАЕТ из произносимого текста.
+import re as _re_emo
+_EMO_TAG_RE = _re_emo.compile(r"\[emo:\s*([a-zа-яё_]+)\s*\]", _re_emo.IGNORECASE)
+
+
+def _extract_emo_tag(text: str):
+    """Вернуть (canon_tone | None, text_без_тега). Тег ищется в любом месте."""
+    if not text:
+        return None, text
+    m = _EMO_TAG_RE.search(text)
+    if not m:
+        return None, text
+    raw = m.group(1).strip().lower()
+    canon = raw if raw in _TTS_TONES else _TTS_TONE_ALIASES.get(raw)
+    cleaned = _EMO_TAG_RE.sub("", text).strip()
+    return canon, cleaned
 
 
 def _infer_tone_from_text(text: str) -> str:
-    """Грубый тон по самой фразе, когда клиент не прислал явный tone."""
+    """Грубый тон по самой фразе, когда нет явного tone и тега [emo:...]."""
     s = (text or "").strip()
     if not s:
         return "steady"
+    low = s.lower()
+    # Эмоциональные слова-маркеры — дают живую интонацию даже без тега мозга.
+    if any(w in low for w in ("ура", "получилось", "готово!", "отлично", "супер", "класс")):
+        return "joy"
+    if any(w in low for w in ("жаль", "к сожалению", "увы", "не вышло", "не получилось")):
+        return "sad"
     if "!" in s:
         return "spark"          # восклицание — энергичнее
     if s.endswith("?"):
@@ -591,19 +642,21 @@ def _infer_tone_from_text(text: str) -> str:
     return "steady"
 
 
-def _tts_prosody(text: str, tone: Optional[str], base_rate_mult: float, base_pitch_hz: int):
-    """Вернуть (rate_mult, pitch_hz) с учётом тона и типа фразы.
+def _tts_prosody(text: str, tone: Optional[str], base_rate_mult: float,
+                 base_pitch_hz: int, base_volume: int = 0):
+    """Вернуть (rate_mult, pitch_hz, volume_pct) с учётом тона и типа фразы.
 
-    Реальный человек не говорит всё одним тоном: вопрос — интонация вверх,
-    восклицание — энергичнее, спокойная мысль — ниже и мягче. Здесь это и
-    эмулируется лёгкими сдвигами поверх базовых параметров голоса.
+    Реальный человек не говорит всё одним тоном: радость — быстрее, выше и
+    громче; грусть — медленно, низко и тихо; вопрос — интонация вверх. Здесь
+    это и эмулируется сдвигами rate/pitch/volume поверх базовых параметров.
     """
     t = (tone or "").strip().lower()
     if t not in _TTS_TONES:
-        t = _infer_tone_from_text(text)
-    dr, dp = _TTS_TONES.get(t, (1.0, 0))
+        t = _TTS_TONE_ALIASES.get(t) or _infer_tone_from_text(text)
+    dr, dp, dv = _TTS_TONES.get(t, (1.0, 0, 0))
     rate_mult = base_rate_mult * dr
     pitch_hz = base_pitch_hz + dp
+    volume_pct = base_volume + dv
     # Вопрос — приподнимаем тон в конце (интонация вверх). Edge не даёт SSML,
     # поэтому имитируем общим лёгким подъёмом pitch на вопросительных фразах.
     if (text or "").strip().endswith("?"):
@@ -611,7 +664,8 @@ def _tts_prosody(text: str, tone: Optional[str], base_rate_mult: float, base_pit
     # Клампы в допустимые Edge-диапазоны.
     rate_mult = max(0.5, min(rate_mult, 1.6))
     pitch_hz = max(-30, min(pitch_hz, 30))
-    return rate_mult, pitch_hz
+    volume_pct = max(-50, min(volume_pct, 30))
+    return rate_mult, pitch_hz, volume_pct
 
 
 if AIOHTTP_AVAILABLE:
@@ -1403,20 +1457,31 @@ class APIServerAdapter(BasePlatformAdapter):
         except (TypeError, ValueError):
             base_pitch_hz = 8
 
-        # Авто-тон: приоритет (1) явный "tone" в теле → (2) текущий профиль IRIS
-        # (настроение Миши прямо сейчас) → (3) тип самой фразы. Так голос звучит
-        # как живой человек: в режиме поддержки — мягче, бодрый утром — энергичнее.
-        tone = body.get("tone")
+        # Эмоция ответа: мозг помечает фразу тегом [emo:joy]/[emo:грусть] в
+        # начале (см. SOUL.md). Тег вырезаем из произносимого текста и используем
+        # как самый приоритетный источник тона — он точнее, чем время суток.
+        emo_tone, text = _extract_emo_tag(text)
+
+        # Авто-тон: приоритет (1) тег [emo:...] от мозга → (2) явный "tone" в теле
+        # → (3) текущий профиль IRIS (настроение Миши) → (4) тип самой фразы. Так
+        # голос звучит живо: радостный ответ — звонко, поддержка — мягко.
+        tone = emo_tone or body.get("tone")
         if not tone:
             try:
                 from agent.iris_persona import _choose_profile
                 tone = _choose_profile()
             except Exception:
                 tone = None
-        rate_mult, pitch_hz = _tts_prosody(text, tone, base_rate_mult, base_pitch_hz)
+        try:
+            base_volume = int(round(float(body.get("volume", 0))))
+        except (TypeError, ValueError):
+            base_volume = 0
+        rate_mult, pitch_hz, volume_pct = _tts_prosody(
+            text, tone, base_rate_mult, base_pitch_hz, base_volume
+        )
         rate = _fmt_rate(rate_mult)
         pitch = _fmt_pitch(pitch_hz)
-        volume = _fmt_volume(body.get("volume", 0))
+        volume = _fmt_volume(volume_pct)
 
         import re as _re_tts
         original_text = text
@@ -1428,6 +1493,40 @@ class APIServerAdapter(BasePlatformAdapter):
         if not _re_tts.search(r"\w", naturalized):
             naturalized = original_text if _re_tts.search(r"\w", original_text) else "Готово."
         text = naturalized
+
+        import os as _os_tts
+        backend = (_os_tts.getenv("TTS_BACKEND") or "edge").strip().lower()
+        fish_key = _os_tts.getenv("FISH_API_KEY", "").strip()
+        fish_voice = (body.get("fish_voice_id") or _os_tts.getenv("FISH_VOICE_ID", "")).strip()
+
+        if backend == "fish" and fish_key and fish_voice:
+            try:
+                import aiohttp
+                payload = {
+                    "text": text,
+                    "reference_id": fish_voice,
+                    "format": "mp3",
+                    "normalize": True,
+                }
+                headers = {
+                    "Authorization": f"Bearer {fish_key}",
+                    "Content-Type": "application/json",
+                }
+                timeout = aiohttp.ClientTimeout(total=30)
+                async with aiohttp.ClientSession(timeout=timeout) as sess:
+                    async with sess.post(
+                        "https://api.fish.audio/v1/tts",
+                        json=payload, headers=headers,
+                    ) as resp:
+                        if resp.status == 200:
+                            audio = await resp.read()
+                            return web.Response(body=audio, content_type="audio/mpeg")
+                        err_body = (await resp.text())[:200]
+                        logger.warning(
+                            "Fish TTS %s: %s — fallback to Edge", resp.status, err_body
+                        )
+            except Exception as e:
+                logger.warning("Fish TTS error: %s — fallback to Edge", e)
 
         try:
             import tempfile, os as _os
@@ -1531,11 +1630,18 @@ class APIServerAdapter(BasePlatformAdapter):
                         remember_device_context,
                         system_prompt_amendment as _loc_amend,
                     )
-                    sk = gateway_session_key or "phone-misha"
-                    remember_device_context(sk, parsed_ctx)
-                    amendment = _loc_amend(sk)
-                    if amendment:
-                        system_prompt = (system_prompt or "") + amendment
+                    # Device context is sensitive and belongs only to an
+                    # authenticated, explicitly scoped session.  Never put
+                    # it in a shared fallback bucket.
+                    if gateway_session_key:
+                        remember_device_context(gateway_session_key, parsed_ctx)
+                        amendment = _loc_amend(gateway_session_key)
+                        if amendment:
+                            system_prompt = (system_prompt or "") + amendment
+                    else:
+                        logger.debug(
+                            "device_context header ignored: no session key was provided"
+                        )
             except Exception as e:
                 logger.debug("device_context header ignored: %s", e)
 

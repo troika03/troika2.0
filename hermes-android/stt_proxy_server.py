@@ -15,6 +15,7 @@ import os
 import sys
 import time
 import asyncio
+import hmac
 import tempfile
 from pathlib import Path
 from dotenv import load_dotenv
@@ -60,9 +61,22 @@ def _collect_groq_keys() -> list[str]:
 
 GROQ_KEYS = _collect_groq_keys()
 GROQ_API_KEY = GROQ_KEYS[0] if GROQ_KEYS else ""  # обратная совместимость
-API_SERVER_KEY = os.getenv("API_SERVER_KEY", "hermes-2024")
+API_SERVER_KEY = os.getenv("API_SERVER_KEY", "").strip()
 PORT = int(os.getenv("STT_PROXY_PORT", "8643"))
 HOST = "0.0.0.0"
+
+_PLACEHOLDER_KEYS = {
+    "hermes-2024", "your_api_key", "your_api_key_here", "changeme",
+    "placeholder", "example", "dummy", "none", "null",
+}
+
+
+def _has_usable_api_key(value: str) -> bool:
+    """Reject an empty or published API key before handling audio uploads."""
+    return len(value) >= 8 and value.lower() not in _PLACEHOLDER_KEYS
+
+
+API_KEY_CONFIGURED = _has_usable_api_key(API_SERVER_KEY)
 
 # Backend selection
 STT_BACKEND = (os.getenv("STT_BACKEND") or "auto").strip().lower()
@@ -301,11 +315,16 @@ async def health(request):
 
 
 async def transcribe(request):
+    if not API_KEY_CONFIGURED:
+        return web.json_response(
+            {"error": "STT proxy is not configured with a valid API_SERVER_KEY"},
+            status=503,
+        )
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
         return web.json_response({"error": "Missing Authorization header"}, status=401)
     token = auth.replace("Bearer ", "").strip()
-    if token != API_SERVER_KEY:
+    if not hmac.compare_digest(token, API_SERVER_KEY):
         return web.json_response({"error": "Invalid API key"}, status=401)
 
     reader = await request.multipart()
@@ -388,7 +407,9 @@ def main():
         app.on_startup.append(_on_startup)
 
     log.info(f"🎙️  Hermes STT Proxy запущен на http://{HOST}:{PORT}")
-    log.info(f"    API ключ: {API_SERVER_KEY}")
+    log.info("    API ключ настроен: %s", "да" if API_KEY_CONFIGURED else "нет")
+    if not API_KEY_CONFIGURED:
+        log.error("STT proxy will reject requests until API_SERVER_KEY is a unique secret")
     log.info(f"    STT_BACKEND={STT_BACKEND}  GROQ_API_KEY={'✓' if GROQ_API_KEY else '✗'}")
     log.info(f"    Local model: {LOCAL_MODEL_SIZE} (device={LOCAL_DEVICE}, compute={LOCAL_COMPUTE or 'auto'})")
     log.info(f"    Endpoint: POST /v1/audio/transcriptions")

@@ -14,6 +14,15 @@ class AudioRecorderService {
 
   /// Запросить разрешение на микрофон
   Future<bool> requestPermission() async {
+    // Десктоп (Windows/Linux/macOS): permission_handler не поддерживает
+    // микрофон — доступ к устройству проверяет сам record.hasPermission().
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      try {
+        return await _recorder.hasPermission();
+      } catch (_) {
+        return true; // на Windows доступ к мику обычно не требует runtime-запроса
+      }
+    }
     final status = await Permission.microphone.request();
     return status.isGranted;
   }
@@ -25,12 +34,17 @@ class AudioRecorderService {
     final hasPermission = await requestPermission();
     if (!hasPermission) return false;
 
+    // Десктоп (Windows/Linux/macOS): record_windows надёжно пишет WAV/PCM,
+    // а AAC-LC там не всегда поддержан. На мобилке оставляем компактный m4a.
+    final isDesktop = !Platform.isAndroid && !Platform.isIOS;
     final dir = await getTemporaryDirectory();
-    _currentPath = '${dir.path}/hermes_voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    final ext = isDesktop ? 'wav' : 'm4a';
+    _currentPath =
+        '${dir.path}/hermes_voice_${DateTime.now().millisecondsSinceEpoch}.$ext';
 
     await _recorder.start(
-      const RecordConfig(
-        encoder: AudioEncoder.aacLc,
+      RecordConfig(
+        encoder: isDesktop ? AudioEncoder.wav : AudioEncoder.aacLc,
         sampleRate: 16000,
         numChannels: 1,
         bitRate: 64000,

@@ -12,6 +12,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.util.Base64
 import androidx.core.app.NotificationCompat
 import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.plugin.common.MethodChannel
@@ -23,10 +24,12 @@ import java.io.File
 import java.io.FileWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.SecureRandom
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.concurrent.thread
 
 /**
@@ -49,35 +52,54 @@ class HermesListenerService : Service() {
         const val PREFS = "FlutterSharedPreferences"
         const val PREF_URL = "flutter.hermes_server_url"
         const val PREF_KEY = "flutter.hermes_api_key"
+        const val PREF_SESSION_KEY = "flutter.hermes_session_key"
+        const val PREF_SESSION_ID = "flutter.hermes_session_id"
 
-        // Дефолты на случай, когда онбординг/настройки ещё не записали prefs
-        // (например adb-установка release НЕ пишет SharedPreferences). Без этого
-        // fallback Kotlin-служба получала url=null → не подключалась к серверу →
-        // «нет сети», хотя Flutter-сторона работала на тех же дефолтах.
-        const val DEFAULT_URL = "http://89.208.105.187:8642"
-        const val DEFAULT_KEY = "hermes-2024"
-
-        /** URL сервера из prefs, либо вшитый дефолт (никогда не null/пусто). */
+        /** URL и ключ задаются при подключении аккаунта; общих production-дефолтов нет. */
         fun resolvedUrl(prefs: android.content.SharedPreferences): String {
-            val u = prefs.getString(PREF_URL, null)
-            return if (u.isNullOrBlank()) DEFAULT_URL else u
+            return prefs.getString(PREF_URL, null)?.trim()?.trimEnd('/') ?: ""
         }
 
-        /** API-ключ из prefs, либо вшитый дефолт. */
         fun resolvedKey(prefs: android.content.SharedPreferences): String {
-            val k = prefs.getString(PREF_KEY, null)
-            return if (k.isNullOrBlank()) DEFAULT_KEY else k
+            return prefs.getString(PREF_KEY, null)?.trim() ?: ""
+        }
+
+        /** The Android service and Flutter share one random identity per install. */
+        fun resolvedSessionKey(prefs: android.content.SharedPreferences): String {
+            prefs.getString(PREF_SESSION_KEY, null)?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                return it
+            }
+            val bytes = ByteArray(24)
+            SecureRandom().nextBytes(bytes)
+            val generated = "mobile-" + Base64.encodeToString(
+                bytes, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
+            )
+            prefs.edit().putString(PREF_SESSION_KEY, generated).commit()
+            return generated
+        }
+
+        fun resolvedSessionId(prefs: android.content.SharedPreferences): String {
+            prefs.getString(PREF_SESSION_ID, null)?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                return it
+            }
+            val generated = resolvedSessionKey(prefs)
+            prefs.edit().putString(PREF_SESSION_ID, generated).commit()
+            return generated
         }
         const val PREF_TTS_VOICE = "flutter.hermes_tts_voice"
         const val PREF_BARGE_IN_ENABLED = "flutter.hermes_barge_in_enabled"
         const val PREF_BARGE_IN_THRESHOLD = "flutter.hermes_barge_in_threshold"
 
         const val AMPLITUDE_THRESHOLD = 800   // достаточный голос, но не шум
-        // Порог для wake-word listener. 16.06.2026 поднят 450→600: слишком низкий
-        // порог + триггер на 1 фрейме слал в облачный Whisper КАЖДЫЙ шорох, выжигая
-        // дневной лимit Groq (2000/день) на тишине и ловя галлюцинации. 600 выше
-        // фонового шума, но ловит нормально сказанное "Тройка".
-        const val WAKE_AMPLITUDE_THRESHOLD = 600
+        // Порог для wake-word listener.
+        // 16.06.2026: поднят 450→600 из-за дневного лимита Groq (2000/день) —
+        // тихий порог выжигал квоту на шумах.
+        // 13.08.2026: STT переехал на LOCAL faster-whisper (без лимита) —
+        // возвращаю порог к 450, чтобы Тройка снова ловила «Тройка», сказанную
+        // не в упор к микрофону. Ложные срабатывания больше не жалко: local
+        // STT не считает запросы, а WAKE_MIN_VOICE_FRAMES=5 всё равно отсекает
+        // короткие шорохи.
+        const val WAKE_AMPLITUDE_THRESHOLD = 450
         // Сколько подряд «голосовых» фреймов (~125мс каждый) нужно, чтобы вообще
         // отправить аудио в STT на проверку wake-word. 3 фрейма ≈ 375мс реальной
         // речи — короткий шум/щелчок такого не даёт. Это главный фикс расхода лимита.
@@ -88,6 +110,13 @@ class HermesListenerService : Service() {
         // при 350мс получалось до ~2.8 STT-запросов/сек на шум. 1200мс = максимум
         // ~0.8/сек, отклик на «Тройка» при этом не страдает (слово длиннее).
         const val COOLDOWN_MS = 2000L
+        // Сколько мс тишины после последнего голосового фрейма ждём в диалоге,
+        // прежде чем считать реплику законченной и отправить в STT. Раньше было
+        // 1500мс — на слух это ощущается как «ещё 4-5 сек ждёт после того как
+        // замолк». 850мс — компромисс: чуть длиннее естественной паузы между
+        // словами (~500-700мс), но не режет на вдохе. Если начнёт обрывать
+        // фразы посреди — поднять до 1000. Ниже 700 не опускать.
+        const val END_OF_SPEECH_MS = 850L
 
         // Покрываем основные ошибки распознавания Whisper'ом слова "Тройка".
         // Список расширен — лучше иметь немного ложных срабатываний (юзер
@@ -115,6 +144,16 @@ class HermesListenerService : Service() {
     private var ttsReady = false
     private var phoneBridge: PhoneBridgeClient? = null
     private var edgeTts: EdgeTtsPlayer? = null
+
+    // Watchdog: следит чтобы Тройка не «оглохла» после долгого простоя (Android
+    // иногда потихоньку роняет AudioRecord, isInDialog может застрять на
+    // невыбросе, WebSocket-мост может отвалиться от сна). Проверяет раз в минуту
+    // и сам чинит найденное. Пингует сервер раз в 2 часа.
+    private val lastRecordActivityMs = AtomicLong(0)
+    private val dialogStartMs = AtomicLong(0)
+    private val lastServerPingMs = AtomicLong(0)
+    private val lastListenerRestartMs = AtomicLong(0)
+    private var watchdogThread: Thread? = null
 
     // Rolling buffer: BUFFER_SECONDS секунд PCM
     private val ringSize = SAMPLE_RATE * BUFFER_SECONDS
@@ -253,15 +292,18 @@ class HermesListenerService : Service() {
             return
         }
 
-        // Fallback на встроенный Android TTS если Edge недоступен
+        // Fallback на встроенный Android TTS если Edge недоступен. Локальный TTS
+        // не умеет интонацию по тону, поэтому просто вырезаем тег [emo:...],
+        // чтобы он не прозвучал вслух как «эмо джой».
         if (!ttsReady) { onDone?.invoke(); return }
+        val noTag = cleaned.replace(Regex("""\[emo:\s*[A-Za-zА-Яа-яЁё_]+\s*]"""), "").trim()
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(id: String?) {}
             override fun onDone(id: String?) { onDone?.invoke() }
             @Deprecated("Deprecated in Java")
             override fun onError(id: String?) { onDone?.invoke() }
         })
-        tts?.speak(cleaned, TextToSpeech.QUEUE_FLUSH, null, "hermes-${System.currentTimeMillis()}")
+        tts?.speak(noTag, TextToSpeech.QUEUE_FLUSH, null, "hermes-${System.currentTimeMillis()}")
     }
 
     /**
@@ -345,12 +387,215 @@ class HermesListenerService : Service() {
 
         // Инициализируем серверный Edge TTS (более качественный голос)
         startEdgeTts()
+
+        // Раз в минуту сторож проверяет что микрофон читает, поток слушателя жив,
+        // мост подключён, и что не залипли флаги диалога. Раз в 2 часа пингует сервер.
+        startWatchdog()
+    }
+
+    // ─── Watchdog: держим Тройку живой в фоне ────────────────────────
+    // Причина: раньше после долгого простоя (телефон лежит с закрытым приложением)
+    // Тройка «не слышала с первого раза» с главного экрана. Тихо ронялся один из
+    // компонентов, а сервис не знал что что-то мертво.
+    private fun startWatchdog() {
+        if (watchdogThread?.isAlive == true) return
+        // При старте сторожа обнуляем таймер активности, чтобы первая же секунда
+        // без чтения микрофона не сработала как «завис».
+        lastRecordActivityMs.set(System.currentTimeMillis())
+        watchdogThread = thread(name = "HermesWatchdog", isDaemon = true) {
+            while (isRunning.get()) {
+                try {
+                    Thread.sleep(60_000)
+                    if (!isRunning.get()) break
+                    selfCheck()
+                } catch (_: InterruptedException) { break }
+                catch (e: Exception) {
+                    android.util.Log.e("Watchdog", "selfCheck err: ${e.message}")
+                }
+            }
+        }
+        logWatchdog("watchdog started (interval=60s, server ping=2h)")
+    }
+
+    private fun selfCheck() {
+        val now = System.currentTimeMillis()
+
+        // 1) Поток слушателя вообще жив?
+        if (listenerThread?.isAlive != true && !listenerPaused.get()) {
+            logWatchdog("listener thread dead → restart")
+            restartListenerLoop("thread-dead")
+            return
+        }
+
+        // 2) AudioRecord молча замер? В нормальном режиме read() возвращает
+        // фреймы каждые ~64мс. Если тишина в тумбочке > 90с — что-то не так.
+        // Не считаем это ошибкой пока идёт диалог (listener на паузе).
+        if (!listenerPaused.get() && !isInDialog.get()) {
+            val silentMs = now - lastRecordActivityMs.get()
+            if (silentMs > 90_000) {
+                logWatchdog("recorder stalled ${silentMs}ms → restart listener")
+                restartListenerLoop("stalled-${silentMs}ms")
+                return
+            }
+        }
+
+        // 3) Флаг диалога залип? runDialog не должен идти дольше ~5 минут.
+        // Если больше — где-то был необработанный SIGSEGV в кишках Kotlin,
+        // выпустим флаг и вернём микрофон.
+        val dStart = dialogStartMs.get()
+        if (isInDialog.get() && dStart > 0 && now - dStart > 5 * 60_000) {
+            logWatchdog("dialog stuck ${now - dStart}ms → force release")
+            isInDialog.set(false)
+            listenerPaused.set(false)
+            dialogStartMs.set(0)
+        }
+
+        // 4) WebSocket-мост к серверу отвалился? PhoneBridgeClient сам не
+        // умеет reconnect на все случаи — пересоздаём объект.
+        if (phoneBridge == null) {
+            logWatchdog("phoneBridge null → restart")
+            startPhoneBridge()
+        }
+        if (edgeTts == null) {
+            logWatchdog("edgeTts null → restart")
+            startEdgeTts()
+        }
+
+        // 5) Разрешение на микрофон могли отозвать через настройки — тогда
+        // AudioRecord.read() будет возвращать 0 молча. Проверяем и пишем в лог,
+        // чтобы понять почему всё замерло (само оно не восстановится).
+        val micGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+            this, android.Manifest.permission.RECORD_AUDIO
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!micGranted) {
+            logWatchdog("RECORD_AUDIO permission REVOKED — нужен ручной re-grant")
+        }
+
+        // 6) Раз в 2 часа полная проверка серверных сервисов: /health, STT-прокси
+        // (реальная транскрипция 100мс тишины), мозг (короткий ответ на 2+2).
+        // Ничем не чиним с телефона — но пишем в watchdog.log почему Тройка
+        // могла бы молчать: пользователь потом увидит через adb / файл-экран.
+        if (now - lastServerPingMs.get() > 2 * 60 * 60_000) {
+            lastServerPingMs.set(now)
+            thread(name = "WatchdogPing", isDaemon = true) {
+                val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+                if (resolvedUrl(prefs).isBlank()) {
+                    logWatchdog("server checks skipped: server is not configured")
+                } else {
+                    pingServerHealth()
+                    pingSttTranscribe()
+                    pingBrainAnswer()
+                }
+            }
+        }
+    }
+
+    private fun restartListenerLoop(reason: String) {
+        val now = System.currentTimeMillis()
+        // Защита от штормового рестарта — не чаще раза в минуту.
+        if (now - lastListenerRestartMs.get() < 60_000) {
+            logWatchdog("skip restart (cooldown) reason=$reason")
+            return
+        }
+        lastListenerRestartMs.set(now)
+        try {
+            val old = listenerThread
+            isRunning.set(false)
+            try { old?.interrupt() } catch (_: Exception) {}
+            // Дадим циклу выйти и освободить AudioRecord.
+            Thread.sleep(600)
+            isRunning.set(true)
+            listenerThread = thread(start = true, name = "HermesListener") {
+                runListenerLoop()
+            }
+            lastRecordActivityMs.set(System.currentTimeMillis())
+            logWatchdog("listener restarted (reason=$reason)")
+        } catch (e: Exception) {
+            logWatchdog("restart failed: ${e.message}")
+        }
+    }
+
+    private fun pingServerHealth() {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val base = resolvedUrl(prefs).trimEnd('/')
+        if (base.isBlank()) return
+        try {
+            val c = (URL("$base/health").openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 5000
+                readTimeout = 5000
+            }
+            val code = c.responseCode
+            c.disconnect()
+            logWatchdog("server /health = $code")
+        } catch (e: Exception) {
+            logWatchdog("server /health FAIL: ${e.message}")
+        }
+    }
+
+    /**
+     * Реальный self-test STT: 100мс тишины → WAV → POST на /v1/audio/transcriptions.
+     * Успех = 200 + валидный JSON с полем "text" (даже пустой — сервис живой).
+     * Ловит случай «сервер отвечает /health но faster-whisper упал в контейнере».
+     */
+    private fun pingSttTranscribe() {
+        val silence = ShortArray(1600) // 100мс at 16kHz mono
+        val buf = ByteArrayOutputStream(silence.size * 2)
+        for (s in silence) {
+            val v = s.toInt()
+            buf.write(v and 0xff); buf.write((v shr 8) and 0xff)
+        }
+        val wav = pcmToWav(buf.toByteArray(), SAMPLE_RATE)
+        val result = transcribeSync(wav)
+        if (result == null) {
+            logWatchdog("STT self-test FAIL (транскрипция вернула null)")
+        } else {
+            logWatchdog("STT self-test OK (text='${result.take(40)}')")
+        }
+    }
+
+    /**
+     * Реальный self-test мозга: короткий запрос «2+2», ждём непустой ответ.
+     * Ловит случай когда LLM-провайдер (Groq/OpenRouter/Tor-мост) молчит.
+     */
+    private fun pingBrainAnswer() {
+        val history = listOf(JSONObject().apply {
+            put("role", "user")
+            put("content", "Ответь одной цифрой: сколько будет два плюс два?")
+        })
+        val start = System.currentTimeMillis()
+        val answer = try { chatWithHermesHistory(history) } catch (e: Exception) { "" }
+        val took = System.currentTimeMillis() - start
+        if (answer.isBlank()) {
+            logWatchdog("brain self-test FAIL (empty, ${took}ms)")
+        } else {
+            logWatchdog("brain self-test OK (${took}ms, '${answer.take(40)}')")
+        }
+    }
+
+    private fun logWatchdog(msg: String) {
+        android.util.Log.i("Watchdog", msg)
+        try {
+            val f = File(filesDir, "watchdog.log")
+            val ts = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+            FileWriter(f, true).use { it.append("[$ts] $msg\n") }
+            // Простая ротация: > 200 KB → уносим в .old, начинаем чистый.
+            if (f.length() > 200_000L) {
+                val old = File(filesDir, "watchdog.log.old")
+                if (old.exists()) old.delete()
+                f.renameTo(old)
+            }
+        } catch (_: Exception) {}
     }
 
     private fun startEdgeTts() {
         if (edgeTts != null) return
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val url = resolvedUrl(prefs)
+        if (url.isBlank()) {
+            android.util.Log.i("HermesListener", "Edge TTS not started: server is not configured")
+            return
+        }
         val key = resolvedKey(prefs)
         val voice = prefs.getString("flutter.hermes_edge_voice", null) ?: "ru-RU-SvetlanaNeural"
         // SharedPreferences хранит числа как double/int; берём с fallback
@@ -395,6 +640,10 @@ class HermesListenerService : Service() {
         if (phoneBridge != null) return
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val url = resolvedUrl(prefs)
+        if (url.isBlank()) {
+            android.util.Log.i("HermesListener", "PhoneBridge not started: server is not configured")
+            return
+        }
         val key = resolvedKey(prefs)
         phoneBridge = PhoneBridgeClient(applicationContext, url, key).also { it.start() }
         android.util.Log.i("HermesListener", "PhoneBridge started → $url")
@@ -448,6 +697,10 @@ class HermesListenerService : Service() {
                 }
                 val read = recorder.read(readBuf, 0, readBuf.size)
                 if (read <= 0) { Thread.sleep(20); continue }
+
+                // Отметка «микрофон реально читает» — watchdog по этому таймеру
+                // ловит тихую смерть AudioRecord и пересоздаёт listener.
+                lastRecordActivityMs.set(System.currentTimeMillis())
 
                 // Записываем в rolling buffer
                 synchronized(ringLock) {
@@ -647,6 +900,7 @@ class HermesListenerService : Service() {
      */
     private fun runDialog() {
         listenerPaused.set(true)
+        dialogStartMs.set(System.currentTimeMillis())
         Thread.sleep(400)
 
         val history = mutableListOf<JSONObject>()
@@ -672,7 +926,10 @@ class HermesListenerService : Service() {
             // схлынуло эхо динамика). Если юзер заговорил сразу — recordUtterance
             // (свой AudioRecord с долгим окном тишины в начале) его поймает.
             speak(greeting)
-            Thread.sleep(550)
+            // 550мс → 250мс: greeting играет асинхронно, реально нужно только
+            // чтобы схлынул щелчок старта плеера. Дальше warm-up внутри
+            // recordUtterance (~350мс) прикрывает эхо. Экономия ~300мс до старта записи.
+            Thread.sleep(250)
 
             while (isRunning.get()) {
                 // Запись вопроса
@@ -823,6 +1080,7 @@ class HermesListenerService : Service() {
         } finally {
             isInDialog.set(false)
             listenerPaused.set(false)
+            dialogStartMs.set(0)
         }
     }
 
@@ -881,7 +1139,10 @@ class HermesListenerService : Service() {
                 if (amp > AMPLITUDE_THRESHOLD) {
                     lastVoiceTime = System.currentTimeMillis()
                     voiceFrameCount++
-                } else if (voiceFrameCount > 0 && System.currentTimeMillis() - lastVoiceTime > 1500) {
+                } else if (voiceFrameCount > 0 && System.currentTimeMillis() - lastVoiceTime > END_OF_SPEECH_MS) {
+                    // Snappy end-of-turn: ждём END_OF_SPEECH_MS реальной тишины
+                    // после последнего голосового фрейма и стреляем в STT. Ниже
+                    // 700мс начинает рубить естественные паузы между словами.
                     break
                 }
             }
@@ -948,6 +1209,10 @@ class HermesListenerService : Service() {
     private fun chatWithHermesHistory(history: List<JSONObject>): String {
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val serverUrl = resolvedUrl(prefs)
+        if (serverUrl.isBlank()) {
+            android.util.Log.w("HermesListener", "Chat skipped: server is not configured")
+            return ""
+        }
         val apiKey = resolvedKey(prefs)
         val url = "$serverUrl/v1/chat/completions"
 
@@ -994,12 +1259,14 @@ class HermesListenerService : Service() {
                 connectTimeout = 8000
                 // Большой timeout — Hermes может ходить в браузер/искать/работать с файлами
                 readTimeout = 180000
-                setRequestProperty("Authorization", "Bearer $apiKey")
+                if (apiKey.isNotBlank()) {
+                    setRequestProperty("Authorization", "Bearer $apiKey")
+                }
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                // Стабильный session key и id чтобы Hermes сохранял память и историю
-                // между разными разговорами с этим устройством
-                setRequestProperty("X-Hermes-Session-Key", "phone-misha")
-                setRequestProperty("X-Hermes-Session-Id", "phone-misha-main")
+                // One random session identity per app installation; Flutter sends
+                // the same values so voice and text share only this user's history.
+                setRequestProperty("X-Hermes-Session-Key", resolvedSessionKey(prefs))
+                setRequestProperty("X-Hermes-Session-Id", resolvedSessionId(prefs))
                 // Контекст устройства для режима «где я» — Wi-Fi BSSID,
                 // bluetooth, тип сети. Сервер маппит в дом/работа/машина.
                 try {
@@ -1070,6 +1337,9 @@ class HermesListenerService : Service() {
     private fun transcribeSync(wav: ByteArray): String? {
         val prefs: SharedPreferences = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val serverUrl = resolvedUrl(prefs)
+        if (serverUrl.isBlank()) {
+            return null
+        }
         val apiKey = resolvedKey(prefs)
         val sttUrl = serverUrl.replace(Regex(":\\d+$"), ":8643") +
             "/v1/audio/transcriptions"
@@ -1081,7 +1351,9 @@ class HermesListenerService : Service() {
                 doOutput = true
                 connectTimeout = 5000
                 readTimeout = 15000
-                setRequestProperty("Authorization", "Bearer $apiKey")
+                if (apiKey.isNotBlank()) {
+                    setRequestProperty("Authorization", "Bearer $apiKey")
+                }
                 setRequestProperty(
                     "Content-Type",
                     "multipart/form-data; boundary=$boundary"
@@ -1133,15 +1405,18 @@ class HermesListenerService : Service() {
     }
 
     /// Прокинуть реплику голосового диалога в Flutter-чат, чтобы голос и текст
-    /// складывались в одну общую ленту (одна сессия phone-misha-main).
+    /// складывались в одну общую ленту этой установки приложения.
     private fun sendChatToFlutter(role: String, content: String) {
         val engine = FlutterEngineCache.getInstance().get("main_engine") ?: return
         val channel = MethodChannel(
             engine.dartExecutor.binaryMessenger, FLUTTER_CHANNEL
         )
+        // Скрытый тег эмоции [emo:...] управляет интонацией голоса, но в ленте
+        // чата его быть не должно — вырезаем перед показом.
+        val visible = content.replace(Regex("""\[emo:\s*[A-Za-zА-Яа-яЁё_]+\s*]"""), "").trim()
         val payload = HashMap<String, Any>()
         payload["role"] = role
-        payload["content"] = content
+        payload["content"] = visible
         android.os.Handler(mainLooper).post {
             channel.invokeMethod("voice_message", payload)
         }
@@ -1177,6 +1452,8 @@ class HermesListenerService : Service() {
     override fun onDestroy() {
         isRunning.set(false)
         listenerThread?.interrupt()
+        watchdogThread?.interrupt()
+        watchdogThread = null
         wakeLock?.let { if (it.isHeld) it.release() }
         try {
             tts?.stop()

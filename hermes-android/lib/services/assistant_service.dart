@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -35,6 +36,11 @@ class AssistantService extends ChangeNotifier {
   // Единая лента диалога — голос и текст вперемешку, как в мессенджере.
   final List<ChatMessage> _messages = [];
   bool _historyLoaded = false;
+
+  // Скрытый тег эмоции [emo:...] управляет интонацией голоса. В тексте чата и
+  // в произношении локального TTS его быть не должно — вырезаем.
+  static final RegExp _emoTag = RegExp(r'\[emo:\s*[A-Za-zА-Яа-яЁё_]+\s*\]');
+  static String _stripEmoTag(String s) => s.replaceAll(_emoTag, '').trim();
 
   AssistantState get state => _state;
   String get lastUserText => _lastUserText;
@@ -181,16 +187,35 @@ class AssistantService extends ChangeNotifier {
       return;
     }
 
-    final micStatus = await Permission.microphone.status;
-    if (!micStatus.isGranted) {
-      final r = await Permission.microphone.request();
-      if (!r.isGranted) {
-        _setError('Нет доступа к микрофону.');
-        return;
+    // permission_handler не поддерживает микрофон на десктопе (Windows) —
+    // там доступ к устройству проверяет сам record (в AudioRecorderService).
+    // Гейт через permission_handler делаем только на мобилке.
+    if (Platform.isAndroid || Platform.isIOS) {
+      final micStatus = await Permission.microphone.status;
+      if (!micStatus.isGranted) {
+        final r = await Permission.microphone.request();
+        if (!r.isGranted) {
+          _setError('Нет доступа к микрофону.');
+          return;
+        }
       }
     }
 
-    // Весь диалог (запись → STT → Hermes → TTS) идёт в нативном сервисе,
+    // Десктоп (Windows/Linux/macOS): нативного фонового сервиса нет —
+    // ведём весь диалог на Dart-стороне (push-to-talk). Первое нажатие мик
+    // начинает запись, повторное (кнопка stop) — останавливает и обрабатывает
+    // через stopRecordingAndProcess (запись → STT-прокси :8643 → Hermes → TTS).
+    if (!Platform.isAndroid) {
+      final ok = await _recorder.startRecording();
+      if (!ok) {
+        _setError('Не удалось начать запись с микрофона.');
+        return;
+      }
+      _setState(AssistantState.recording);
+      return;
+    }
+
+    // Android: весь диалог (запись → STT → Hermes → TTS) идёт в нативном сервисе,
     // он сам берёт микрофон без конфликта с listener loop.
     try {
       await _platform.invokeMethod('triggerDialog');
@@ -234,7 +259,7 @@ class AssistantService extends ChangeNotifier {
       notifyListeners();
 
       final response =
-          await _hermes.sendMessage(userMsg, recent: _recentContext());
+          _stripEmoTag(await _hermes.sendMessage(userMsg, recent: _recentContext()));
       _lastHermesText = response;
       pending
         ..text = response
@@ -311,19 +336,22 @@ class AssistantService extends ChangeNotifier {
           notifyListeners();
         },
         onDelta: (d) {
-          pending.text += d;
+          // Чистим накопленный текст от тега на каждом апдейте, чтобы
+          // [emo:...] не мелькал в пузыре пока идёт стрим.
+          pending.text = _stripEmoTag(pending.text + d);
           notifyListeners();
         },
       );
-      _lastHermesText = response;
+      final cleanResponse = _stripEmoTag(response);
+      _lastHermesText = cleanResponse;
       pending
-        ..text = response
+        ..text = cleanResponse
         ..pending = false;
       notifyListeners();
 
       if (speak) {
         _setState(AssistantState.speaking);
-        await _tts.speak(response);
+        await _tts.speak(cleanResponse);
       }
       _setState(AssistantState.idle);
     } catch (e) {

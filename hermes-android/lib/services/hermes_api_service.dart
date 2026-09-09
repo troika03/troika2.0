@@ -19,7 +19,7 @@ class ThoughtStep {
   final DateTime time;
 
   ThoughtStep(this.kind, this.text, {this.isError = false, DateTime? time})
-      : time = time ?? DateTime.now();
+    : time = time ?? DateTime.now();
 }
 
 /// Одно сообщение в чате (общая модель для голоса и текста).
@@ -27,7 +27,8 @@ class ThoughtStep {
 class ChatMessage {
   final String role; // 'user' | 'assistant'
   String text;
-  final List<String> imageDataUrls; // data:image/...;base64,... (для отрисовки и отправки)
+  final List<String>
+  imageDataUrls; // data:image/...;base64,... (для отрисовки и отправки)
   final bool fromVoice;
   final DateTime time;
   bool pending; // ждём ответ сервера (для индикатора «печатает»)
@@ -44,9 +45,9 @@ class ChatMessage {
     DateTime? time,
     this.pending = false,
     List<ThoughtStep>? thoughts,
-  })  : imageDataUrls = imageDataUrls ?? [],
-        thoughts = thoughts ?? [],
-        time = time ?? DateTime.now();
+  }) : imageDataUrls = imageDataUrls ?? [],
+       thoughts = thoughts ?? [],
+       time = time ?? DateTime.now();
 
   bool get isUser => role == 'user';
   bool get hasImages => imageDataUrls.isNotEmpty;
@@ -74,7 +75,7 @@ class ChatMessage {
 
 /// Сервис для общения с Hermes API Server.
 /// Использует OpenAI-совместимый Chat Completions API в общей сессии
-/// phone-misha-main — той же, что голосовой путь (Kotlin).
+/// конкретной установки приложения — той же, что голосовой путь (Kotlin).
 class HermesApiService {
   static const Duration _timeout = Duration(seconds: 90);
 
@@ -106,24 +107,25 @@ class HermesApiService {
       message.toApiMessage(),
     ];
 
-    final bodyMap = <String, dynamic>{
-      'messages': messages,
-      'stream': false,
-    };
+    final bodyMap = <String, dynamic>{'messages': messages, 'stream': false};
     if (HermesConfig.model.isNotEmpty) {
       bodyMap['model'] = HermesConfig.model;
     }
 
     try {
       final uri = Uri.parse(HermesConfig.chatCompletionsUrl);
+      // Async headers чтобы X-Hermes-Device-Context (GPS/wifi/bt) шёл с каждым
+      // запросом. Иначе Тройка не знает координат Миши пока не пройдёт
+      // wake-word диалог (Kotlin шлёт header только оттуда).
+      final chatHdrs = await HermesConfig.chatHeadersAsync();
       final response = await http
-          .post(uri,
-              headers: HermesConfig.chatHeaders, body: json.encode(bodyMap))
+          .post(uri, headers: chatHdrs, body: json.encode(bodyMap))
           .timeout(_timeout);
 
       if (response.statusCode != 200) {
         throw HermesApiException(
-            'API error ${response.statusCode}: ${_short(response.body)}');
+          'API error ${response.statusCode}: ${_short(response.body)}',
+        );
       }
 
       final data = json.decode(utf8.decode(response.bodyBytes));
@@ -132,7 +134,8 @@ class HermesApiService {
       return assistantMessage;
     } on SocketException {
       throw HermesApiException(
-          'Нет соединения с сервером. Проверь что сервер включён.');
+        'Нет соединения с сервером. Проверь что сервер включён.',
+      );
     } on TimeoutException {
       throw HermesApiException('Сервер не ответил вовремя. Попробуй ещё раз.');
     }
@@ -162,24 +165,25 @@ class HermesApiService {
     ];
     final inputContent = message.toApiMessage()['content'];
     final startBody = <String, dynamic>{
-      'input': inputContent is String
-          ? inputContent
-          : [message.toApiMessage()],
+      'input': inputContent is String ? inputContent : [message.toApiMessage()],
       'session_id': HermesConfig.sessionId,
       if (history.isNotEmpty) 'conversation_history': history,
     };
 
     final client = http.Client();
     try {
+      // Async headers — с device_context (GPS) для streaming-пути тоже.
+      final chatHdrs = await HermesConfig.chatHeadersAsync();
       final startReq = http.Request('POST', Uri.parse(HermesConfig.runsUrl))
-        ..headers.addAll(HermesConfig.chatHeaders)
+        ..headers.addAll(chatHdrs)
         ..body = json.encode(startBody);
       final startResp = await client.send(startReq).timeout(_timeout);
       final startBodyStr = await startResp.stream.bytesToString();
       // Сервер отдаёт 202 Accepted (run стартовал асинхронно), реже 200.
       if (startResp.statusCode != 200 && startResp.statusCode != 202) {
         throw HermesApiException(
-            'API error ${startResp.statusCode}: ${_short(startBodyStr)}');
+          'API error ${startResp.statusCode}: ${_short(startBodyStr)}',
+        );
       }
       final startData = json.decode(startBodyStr) as Map<String, dynamic>;
       final runId = (startData['run_id'] ?? startData['id'])?.toString();
@@ -193,15 +197,18 @@ class HermesApiService {
         ..headers.addAll(HermesConfig.headers);
       final evResp = await client.send(evReq).timeout(_timeout);
       if (evResp.statusCode != 200) {
-        throw HermesApiException('Поток событий недоступен (${evResp.statusCode}).');
+        throw HermesApiException(
+          'Поток событий недоступен (${evResp.statusCode}).',
+        );
       }
 
       final answer = StringBuffer();
       String lastThought = '';
       bool runFailed = false;
-      await for (final raw in evResp.stream
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())) {
+      await for (final raw
+          in evResp.stream
+              .transform(utf8.decoder)
+              .transform(const LineSplitter())) {
         final line = raw.trim();
         if (line.isEmpty || !line.startsWith('data:')) continue;
         final payload = line.substring(5).trim();
@@ -274,7 +281,8 @@ class HermesApiService {
   Future<String> _fetchRunError(http.Client client, String runId) async {
     try {
       final uri = Uri.parse('${HermesConfig.runsUrl}/$runId');
-      final req = http.Request('GET', uri)..headers.addAll(HermesConfig.headers);
+      final req = http.Request('GET', uri)
+        ..headers.addAll(HermesConfig.headers);
       final resp = await client.send(req).timeout(const Duration(seconds: 20));
       final body = await resp.stream.bytesToString();
       final data = json.decode(body) as Map<String, dynamic>;
@@ -297,7 +305,8 @@ class HermesApiService {
   Future<String> _fetchRunResult(http.Client client, String runId) async {
     try {
       final uri = Uri.parse('${HermesConfig.runsUrl}/$runId');
-      final req = http.Request('GET', uri)..headers.addAll(HermesConfig.headers);
+      final req = http.Request('GET', uri)
+        ..headers.addAll(HermesConfig.headers);
       final resp = await client.send(req).timeout(const Duration(seconds: 30));
       final body = await resp.stream.bytesToString();
       if (resp.statusCode != 200) return '';
@@ -309,14 +318,16 @@ class HermesApiService {
     }
   }
 
-  static String _short(String s) => s.length > 200 ? '${s.substring(0, 200)}…' : s;
+  static String _short(String s) =>
+      s.length > 200 ? '${s.substring(0, 200)}…' : s;
 
   /// Загрузить историю общей сессии с сервера (для отрисовки ленты при входе).
   /// Возвращает сообщения по порядку (старые → новые).
   Future<List<ChatMessage>> loadSessionHistory({int limit = 60}) async {
     final encoded = Uri.encodeComponent(HermesConfig.sessionId);
     final uri = Uri.parse(
-        '${HermesConfig.serverUrl}/v1/sessions/$encoded/messages?limit=$limit');
+      '${HermesConfig.serverUrl}/v1/sessions/$encoded/messages?limit=$limit',
+    );
     try {
       final response = await http
           .get(uri, headers: HermesConfig.headers)
@@ -325,9 +336,12 @@ class HermesApiService {
         return []; // сессии ещё нет — пустой чат
       }
       if (response.statusCode != 200) {
-        throw HermesApiException('История недоступна (${response.statusCode}).');
+        throw HermesApiException(
+          'История недоступна (${response.statusCode}).',
+        );
       }
-      final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final data =
+          json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       final raw = (data['messages'] as List?) ?? const [];
       final out = <ChatMessage>[];
       for (final m in raw.whereType<Map<String, dynamic>>()) {
@@ -335,15 +349,19 @@ class HermesApiService {
         if (role != 'user' && role != 'assistant') continue;
         final content = _extractText(m['content']);
         if (content.trim().isEmpty) continue;
-        out.add(ChatMessage(
-          role: role,
-          text: _stripDatePrefix(content),
-          time: _toTime(m['timestamp']),
-        ));
+        out.add(
+          ChatMessage(
+            role: role,
+            text: _stripDatePrefix(content),
+            time: _toTime(m['timestamp']),
+          ),
+        );
       }
       return out;
     } on SocketException {
-      throw HermesApiException('Нет соединения с сервером — историю взять негде.');
+      throw HermesApiException(
+        'Нет соединения с сервером — историю взять негде.',
+      );
     } on TimeoutException {
       throw HermesApiException('Сервер не ответил вовремя.');
     }
@@ -379,7 +397,10 @@ class HermesApiService {
   }
 
   // ── Список всех сессий (экран истории) ───────────────────────────────────
-  Future<List<SessionSummary>> listSessions({int limit = 50, int offset = 0}) async {
+  Future<List<SessionSummary>> listSessions({
+    int limit = 50,
+    int offset = 0,
+  }) async {
     final uri = Uri.parse(
       '${HermesConfig.serverUrl}/v1/sessions?limit=$limit&offset=$offset',
     );
@@ -388,16 +409,21 @@ class HermesApiService {
           .get(uri, headers: HermesConfig.headers)
           .timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) {
-        throw HermesApiException('История недоступна (${response.statusCode}).');
+        throw HermesApiException(
+          'История недоступна (${response.statusCode}).',
+        );
       }
-      final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final data =
+          json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       final raw = (data['sessions'] as List?) ?? const [];
       return raw
           .whereType<Map<String, dynamic>>()
           .map(SessionSummary.fromJson)
           .toList();
     } on SocketException {
-      throw HermesApiException('Нет соединения с сервером — историю взять негде.');
+      throw HermesApiException(
+        'Нет соединения с сервером — историю взять негде.',
+      );
     } on TimeoutException {
       throw HermesApiException('Сервер не ответил вовремя.');
     }
@@ -405,7 +431,9 @@ class HermesApiService {
 
   Future<List<SessionMessage>> getSessionMessages(String sessionId) async {
     final encoded = Uri.encodeComponent(sessionId);
-    final uri = Uri.parse('${HermesConfig.serverUrl}/v1/sessions/$encoded/messages');
+    final uri = Uri.parse(
+      '${HermesConfig.serverUrl}/v1/sessions/$encoded/messages',
+    );
     try {
       final response = await http
           .get(uri, headers: HermesConfig.headers)
@@ -413,14 +441,17 @@ class HermesApiService {
       if (response.statusCode != 200) {
         throw HermesApiException('Сессия недоступна (${response.statusCode}).');
       }
-      final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final data =
+          json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       final raw = (data['messages'] as List?) ?? const [];
       return raw
           .whereType<Map<String, dynamic>>()
           .map(SessionMessage.fromJson)
           .toList();
     } on SocketException {
-      throw HermesApiException('Нет соединения с сервером — транскрипт взять негде.');
+      throw HermesApiException(
+        'Нет соединения с сервером — транскрипт взять негде.',
+      );
     } on TimeoutException {
       throw HermesApiException('Сервер не ответил вовремя.');
     }
@@ -445,13 +476,13 @@ class SessionSummary {
   });
 
   factory SessionSummary.fromJson(Map<String, dynamic> j) => SessionSummary(
-        id: (j['id'] ?? '').toString(),
-        source: j['source']?.toString(),
-        title: j['title']?.toString(),
-        preview: j['preview']?.toString(),
-        messageCount: (j['message_count'] as num?)?.toInt() ?? 0,
-        lastActive: (j['last_active'] as num?)?.toDouble(),
-      );
+    id: (j['id'] ?? '').toString(),
+    source: j['source']?.toString(),
+    title: j['title']?.toString(),
+    preview: j['preview']?.toString(),
+    messageCount: (j['message_count'] as num?)?.toInt() ?? 0,
+    lastActive: (j['last_active'] as num?)?.toDouble(),
+  );
 }
 
 class SessionMessage {
@@ -462,10 +493,10 @@ class SessionMessage {
   SessionMessage({required this.role, required this.content, this.timestamp});
 
   factory SessionMessage.fromJson(Map<String, dynamic> j) => SessionMessage(
-        role: (j['role'] ?? 'user').toString(),
-        content: (j['content'] ?? '').toString(),
-        timestamp: (j['timestamp'] as num?)?.toDouble(),
-      );
+    role: (j['role'] ?? 'user').toString(),
+    content: (j['content'] ?? '').toString(),
+    timestamp: (j['timestamp'] as num?)?.toDouble(),
+  );
 }
 
 class HermesApiException implements Exception {

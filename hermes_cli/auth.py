@@ -561,6 +561,9 @@ _PLACEHOLDER_SECRET_VALUES = {
     "**",
     "***",
     "changeme",
+    # Legacy public default used by early Troika builds.  It is not a secret
+    # and must never permit a network-accessible API server.
+    "hermes-2024",
     "your_api_key",
     "your_api_key_here",
     "your-api-key",

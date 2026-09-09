@@ -123,6 +123,13 @@ class MainActivity : FlutterActivity() {
                     requestBackgroundLocation()
                     result.success(null)
                 }
+                "getDeviceContext" -> {
+                    // JSON с GPS/wifi/bluetooth-fingerprint для X-Hermes-Device-Context
+                    // header. Flutter шлёт этот header при каждом chat-запросе, чтобы
+                    // Тройка знала где Миша даже когда запрос идёт из текстового чата
+                    // (а не только через wake-word Kotlin-путь).
+                    result.success(DeviceContext.asHeaderValue(applicationContext))
+                }
                 "getEdgeVoice" -> {
                     val prefs = getSharedPreferences(
                         HermesListenerService.PREFS, MODE_PRIVATE

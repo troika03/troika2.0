@@ -20,9 +20,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _testing = false;
   String? _testResult;
   String _currentVoice = 'ru-RU-SvetlanaNeural';
-  double _rate = 1.0;       // 0.5..1.5 — скорость
-  int _pitch = 0;            // -50..+50 Hz — тон ("женственность" вверх)
-  int _volume = 0;           // -50..+50 % — громкость
+  double _rate = 1.0; // 0.5..1.5 — скорость
+  int _pitch = 0; // -50..+50 Hz — тон ("женственность" вверх)
+  int _volume = 0; // -50..+50 % — громкость
 
   List<VoicePreset> _presets = [];
   String? _activePresetName;
@@ -32,14 +32,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // Список доступных голосов Edge TTS с человекочитаемыми описаниями
   static const _voices = [
-    {'id': 'ru-RU-SvetlanaNeural', 'name': '🇷🇺 Светлана', 'desc': 'Русская, женский, мягкий'},
-    {'id': 'ru-RU-DmitryNeural', 'name': '🇷🇺 Дмитрий', 'desc': 'Русский, мужской, серьезный'},
-    {'id': 'en-GB-RyanNeural', 'name': '🇬🇧 Ryan', 'desc': 'Британец, мужской, молодой'},
-    {'id': 'en-GB-ThomasNeural', 'name': '🇬🇧 Thomas', 'desc': 'Британец, мужской, зрелый'},
-    {'id': 'en-GB-SoniaNeural', 'name': '🇬🇧 Sonia', 'desc': 'Британка, женский, спокойная'},
-    {'id': 'en-GB-LibbyNeural', 'name': '🇬🇧 Libby', 'desc': 'Британка, женский, энергичная'},
-    {'id': 'en-US-AriaNeural', 'name': '🇺🇸 Aria', 'desc': 'Американка, женский, живая'},
-    {'id': 'en-US-GuyNeural', 'name': '🇺🇸 Guy', 'desc': 'Американец, мужской, спокойный'},
+    {
+      'id': 'ru-RU-SvetlanaNeural',
+      'name': '🇷🇺 Светлана',
+      'desc': 'Русская, женский, мягкий',
+    },
+    {
+      'id': 'ru-RU-DmitryNeural',
+      'name': '🇷🇺 Дмитрий',
+      'desc': 'Русский, мужской, серьезный',
+    },
+    {
+      'id': 'en-GB-RyanNeural',
+      'name': '🇬🇧 Ryan',
+      'desc': 'Британец, мужской, молодой',
+    },
+    {
+      'id': 'en-GB-ThomasNeural',
+      'name': '🇬🇧 Thomas',
+      'desc': 'Британец, мужской, зрелый',
+    },
+    {
+      'id': 'en-GB-SoniaNeural',
+      'name': '🇬🇧 Sonia',
+      'desc': 'Британка, женский, спокойная',
+    },
+    {
+      'id': 'en-GB-LibbyNeural',
+      'name': '🇬🇧 Libby',
+      'desc': 'Британка, женский, энергичная',
+    },
+    {
+      'id': 'en-US-AriaNeural',
+      'name': '🇺🇸 Aria',
+      'desc': 'Американка, женский, живая',
+    },
+    {
+      'id': 'en-US-GuyNeural',
+      'name': '🇺🇸 Guy',
+      'desc': 'Американец, мужской, спокойный',
+    },
   ];
 
   static const _channel = MethodChannel('com.troika.hermes/background');
@@ -58,8 +90,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      _bargeInEnabled = prefs.getBool('flutter.hermes_barge_in_enabled') ?? true;
-      _bargeInThreshold = prefs.getInt('flutter.hermes_barge_in_threshold') ?? 1200;
+      _bargeInEnabled =
+          prefs.getBool('flutter.hermes_barge_in_enabled') ?? true;
+      _bargeInThreshold =
+          prefs.getInt('flutter.hermes_barge_in_threshold') ?? 1200;
     });
   }
 
@@ -79,15 +113,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final list = await VoicePresets.load();
     final active = await VoicePresets.getActiveName();
     if (!mounted) return;
-    
+
     // Проверка на первый запуск (если активен Claude и настройки по умолчанию)
-    final wasFirstLaunch = active == 'Claude' && 
+    final wasFirstLaunch =
+        active == 'Claude' &&
         list.any((p) => p.name == 'Claude') &&
         _currentVoice == 'ru-RU-SvetlanaNeural' &&
         _rate == 1.0 &&
         _pitch == 0 &&
         _volume == 0;
-        
+
     setState(() {
       _presets = list;
       _activePresetName = active;
@@ -107,12 +142,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _volume = p.volume;
       _activePresetName = p.name;
     });
-    try { await _channel.invokeMethod('setEdgeVoice', _voiceArgs(p.voice)); } catch (_) {}
+    try {
+      await _channel.invokeMethod('setEdgeVoice', _voiceArgs(p.voice));
+    } catch (_) {}
     await VoicePresets.setActiveName(p.name);
     if (showSnack && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Применен пресет «${p.name}»')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Применен пресет «${p.name}»')));
     }
   }
 
@@ -133,9 +170,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _presets = list;
       _activePresetName = preset.name;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Сохранен пресет «${preset.name}»')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Сохранен пресет «${preset.name}»')));
   }
 
   Future<void> _deletePreset(String name) async {
@@ -143,17 +180,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF17150F),
-        title: const Text('Удалить пресет?', style: TextStyle(color: Colors.white)),
-        content: Text('Пресет «$name» будет удален.', 
-            style: const TextStyle(color: Colors.white70)),
+        title: const Text(
+          'Удалить пресет?',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          'Пресет «$name» будет удален.',
+          style: const TextStyle(color: Colors.white70),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Отмена', style: TextStyle(color: Colors.white54)),
+            child: const Text(
+              'Отмена',
+              style: TextStyle(color: Colors.white54),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Удалить', style: TextStyle(color: Color(0xFFE57373))),
+            child: const Text(
+              'Удалить',
+              style: TextStyle(color: Color(0xFFE57373)),
+            ),
           ),
         ],
       ),
@@ -186,11 +234,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена', style: TextStyle(color: Colors.white54)),
+            child: const Text(
+              'Отмена',
+              style: TextStyle(color: Colors.white54),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Сохранить', style: TextStyle(color: Color(0xFFF5A623))),
+            child: const Text(
+              'Сохранить',
+              style: TextStyle(color: Color(0xFFF5A623)),
+            ),
           ),
         ],
       ),
@@ -203,7 +257,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (data != null && mounted) {
         if (data is Map) {
           setState(() {
-            _currentVoice = (data['voice'] as String?) ?? 'ru-RU-SvetlanaNeural';
+            _currentVoice =
+                (data['voice'] as String?) ?? 'ru-RU-SvetlanaNeural';
             _rate = (data['rate'] as num?)?.toDouble() ?? 1.0;
             _pitch = (data['pitch'] as num?)?.toInt() ?? 0;
             _volume = (data['volume'] as num?)?.toInt() ?? 0;
@@ -216,23 +271,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Map<String, dynamic> _voiceArgs(String voice) => {
-        'voice': voice,
-        'rate': _rate,
-        'pitch': _pitch,
-        'volume': _volume,
-      };
+    'voice': voice,
+    'rate': _rate,
+    'pitch': _pitch,
+    'volume': _volume,
+  };
 
   Future<void> _previewVoice(String voice) async {
-    try { await _channel.invokeMethod('previewEdgeVoice', _voiceArgs(voice)); } catch (_) {}
+    try {
+      await _channel.invokeMethod('previewEdgeVoice', _voiceArgs(voice));
+    } catch (_) {}
   }
 
   Future<void> _previewCurrentSettings() async {
-    try { await _channel.invokeMethod('previewEdgeVoice', _voiceArgs(_currentVoice)); } catch (_) {}
+    try {
+      await _channel.invokeMethod(
+        'previewEdgeVoice',
+        _voiceArgs(_currentVoice),
+      );
+    } catch (_) {}
   }
 
   Future<void> _selectVoice(String voice) async {
     setState(() => _currentVoice = voice);
-    try { await _channel.invokeMethod('setEdgeVoice', _voiceArgs(voice)); } catch (_) {}
+    try {
+      await _channel.invokeMethod('setEdgeVoice', _voiceArgs(voice));
+    } catch (_) {}
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Голос обновлен, сервис перезапущен')),
@@ -241,7 +305,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _applyVoiceSettings() async {
-    try { await _channel.invokeMethod('setEdgeVoice', _voiceArgs(_currentVoice)); } catch (_) {}
+    try {
+      await _channel.invokeMethod('setEdgeVoice', _voiceArgs(_currentVoice));
+    } catch (_) {}
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Настройки голоса применены')),
@@ -359,7 +425,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (bg == true) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Местоположение уже разрешено (включая фон)')),
+            const SnackBar(
+              content: Text('Местоположение уже разрешено (включая фон)'),
+            ),
           );
         }
         return;
@@ -386,9 +454,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     HermesConfig.serverUrl = _normalizeUrl(_urlController.text);
     HermesConfig.apiKey = _apiKeyController.text.trim();
     Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Настройки сохранены')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Настройки сохранены')));
   }
 
   @override
@@ -399,8 +467,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       backgroundColor: const Color(0xFF0C0B0A),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
-        title: const Text('Настройки',
-            style: TextStyle(color: Colors.white70)),
+        title: const Text('Настройки', style: TextStyle(color: Colors.white70)),
         iconTheme: const IconThemeData(color: Colors.white38),
       ),
       body: ListView(
@@ -421,12 +488,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _inputField(
             controller: _apiKeyController,
             label: 'API ключ',
-            hint: 'hermes-2024',
+            hint: 'Ключ, созданный для твоего сервера',
             obscure: true,
           ),
           const SizedBox(height: 4),
           const Text(
-            'Тот же ключ из ~/.troika/.env (API_SERVER_KEY)',
+            'Создай на сервере: openssl rand -hex 32 (API_SERVER_KEY)',
             style: TextStyle(color: Colors.white38, fontSize: 11),
           ),
           const SizedBox(height: 16),
@@ -447,8 +514,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           if (_testResult != null) ...[
             const SizedBox(height: 8),
-            Text(_testResult!,
-                style: const TextStyle(color: Colors.white70, fontSize: 13)),
+            Text(
+              _testResult!,
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
           ],
 
           const SizedBox(height: 24),
@@ -457,10 +526,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           _sectionHeader('Wake-word'),
           SwitchListTile(
-            title: const Text('Слушать "Тройка" в фоне',
-                style: TextStyle(color: Colors.white70)),
-            subtitle: const Text('Работает в фоне, расходует заряд',
-                style: TextStyle(color: Colors.white30, fontSize: 12)),
+            title: const Text(
+              'Слушать "Тройка" в фоне',
+              style: TextStyle(color: Colors.white70),
+            ),
+            subtitle: const Text(
+              'Работает в фоне, расходует заряд',
+              style: TextStyle(color: Colors.white30, fontSize: 12),
+            ),
             value: assistant.wakeWordEnabled,
             onChanged: (v) => assistant.setWakeWordEnabled(v),
             activeColor: const Color(0xFFF5A623),
@@ -489,10 +562,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       margin: const EdgeInsets.only(right: 12, bottom: 4),
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: isActive ? const Color(0xFF2A2012) : const Color(0xFF17150F),
+                        color: isActive
+                            ? const Color(0xFF2A2012)
+                            : const Color(0xFF17150F),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: isActive ? const Color(0xFFF5A623) : Colors.white10,
+                          color: isActive
+                              ? const Color(0xFFF5A623)
+                              : Colors.white10,
                           width: 1.5,
                         ),
                       ),
@@ -506,22 +583,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 child: Text(
                                   p.name,
                                   style: TextStyle(
-                                    color: isActive ? Colors.white : Colors.white70,
+                                    color: isActive
+                                        ? Colors.white
+                                        : Colors.white70,
                                     fontSize: 14,
-                                    fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                                    fontWeight: isActive
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               if (isActive)
-                                const Icon(Icons.check_circle, color: Color(0xFFF5A623), size: 14),
+                                const Icon(
+                                  Icons.check_circle,
+                                  color: Color(0xFFF5A623),
+                                  size: 14,
+                                ),
                             ],
                           ),
                           const Spacer(),
                           Text(
                             '${p.rate}x / ${p.pitch}Hz',
-                            style: const TextStyle(color: Colors.white30, fontSize: 10),
+                            style: const TextStyle(
+                              color: Colors.white30,
+                              fontSize: 10,
+                            ),
                           ),
                         ],
                       ),
@@ -561,36 +649,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
             return Container(
               margin: const EdgeInsets.only(bottom: 8),
               decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF2A2012) : const Color(0xFF17150F),
+                color: isSelected
+                    ? const Color(0xFF2A2012)
+                    : const Color(0xFF17150F),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isSelected ? const Color(0xFFF5A623) : Colors.transparent,
+                  color: isSelected
+                      ? const Color(0xFFF5A623)
+                      : Colors.transparent,
                   width: 1.5,
                 ),
               ),
               child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 4,
+                ),
                 title: Text(
                   v['name']!,
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 14,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight: isSelected
+                        ? FontWeight.w600
+                        : FontWeight.normal,
                   ),
                 ),
-                subtitle: Text(v['desc']!, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                subtitle: Text(
+                  v['desc']!,
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.play_circle_outline, color: Colors.white70),
+                      icon: const Icon(
+                        Icons.play_circle_outline,
+                        color: Colors.white70,
+                      ),
                       tooltip: 'Прослушать',
                       onPressed: () => _previewVoice(v['id']!),
                     ),
                     if (isSelected)
                       const Padding(
                         padding: EdgeInsets.only(left: 4),
-                        child: Icon(Icons.check_circle, color: Color(0xFFF5A623)),
+                        child: Icon(
+                          Icons.check_circle,
+                          color: Color(0xFFF5A623),
+                        ),
                       ),
                   ],
                 ),
@@ -614,7 +720,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             max: 1.5,
             divisions: 20,
             display: '${_rate.toStringAsFixed(2)}x',
-            onChanged: (v) => setState(() => _rate = double.parse(v.toStringAsFixed(2))),
+            onChanged: (v) =>
+                setState(() => _rate = double.parse(v.toStringAsFixed(2))),
           ),
           _sliderRow(
             label: 'Тон (питч)',
@@ -666,7 +773,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: _resetVoiceSettings,
             style: TextButton.styleFrom(foregroundColor: Colors.white54),
             icon: const Icon(Icons.refresh, size: 14),
-            label: const Text('Сбросить к дефолтам', style: TextStyle(fontSize: 12)),
+            label: const Text(
+              'Сбросить к дефолтам',
+              style: TextStyle(fontSize: 12),
+            ),
           ),
 
           const SizedBox(height: 16),
@@ -675,8 +785,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           _sectionHeader('Прерывание речи (barge-in)'),
           SwitchListTile(
-            title: const Text('Замолкать когда я говорю',
-                style: TextStyle(color: Colors.white70)),
+            title: const Text(
+              'Замолкать когда я говорю',
+              style: TextStyle(color: Colors.white70),
+            ),
             subtitle: const Text(
               'Тройка обрывает свой ответ как только слышит твой голос',
               style: TextStyle(color: Colors.white30, fontSize: 12),
@@ -697,14 +809,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
               display: _bargeInThreshold <= 900
                   ? '$_bargeInThreshold (высокая)'
                   : _bargeInThreshold >= 1800
-                      ? '$_bargeInThreshold (низкая)'
-                      : '$_bargeInThreshold (средняя)',
+                  ? '$_bargeInThreshold (низкая)'
+                  : '$_bargeInThreshold (средняя)',
               onChanged: (v) => _saveBargeInThreshold(v.toInt()),
             ),
             const Text(
               'Меньше = срабатывает на любой шорох (включая шум). '
               'Больше = только когда говоришь явно.',
-              style: TextStyle(color: Colors.white38, fontSize: 11, height: 1.4),
+              style: TextStyle(
+                color: Colors.white38,
+                fontSize: 11,
+                height: 1.4,
+              ),
             ),
           ],
 
@@ -802,10 +918,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               backgroundColor: const Color(0xFFF5A623),
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
-            child: const Text('Сохранить',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            child: const Text(
+              'Сохранить',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),
@@ -829,8 +948,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(label, style: const TextStyle(color: Colors.white70, fontSize: 13)),
-              Text(display, style: const TextStyle(color: Color(0xFFF5A623), fontSize: 13, fontWeight: FontWeight.w600)),
+              Text(
+                label,
+                style: const TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+              Text(
+                display,
+                style: const TextStyle(
+                  color: Color(0xFFF5A623),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ],
           ),
           SliderTheme(

@@ -24,9 +24,6 @@ from tools.registry import registry
 logger = logging.getLogger(__name__)
 
 
-_PHONE_SESSION_ID = "phone-misha-main"
-
-
 def _state_db_path() -> Path:
     return get_hermes_home() / "state.db"
 
@@ -59,7 +56,12 @@ async def _handle(args: Dict[str, Any], **_kw) -> str:
         )
 
     period = args.get("period", "today")
-    session_id = args.get("session_id") or _PHONE_SESSION_ID
+    session_id = (args.get("_session_id") or "").strip()
+    if not session_id:
+        return json.dumps(
+            {"ok": False, "error": "session_scope_unavailable"},
+            ensure_ascii=False,
+        )
     max_items = int(args.get("max_items") or 50)
     start_ts, end_ts, label = _period_to_range(period)
 

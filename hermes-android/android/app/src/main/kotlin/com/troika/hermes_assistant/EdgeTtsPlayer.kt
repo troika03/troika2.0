@@ -36,6 +36,21 @@ class EdgeTtsPlayer(
     private val currentDoneCallback = AtomicReference<(() -> Unit)?>(null)
     private val streamCancelled = AtomicBoolean(false)
 
+    // Эмоция текущей озвучки. Мозг ставит [emo:joy] в начале ПОЛНОГО ответа;
+    // мы вырезаем тег один раз и прикладываем тон ко ВСЕМ предложениям этого
+    // ответа, чтобы вся фраза звучала единым настроением (а не только первая).
+    private val currentTone = AtomicReference<String?>(null)
+
+    private val emoTagRe = Regex("""\[emo:\s*([A-Za-zА-Яа-яЁё_]+)\s*]""")
+
+    /** Достаёт [emo:...] из полного текста, ставит currentTone, возвращает текст без тега. */
+    private fun extractTone(text: String): String {
+        val m = emoTagRe.find(text)
+        if (m == null) { currentTone.set(null); return text }
+        currentTone.set(m.groupValues[1].trim().lowercase())
+        return emoTagRe.replace(text, "").trim()
+    }
+
     // «Поколение» текущей озвучки. Любой новый speak()/speakStream() инкрементит
     // его и глушит предыдущую речь. Потоки синтеза/проигрывания сверяют своё
     // поколение с актуальным — если устарело, тихо выходят и НЕ запускают звук.
@@ -70,14 +85,18 @@ class EdgeTtsPlayer(
 
     /** Синхронно скачивает MP3 и проигрывает; колбэк вызывается когда озвучка закончилась. */
     fun speak(text: String, onDone: (() -> Unit)? = null) {
-        val cleaned = text.replace(Regex("[*#`]+"), "").trim()
+        val cleaned = extractTone(text.replace(Regex("[*#`]+"), "").trim())
         if (cleaned.isEmpty()) { onDone?.invoke(); return }
+        speakResolved(cleaned, currentTone.get(), onDone)
+    }
 
+    /** Озвучить уже очищенный текст с явным тоном (тег уже вырезан). */
+    private fun speakResolved(cleaned: String, tone: String?, onDone: (() -> Unit)?) {
         val myGen = beginPlayback(onDone)
 
         val t = Thread {
             try {
-                val file = synthesizeOrCached(cleaned)
+                val file = synthesizeOrCached(cleaned, tone)
                 if (generation.get() != myGen) return@Thread  // нас перебили — молчим
                 if (file != null && file.length() > 0) {
                     playFile(file, myGen)
@@ -121,12 +140,15 @@ class EdgeTtsPlayer(
      * или когда поток был прерван через stop().
      */
     fun speakStream(text: String, onDone: (() -> Unit)? = null) {
-        val cleaned = text.replace(Regex("[*#`]+"), "").trim()
+        // Тег [emo:...] вырезаем из ПОЛНОГО ответа один раз — currentTone теперь
+        // действует на все предложения этой озвучки.
+        val cleaned = extractTone(text.replace(Regex("[*#`]+"), "").trim())
         if (cleaned.isEmpty()) { onDone?.invoke(); return }
 
+        val tone = currentTone.get()
         val sentences = splitSentences(cleaned)
         if (sentences.size <= 1) {
-            speak(cleaned, onDone)
+            speakResolved(cleaned, tone, onDone)
             return
         }
 
@@ -160,7 +182,7 @@ class EdgeTtsPlayer(
                 val i = nextIndex.getAndIncrement()
                 if (i >= n) return
                 val file: File? = try {
-                    synthesizeOrCached(sentences[i])
+                    synthesizeOrCached(sentences[i], tone)
                 } catch (e: Exception) {
                     Log.e(tag, "stream synth #$i: ${e.message}"); null
                 }
@@ -274,9 +296,11 @@ class EdgeTtsPlayer(
         try { cb() } catch (e: Exception) { Log.e(tag, "onDone error: ${e.message}") }
     }
 
-    private fun synthesizeOrCached(text: String): File? {
-        // Ключ кэша включает все параметры голоса — смена rate/pitch/volume = новый кэш
-        val paramHash = "${voice}_r${(rate * 100).toInt()}_p${pitch}_v${volume}"
+    private fun synthesizeOrCached(text: String, tone: String? = null): File? {
+        // Ключ кэша включает все параметры голоса + тон эмоции — смена
+        // rate/pitch/volume/tone = новый кэш (иначе радостная фраза достанет
+        // нейтральный mp3 из кэша).
+        val paramHash = "${voice}_r${(rate * 100).toInt()}_p${pitch}_v${volume}_t${tone ?: ""}"
         val hash = text.hashCode().toString().replace("-", "n")
         val cached = File(cacheDir, "tts_${hash}_${paramHash}.mp3")
         if (cached.exists() && cached.length() > 100) {
@@ -290,6 +314,7 @@ class EdgeTtsPlayer(
             put("speed", rate)
             put("pitch", pitch)
             put("volume", volume)
+            if (!tone.isNullOrBlank()) put("tone", tone)
         }.toString().toByteArray(Charsets.UTF_8)
 
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {

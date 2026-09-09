@@ -1263,7 +1263,9 @@ async def _action_create(args: Dict[str, Any]) -> Dict[str, Any]:
     if job_runner.active_count() >= 6:
         return {"ok": False, "error": "too_many_active",
                 "say_to_user": "У меня уже шесть задач в работе, подожди пока одна закончится."}
-    session_id = args.get("_session_id") or "phone-misha-main"
+    session_id = args.get("_session_id") or ""
+    if not session_id:
+        return {"ok": False, "error": "session_scope_unavailable"}
     label = f"сайт {project[:40]}"
     task_id = job_runner.submit("gemini_code_create", payload, session_id=session_id, short_label=label)
     return {"ok": True, "action": "create", "task_id": task_id, "status": "queued",
@@ -1303,7 +1305,9 @@ async def _action_iterate(args: Dict[str, Any]) -> Dict[str, Any]:
     if job_runner.active_count() >= 6:
         return {"ok": False, "error": "too_many_active",
                 "say_to_user": "У меня уже шесть задач в работе, подожди пока одна закончится."}
-    session_id = args.get("_session_id") or "phone-misha-main"
+    session_id = args.get("_session_id") or ""
+    if not session_id:
+        return {"ok": False, "error": "session_scope_unavailable"}
     label = f"правка {workspace.name[:30]}"
     task_id = job_runner.submit("gemini_code_iterate", payload, session_id=session_id, short_label=label)
     return {"ok": True, "action": "iterate", "task_id": task_id, "status": "queued",

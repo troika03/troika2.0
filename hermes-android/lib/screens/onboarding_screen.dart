@@ -93,9 +93,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     await _refresh();
   }
 
-  // Обязательные для базовой работы: микрофон (слышать) + спец-возможности
-  // (управлять телефоном, скриншоты). Остальное — желательное.
-  bool get _requiredDone => _mic && _accessibility;
+  // Для базового голосового ассистента нужен только микрофон. Управление
+  // телефоном — повышенное разрешение, поэтому пользователь включает его
+  // отдельно и осознанно после запуска.
+  bool get _requiredDone => _mic;
 
   void _finish() {
     HermesConfig.onboardingDone = true;
@@ -112,16 +113,20 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Настройка Тройки',
-                  style: theme.textTheme.headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.bold)),
+              Text(
+                'Настройка Тройки',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 8),
               Text(
-                'Сервер уже подключён ($_serverHint). Осталось выдать '
-                'разрешения — без них Тройка не услышит тебя и не сможет '
-                'управлять телефоном.',
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: Colors.white70),
+                'Сначала выдай микрофон. Подключение к своему серверу и '
+                'дополнительные возможности можно настроить позже в разделе '
+                '«Настройки».',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: Colors.white70,
+                ),
               ),
               const SizedBox(height: 24),
               Expanded(
@@ -139,10 +144,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       icon: Icons.accessibility_new,
                       title: 'Спец-возможности',
                       subtitle:
-                          'Управление телефоном: нажатия, свайпы, ввод, скриншоты. '
-                          'Включи «Тройка» в списке.',
+                          'Необязательно. Разрешает нажатия, свайпы, ввод и '
+                          'скриншоты. Включай только если действительно нужен '
+                          'контроль телефона.',
                       done: _accessibility,
-                      required_: true,
+                      required_: false,
                       onTap: () => _invoke('openAccessibilitySettings'),
                     ),
                     _Step(
@@ -196,9 +202,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
-                  child: Text(_requiredDone
-                      ? 'Готово, поехали'
-                      : 'Выдай микрофон и спец-возможности'),
+                  child: Text(
+                    _requiredDone ? 'Готово, продолжить' : 'Выдай микрофон',
+                  ),
                 ),
               ),
               if (_requiredDone && !(_overlay && _battery))
@@ -216,11 +222,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         ),
       ),
     );
-  }
-
-  String get _serverHint {
-    final u = HermesConfig.serverUrl;
-    return u.isEmpty ? 'не задан' : u.replaceFirst('http://', '');
   }
 }
 
@@ -248,41 +249,46 @@ class _Step extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: Icon(icon,
-            color: done ? Colors.greenAccent : Colors.white70, size: 28),
+        leading: Icon(
+          icon,
+          color: done ? Colors.greenAccent : Colors.white70,
+          size: 28,
+        ),
         title: Row(
           children: [
             Flexible(
-              child: Text(title,
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w600)),
+              child: Text(
+                title,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
             if (required_ && !done)
               Container(
                 margin: const EdgeInsets.only(left: 8),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: Colors.orange.withValues(alpha: 0.25),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: const Text('нужно',
-                    style: TextStyle(fontSize: 11, color: Colors.orange)),
+                child: const Text(
+                  'нужно',
+                  style: TextStyle(fontSize: 11, color: Colors.orange),
+                ),
               ),
           ],
         ),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4),
-          child: Text(subtitle,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: Colors.white60)),
+          child: Text(
+            subtitle,
+            style: theme.textTheme.bodySmall?.copyWith(color: Colors.white60),
+          ),
         ),
         trailing: done
             ? const Icon(Icons.check_circle, color: Colors.greenAccent)
-            : FilledButton.tonal(
-                onPressed: onTap,
-                child: const Text('Выдать'),
-              ),
+            : FilledButton.tonal(onPressed: onTap, child: const Text('Выдать')),
       ),
     );
   }
