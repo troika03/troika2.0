@@ -29,5 +29,9 @@ void main() {
     expect(HermesConfig.locationContextEnabled, isFalse);
     await HermesConfig.setLocationContextEnabled(true);
     expect(HermesConfig.locationContextEnabled, isTrue);
+
+    expect(HermesConfig.phoneControlEnabled, isFalse);
+    await HermesConfig.setPhoneControlEnabled(true);
+    expect(HermesConfig.phoneControlEnabled, isTrue);
   });
 }

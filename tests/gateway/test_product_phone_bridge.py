@@ -3,7 +3,7 @@
 import asyncio
 import json
 
-from gateway.platforms.phone_bridge import ProductPhoneBridge
+from gateway.platforms.phone_bridge import ProductPhoneBridge, product_bridge
 
 
 class _FakeSocket:
@@ -63,3 +63,42 @@ def test_product_bridge_marks_only_state_queries_as_read_only() -> None:
     assert not ProductPhoneBridge.requires_confirmation("battery")
     assert ProductPhoneBridge.requires_confirmation("open_app")
     assert not ProductPhoneBridge.requires_confirmation("send_sms")
+
+
+def test_product_tool_availability_is_scoped_to_current_device() -> None:
+    from gateway.session_context import clear_session_override, set_session_override
+    from model_tools import _clear_tool_defs_cache, get_tool_definitions
+    from tools.registry import invalidate_check_fn_cache
+
+    def tool_names() -> set[str]:
+        return {
+            item["function"]["name"]
+            for item in get_tool_definitions(
+                enabled_toolsets=["troika-product"], quiet_mode=True
+            )
+        }
+
+    previous = dict(product_bridge._connections)
+    product_bridge._connections.clear()
+    set_session_override("TROIKA_PRODUCT_MODE", "1")
+    try:
+        set_session_override("TROIKA_PRODUCT_DEVICE_ID", "offline-device")
+        _clear_tool_defs_cache()
+        invalidate_check_fn_cache()
+        assert "android_status" not in tool_names()
+
+        product_bridge._connections["online-device"] = _FakeSocket(
+            product_bridge, "online-device"
+        )
+        set_session_override("TROIKA_PRODUCT_DEVICE_ID", "online-device")
+        assert "android_status" in tool_names()
+
+        set_session_override("TROIKA_PRODUCT_DEVICE_ID", "other-offline-device")
+        assert "android_status" not in tool_names()
+    finally:
+        product_bridge._connections.clear()
+        product_bridge._connections.update(previous)
+        clear_session_override("TROIKA_PRODUCT_DEVICE_ID")
+        clear_session_override("TROIKA_PRODUCT_MODE")
+        _clear_tool_defs_cache()
+        invalidate_check_fn_cache()

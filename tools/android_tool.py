@@ -63,6 +63,12 @@ def _check_phone_connected():
         return False
 
 
+# Phone availability is request-scoped in product mode and can change as a
+# device connects or revokes consent. A process-global TTL cache would leak
+# another device's availability decision into this request.
+_check_phone_connected._hermes_skip_availability_cache = True
+
+
 def _product_approval_description(action: str, params: Dict[str, Any]) -> str:
     """Build a short, user-visible description without exposing server state."""
     def text(name: str, fallback: str = "") -> str:

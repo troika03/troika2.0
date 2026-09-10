@@ -49,6 +49,7 @@ class HermesListenerService : Service() {
         const val ACTION_STOP = "STOP"
         const val ACTION_TRIGGER_DIALOG = "TRIGGER_DIALOG"
         const val ACTION_INTERRUPT_TTS = "INTERRUPT_TTS"
+        const val ACTION_REFRESH_PHONE_BRIDGE = "REFRESH_PHONE_BRIDGE"
         const val PREFS = "FlutterSharedPreferences"
         const val PREF_URL = "flutter.hermes_server_url"
         const val PREF_KEY = "flutter.hermes_api_key"
@@ -356,6 +357,7 @@ class HermesListenerService : Service() {
                 try { edgeTts?.stop() } catch (_: Exception) {}
                 try { tts?.stop() } catch (_: Exception) {}
             }
+            ACTION_REFRESH_PHONE_BRIDGE -> refreshPhoneBridge()
             else -> startListening()
         }
         return START_STICKY
@@ -452,7 +454,12 @@ class HermesListenerService : Service() {
 
         // 4) WebSocket-мост к серверу отвалился? PhoneBridgeClient сам не
         // умеет reconnect на все случаи — пересоздаём объект.
-        if (phoneBridge == null) {
+        val phoneControlEnabled = getSharedPreferences(PREFS, MODE_PRIVATE)
+            .getBoolean("flutter.hermes_phone_control_enabled", false)
+        if (!phoneControlEnabled && phoneBridge != null) {
+            logWatchdog("phone control disabled → disconnect")
+            refreshPhoneBridge()
+        } else if (phoneControlEnabled && phoneBridge == null) {
             logWatchdog("phoneBridge null → restart")
             startPhoneBridge()
         }
@@ -651,6 +658,18 @@ class HermesListenerService : Service() {
         val key = resolvedKey(prefs)
         phoneBridge = PhoneBridgeClient(applicationContext, url, key).also { it.start() }
         android.util.Log.i("HermesListener", "PhoneBridge started → $url")
+    }
+
+    private fun refreshPhoneBridge() {
+        val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val enabled = prefs.getBoolean("flutter.hermes_phone_control_enabled", false)
+        try { phoneBridge?.stop() } catch (_: Exception) {}
+        phoneBridge = null
+        if (enabled) {
+            startPhoneBridge()
+        } else {
+            android.util.Log.i("HermesListener", "PhoneBridge stopped by user")
+        }
     }
 
     private fun runListenerLoop() {

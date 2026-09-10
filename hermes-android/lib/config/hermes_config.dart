@@ -17,6 +17,7 @@ class HermesConfig {
   static const String _keySessionId = 'hermes_session_id';
   static const String _keyLocationContextEnabled =
       'hermes_location_context_enabled';
+  static const String _keyPhoneControlEnabled = 'hermes_phone_control_enabled';
 
   // Дефолтные значения.
   // Мобильный клиент не содержит адрес общего production-сервера. Его задаёт
@@ -101,6 +102,20 @@ class HermesConfig {
 
   static Future<void> setLocationContextEnabled(bool value) async {
     await _prefs.setBool(_keyLocationContextEnabled, value);
+  }
+
+  /// Explicit consent for opening the authenticated phone-command channel.
+  /// It is disabled by default and can be revoked at any time.
+  static bool get phoneControlEnabled =>
+      _prefs.getBool(_keyPhoneControlEnabled) ?? false;
+
+  static Future<void> setPhoneControlEnabled(bool value) async {
+    await _prefs.setBool(_keyPhoneControlEnabled, value);
+    if (!Platform.isAndroid) return;
+    try {
+      const platform = MethodChannel('com.troika.hermes/background');
+      await platform.invokeMethod<void>('refreshPhoneBridge');
+    } catch (_) {}
   }
 
   /// URL для WebSocket канала команд (управление телефоном)

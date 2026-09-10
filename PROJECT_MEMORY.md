@@ -57,7 +57,8 @@
 - В product mode (`TROIKA_PRODUCT_AUTH_ENABLED=true`) gateway принимает только `trk_live_…` токены устройств, принудительно выводит memory scope на сервере и запрещает чужие session IDs.
 - STT proxy использует тот же registry, поэтому голосовой путь не возвращается к общему API key.
 - Добавлен операторский CLI: `python -m troika_product --database … provision …`; пошаговый runbook — `docs/TROIKA_CLOSED_BETA_SETUP.md`.
-- В product mode отключены legacy global jobs и phone-control, пока они не получат user/device routing и audit log.
+- В product mode отключены legacy global jobs и небезопасный single-phone
+  bridge. Device-bound замена реализована отдельным этапом ниже.
 - Проверено: 9 focused pytest tests passed, включая token revocation, session isolation, API integration и provisioning CLI. Android `hermes_config_test.dart`: 2/2 passed. Полный `flutter analyze` не завершился в лимит текущей среды.
 
 ## Выполнено: usage cap для закрытой beta (2026-09-09)
@@ -77,8 +78,11 @@
 
 ## Выполнено: безопасный tool boundary product API (2026-09-09)
 
-- Product mode принудительно использует `troika-product` toolset, не конфиг оператора. Доступны только web/vision/image generation.
-- Terminal, server files, PC/Android control и dynamic routers `find_tool`/`run_tool` недоступны пользователю подписки. Для них нужен отдельный paired companion и модель явного approval.
+- Product mode принудительно использует `troika-product` toolset, а не конфиг
+  оператора. Terminal, server files, PC control и dynamic routers
+  `find_tool`/`run_tool` недоступны пользователю подписки. Документы и узкий
+  device-bound Android slice добавлены позже только через отдельные безопасные
+  product tools и явный approval.
 
 ## Выполнено: consent location beta (2026-09-09)
 
@@ -93,6 +97,26 @@
 - Любое изменяющее действие требует отдельного выбора «Разрешить один раз» в Android-приложении. Consent не переносится на другие действия; API отклоняет `session`, `always` и bulk-approval для product action.
 - Android обработал SSE `approval.request` и показывает понятный диалог. Если UI/канал подтверждения недоступен, действие отклоняется.
 - Проверено: 35 focused Python tests; `ruff` и `compileall` прошли; Flutter test 3/3 прошёл; `flutter analyze` без ошибок (40 прежних informational suggestions).
+
+## Выполнено: физический Android E2E и consent управления (2026-09-10)
+
+- На Samsung Galaxy A22 (Android 33) поверх старой версии установлена актуальная
+  debug APK без очистки данных. Приложение использует отдельный product runtime
+  `127.0.0.1:8765` через USB `adb reverse`; старый сервер на `8642` не затронут.
+- Текстовый чат физически проверен: Android отправил запрос в `/v1/runs`,
+  бесплатная агентная модель ответила, результат появился в приложении.
+- Исправлен отсутствовавший consent UI для phone bridge. Новый переключатель
+  «Разрешить управление телефоном» по умолчанию выключен, сохраняет явное
+  решение пользователя и сразу подключает или отключает WebSocket.
+- Исправлена process-global cache выдачи Android tools: доступность теперь
+  проверяется отдельно для текущего device ID и не может наследоваться от
+  другого пользователя или старого состояния соединения.
+- Реальный безопасный tool E2E пройден: модель вызвала `android_status`, телефон
+  получил WebSocket-команду `status` и вернул Samsung Galaxy A22, Android 33,
+  состояние Accessibility и файлового разрешения.
+- Проверено: Flutter tests `4 passed`; debug APK собрана; `16 passed` focused
+  product auth/phone tests. `flutter analyze` не нашёл ошибок, остались прежние
+  informational замечания. Секрет токена в Git, лог и память не записывался.
 
 ## Выполнено: личные документы DOCX/PDF/PPTX (2026-09-10)
 
@@ -177,12 +201,15 @@
 - Проактивные личные сообщения/начало разговора ещё не возвращены в безопасной
   multi-user модели.
 - Физический Android-телефон успешно авторизован через ADB; актуальный debug APK
-  установлен поверх прежней версии без очистки пользовательских данных и был
-  запущен. USB-туннель `adb reverse tcp:8765 tcp:8765` проверен. Затем телефон
-  отключился от USB до замены старого server URL и API key, поэтому ручной чат
-  ещё не проверен. После переподключения нужно повторить reverse, выдать новый
-  одноразово показываемый device token и сохранить `http://127.0.0.1:8765` в
-  настройках приложения. Открывать сервер в Wi-Fi не требуется.
+  установлен, текстовый чат и `android_status` проверены. Текущий USB-туннель —
+  только dev-транспорт: production потребует домен, HTTPS/WSS и нормальный
+  pairing/login без ADB.
+- Голосовой STT сейчас не работает в этом тестовом runtime: Android обращается
+  к `127.0.0.1:8643`, но STT proxy не запущен и USB reverse для `8643` не
+  настроен. Текстовый чат и Android WebSocket от этого не зависят.
+- Accessibility на тестовом телефоне выключен. Поэтому `status`, battery и
+  network работают, но нажатия, свайпы и ввод в другие приложения потребуют
+  отдельного включения Тройки в Спец. возможностях Android.
 - SMS, звонки, clipboard, экран, файлы телефона и календарь намеренно не
   включены в подписочный toolset до отдельного privacy/security review.
 - Нет production deployment с доменом, HTTPS, мониторингом, резервными копиями
@@ -221,6 +248,6 @@
 - [x] Возвращены безопасные личные DOCX/PDF/PPTX и рабочий Android files UI.
 - [x] Настроена и реально проверена бесплатная агентная модель `openrouter/free`.
 - [x] Пройден локальный product API smoke-test с token, approval и DOCX artifact.
-- [ ] Пройден ручной end-to-end тест на физическом Android-телефоне (APK уже
-      установлен; нужно переподключить USB и завершить настройку/чат).
+- [x] Пройден ручной end-to-end тест на физическом Android-телефоне: текстовый
+      чат, device-token auth, WebSocket и `android_status`.
 - [ ] Готов production deployment и self-service подписочный контур.

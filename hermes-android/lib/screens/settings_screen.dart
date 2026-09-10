@@ -30,6 +30,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _bargeInEnabled = true;
   int _bargeInThreshold = 1200;
   bool _locationContextEnabled = false;
+  bool _phoneControlEnabled = false;
 
   // Список доступных голосов Edge TTS с человекочитаемыми описаниями
   static const _voices = [
@@ -86,6 +87,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadPresets();
     _loadBargeIn();
     _locationContextEnabled = HermesConfig.locationContextEnabled;
+    _phoneControlEnabled = HermesConfig.phoneControlEnabled;
   }
 
   Future<void> _loadBargeIn() async {
@@ -458,6 +460,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _locationContextEnabled = enabled);
   }
 
+  Future<void> _setPhoneControlEnabled(bool enabled) async {
+    await HermesConfig.setPhoneControlEnabled(enabled);
+    if (!mounted) return;
+    setState(() => _phoneControlEnabled = enabled);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          enabled
+              ? 'Управление телефоном включено'
+              : 'Управление телефоном выключено',
+        ),
+      ),
+    );
+  }
+
   void _save() {
     HermesConfig.serverUrl = _normalizeUrl(_urlController.text);
     HermesConfig.apiKey = _apiKeyController.text.trim();
@@ -825,8 +842,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 16),
           _sectionHeader('Управление телефоном'),
           const Text(
-            'Чтобы Тройка мог нажимать кнопки и писать в приложениях, '
-            'включи его в Спец. возможностях Android.',
+            'Разреши Тройке принимать команды только от твоего '
+            'авторизованного сервера. Можно отключить в любой момент.',
+            style: TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
+          ),
+          SwitchListTile(
+            title: const Text(
+              'Разрешить управление телефоном',
+              style: TextStyle(color: Colors.white70),
+            ),
+            subtitle: const Text(
+              'По умолчанию выключено. Опасные действия всё равно требуют '
+              'отдельного подтверждения.',
+              style: TextStyle(color: Colors.white38, fontSize: 12),
+            ),
+            value: _phoneControlEnabled,
+            onChanged: _setPhoneControlEnabled,
+            activeThumbColor: const Color(0xFFF5A623),
+            contentPadding: EdgeInsets.zero,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Для нажатий, свайпов и ввода текста дополнительно включи '
+            'Тройку в Спец. возможностях Android.',
             style: TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
           ),
           const SizedBox(height: 12),

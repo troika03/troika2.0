@@ -60,6 +60,10 @@ class MainActivity : FlutterActivity() {
                 "stopListenerService" -> { stopListenerService(); result.success(null) }
                 "triggerDialog" -> { triggerDialog(); result.success(null) }
                 "interruptTts" -> { interruptTts(); result.success(null) }
+                "refreshPhoneBridge" -> {
+                    refreshPhoneBridge()
+                    result.success(null)
+                }
                 "requestBatteryOptimizationDisable" -> {
                     requestBatteryOptimizationDisable()
                     result.success(null)
@@ -231,6 +235,17 @@ class MainActivity : FlutterActivity() {
             action = HermesListenerService.ACTION_STOP
         }
         startService(intent)
+    }
+
+    private fun refreshPhoneBridge() {
+        val intent = Intent(this, HermesListenerService::class.java).apply {
+            action = HermesListenerService.ACTION_REFRESH_PHONE_BRIDGE
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
     }
 
     private fun isBatteryOptimizationIgnored(): Boolean {
