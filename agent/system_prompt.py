@@ -57,6 +57,18 @@ def _ra():
     return run_agent
 
 
+def _is_troika_product_mode() -> bool:
+    """Return whether this turn belongs to the authenticated Troika product."""
+
+    try:
+        from gateway.session_context import get_session_env
+
+        value = get_session_env("TROIKA_PRODUCT_MODE", "")
+    except Exception:
+        value = os.environ.get("TROIKA_PRODUCT_MODE", "")
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) -> Dict[str, str]:
     """Assemble the system prompt as three ordered parts.
 
@@ -83,11 +95,21 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     # ── Stable tier ────────────────────────────────────────────────
     stable_parts: List[str] = []
 
+    # Product sessions use a fixed Troika identity. This is intentionally
+    # independent of HERMES_HOME/SOUL.md: existing installations may still
+    # contain the old upstream default seeded before the product was deployed.
+    _troika_product_mode = _is_troika_product_mode()
+
     # Try SOUL.md as primary identity unless the caller explicitly skipped it.
     # Some execution modes (cron) still want HERMES_HOME persona while keeping
     # cwd project instructions disabled.
     _soul_loaded = False
-    if agent.load_soul_identity or not agent.skip_context_files:
+    if _troika_product_mode:
+        from troika_product.persona import load_troika_persona
+
+        stable_parts.append(load_troika_persona())
+        _soul_loaded = True
+    elif agent.load_soul_identity or not agent.skip_context_files:
         _soul_content = _r.load_soul_md()
         if _soul_content:
             stable_parts.append(_soul_content)
@@ -97,8 +119,10 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
         # Fallback to hardcoded identity
         stable_parts.append(DEFAULT_AGENT_IDENTITY)
 
-    # Pointer to the hermes-agent skill + docs for user questions about Hermes itself.
-    stable_parts.append(HERMES_AGENT_HELP_GUIDANCE)
+    # The upstream help pointer is useful in operator/CLI sessions, but would
+    # leak the implementation name into the consumer-facing Troika product.
+    if not _troika_product_mode:
+        stable_parts.append(HERMES_AGENT_HELP_GUIDANCE)
 
     # Tool-aware behavioral guidance: only inject when the tools are loaded
     tool_guidance = []

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -35,6 +36,18 @@ class TroikaFile {
 
   DateTime get time =>
       DateTime.fromMillisecondsSinceEpoch((created * 1000).round());
+}
+
+class FileSaveResult {
+  final bool saved;
+  final String? error;
+
+  const FileSaveResult._({required this.saved, this.error});
+
+  const FileSaveResult.saved() : this._(saved: true);
+  const FileSaveResult.cancelled() : this._(saved: false);
+  const FileSaveResult.failed(String message)
+      : this._(saved: false, error: message);
 }
 
 /// Доступ только к личным документам аутентифицированного пользователя.
@@ -107,6 +120,34 @@ class FilesService {
       return 'Нет соединения с сервером.';
     } catch (e) {
       return 'Ошибка отправки: $e';
+    }
+  }
+
+  /// Save a durable copy through the platform document picker.
+  ///
+  /// On Android/iOS file_picker writes [bytes] to the user-selected location.
+  /// Desktop pickers return a path, so the copy is written here after choice.
+  Future<FileSaveResult> saveToDevice(TroikaFile file) async {
+    try {
+      final downloaded = await _download(file);
+      final bytes = await downloaded.readAsBytes();
+      final isMobile = Platform.isAndroid || Platform.isIOS;
+      final target = await FilePicker.platform.saveFile(
+        dialogTitle: 'Сохранить файл на устройство',
+        fileName: file.name,
+        type: FileType.custom,
+        allowedExtensions: [file.ext],
+        bytes: isMobile ? bytes : null,
+      );
+      if (target == null) return const FileSaveResult.cancelled();
+      if (!isMobile) {
+        await File(target).writeAsBytes(bytes, flush: true);
+      }
+      return const FileSaveResult.saved();
+    } on SocketException {
+      return const FileSaveResult.failed('Нет соединения с сервером.');
+    } catch (e) {
+      return FileSaveResult.failed('Ошибка сохранения: $e');
     }
   }
 

@@ -20,6 +20,7 @@ import uuid
 from typing import Optional
 
 from hermes_constants import get_hermes_home
+from troika_product.notifications import NotificationPreferences
 
 
 @dataclass(frozen=True)
@@ -135,6 +136,12 @@ class AccessRegistry:
                     session_digest TEXT,
                     run_digest TEXT,
                     details_json TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS troika_notification_preferences (
+                    user_id TEXT PRIMARY KEY REFERENCES troika_users(id),
+                    preferences_json TEXT NOT NULL,
+                    updated_at REAL NOT NULL
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_troika_devices_user
@@ -469,6 +476,65 @@ class AccessRegistry:
                 (time.time(), self._token_digest(token)),
             )
         return cursor.rowcount == 1
+
+    @staticmethod
+    def _require_active_principal(
+        connection: sqlite3.Connection, principal: AccessPrincipal,
+    ) -> None:
+        """Recheck ownership and revocation within a preferences transaction."""
+        row = connection.execute(
+            "SELECT 1 FROM troika_api_tokens AS tokens "
+            "JOIN troika_devices AS devices ON devices.id = tokens.device_id "
+            "JOIN troika_users AS users ON users.id = devices.user_id "
+            "WHERE tokens.id = ? AND devices.id = ? AND users.id = ? "
+            "AND tokens.revoked_at IS NULL "
+            "AND (tokens.expires_at IS NULL OR tokens.expires_at > ?) "
+            "AND devices.status = 'active' AND users.status = 'active'",
+            (principal.token_id, principal.device_id, principal.user_id, time.time()),
+        ).fetchone()
+        if row is None:
+            raise PermissionError("active product authentication is required")
+
+    def notification_preferences(self, principal: AccessPrincipal) -> NotificationPreferences:
+        """Read this authenticated account's preferences, defaulting to opt-out."""
+        with self._connect() as connection:
+            self._require_active_principal(connection, principal)
+            row = connection.execute(
+                "SELECT preferences_json FROM troika_notification_preferences WHERE user_id = ?",
+                (principal.user_id,),
+            ).fetchone()
+        if row is None:
+            return NotificationPreferences()
+        return NotificationPreferences.from_dict(json.loads(row["preferences_json"]))
+
+    def set_notification_preferences(
+        self, principal: AccessPrincipal, preferences: NotificationPreferences,
+    ) -> NotificationPreferences:
+        """Atomically replace preferences and record consent without schedule data."""
+        validated = NotificationPreferences.from_dict(preferences.to_dict())
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._require_active_principal(connection, principal)
+            now = time.time()
+            connection.execute(
+                "INSERT INTO troika_notification_preferences "
+                "(user_id, preferences_json, updated_at) VALUES (?, ?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET "
+                "preferences_json = excluded.preferences_json, updated_at = excluded.updated_at",
+                (principal.user_id, json.dumps(validated.to_dict()), now),
+            )
+            details = {
+                "reminders_enabled": validated.reminders_enabled,
+                "proactive_enabled": validated.proactive_enabled,
+                "quiet_hours_enabled": validated.quiet_hours_enabled,
+            }
+            connection.execute(
+                "INSERT INTO troika_audit_events "
+                "(occurred_at, event_type, user_id, device_id, details_json) "
+                "VALUES (?, 'notifications.preferences_updated', ?, ?, ?)",
+                (now, principal.user_id, principal.device_id, json.dumps(details)),
+            )
+        return validated
 
     def claim_session(self, principal: AccessPrincipal, session_id: str) -> bool:
         """Atomically bind a session to its owner; reject cross-user access."""

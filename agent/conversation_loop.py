@@ -176,6 +176,25 @@ def _restore_or_build_system_prompt(agent, system_message, conversation_history)
                 agent.session_id, exc,
             )
 
+    # A product session may outlive the deployment that created it. Do not
+    # restore a cached upstream identity (or a stale product prompt) into the
+    # customer-facing assistant; rebuild once with the current Troika persona
+    # and persist the corrected snapshot for subsequent turns.
+    if stored_prompt:
+        try:
+            from agent.system_prompt import _is_troika_product_mode
+
+            product_mode = _is_troika_product_mode()
+        except Exception:
+            product_mode = False
+        if product_mode and not stored_prompt.lstrip().startswith("# Тройка — кто ты"):
+            logger.info(
+                "Refreshing stale product system prompt for session %s",
+                agent.session_id,
+            )
+            stored_prompt = None
+            stored_state = "stale"
+
     if stored_prompt:
         # Continuing session — reuse the exact system prompt from the
         # previous turn so the Anthropic cache prefix matches.

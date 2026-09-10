@@ -118,6 +118,22 @@
   product auth/phone tests. `flutter analyze` не нашёл ошибок, остались прежние
   informational замечания. Секрет токена в Git, лог и память не записывался.
 
+## Выполнено: сохранение личных файлов на Android (2026-09-10)
+
+- В «Файлы Тройки» добавлена заметная кнопка скачивания и пункт «Сохранить на
+  телефон». Файл сначала проходит обычную проверенную загрузку artifact API,
+  затем сохраняется через Android Storage Access Framework в папку и имя,
+  выбранные пользователем.
+- Используется `file_picker` с байтами только текущего файла. Разрешение
+  `MANAGE_EXTERNAL_STORAGE` не требуется, серверный artifact и private cache
+  остаются защищёнными. Ошибка сети, отмена выбора и ошибка записи показываются
+  отдельно; успешное сохранение подтверждается SnackBar.
+- Проверено: Flutter tests `4 passed`, `flutter analyze --no-fatal-infos`
+  без ошибок (31 прежнее informational замечание), debug APK собрана и
+  установлена поверх прежней версии. Полный physical tap тест сохранения пока
+  не завершён: ADB нестабильно теряет подключение Samsung A22 во время UI
+  действий. Сам чат/phone bridge ранее уже прошли physical E2E.
+
 ## Выполнено: личные документы DOCX/PDF/PPTX (2026-09-10)
 
 - Старый Android-экран обращался к отсутствующему общему `/v1/files` и не
@@ -149,9 +165,33 @@
   от глобального `~/.troika/active_project.json`, поэтому для чистого прогона
   его нужно сделать hermetic.
 
+## Выполнено: восстановлена идентичность Тройки (2026-09-10)
+
+- В исходной копии `D:\troikahermes\docker\SOUL.md` найден старый промт
+  Тройки. Из него оставлены личность, живой русский стиль, собственное мнение,
+  инициативность, эмоциональные метки для голоса, честность и safety-правила;
+  устаревшие внутренние инструкции, серверные пути, конкретные команды и
+  перечисления инструментов убраны.
+- `docker/SOUL.md` теперь содержит компактную продуктовую личность Тройки,
+  без дефолтного Hermes identity. `troika_product/persona.py` даёт безопасный
+  fallback, если исходный файл недоступен.
+- В product mode system-prompt принудительно использует личность Тройки,
+  пропускает upstream Hermes help guidance и не зависит от старого
+  `HERMES_HOME/SOUL.md`. Существующий сохранённый system prompt с Hermes
+  автоматически перестраивается один раз и сохраняется уже с Тройкой.
+- Docker upgrade заменяет только точный дефолтный upstream `SOUL.md`; свой
+  пользовательский prompt не перезаписывается. Локальный `data/test-runtime`
+  также обновлён для текущего тестового сервера; runtime-файлы не коммитятся.
+- Проверено: `tests/agent/test_troika_product_persona.py` и
+  `tests/agent/test_system_prompt_restore.py` — 12 passed; compileall и
+  `git diff --check` прошли. После перезапуска локального product API на
+  `127.0.0.1:8765` живой запрос «Как тебя зовут?» вернул «Я Тройка».
+
 ## Ближайший порядок работы
 
-1. Вернуть проактивного личного ассистента через личные notification preferences и quiet hours, без global jobs.
+1. Довести проактивного личного ассистента: tenant-owned очередь/in-app inbox,
+   доставка и Android UI поверх уже готовых notification preferences и quiet
+   hours, без global jobs.
 2. Расширять paired-phone slice только после явного privacy review каждой категории (calendar, phone files, screen, calls/SMS).
 3. Настроить воспроизводимую среду и минимальный зелёный CI baseline; отдельно обновить Android Gradle/Kotlin до будущих требований Flutter.
 4. Заменить legacy response store на tenant-owned storage либо оставить endpoint выключенным до этой миграции.
@@ -191,6 +231,8 @@
 - разовое подтверждение действий;
 - создание и личное хранение DOCX/PDF/PPTX;
 - узкий безопасный набор управления привязанным Android-телефоном;
+- личные notification preferences и проверка тихих часов через product API
+  (очередь, доставка и Android UI ещё не подключены);
 - Android debug APK, Flutter tests и анализ из предыдущего этапа.
 
 ### Что ещё не является готовым продуктом
@@ -246,8 +288,12 @@
 - [ ] Восстановлены TUI проверки.
 - [x] Реализованы beta account/device/session/entitlement/usage foundation.
 - [x] Возвращены безопасные личные DOCX/PDF/PPTX и рабочий Android files UI.
+- [x] Добавлено сохранение artifact-файлов на телефон через системный выбор
+      папки.
 - [x] Настроена и реально проверена бесплатная агентная модель `openrouter/free`.
 - [x] Пройден локальный product API smoke-test с token, approval и DOCX artifact.
 - [x] Пройден ручной end-to-end тест на физическом Android-телефоне: текстовый
       чат, device-token auth, WebSocket и `android_status`.
+- [ ] Пройден physical tap тест сохранения artifact в выбранную папку Android
+      (APK установлена, но ADB нестабилен во время UI-проверки).
 - [ ] Готов production deployment и self-service подписочный контур.

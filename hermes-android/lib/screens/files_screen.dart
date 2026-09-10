@@ -64,6 +64,24 @@ class _FilesScreenState extends State<FilesScreen> {
     }
   }
 
+  Future<void> _saveFile(TroikaFile f) async {
+    setState(() => _busyId = f.id);
+    final result = await _svc.saveToDevice(f);
+    if (!mounted) return;
+    setState(() => _busyId = '');
+    if (result.error != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(result.error!)));
+      return;
+    }
+    if (result.saved) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('«${f.name}» сохранён на телефоне')),
+      );
+    }
+  }
+
   Future<void> _deleteFile(TroikaFile f) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -169,22 +187,37 @@ class _FilesScreenState extends State<FilesScreen> {
       ),
       trailing: isBusy
           ? const SizedBox(
-              width: 18,
-              height: 18,
+              width: 24,
+              height: 24,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-          : PopupMenuButton<String>(
-              tooltip: 'Действия',
-              onSelected: (action) {
-                if (action == 'open') _openFile(f);
-                if (action == 'share') _shareFile(f);
-                if (action == 'delete') _deleteFile(f);
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'open', child: Text('Открыть')),
-                PopupMenuItem(value: 'share', child: Text('Поделиться')),
-                PopupMenuDivider(),
-                PopupMenuItem(value: 'delete', child: Text('Удалить')),
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: 'Сохранить на телефон',
+                  icon: const Icon(Icons.download_outlined),
+                  onPressed: () => _saveFile(f),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'Другие действия',
+                  onSelected: (action) {
+                    if (action == 'open') _openFile(f);
+                    if (action == 'save') _saveFile(f);
+                    if (action == 'share') _shareFile(f);
+                    if (action == 'delete') _deleteFile(f);
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'open', child: Text('Открыть')),
+                    PopupMenuItem(
+                      value: 'save',
+                      child: Text('Сохранить на телефон'),
+                    ),
+                    PopupMenuItem(value: 'share', child: Text('Поделиться')),
+                    PopupMenuDivider(),
+                    PopupMenuItem(value: 'delete', child: Text('Удалить')),
+                  ],
+                ),
               ],
             ),
       onTap: isBusy ? null : () => _openFile(f),

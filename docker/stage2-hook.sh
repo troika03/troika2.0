@@ -111,6 +111,13 @@ seed_one ".env" ".env.example"
 seed_one "config.yaml" "cli-config.yaml.example"
 seed_one "SOUL.md" "docker/SOUL.md"
 
+# Existing volumes may have been seeded before the product persona existed.
+# Migrate only the exact upstream default; never overwrite a user's custom
+# SOUL.md. This keeps upgrades safe while fixing stale Hermes identity files.
+if [ -f "$HERMES_HOME/SOUL.md" ] && grep -q '^You are Hermes Agent, an intelligent AI assistant created by Nous Research\.' "$HERMES_HOME/SOUL.md"; then
+    s6-setuidgid hermes cp "$INSTALL_DIR/docker/SOUL.md" "$HERMES_HOME/SOUL.md"
+fi
+
 # .env holds API keys and secrets — restrict to owner-only access. Applied
 # unconditionally (not only on first-seed) so a host-mounted .env that was
 # created with a permissive umask gets tightened on every container start.

@@ -1474,6 +1474,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 "tool_progress_events": True,
                 "approval_events": True,
                 "private_artifacts": self._artifact_store is not None,
+                "notification_preferences": self._access_registry is not None,
                 "product_quota_enforcement": self._product_quotas_enabled,
                 "session_continuity_header": "X-Hermes-Session-Id",
                 "session_key_header": "X-Hermes-Session-Key",
@@ -1496,6 +1497,18 @@ class APIServerAdapter(BasePlatformAdapter):
                 "run_stop": {"method": "POST", "path": "/v1/runs/{run_id}/stop"},
                 **(
                     {
+                        "notification_preferences": {
+                            "method": "GET", "path": "/v1/notification-preferences",
+                        },
+                        "notification_preferences_update": {
+                            "method": "PUT", "path": "/v1/notification-preferences",
+                        },
+                    }
+                    if self._access_registry is not None
+                    else {}
+                ),
+                **(
+                    {
                         "artifacts": {"method": "GET", "path": "/v1/artifacts"},
                         "artifact_download": {
                             "method": "GET",
@@ -1511,6 +1524,41 @@ class APIServerAdapter(BasePlatformAdapter):
                 ),
             },
         })
+
+    async def _handle_notification_preferences(self, request: "web.Request") -> "web.Response":
+        """Read or replace the authenticated account's notification preferences."""
+        auth_err = self._check_auth(request)
+        if auth_err is not None:
+            return auth_err
+        principal = self._product_principal(request)
+        if principal is None:
+            return web.json_response(
+                _openai_error("Notification preferences are unavailable"),
+                status=503 if self._product_auth_enabled else 404,
+            )
+        if request.method == "PUT":
+            from troika_product.notifications import NotificationPreferences
+
+            try:
+                preferences = NotificationPreferences.from_dict(await request.json())
+            except (ValueError, TypeError, UnicodeError):
+                return web.json_response(
+                    _openai_error("Invalid notification preferences", code="invalid_preferences"),
+                    status=400,
+                )
+        try:
+            if request.method == "PUT":
+                result = self._access_registry.set_notification_preferences(principal, preferences)
+            else:
+                result = self._access_registry.notification_preferences(principal)
+        except PermissionError:
+            return web.json_response(_openai_error("Product authentication is required"), status=401)
+        except Exception:
+            logger.exception("Product notification preferences unavailable")
+            return web.json_response(
+                _openai_error("Notification preferences are temporarily unavailable"), status=503,
+            )
+        return web.json_response(result.to_dict(), headers={"Cache-Control": "no-store"})
 
     async def _handle_phone_ws(self, request: "web.Request") -> "web.Response":
         """GET /v1/phone/commands — WebSocket-канал для Android-телефона."""
@@ -4658,6 +4706,12 @@ class APIServerAdapter(BasePlatformAdapter):
             self._app.router.add_get("/v1/health", self._handle_health)
             self._app.router.add_get("/v1/models", self._handle_models)
             self._app.router.add_get("/v1/capabilities", self._handle_capabilities)
+            self._app.router.add_get(
+                "/v1/notification-preferences", self._handle_notification_preferences,
+            )
+            self._app.router.add_put(
+                "/v1/notification-preferences", self._handle_notification_preferences,
+            )
             self._app.router.add_post("/v1/chat/completions", self._handle_chat_completions)
             self._app.router.add_get("/v1/phone/commands", self._handle_phone_ws)
             self._app.router.add_get("/v1/phone/status", self._handle_phone_status)

@@ -21,6 +21,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from agent.conversation_loop import _restore_or_build_system_prompt
+from gateway.session_context import clear_session_override, set_session_override
 
 
 def _make_agent(session_db=None, prebuilt_prompt: str = "BUILT_PROMPT"):
@@ -56,6 +57,26 @@ class TestStoredPromptReuse:
         db.update_system_prompt.assert_not_called()
         # No warnings on the happy path
         assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+    def test_product_mode_refreshes_stale_upstream_identity(self):
+        """A continuing product session must not keep a cached Hermes prompt."""
+        db = MagicMock()
+        db.get_session.return_value = {
+            "system_prompt": "You are Hermes Agent, an intelligent AI assistant."
+        }
+        agent = _make_agent(session_db=db, prebuilt_prompt="# Тройка — кто ты\nобновлено")
+
+        set_session_override("TROIKA_PRODUCT_MODE", "1")
+        try:
+            _restore_or_build_system_prompt(agent, None, [{"role": "user", "content": "hi"}])
+        finally:
+            clear_session_override("TROIKA_PRODUCT_MODE")
+
+        agent._build_system_prompt.assert_called_once_with(None)
+        assert agent._cached_system_prompt == "# Тройка — кто ты\nобновлено"
+        db.update_system_prompt.assert_called_once_with(
+            agent.session_id, "# Тройка — кто ты\nобновлено"
+        )
 
     def test_present_row_with_unicode_preserved(self):
         """Non-ASCII bytes in the stored prompt are not mangled."""
