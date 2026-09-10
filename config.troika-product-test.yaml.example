@@ -1,0 +1,30 @@
+# Isolated local/closed-beta profile for testing Troika without paid inference.
+# Copy this file to <HERMES_HOME>/config.yaml and store OPENROUTER_API_KEY only
+# in <HERMES_HOME>/.env. Never commit the real key.
+
+model:
+  default: openrouter/free
+  provider: openrouter
+  base_url: https://openrouter.ai/api/v1
+
+# Keep the product boundary explicit. The authenticated product API also
+# enforces this toolset server-side, even if an operator changes the config.
+toolsets:
+  - troika-product
+platform_toolsets:
+  api_server:
+    - troika-product
+
+agent:
+  max_turns: 90
+  tool_use_enforcement: true
+  api_max_retries: 3
+
+stt:
+  enabled: true
+  provider: groq
+
+openrouter:
+  response_cache: true
+  response_cache_ttl: 300
+
