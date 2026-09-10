@@ -2,6 +2,19 @@
 
 Instructions for AI coding assistants and developers working on the hermes-agent codebase.
 
+## Project Memory Discipline
+
+- At the start of every work session, read `PROJECT_MEMORY.md` before making
+  project decisions or edits.
+- After every completed task, update `PROJECT_MEMORY.md` before the final
+  response. Record what changed, what was actually verified, what remains
+  incomplete, and the next safe step.
+- Keep the memory as a current source of truth, not an append-only diary.
+  Replace or remove stale, superseded, duplicated, or contradictory facts as
+  soon as newer information is known.
+- Never store API keys, access tokens, passwords, personal message contents,
+  or other secrets in project memory.
+
 ## Development Environment
 
 ```bash
