@@ -548,9 +548,19 @@ TOOLSETS = {
     },
 
     "troika-product": {
-        "description": "Hosted Troika toolkit with a paired-phone safe slice.",
+        "description": "Hosted Troika toolkit with private files and paired-phone controls.",
         "tools": [],
-        "includes": ["safe", "troika-phone"],
+        "includes": ["safe", "troika-phone", "troika-documents"],
+    },
+
+    "troika-documents": {
+        "description": "Private user-owned Word, PDF, and PowerPoint creation.",
+        "tools": [
+            "troika_create_docx",
+            "troika_create_pdf",
+            "troika_create_pptx",
+        ],
+        "includes": [],
     },
 
     "troika-phone": {

@@ -24,7 +24,10 @@
 3. Любое действие с внешним эффектом требует явного подтверждения и аудита.
 4. Multi-tenancy и приватность — P0 до любых продаж.
 5. Никаких общих секретов, `phone-misha`, единой памяти или публичного HTTP в production.
-6. Никаких обещаний безлимитного agentic AI; тарифы ограничены usage/cost caps.
+6. На текущем этапе пользовательские и тарифные лимиты выключены по решению
+   владельца. Остаются только технические safety-границы. Перед продажами
+   тарифы и cost caps проектируются отдельно; публичное обещание «безлимита»
+   пока не даём.
 7. Если решение меняет назначение функции, доступы, пользовательские данные или видимое клиенту поведение, сначала запросить решение владельца продукта. Не угадывать требования.
 
 ## Известные критические проблемы baseline
@@ -33,7 +36,9 @@
 - Точный device context всё ещё требует отдельного opt-in, политики хранения и удаления. Его внешний reverse-geocoding вызов нужно убрать за consent/feature flag.
 - PC tools включены в core toolset; `tools/pc_tool.py` и `troika_voice_daemon.py` были незакоммичены в исходной копии.
 - PC/voice зависимости (`mss`, `pyautogui`, `scipy`, `pyttsx3`) не описаны в dependency manifest.
-- Flutter dependencies не установлены; TUI dependencies не установлены.
+- Flutter-проверки восстановлены. TUI dependencies и TUI build ещё не проверены.
+- Android debug APK собирается, но Flutter предупреждает о будущем minimum:
+  Android Gradle Plugin 8.11.1 и Kotlin 2.2.20; обновлять отдельным коммитом.
 - Web dashboard собирался успешно, но имеет крупный main bundle.
 
 ## Выполнено: P0 initial security foundation (2026-09-09)
@@ -89,15 +94,45 @@
 - Android обработал SSE `approval.request` и показывает понятный диалог. Если UI/канал подтверждения недоступен, действие отклоняется.
 - Проверено: 35 focused Python tests; `ruff` и `compileall` прошли; Flutter test 3/3 прошёл; `flutter analyze` без ошибок (40 прежних informational suggestions).
 
+## Выполнено: личные документы DOCX/PDF/PPTX (2026-09-10)
+
+- Старый Android-экран обращался к отсутствующему общему `/v1/files` и не
+  работал. Он заменён на tenant-owned `/v1/artifacts`: список, проверенное
+  скачивание и удаление доступны только владельцу `trk_live_…` токена.
+- Добавлены product tools `troika_create_docx`, `troika_create_pdf` и
+  `troika_create_pptx`. Файлы создаются в памяти без server filesystem tools,
+  удалённых картинок и путей от модели; перед сохранением требуется разовое
+  подтверждение пользователя.
+- Storage использует opaque artifact ID/имя, user/device ownership, атомарную
+  запись и SHA-256 integrity check. Физические пути и имена хранения не
+  возвращаются модели или клиенту. Audit не хранит имя или содержимое файла.
+- Product API больше не подмешивает локальный `ACTIVE_PROJECT` оператора в
+  пользовательский system context: старый блок содержал имя и путь проекта и
+  мог раскрыть серверные данные подписчику.
+- Android умеет открыть, поделиться и после отдельного диалога удалить файл.
+  Native share принимает только файлы из private cache/files приложения и
+  только PDF/DOCX/PPTX через FileProvider.
+- Пользовательские quota-ограничения временно выключены через
+  `TROIKA_PRODUCT_QUOTAS_ENABLED=false`; quota ledger сохранён для будущего.
+  Жёсткие границы HTTP и 50 MB на один артефакт остаются только защитой от
+  аварии/заполнения диска.
+- Добавлены `python-docx` и `reportlab`, Docker-образ получает DejaVu для
+  кириллицы в PDF. `uv.lock` обновлён.
+- Проверено: 35 focused Python tests, `ruff`, `compileall`; Flutter test 4/4;
+  `flutter analyze --no-fatal-infos` без ошибок/предупреждений (31 прежний
+  informational suggestion); debug APK успешно собран. Дополнительно прошёл
+  171 API regression test (1 skipped); один legacy-тест system prompt зависит
+  от глобального `~/.troika/active_project.json`, поэтому для чистого прогона
+  его нужно сделать hermetic.
+
 ## Ближайший порядок работы
 
-1. Добавить создание и доставку документов/презентаций через отдельное user-owned storage, не через server filesystem или legacy push-file.
-2. Расширять paired-phone slice только после явного privacy review каждой категории (calendar, files, screen, calls/SMS).
-3. Вернуть проактивного личного ассистента через личные notification preferences и quiet hours, без global jobs.
-2. Настроить воспроизводимую среду и минимальный зелёный CI baseline.
-3. Заменить legacy response store на tenant-owned storage либо оставить endpoint выключенным до этой миграции.
-4. Добавить lifecycle удаления данных: saved locations, диалоги, memory и account deletion.
-5. Спроектировать subscription billing: продукты, платежные периоды, webhooks, отмена, возвраты и поддержка.
+1. Вернуть проактивного личного ассистента через личные notification preferences и quiet hours, без global jobs.
+2. Расширять paired-phone slice только после явного privacy review каждой категории (calendar, phone files, screen, calls/SMS).
+3. Настроить воспроизводимую среду и минимальный зелёный CI baseline; отдельно обновить Android Gradle/Kotlin до будущих требований Flutter.
+4. Заменить legacy response store на tenant-owned storage либо оставить endpoint выключенным до этой миграции.
+5. Добавить lifecycle удаления данных: artifacts, saved locations, диалоги, memory и account deletion.
+6. Спроектировать subscription billing: продукты, платежные периоды, webhooks, отмена, возвраты и поддержка.
 
 ## Правила изменения проекта
 
@@ -117,5 +152,7 @@
 - [x] Создана отдельная продуктовая ветка.
 - [x] Стабилизирован Git baseline новой копии и опубликован в новом GitHub repo.
 - [x] Запущена P0 security foundation.
-- [ ] Восстановлены Flutter/TUI проверки.
+- [x] Восстановлены Flutter test/analyze и Android debug build.
+- [ ] Восстановлены TUI проверки.
 - [x] Реализованы beta account/device/session/entitlement/usage foundation.
+- [x] Возвращены безопасные личные DOCX/PDF/PPTX и рабочий Android files UI.

@@ -111,10 +111,10 @@ class HermesConfig {
   static String get chatCompletionsUrl => '$serverUrl/v1/chat/completions';
 
   /// URL structured runs (стриминг мыслей и вызовов через SSE)
-  static String get runsUrl => serverUrl + '/v1/runs';
+  static String get runsUrl => '$serverUrl/v1/runs';
 
-  /// URL файлового браузера (документы Тройки на сервере)
-  static String get filesUrl => serverUrl + '/v1/files';
+  /// Личные документы текущего аккаунта Тройки.
+  static String get artifactsUrl => '$serverUrl/v1/artifacts';
 
   /// Единая сессия для голоса и текста конкретной установки приложения.
   /// Идентификаторы генерируются случайно один раз и не разделяются между людьми.

@@ -72,6 +72,10 @@ dependencies = [
   # фигуры для декора / реальные фото через add_picture). Vendor'им пакет,
   # чтобы кодеру в docker-контейнере на сервере не приходилось `pip install`.
   "python-pptx>=1.0.2,<2",
+  # Hosted Troika creates private user-owned Word/PDF artifacts.  Both
+  # libraries work entirely in memory; no office process or remote renderer.
+  "python-docx>=1.2.0,<2",
+  "reportlab>=4.4.10,<5",
   # Pillow нужен python-pptx для обработки картинок (add_picture) и
   # напрямую кодеру когда он ресайзит фото под слайд.
   "pillow>=10.4,<12",

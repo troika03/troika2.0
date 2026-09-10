@@ -37,6 +37,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 
 try:
     from aiohttp import web
@@ -831,8 +832,21 @@ class APIServerAdapter(BasePlatformAdapter):
                 os.getenv("TROIKA_PRODUCT_AUTH_ENABLED", "false"),
             )
         )
+        # Cost metering remains implemented, but early product development is
+        # intentionally unmetered.  Operators can re-enable quota enforcement
+        # without a schema migration when paid plans are introduced.
+        self._product_quotas_enabled = _coerce_config_bool(
+            extra.get(
+                "product_quotas_enabled",
+                os.getenv("TROIKA_PRODUCT_QUOTAS_ENABLED", "false"),
+            )
+        )
         self._access_registry = None
+        self._artifact_store = None
         self._product_auth_error: Optional[str] = None
+        self._product_artifact_error: Optional[str] = None
+        self._product_artifact_db: Optional[Path] = None
+        self._product_artifact_root: Optional[Path] = None
         if self._product_auth_enabled:
             try:
                 from troika_product.access import AccessRegistry
@@ -842,6 +856,28 @@ class APIServerAdapter(BasePlatformAdapter):
                 )
                 database_path = Path(str(raw_database)) if raw_database else None
                 self._access_registry = AccessRegistry(database_path)
+                self._product_artifact_db = self._access_registry.database_path.resolve()
+                raw_artifact_root = extra.get(
+                    "product_artifact_root",
+                    os.getenv("TROIKA_PRODUCT_ARTIFACT_ROOT", ""),
+                )
+                self._product_artifact_root = (
+                    Path(str(raw_artifact_root)).resolve()
+                    if raw_artifact_root
+                    else None
+                )
+                try:
+                    from troika_product.artifacts import ArtifactStore
+
+                    self._artifact_store = ArtifactStore(
+                        database_path=self._product_artifact_db,
+                        storage_root=self._product_artifact_root,
+                    )
+                    self._product_artifact_root = self._artifact_store.storage_root
+                except Exception as exc:
+                    # Chat stays available if the optional file subsystem is
+                    # unhealthy, while every artifact endpoint/tool fails closed.
+                    self._product_artifact_error = str(exc)
             except Exception as exc:
                 # Product auth must fail closed at connect time; never silently
                 # fall back to the legacy shared-key mode.
@@ -1071,7 +1107,7 @@ class APIServerAdapter(BasePlatformAdapter):
         self, request: "web.Request"
     ) -> Optional["web.Response"]:
         """Reserve one paid/beta request before starting agent work."""
-        if self._access_registry is None:
+        if self._access_registry is None or not self._product_quotas_enabled:
             return None
         principal = self._product_principal(request)
         if principal is None:
@@ -1437,6 +1473,8 @@ class APIServerAdapter(BasePlatformAdapter):
                 "run_approval_response": True,
                 "tool_progress_events": True,
                 "approval_events": True,
+                "private_artifacts": self._artifact_store is not None,
+                "product_quota_enforcement": self._product_quotas_enabled,
                 "session_continuity_header": "X-Hermes-Session-Id",
                 "session_key_header": "X-Hermes-Session-Key",
                 "cors": bool(self._cors_origins),
@@ -1456,6 +1494,21 @@ class APIServerAdapter(BasePlatformAdapter):
                 "run_events": {"method": "GET", "path": "/v1/runs/{run_id}/events"},
                 "run_approval": {"method": "POST", "path": "/v1/runs/{run_id}/approval"},
                 "run_stop": {"method": "POST", "path": "/v1/runs/{run_id}/stop"},
+                **(
+                    {
+                        "artifacts": {"method": "GET", "path": "/v1/artifacts"},
+                        "artifact_download": {
+                            "method": "GET",
+                            "path": "/v1/artifacts/{artifact_id}/download",
+                        },
+                        "artifact_delete": {
+                            "method": "DELETE",
+                            "path": "/v1/artifacts/{artifact_id}",
+                        },
+                    }
+                    if self._artifact_store is not None
+                    else {}
+                ),
             },
         })
 
@@ -1502,6 +1555,111 @@ class APIServerAdapter(BasePlatformAdapter):
             )
         from gateway.platforms.phone_bridge import bridge
         return web.json_response({"connected": bridge.is_connected(), "bridge_id": id(bridge)})
+
+    def _require_artifact_principal(self, request: "web.Request") -> Any:
+        """Authenticate one artifact request and return its private store/owner."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        principal = self._product_principal(request)
+        if principal is None or self._artifact_store is None:
+            return web.json_response(
+                _openai_error(
+                    "Private files are unavailable",
+                    code="artifact_storage_unavailable",
+                ),
+                status=503 if self._product_auth_enabled else 404,
+            )
+        return self._artifact_store, principal
+
+    async def _handle_list_artifacts(self, request: "web.Request") -> "web.Response":
+        """GET /v1/artifacts — list only the authenticated user's files."""
+        resolved = self._require_artifact_principal(request)
+        if isinstance(resolved, web.Response):
+            return resolved
+        store, principal = resolved
+        try:
+            items = [item.to_dict() for item in store.list_for_user(principal.user_id)]
+        except Exception:
+            logger.exception("Product artifact listing failed")
+            return web.json_response(
+                _openai_error("Private files are temporarily unavailable"), status=503
+            )
+        return web.json_response({"object": "list", "data": items})
+
+    async def _handle_download_artifact(self, request: "web.Request") -> "web.Response":
+        """GET /v1/artifacts/{id}/download — owner-scoped verified download."""
+        resolved = self._require_artifact_principal(request)
+        if isinstance(resolved, web.Response):
+            return resolved
+        store, principal = resolved
+        artifact_id = request.match_info.get("artifact_id", "")
+        try:
+            stored = store.read_for_user(principal.user_id, artifact_id)
+        except Exception:
+            logger.exception("Product artifact integrity/read failure")
+            return web.json_response(
+                _openai_error("This file is temporarily unavailable"), status=503
+            )
+        if stored is None:
+            return web.json_response(
+                _openai_error("File not found", code="artifact_not_found"), status=404
+            )
+        artifact, data = stored
+        ascii_name = re.sub(r"[^A-Za-z0-9._-]+", "_", artifact.filename).strip("._")
+        if not ascii_name:
+            ascii_name = f"document.{artifact.kind}"
+        disposition = (
+            f'attachment; filename="{ascii_name[:120]}"; '
+            f"filename*=UTF-8''{quote(artifact.filename, safe='')}"
+        )
+        self._record_product_audit(
+            request,
+            "artifact.downloaded",
+            details={
+                "artifact_digest": hashlib.sha256(artifact.id.encode("utf-8")).hexdigest()[:32],
+                "kind": artifact.kind,
+                "size": artifact.size,
+            },
+        )
+        return web.Response(
+            body=data,
+            content_type=artifact.mime_type,
+            headers={
+                "Content-Disposition": disposition,
+                "X-Content-Type-Options": "nosniff",
+                "Cache-Control": "private, no-store",
+            },
+        )
+
+    async def _handle_delete_artifact(self, request: "web.Request") -> "web.Response":
+        """DELETE /v1/artifacts/{id} — direct, authenticated user action."""
+        resolved = self._require_artifact_principal(request)
+        if isinstance(resolved, web.Response):
+            return resolved
+        store, principal = resolved
+        artifact_id = request.match_info.get("artifact_id", "")
+        try:
+            artifact = store.delete_for_user(principal.user_id, artifact_id)
+        except Exception:
+            logger.exception("Product artifact deletion failed")
+            return web.json_response(
+                _openai_error("File deletion is temporarily unavailable"), status=503
+            )
+        if artifact is None:
+            return web.json_response(
+                _openai_error("File not found", code="artifact_not_found"), status=404
+            )
+        self._record_product_audit(
+            request,
+            "artifact.deleted",
+            details={
+                "artifact_digest": hashlib.sha256(artifact.id.encode("utf-8")).hexdigest()[:32],
+                "kind": artifact.kind,
+                "size": artifact.size,
+            },
+        )
+        return web.json_response({"ok": True, "id": artifact.id})
 
     async def _handle_list_sessions(self, request: "web.Request") -> "web.Response":
         """GET /v1/sessions — список сессий для UI истории.
@@ -1806,7 +1964,6 @@ class APIServerAdapter(BasePlatformAdapter):
         if auth_err:
             return auth_err
         product_principal = self._product_principal(request)
-        product_device_id = product_principal.device_id if product_principal else None
 
         # Parse request body
         try:
@@ -1919,15 +2076,18 @@ class APIServerAdapter(BasePlatformAdapter):
                 self._request_audit_log_suffix(request),
             )
 
-        # Active project context: добавляем краткую сводку об активном проекте
-        # в system prompt, чтобы LLM на каждом turn знала «сейчас работаем над X».
-        try:
-            from tools.project_tool import get_active_project_summary as _active_proj
-            _proj_summary = _active_proj()
-            if _proj_summary:
-                system_prompt = (system_prompt or "") + "\n\n" + _proj_summary
-        except Exception as _e:
-            logger.debug("active_project injection skipped: %s", _e)
+        # Active local project context is a legacy single-user feature.  It can
+        # contain an operator project name and server path, so it must never be
+        # injected into a hosted product user's conversation.
+        if self._access_registry is None:
+            try:
+                from tools.project_tool import get_active_project_summary as _active_proj
+
+                _proj_summary = _active_proj()
+                if _proj_summary:
+                    system_prompt = (system_prompt or "") + "\n\n" + _proj_summary
+            except Exception as _e:
+                logger.debug("active_project injection skipped: %s", _e)
 
         # Allow caller to continue an existing session by passing X-Hermes-Session-Id.
         # When provided, history is loaded from state.db instead of from the request body.
@@ -2011,16 +2171,17 @@ class APIServerAdapter(BasePlatformAdapter):
         if quota_err:
             return quota_err
         usage = request.get("troika_usage")
-        if usage is not None:
+        if product_principal is not None:
+            audit_details: Dict[str, Any] = {"endpoint": "chat_completions"}
+            if usage is not None:
+                audit_details.update(
+                    {"limit": usage.limit, "remaining": usage.remaining}
+                )
             self._record_product_audit(
                 request,
                 "request.accepted",
                 session_id=session_id,
-                details={
-                    "endpoint": "chat_completions",
-                    "limit": usage.limit,
-                    "remaining": usage.remaining,
-                },
+                details=audit_details,
             )
 
         completion_id = f"chatcmpl-{uuid.uuid4().hex[:29]}"
@@ -2109,7 +2270,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 tool_complete_callback=_on_tool_complete,
                 agent_ref=agent_ref,
                 gateway_session_key=gateway_session_key,
-                product_device_id=product_device_id,
+                product_principal=product_principal,
             ))
             # Ensure SSE drain loops can terminate without relying on polling
             # agent_task.done(), which can race with queue timeout checks.
@@ -2129,7 +2290,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 ephemeral_system_prompt=system_prompt,
                 session_id=session_id,
                 gateway_session_key=gateway_session_key,
-                product_device_id=product_device_id,
+                product_principal=product_principal,
             )
 
         idempotency_key = request.headers.get("Idempotency-Key")
@@ -3657,7 +3818,7 @@ class APIServerAdapter(BasePlatformAdapter):
         tool_complete_callback=None,
         agent_ref: Optional[list] = None,
         gateway_session_key: Optional[str] = None,
-        product_device_id: Optional[str] = None,
+        product_principal: Optional[Any] = None,
     ) -> tuple:
         """
         Create an agent and run a conversation in a thread executor.
@@ -3678,12 +3839,45 @@ class APIServerAdapter(BasePlatformAdapter):
                 set_session_override,
             )
 
-            if product_device_id:
-                # The device id is derived from the accepted bearer token,
+            product_override_names: list[str] = []
+            if product_principal is not None:
+                # Product identity is derived from the accepted bearer token,
                 # never from model arguments or caller-controlled headers.
                 # ContextVars propagate into parallel tool workers.
                 set_session_override("TROIKA_PRODUCT_MODE", "1")
-                set_session_override("TROIKA_PRODUCT_DEVICE_ID", product_device_id)
+                set_session_override(
+                    "TROIKA_PRODUCT_USER_ID", product_principal.user_id
+                )
+                set_session_override(
+                    "TROIKA_PRODUCT_DEVICE_ID", product_principal.device_id
+                )
+                set_session_override(
+                    "TROIKA_PRODUCT_TOKEN_ID", product_principal.token_id
+                )
+                set_session_override(
+                    "TROIKA_PRODUCT_ARTIFACTS_AVAILABLE",
+                    "1" if self._artifact_store is not None else "0",
+                )
+                product_override_names.extend(
+                    [
+                        "TROIKA_PRODUCT_MODE",
+                        "TROIKA_PRODUCT_USER_ID",
+                        "TROIKA_PRODUCT_DEVICE_ID",
+                        "TROIKA_PRODUCT_TOKEN_ID",
+                        "TROIKA_PRODUCT_ARTIFACTS_AVAILABLE",
+                    ]
+                )
+                if self._product_artifact_db is not None:
+                    set_session_override(
+                        "TROIKA_PRODUCT_ARTIFACT_DB", str(self._product_artifact_db)
+                    )
+                    product_override_names.append("TROIKA_PRODUCT_ARTIFACT_DB")
+                if self._product_artifact_root is not None:
+                    set_session_override(
+                        "TROIKA_PRODUCT_ARTIFACT_ROOT",
+                        str(self._product_artifact_root),
+                    )
+                    product_override_names.append("TROIKA_PRODUCT_ARTIFACT_ROOT")
             try:
                 agent = self._create_agent(
                     ephemeral_system_prompt=ephemeral_system_prompt,
@@ -3715,9 +3909,8 @@ class APIServerAdapter(BasePlatformAdapter):
                     result["session_id"] = _eff_sid
                 return result, usage
             finally:
-                if product_device_id:
-                    clear_session_override("TROIKA_PRODUCT_DEVICE_ID")
-                    clear_session_override("TROIKA_PRODUCT_MODE")
+                for override_name in reversed(product_override_names):
+                    clear_session_override(override_name)
 
         return await loop.run_in_executor(None, _run)
 
@@ -3881,16 +4074,17 @@ class APIServerAdapter(BasePlatformAdapter):
             return quota_err
 
         usage = request.get("troika_usage")
-        if usage is not None:
+        if self._product_principal(request) is not None:
+            audit_details: Dict[str, Any] = {"endpoint": "runs"}
+            if usage is not None:
+                audit_details.update(
+                    {"limit": usage.limit, "remaining": usage.remaining}
+                )
             self._record_product_audit(
                 request,
                 "request.accepted",
                 session_id=str(session_id),
-                details={
-                    "endpoint": "runs",
-                    "limit": usage.limit,
-                    "remaining": usage.remaining,
-                },
+                details=audit_details,
             )
 
         approval_session_key = gateway_session_key or session_id or run_id
@@ -3974,7 +4168,7 @@ class APIServerAdapter(BasePlatformAdapter):
                     effective_task_id = session_id or run_id
                     approval_token = None
                     session_tokens = []
-                    product_context_bound = False
+                    product_override_names: list[str] = []
                     try:
                         # Bind approval/session identity for this API run via
                         # contextvars so concurrent runs do not share process
@@ -3990,9 +4184,43 @@ class APIServerAdapter(BasePlatformAdapter):
                             # same server-derived device scope.
                             set_session_override("TROIKA_PRODUCT_MODE", "1")
                             set_session_override(
+                                "TROIKA_PRODUCT_USER_ID", principal.user_id
+                            )
+                            set_session_override(
                                 "TROIKA_PRODUCT_DEVICE_ID", principal.device_id
                             )
-                            product_context_bound = True
+                            set_session_override(
+                                "TROIKA_PRODUCT_TOKEN_ID", principal.token_id
+                            )
+                            set_session_override(
+                                "TROIKA_PRODUCT_ARTIFACTS_AVAILABLE",
+                                "1" if self._artifact_store is not None else "0",
+                            )
+                            product_override_names.extend(
+                                [
+                                    "TROIKA_PRODUCT_MODE",
+                                    "TROIKA_PRODUCT_USER_ID",
+                                    "TROIKA_PRODUCT_DEVICE_ID",
+                                    "TROIKA_PRODUCT_TOKEN_ID",
+                                    "TROIKA_PRODUCT_ARTIFACTS_AVAILABLE",
+                                ]
+                            )
+                            if self._product_artifact_db is not None:
+                                set_session_override(
+                                    "TROIKA_PRODUCT_ARTIFACT_DB",
+                                    str(self._product_artifact_db),
+                                )
+                                product_override_names.append(
+                                    "TROIKA_PRODUCT_ARTIFACT_DB"
+                                )
+                            if self._product_artifact_root is not None:
+                                set_session_override(
+                                    "TROIKA_PRODUCT_ARTIFACT_ROOT",
+                                    str(self._product_artifact_root),
+                                )
+                                product_override_names.append(
+                                    "TROIKA_PRODUCT_ARTIFACT_ROOT"
+                                )
                         agent = self._create_agent(
                             ephemeral_system_prompt=ephemeral_system_prompt,
                             session_id=session_id,
@@ -4021,9 +4249,8 @@ class APIServerAdapter(BasePlatformAdapter):
                                     clear_session_vars(session_tokens)
                                 except Exception:
                                     pass
-                            if product_context_bound:
-                                clear_session_override("TROIKA_PRODUCT_DEVICE_ID")
-                                clear_session_override("TROIKA_PRODUCT_MODE")
+                            for override_name in reversed(product_override_names):
+                                clear_session_override(override_name)
                     u = {
                         "input_tokens": getattr(agent, "session_prompt_tokens", 0) or 0,
                         "output_tokens": getattr(agent, "session_completion_tokens", 0) or 0,
@@ -4434,6 +4661,14 @@ class APIServerAdapter(BasePlatformAdapter):
             self._app.router.add_post("/v1/chat/completions", self._handle_chat_completions)
             self._app.router.add_get("/v1/phone/commands", self._handle_phone_ws)
             self._app.router.add_get("/v1/phone/status", self._handle_phone_status)
+            self._app.router.add_get("/v1/artifacts", self._handle_list_artifacts)
+            self._app.router.add_get(
+                "/v1/artifacts/{artifact_id}/download",
+                self._handle_download_artifact,
+            )
+            self._app.router.add_delete(
+                "/v1/artifacts/{artifact_id}", self._handle_delete_artifact
+            )
             if self._access_registry is None:
                 self._app.router.add_post("/v1/phone/notify", self._handle_phone_notify)
             self._app.router.add_get("/v1/sessions", self._handle_list_sessions)

@@ -13,10 +13,12 @@ import android.provider.Settings
 import android.view.WindowManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
 
 class MainActivity : FlutterActivity() {
 
@@ -130,6 +132,10 @@ class MainActivity : FlutterActivity() {
                     // (а не только через wake-word Kotlin-путь).
                     result.success(DeviceContext.asHeaderValue(applicationContext))
                 }
+                "shareFile" -> {
+                    val path = call.argument<String>("path") ?: ""
+                    result.success(sharePrivateFile(path))
+                }
                 "getEdgeVoice" -> {
                     val prefs = getSharedPreferences(
                         HermesListenerService.PREFS, MODE_PRIVATE
@@ -155,6 +161,38 @@ class MainActivity : FlutterActivity() {
         super.onNewIntent(intent)
         if (intent.getBooleanExtra("wake_word_detected", false)) {
             methodChannel?.invokeMethod("wake_word_detected", null)
+        }
+    }
+
+    private fun sharePrivateFile(rawPath: String): Boolean {
+        return try {
+            val target = File(rawPath).canonicalFile
+            val allowedRoots = listOf(cacheDir.canonicalFile, filesDir.canonicalFile)
+            val allowed = allowedRoots.any { root ->
+                target.path == root.path || target.path.startsWith(root.path + File.separator)
+            }
+            if (!allowed || !target.isFile) return false
+
+            val mimeType = when (target.extension.lowercase()) {
+                "pdf" -> "application/pdf"
+                "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                else -> return false
+            }
+            val uri = FileProvider.getUriForFile(
+                this,
+                "$packageName.fileprovider",
+                target,
+            )
+            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                type = mimeType
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(sendIntent, "Поделиться файлом"))
+            true
+        } catch (_: Exception) {
+            false
         }
     }
 
