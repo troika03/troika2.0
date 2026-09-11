@@ -549,7 +549,7 @@ TOOLSETS = {
 
     "troika-product": {
         "description": "Hosted Troika toolkit with private files and paired-phone controls.",
-        "tools": [],
+        "tools": ["troika_assistant"],
         "includes": ["safe", "troika-phone", "troika-documents"],
     },
 

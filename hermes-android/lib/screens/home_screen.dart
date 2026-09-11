@@ -7,6 +7,7 @@ import 'chat_screen.dart';
 import 'settings_screen.dart';
 import 'history_screen.dart';
 import 'files_screen.dart';
+import 'assistant_hub_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -138,6 +139,16 @@ class _TopBar extends StatelessWidget {
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const HistoryScreen()),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.inbox_outlined),
+            color: TroikaColors.textMuted,
+            iconSize: 22,
+            tooltip: 'Помощник: проекты и напоминания',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AssistantHubScreen()),
             ),
           ),
           IconButton(

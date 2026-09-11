@@ -855,6 +855,7 @@ class APIServerAdapter(BasePlatformAdapter):
         ).rstrip("/")
         self._access_registry = None
         self._artifact_store = None
+        self._proactive_store = None
         self._product_auth_error: Optional[str] = None
         self._product_artifact_error: Optional[str] = None
         self._product_artifact_db: Optional[Path] = None
@@ -869,6 +870,9 @@ class APIServerAdapter(BasePlatformAdapter):
                 database_path = Path(str(raw_database)) if raw_database else None
                 self._access_registry = AccessRegistry(database_path)
                 self._product_artifact_db = self._access_registry.database_path.resolve()
+                from troika_product.proactive import ProactiveStore
+
+                self._proactive_store = ProactiveStore(self._product_artifact_db)
                 raw_artifact_root = extra.get(
                     "product_artifact_root",
                     os.getenv("TROIKA_PRODUCT_ARTIFACT_ROOT", ""),
@@ -1085,6 +1089,19 @@ class APIServerAdapter(BasePlatformAdapter):
                 "Product audit write failed: %s",
                 self._request_audit_log_suffix(request),
             )
+
+    def _assistant_context(self, request: "web.Request") -> str:
+        """Load bounded project context for this authenticated user only."""
+        principal = self._product_principal(request)
+        if principal is None or self._proactive_store is None:
+            return ""
+        try:
+            return self._proactive_store.assistant_context(principal)
+        except PermissionError:
+            return ""
+        except Exception:
+            logger.exception("Product assistant context unavailable")
+            return ""
 
     def _authorize_product_session(
         self, request: "web.Request", session_id: str, *, claim: bool
@@ -1490,6 +1507,8 @@ class APIServerAdapter(BasePlatformAdapter):
                 "approval_events": True,
                 "private_artifacts": self._artifact_store is not None,
                 "notification_preferences": self._access_registry is not None,
+                "assistant_projects": self._proactive_store is not None,
+                "assistant_inbox": self._proactive_store is not None,
                 "product_quota_enforcement": self._product_quotas_enabled,
                 "session_continuity_header": "X-Hermes-Session-Id",
                 "session_key_header": "X-Hermes-Session-Key",
@@ -1517,6 +1536,15 @@ class APIServerAdapter(BasePlatformAdapter):
                         },
                         "notification_preferences_update": {
                             "method": "PUT", "path": "/v1/notification-preferences",
+                        },
+                        "assistant_projects": {
+                            "method": "GET", "path": "/v1/assistant/projects",
+                        },
+                        "assistant_tasks": {
+                            "method": "GET", "path": "/v1/assistant/tasks",
+                        },
+                        "assistant_inbox": {
+                            "method": "GET", "path": "/v1/assistant/inbox",
                         },
                     }
                     if self._access_registry is not None
@@ -1574,6 +1602,183 @@ class APIServerAdapter(BasePlatformAdapter):
                 _openai_error("Notification preferences are temporarily unavailable"), status=503,
             )
         return web.json_response(result.to_dict(), headers={"Cache-Control": "no-store"})
+
+    def _require_proactive_principal(self, request: "web.Request") -> Any:
+        auth_err = self._check_auth(request)
+        if auth_err is not None:
+            return auth_err
+        principal = self._product_principal(request)
+        if principal is None or self._proactive_store is None:
+            return web.json_response(
+                _openai_error("Assistant workspace is unavailable"),
+                status=503 if self._product_auth_enabled else 404,
+            )
+        return principal
+
+    async def _handle_assistant_projects(self, request: "web.Request") -> "web.Response":
+        resolved = self._require_proactive_principal(request)
+        if isinstance(resolved, web.Response):
+            return resolved
+        try:
+            if request.method == "POST":
+                body = await request.json()
+                if not isinstance(body, dict):
+                    raise ValueError("body must be an object")
+                item = self._proactive_store.create_project(
+                    resolved, name=body.get("name"), summary=body.get("summary", "")
+                )
+                payload = {"project": item.to_dict()}
+                status = 201
+            else:
+                items = self._proactive_store.list_projects(resolved)
+                payload = {"projects": [item.to_dict() for item in items]}
+                status = 200
+        except (ValueError, TypeError, UnicodeError):
+            return web.json_response(
+                _openai_error("Invalid project", code="invalid_project"), status=400
+            )
+        except PermissionError:
+            return web.json_response(_openai_error("Product authentication is required"), status=401)
+        except Exception:
+            logger.exception("Product project workspace unavailable")
+            return web.json_response(_openai_error("Assistant workspace is temporarily unavailable"), status=503)
+        return web.json_response(payload, status=status, headers={"Cache-Control": "no-store"})
+
+    async def _handle_assistant_project_active(self, request: "web.Request") -> "web.Response":
+        resolved = self._require_proactive_principal(request)
+        if isinstance(resolved, web.Response):
+            return resolved
+        try:
+            item = self._proactive_store.set_active_project(
+                resolved, request.match_info.get("project_id", "")
+            )
+        except LookupError:
+            return web.json_response(_openai_error("Project not found"), status=404)
+        except (ValueError, TypeError):
+            return web.json_response(_openai_error("Invalid project", code="invalid_project"), status=400)
+        except PermissionError:
+            return web.json_response(_openai_error("Product authentication is required"), status=401)
+        return web.json_response({"project": item.to_dict()}, headers={"Cache-Control": "no-store"})
+
+    async def _handle_assistant_tasks(self, request: "web.Request") -> "web.Response":
+        resolved = self._require_proactive_principal(request)
+        if isinstance(resolved, web.Response):
+            return resolved
+        try:
+            if request.method == "POST":
+                body = await request.json()
+                if not isinstance(body, dict):
+                    raise ValueError("body must be an object")
+                item = self._proactive_store.create_task(
+                    resolved,
+                    project_id=body.get("project_id"), title=body.get("title"),
+                    details=body.get("details", ""), due_at=body.get("due_at"),
+                    action_mode=body.get("action_mode", "remind"),
+                    action_summary=body.get("action_summary", ""),
+                    idempotency_key=request.headers.get("Idempotency-Key"),
+                )
+                payload = {"task": item.to_dict()}
+                status = 201
+            else:
+                items = self._proactive_store.list_tasks(
+                    resolved,
+                    project_id=request.query.get("project_id"),
+                    include_closed=request.query.get("include_closed", "false").lower() == "true",
+                )
+                payload = {"tasks": [item.to_dict() for item in items]}
+                status = 200
+        except LookupError:
+            return web.json_response(_openai_error("Project not found"), status=404)
+        except (ValueError, TypeError, UnicodeError):
+            return web.json_response(_openai_error("Invalid task", code="invalid_task"), status=400)
+        except PermissionError:
+            return web.json_response(_openai_error("Product authentication is required"), status=401)
+        except Exception:
+            logger.exception("Product task workspace unavailable")
+            return web.json_response(_openai_error("Assistant workspace is temporarily unavailable"), status=503)
+        return web.json_response(payload, status=status, headers={"Cache-Control": "no-store"})
+
+    async def _handle_assistant_task_update(self, request: "web.Request") -> "web.Response":
+        resolved = self._require_proactive_principal(request)
+        if isinstance(resolved, web.Response):
+            return resolved
+        try:
+            body = await request.json()
+            if not isinstance(body, dict) or set(body) != {"status"}:
+                raise ValueError("status is required")
+            item = self._proactive_store.update_task(
+                resolved, request.match_info.get("task_id", ""), status=body["status"]
+            )
+        except LookupError:
+            return web.json_response(_openai_error("Task not found"), status=404)
+        except (ValueError, TypeError, UnicodeError):
+            return web.json_response(_openai_error("Invalid task", code="invalid_task"), status=400)
+        except PermissionError:
+            return web.json_response(_openai_error("Product authentication is required"), status=401)
+        return web.json_response({"task": item.to_dict()}, headers={"Cache-Control": "no-store"})
+
+    async def _handle_assistant_notes(self, request: "web.Request") -> "web.Response":
+        resolved = self._require_proactive_principal(request)
+        if isinstance(resolved, web.Response):
+            return resolved
+        try:
+            if request.method == "POST":
+                body = await request.json()
+                if not isinstance(body, dict):
+                    raise ValueError("body must be an object")
+                item = self._proactive_store.add_note(
+                    resolved, project_id=body.get("project_id"),
+                    kind=body.get("kind", "context"), content=body.get("content"),
+                    idempotency_key=request.headers.get("Idempotency-Key"),
+                )
+                payload = {"note": item}
+                status = 201
+            else:
+                items = self._proactive_store.list_notes(
+                    resolved, project_id=request.query.get("project_id")
+                )
+                payload = {"notes": items}
+                status = 200
+        except LookupError:
+            return web.json_response(_openai_error("Project not found"), status=404)
+        except (ValueError, TypeError, UnicodeError):
+            return web.json_response(_openai_error("Invalid note", code="invalid_note"), status=400)
+        except PermissionError:
+            return web.json_response(_openai_error("Product authentication is required"), status=401)
+        return web.json_response(payload, status=status, headers={"Cache-Control": "no-store"})
+
+    async def _handle_assistant_inbox(self, request: "web.Request") -> "web.Response":
+        resolved = self._require_proactive_principal(request)
+        if isinstance(resolved, web.Response):
+            return resolved
+        try:
+            unread = request.query.get("unread_only", "false").lower() == "true"
+            items = self._proactive_store.list_inbox(resolved, unread_only=unread)
+        except PermissionError:
+            return web.json_response(_openai_error("Product authentication is required"), status=401)
+        except Exception:
+            logger.exception("Product inbox unavailable")
+            return web.json_response(_openai_error("Assistant inbox is temporarily unavailable"), status=503)
+        return web.json_response(
+            {"messages": [item.to_dict() for item in items]},
+            headers={"Cache-Control": "no-store"},
+        )
+
+    async def _handle_assistant_inbox_read(self, request: "web.Request") -> "web.Response":
+        resolved = self._require_proactive_principal(request)
+        if isinstance(resolved, web.Response):
+            return resolved
+        try:
+            item = self._proactive_store.mark_read(
+                resolved, request.match_info.get("message_id", "")
+            )
+        except LookupError:
+            return web.json_response(_openai_error("Message not found"), status=404)
+        except (ValueError, TypeError):
+            return web.json_response(_openai_error("Invalid message"), status=400)
+        except PermissionError:
+            return web.json_response(_openai_error("Product authentication is required"), status=401)
+        return web.json_response({"message": item.to_dict()}, headers={"Cache-Control": "no-store"})
 
     async def _handle_phone_ws(self, request: "web.Request") -> "web.Response":
         """GET /v1/phone/commands — WebSocket-канал для Android-телефона."""
@@ -2227,6 +2432,10 @@ class APIServerAdapter(BasePlatformAdapter):
                     system_prompt = (system_prompt or "") + "\n\n" + _proj_summary
             except Exception as _e:
                 logger.debug("active_project injection skipped: %s", _e)
+        else:
+            private_project_context = self._assistant_context(request)
+            if private_project_context:
+                system_prompt = (system_prompt or "") + "\n\n" + private_project_context
 
         # Allow caller to continue an existing session by passing X-Hermes-Session-Id.
         # When provided, history is loaded from state.db instead of from the request body.
@@ -4010,7 +4219,12 @@ class APIServerAdapter(BasePlatformAdapter):
                     set_session_override(
                         "TROIKA_PRODUCT_ARTIFACT_DB", str(self._product_artifact_db)
                     )
-                    product_override_names.append("TROIKA_PRODUCT_ARTIFACT_DB")
+                    set_session_override(
+                        "TROIKA_PRODUCT_ACCESS_DB", str(self._product_artifact_db)
+                    )
+                    product_override_names.extend(
+                        ["TROIKA_PRODUCT_ARTIFACT_DB", "TROIKA_PRODUCT_ACCESS_DB"]
+                    )
                 if self._product_artifact_root is not None:
                     set_session_override(
                         "TROIKA_PRODUCT_ARTIFACT_ROOT",
@@ -4227,14 +4441,19 @@ class APIServerAdapter(BasePlatformAdapter):
             )
 
         approval_session_key = gateway_session_key or session_id or run_id
+        principal = self._product_principal(request)
+        private_project_context = self._assistant_context(request)
         ephemeral_system_prompt = instructions
+        if private_project_context:
+            ephemeral_system_prompt = (
+                (str(ephemeral_system_prompt) + "\n\n") if ephemeral_system_prompt else ""
+            ) + private_project_context
         loop = asyncio.get_running_loop()
         q: "asyncio.Queue[Optional[Dict]]" = asyncio.Queue()
         created_at = time.time()
         self._run_streams[run_id] = q
         self._run_streams_created[run_id] = created_at
         self._run_approval_sessions[run_id] = approval_session_key
-        principal = self._product_principal(request)
         if principal is not None:
             self._run_owners[run_id] = (principal.user_id, principal.device_id)
         self._record_product_audit(
@@ -4349,8 +4568,15 @@ class APIServerAdapter(BasePlatformAdapter):
                                     "TROIKA_PRODUCT_ARTIFACT_DB",
                                     str(self._product_artifact_db),
                                 )
-                                product_override_names.append(
-                                    "TROIKA_PRODUCT_ARTIFACT_DB"
+                                set_session_override(
+                                    "TROIKA_PRODUCT_ACCESS_DB",
+                                    str(self._product_artifact_db),
+                                )
+                                product_override_names.extend(
+                                    [
+                                        "TROIKA_PRODUCT_ARTIFACT_DB",
+                                        "TROIKA_PRODUCT_ACCESS_DB",
+                                    ]
                                 )
                             if self._product_artifact_root is not None:
                                 set_session_override(
@@ -4803,6 +5029,40 @@ class APIServerAdapter(BasePlatformAdapter):
             self._app.router.add_put(
                 "/v1/notification-preferences", self._handle_notification_preferences,
             )
+            if self._proactive_store is not None:
+                self._app.router.add_get(
+                    "/v1/assistant/projects", self._handle_assistant_projects,
+                )
+                self._app.router.add_post(
+                    "/v1/assistant/projects", self._handle_assistant_projects,
+                )
+                self._app.router.add_put(
+                    "/v1/assistant/projects/{project_id}/active",
+                    self._handle_assistant_project_active,
+                )
+                self._app.router.add_get(
+                    "/v1/assistant/tasks", self._handle_assistant_tasks,
+                )
+                self._app.router.add_post(
+                    "/v1/assistant/tasks", self._handle_assistant_tasks,
+                )
+                self._app.router.add_patch(
+                    "/v1/assistant/tasks/{task_id}",
+                    self._handle_assistant_task_update,
+                )
+                self._app.router.add_get(
+                    "/v1/assistant/notes", self._handle_assistant_notes,
+                )
+                self._app.router.add_post(
+                    "/v1/assistant/notes", self._handle_assistant_notes,
+                )
+                self._app.router.add_get(
+                    "/v1/assistant/inbox", self._handle_assistant_inbox,
+                )
+                self._app.router.add_post(
+                    "/v1/assistant/inbox/{message_id}/read",
+                    self._handle_assistant_inbox_read,
+                )
             self._app.router.add_post("/v1/chat/completions", self._handle_chat_completions)
             self._app.router.add_get("/v1/phone/commands", self._handle_phone_ws)
             self._app.router.add_get("/v1/phone/status", self._handle_phone_status)

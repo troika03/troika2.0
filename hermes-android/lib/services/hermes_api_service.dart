@@ -451,6 +451,145 @@ class HermesApiService {
   }
 
   // ── Список всех сессий (экран истории) ───────────────────────────────────
+  Future<List<TroikaProject>> listAssistantProjects() async {
+    final response = await http
+        .get(Uri.parse('${HermesConfig.serverUrl}/v1/assistant/projects'),
+            headers: HermesConfig.headers)
+        .timeout(const Duration(seconds: 15));
+    _checkAssistantResponse(response, 'Проекты недоступны');
+    final data =
+        json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+    return ((data['projects'] as List?) ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(TroikaProject.fromJson)
+        .toList();
+  }
+
+  Future<TroikaProject> createAssistantProject(String name,
+      {String summary = ''}) async {
+    final response = await http
+        .post(Uri.parse('${HermesConfig.serverUrl}/v1/assistant/projects'),
+            headers: HermesConfig.headers,
+            body: json.encode({'name': name, 'summary': summary}))
+        .timeout(const Duration(seconds: 15));
+    _checkAssistantResponse(response, 'Проект не создан');
+    return TroikaProject.fromJson((json.decode(utf8.decode(response.bodyBytes))
+        as Map<String, dynamic>)['project'] as Map<String, dynamic>);
+  }
+
+  Future<void> activateAssistantProject(String projectId) async {
+    final response = await http
+        .put(
+            Uri.parse('${HermesConfig.serverUrl}/v1/assistant/projects/'
+                '${Uri.encodeComponent(projectId)}/active'),
+            headers: HermesConfig.headers)
+        .timeout(const Duration(seconds: 15));
+    _checkAssistantResponse(response, 'Проект не выбран');
+  }
+
+  Future<List<TroikaTask>> listAssistantTasks(
+      {String? projectId, bool includeClosed = false}) async {
+    final query = <String, String>{'include_closed': includeClosed.toString()};
+    if (projectId != null && projectId.isNotEmpty) {
+      query['project_id'] = projectId;
+    }
+    final uri = Uri.parse('${HermesConfig.serverUrl}/v1/assistant/tasks')
+        .replace(queryParameters: query);
+    final response = await http
+        .get(uri, headers: HermesConfig.headers)
+        .timeout(const Duration(seconds: 15));
+    _checkAssistantResponse(response, 'Задачи недоступны');
+    final data =
+        json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+    return ((data['tasks'] as List?) ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(TroikaTask.fromJson)
+        .toList();
+  }
+
+  Future<TroikaTask> createAssistantTask(
+      {required String title,
+      String? projectId,
+      String details = '',
+      String? dueAt,
+      String actionMode = 'remind',
+      String actionSummary = ''}) async {
+    final body = <String, dynamic>{
+      'title': title,
+      'details': details,
+      'action_mode': actionMode,
+      'action_summary': actionSummary
+    };
+    if (projectId != null && projectId.isNotEmpty) {
+      body['project_id'] = projectId;
+    }
+    if (dueAt != null && dueAt.isNotEmpty) body['due_at'] = dueAt;
+    final response = await http
+        .post(Uri.parse('${HermesConfig.serverUrl}/v1/assistant/tasks'),
+            headers: {
+              ...HermesConfig.headers,
+              'Idempotency-Key':
+                  'android-${DateTime.now().microsecondsSinceEpoch}'
+            },
+            body: json.encode(body))
+        .timeout(const Duration(seconds: 15));
+    _checkAssistantResponse(response, 'Задача не создана');
+    return TroikaTask.fromJson((json.decode(utf8.decode(response.bodyBytes))
+        as Map<String, dynamic>)['task'] as Map<String, dynamic>);
+  }
+
+  Future<List<TroikaInboxMessage>> listAssistantInbox(
+      {bool unreadOnly = false}) async {
+    final uri = Uri.parse('${HermesConfig.serverUrl}/v1/assistant/inbox')
+        .replace(queryParameters: {'unread_only': unreadOnly.toString()});
+    final response = await http
+        .get(uri, headers: HermesConfig.headers)
+        .timeout(const Duration(seconds: 15));
+    _checkAssistantResponse(response, 'Входящие недоступны');
+    final data =
+        json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+    return ((data['messages'] as List?) ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(TroikaInboxMessage.fromJson)
+        .toList();
+  }
+
+  Future<void> markAssistantMessageRead(String messageId) async {
+    final response = await http
+        .post(
+            Uri.parse('${HermesConfig.serverUrl}/v1/assistant/inbox/'
+                '${Uri.encodeComponent(messageId)}/read'),
+            headers: HermesConfig.headers)
+        .timeout(const Duration(seconds: 15));
+    _checkAssistantResponse(response, 'Сообщение не обновлено');
+  }
+
+  Future<TroikaNotificationPreferences> getNotificationPreferences() async {
+    final response = await http
+        .get(Uri.parse('${HermesConfig.serverUrl}/v1/notification-preferences'),
+            headers: HermesConfig.headers)
+        .timeout(const Duration(seconds: 15));
+    _checkAssistantResponse(response, 'Настройки уведомлений недоступны');
+    return TroikaNotificationPreferences.fromJson(
+        json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>);
+  }
+
+  Future<void> setNotificationPreferences(
+      TroikaNotificationPreferences preferences) async {
+    final response = await http
+        .put(Uri.parse('${HermesConfig.serverUrl}/v1/notification-preferences'),
+            headers: HermesConfig.headers,
+            body: json.encode(preferences.toJson()))
+        .timeout(const Duration(seconds: 15));
+    _checkAssistantResponse(response, 'Настройки уведомлений не сохранены');
+  }
+
+  static void _checkAssistantResponse(http.Response response, String fallback) {
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw HermesApiException('$fallback (${response.statusCode}).');
+    }
+  }
+
   Future<List<SessionSummary>> listSessions({
     int limit = 50,
     int offset = 0,
@@ -510,6 +649,112 @@ class HermesApiService {
       throw HermesApiException('Сервер не ответил вовремя.');
     }
   }
+}
+
+class TroikaProject {
+  final String id, name, summary, status;
+  final bool isActive;
+  TroikaProject(
+      {required this.id,
+      required this.name,
+      required this.summary,
+      required this.status,
+      required this.isActive});
+  factory TroikaProject.fromJson(Map<String, dynamic> j) => TroikaProject(
+      id: (j['id'] ?? '').toString(),
+      name: (j['name'] ?? '').toString(),
+      summary: (j['summary'] ?? '').toString(),
+      status: (j['status'] ?? '').toString(),
+      isActive: j['is_active'] == true);
+}
+
+class TroikaTask {
+  final String id, projectId, title, details, status, actionMode, dueAt;
+  final bool requiresApproval;
+  TroikaTask(
+      {required this.id,
+      required this.projectId,
+      required this.title,
+      required this.details,
+      required this.status,
+      required this.actionMode,
+      required this.dueAt,
+      required this.requiresApproval});
+  factory TroikaTask.fromJson(Map<String, dynamic> j) => TroikaTask(
+      id: (j['id'] ?? '').toString(),
+      projectId: (j['project_id'] ?? '').toString(),
+      title: (j['title'] ?? '').toString(),
+      details: (j['details'] ?? '').toString(),
+      status: (j['status'] ?? '').toString(),
+      actionMode: (j['action_mode'] ?? 'remind').toString(),
+      dueAt: (j['due_at'] ?? '').toString(),
+      requiresApproval: j['requires_approval'] == true);
+}
+
+class TroikaInboxMessage {
+  final String id, kind, category, title, body, reason, availableAt;
+  final bool requiresApproval;
+  final bool isRead;
+  TroikaInboxMessage(
+      {required this.id,
+      required this.kind,
+      required this.category,
+      required this.title,
+      required this.body,
+      required this.reason,
+      required this.availableAt,
+      required this.requiresApproval,
+      required this.isRead});
+  factory TroikaInboxMessage.fromJson(Map<String, dynamic> j) =>
+      TroikaInboxMessage(
+          id: (j['id'] ?? '').toString(),
+          kind: (j['kind'] ?? '').toString(),
+          category: (j['category'] ?? '').toString(),
+          title: (j['title'] ?? '').toString(),
+          body: (j['body'] ?? '').toString(),
+          reason: (j['reason'] ?? '').toString(),
+          availableAt: (j['available_at'] ?? '').toString(),
+          requiresApproval: j['requires_approval'] == true,
+          isRead: j['read_at'] != null);
+}
+
+class TroikaNotificationPreferences {
+  final bool remindersEnabled, proactiveEnabled, quietHoursEnabled;
+  final String timezone, quietStart, quietEnd;
+  TroikaNotificationPreferences(
+      {required this.remindersEnabled,
+      required this.proactiveEnabled,
+      required this.quietHoursEnabled,
+      required this.timezone,
+      required this.quietStart,
+      required this.quietEnd});
+  factory TroikaNotificationPreferences.fromJson(Map<String, dynamic> j) =>
+      TroikaNotificationPreferences(
+          remindersEnabled: j['reminders_enabled'] == true,
+          proactiveEnabled: j['proactive_enabled'] == true,
+          quietHoursEnabled: j['quiet_hours_enabled'] == true,
+          timezone: (j['timezone'] ?? 'UTC').toString(),
+          quietStart: (j['quiet_start'] ?? '22:00').toString(),
+          quietEnd: (j['quiet_end'] ?? '08:00').toString());
+  Map<String, dynamic> toJson() => {
+        'reminders_enabled': remindersEnabled,
+        'proactive_enabled': proactiveEnabled,
+        'quiet_hours_enabled': quietHoursEnabled,
+        'timezone': timezone,
+        'quiet_start': quietStart,
+        'quiet_end': quietEnd
+      };
+  TroikaNotificationPreferences copyWith(
+          {bool? remindersEnabled,
+          bool? proactiveEnabled,
+          bool? quietHoursEnabled}) =>
+      TroikaNotificationPreferences(
+          remindersEnabled: remindersEnabled ?? this.remindersEnabled,
+          proactiveEnabled: proactiveEnabled ?? this.proactiveEnabled,
+          quietHoursEnabled: quietHoursEnabled ?? this.quietHoursEnabled,
+          timezone: timezone,
+          quietStart: quietStart,
+          quietEnd: quietEnd);
 }
 
 class SessionSummary {
