@@ -1,3 +1,24 @@
+# Troika Product - Agent Guide
+
+## Mandatory session route
+
+- This repository, `D:\troika-product`, is the only writable checkout for the
+  Troika product.
+- `D:\troikahermes` is a read-only source for comparing or selectively porting
+  older behavior. Never write plans, code, commits, generated files, or runtime
+  data there.
+- At the beginning of every Troika session, including a session whose initial
+  directory is `D:\troikahermes`, switch the working directory to
+  `D:\troika-product` and read, in order:
+  1. `AGENTS.md`
+  2. `PROJECT_MEMORY.md`
+  3. `PRODUCTIZATION_PLAN.md`
+  4. `docs/TROIKA_CAPABILITY_RESTORATION_PLAN.md`
+- Expected branch: `codex/product-foundation`.
+- Expected remote: `https://github.com/troika03/troika2.0.git`.
+- After every completed task, refresh `PROJECT_MEMORY.md`, removing stale facts,
+  then commit and push ready changes with `git push origin HEAD:main`.
+
 # Hermes Agent - Development Guide
 
 Instructions for AI coding assistants and developers working on the hermes-agent codebase.
