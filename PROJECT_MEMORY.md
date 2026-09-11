@@ -268,14 +268,19 @@
   `flutter analyze --no-fatal-infos` без ошибок; debug APK собрана. Телефон в
   момент проверки не был виден через ADB, поэтому новый экран физически ещё не
   проверен.
+- Повторная проверка 2026-09-11 снова дала `79 passed` и Flutter `6/6`; полный
+  analyze оставил только 31 прежнее informational-замечание. `adb devices -l`
+  не показал устройств, поэтому physical tap, MediaProjection consent и
+  `screen.snapshot` остаются непроверенными.
 
 ## Ближайший порядок работы
 
 1. Повторить на Samsung ручную проверку barge-in и реального обрыва сети;
    настроить VAD/эхоподавление по результату, не меняя security boundary.
-2. Физически проверить Android-экран «Помощник» и фоновый event engine. Затем
-   добавить пользовательскую политику retention/account deletion; push оставить
-   выключенным до отдельной проверки push token lifecycle.
+2. После подключения Samsung физически проверить Android-экран «Помощник» и
+   фоновый event engine. Затем пройти MediaProjection consent для
+   `screen.snapshot`; retention/account deletion и push token lifecycle остаются
+   отдельными этапами до включения push.
 3. Реализовать безопасный `screen.snapshot` через MediaProjection. Только после
    physical E2E и threat-model review переходить к WebRTC screen assist и
    CameraX live vision.
