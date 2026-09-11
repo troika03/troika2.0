@@ -34,7 +34,7 @@ class WakeWordService {
   }
 
   Future<void> _handleNativeEvent(MethodCall call) async {
-    debugPrint('[Native] ${call.method} ${call.arguments}');
+    debugPrint('[Native] ${call.method}');
     if (call.method == 'wake_word_detected' && _isListening) {
       onWakeWordDetected?.call();
     } else if (call.method == 'debug_heard') {

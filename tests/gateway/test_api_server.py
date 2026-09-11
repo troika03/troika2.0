@@ -37,6 +37,15 @@ from gateway.platforms.api_server import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _isolate_active_project(monkeypatch):
+    """Keep a developer's personal active project out of API tests."""
+    monkeypatch.setattr(
+        "tools.project_tool.get_active_project_summary",
+        lambda: None,
+    )
+
+
 # ---------------------------------------------------------------------------
 # check_api_server_requirements
 # ---------------------------------------------------------------------------
@@ -436,6 +445,22 @@ def auth_adapter():
 
 
 class TestAgentExecution:
+    def test_product_agent_enables_content_log_redaction(self):
+        product_adapter = _make_adapter()
+        product_adapter._access_registry = MagicMock()
+
+        with patch("run_agent.AIAgent") as agent_cls, \
+             patch("gateway.run._resolve_runtime_agent_kwargs", return_value={}), \
+             patch("gateway.run._resolve_gateway_model", return_value="test-model"), \
+             patch("gateway.run._load_gateway_config", return_value={}), \
+             patch("gateway.run.GatewayRunner._load_reasoning_config", return_value=None), \
+             patch("gateway.run.GatewayRunner._load_fallback_model", return_value=None), \
+             patch("hermes_cli.tools_config._get_platform_tools", return_value=set()):
+            agent = agent_cls.return_value
+            product_adapter._create_agent(session_id="private-session")
+
+        assert agent._redact_content_logs is True
+
     @pytest.mark.asyncio
     async def test_run_agent_uses_session_id_as_task_id(self, adapter):
         mock_agent = MagicMock()

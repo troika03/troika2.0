@@ -841,6 +841,18 @@ class APIServerAdapter(BasePlatformAdapter):
                 os.getenv("TROIKA_PRODUCT_QUOTAS_ENABLED", "false"),
             )
         )
+        self._product_voice_enabled = _coerce_config_bool(
+            extra.get(
+                "product_voice_enabled",
+                os.getenv("TROIKA_PRODUCT_VOICE_ENABLED", "true"),
+            )
+        )
+        self._product_stt_url = str(
+            extra.get(
+                "product_stt_url",
+                os.getenv("TROIKA_PRODUCT_STT_URL", "http://127.0.0.1:8766"),
+            )
+        ).rstrip("/")
         self._access_registry = None
         self._artifact_store = None
         self._product_auth_error: Optional[str] = None
@@ -1374,6 +1386,9 @@ class APIServerAdapter(BasePlatformAdapter):
             reasoning_config=reasoning_config,
             gateway_session_key=gateway_session_key,
         )
+        # Product conversations can contain voice transcripts and private
+        # document text. Keep raw user content out of the operator logs.
+        agent._redact_content_logs = self._access_registry is not None
         return agent
 
     # ------------------------------------------------------------------
@@ -1852,7 +1867,86 @@ class APIServerAdapter(BasePlatformAdapter):
         )
         return web.json_response({"ok": bool(result.get("ok", True)), "result": result})
 
+    async def _handle_audio_transcriptions(self, request: "web.Request") -> "web.Response":
+        """Expose private STT on the authenticated API origin used by Android."""
+        auth_err = self._check_auth(request)
+        if auth_err is not None:
+            return auth_err
+        if (
+            not self._product_auth_enabled
+            or self._access_registry is None
+            or not self._product_voice_enabled
+        ):
+            return web.json_response({"error": "Product voice is unavailable"}, status=503)
+        session_id = request.headers.get("X-Hermes-Session-Id", "")
+        if not session_id:
+            return web.json_response({"error": "Voice session is required"}, status=400)
+        session_err = self._authorize_product_session(request, session_id, claim=True)
+        if session_err is not None:
+            return session_err
+        import aiohttp
+        from troika_product.voice import guarded_voice, read_audio_upload
+
+        async def operation():
+            audio, language = await read_audio_upload(request)
+            form = aiohttp.FormData()
+            form.add_field("file", audio, filename="voice.wav", content_type="application/octet-stream")
+            form.add_field("language", language)
+            # Operator-owned destination, never accepted from the client.
+            headers = {
+                "Authorization": request.headers["Authorization"],
+                "X-Hermes-Session-Id": session_id,
+            }
+            try:
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=85)) as client:
+                    async with client.post(
+                        self._product_stt_url + "/v1/audio/transcriptions", data=form,
+                        headers=headers, allow_redirects=False,
+                    ) as response:
+                        if response.status != 200:
+                            status = response.status if response.status in {400, 401, 403, 413, 503, 504} else 502
+                            return web.json_response({"error": "Speech recognition unavailable"}, status=status)
+                        body = bytearray()
+                        async for chunk in response.content.iter_chunked(8192):
+                            body.extend(chunk)
+                            if len(body) > 1024 * 1024:
+                                raise web.HTTPBadGateway(text="Invalid speech response")
+                        data = json.loads(body)
+                        if not isinstance(data, dict) or not isinstance(data.get("text"), str):
+                            raise ValueError("Invalid speech response")
+                        return web.json_response({"text": data["text"]})
+            except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
+                return web.json_response({"error": "Speech recognition unavailable"}, status=503)
+
+        token = request.headers["Authorization"].removeprefix("Bearer ").strip()
+        return await guarded_voice(
+            operation,
+            registry=self._access_registry,
+            token=token,
+            request=request,
+            enabled=lambda: self._product_voice_enabled,
+        )
+
     async def _handle_audio_speech(self, request: "web.Request") -> "web.Response":
+        auth_err = self._check_auth(request)
+        if auth_err is not None:
+            return auth_err
+        if self._product_auth_enabled:
+            if not self._product_voice_enabled:
+                return web.json_response({"error": "Product voice is unavailable"}, status=503)
+            from troika_product.voice import guarded_voice
+
+            token = request.headers["Authorization"].removeprefix("Bearer ").strip()
+            return await guarded_voice(
+                lambda: self._synthesize_audio_speech(request),
+                registry=self._access_registry,
+                token=token,
+                request=request,
+                enabled=lambda: self._product_voice_enabled,
+            )
+        return await self._synthesize_audio_speech(request)
+
+    async def _synthesize_audio_speech(self, request: "web.Request") -> "web.Response":
         """POST /v1/audio/speech — Edge TTS (OpenAI-compatible body, MP3 response).
 
         Body: {"input": "текст", "voice": "ru-RU-SvetlanaNeural", "speed": 1.0}
@@ -1924,7 +2018,7 @@ class APIServerAdapter(BasePlatformAdapter):
         # → (3) текущий профиль IRIS (настроение Миши) → (4) тип самой фразы. Так
         # голос звучит живо: радостный ответ — звонко, поддержка — мягко.
         tone = emo_tone or body.get("tone")
-        if not tone:
+        if not tone and not self._product_auth_enabled:
             try:
                 from agent.iris_persona import _choose_profile
                 tone = _choose_profile()
@@ -1978,33 +2072,30 @@ class APIServerAdapter(BasePlatformAdapter):
                     ) as resp:
                         if resp.status == 200:
                             audio = await resp.read()
+                            if len(audio) > 10 * 1024 * 1024:
+                                raise ValueError("Speech output too large")
                             return web.Response(body=audio, content_type="audio/mpeg")
-                        err_body = (await resp.text())[:200]
                         logger.warning(
-                            "Fish TTS %s: %s — fallback to Edge", resp.status, err_body
+                            "Fish TTS %s — fallback to Edge", resp.status
                         )
             except Exception as e:
-                logger.warning("Fish TTS error: %s — fallback to Edge", e)
+                logger.warning("Fish TTS error (%s) — fallback to Edge", type(e).__name__)
 
         try:
-            import tempfile, os as _os
-            tmp_fd, tmp_path = tempfile.mkstemp(suffix=".mp3", prefix="hermes_tts_")
-            _os.close(tmp_fd)
-            try:
-                import edge_tts
-                communicate = edge_tts.Communicate(
-                    text, voice=voice, rate=rate, pitch=pitch, volume=volume
-                )
-                await communicate.save(tmp_path)
-                with open(tmp_path, "rb") as f:
-                    audio = f.read()
-            finally:
-                try: _os.unlink(tmp_path)
-                except Exception: pass
-            return web.Response(body=audio, content_type="audio/mpeg")
+            import edge_tts
+            communicate = edge_tts.Communicate(
+                text, voice=voice, rate=rate, pitch=pitch, volume=volume
+            )
+            audio = bytearray()
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    audio.extend(chunk["data"])
+                    if len(audio) > 10 * 1024 * 1024:
+                        raise ValueError("Speech output too large")
+            return web.Response(body=bytes(audio), content_type="audio/mpeg")
         except Exception as e:
-            logger.error("Edge TTS error: %s (text=%r)", e, text[:120])
-            return web.json_response({"error": f"tts_failed: {e}"}, status=500)
+            logger.error("Edge TTS error (%s)", type(e).__name__)
+            return web.json_response({"error": "Speech synthesis unavailable"}, status=503)
 
     async def _handle_chat_completions(self, request: "web.Request") -> "web.Response":
         """POST /v1/chat/completions — OpenAI Chat Completions format."""
@@ -4728,6 +4819,7 @@ class APIServerAdapter(BasePlatformAdapter):
             self._app.router.add_get("/v1/sessions", self._handle_list_sessions)
             self._app.router.add_get("/v1/sessions/{session_id}/messages", self._handle_get_session_messages)
             self._app.router.add_post("/v1/audio/speech", self._handle_audio_speech)
+            self._app.router.add_post("/v1/audio/transcriptions", self._handle_audio_transcriptions)
             self._app.router.add_post("/v1/responses", self._handle_responses)
             self._app.router.add_get("/v1/responses/{response_id}", self._handle_get_response)
             self._app.router.add_delete("/v1/responses/{response_id}", self._handle_delete_response)

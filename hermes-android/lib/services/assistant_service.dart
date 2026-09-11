@@ -31,7 +31,7 @@ class AssistantService extends ChangeNotifier {
   String _lastHermesText = '';
   String _errorMessage = '';
   String _debugHeard = '';
-  bool _wakeWordEnabled = true;
+  bool _wakeWordEnabled = false;
   RunApprovalRequest? _pendingApproval;
   Completer<String>? _approvalCompleter;
 
@@ -58,37 +58,7 @@ class AssistantService extends ChangeNotifier {
 
   Future<void> init() async {
     await _tts.init();
-
-    final micStatus = await Permission.microphone.request();
-    debugPrint('[Assistant] mic: $micStatus');
-
-    // Запросить отключение оптимизации батареи (нужно для фона)
-    try {
-      final ignored =
-          await _platform.invokeMethod<bool>('isBatteryOptimizationIgnored') ??
-              false;
-      if (!ignored) {
-        await _platform.invokeMethod('requestBatteryOptimizationDisable');
-      }
-    } catch (e) {
-      debugPrint('[Assistant] battery opt check failed: $e');
-    }
-
-    // Запросить разрешение на overlay (для bottom sheet поверх приложений)
-    try {
-      final hasOverlay =
-          await _platform.invokeMethod<bool>('hasOverlayPermission') ?? false;
-      if (!hasOverlay) {
-        await _platform.invokeMethod('requestOverlayPermission');
-      }
-    } catch (e) {
-      debugPrint('[Assistant] overlay check failed: $e');
-    }
-
-    // Уведомления (Android 13+)
-    if (await Permission.notification.isDenied) {
-      await Permission.notification.request();
-    }
+    _wakeWordEnabled = HermesConfig.wakeWordEnabled;
 
     _wakeWord.onWakeWordDetected = _onWakeWordConfirmed;
     _wakeWord.onStatusUpdate = (s) => debugPrint('[WakeWord] $s');
@@ -104,7 +74,7 @@ class AssistantService extends ChangeNotifier {
     HermesConfig.serverUrl = HermesConfig.serverUrl;
     HermesConfig.apiKey = HermesConfig.apiKey;
 
-    if (micStatus.isGranted && _wakeWordEnabled) {
+    if (_wakeWordEnabled) {
       await _startWakeWordListening();
     }
 
@@ -132,7 +102,34 @@ class AssistantService extends ChangeNotifier {
 
   Future<void> setWakeWordEnabled(bool enabled) async {
     _wakeWordEnabled = enabled;
+    HermesConfig.wakeWordEnabled = enabled;
     if (enabled) {
+      final micStatus = await Permission.microphone.request();
+      if (!micStatus.isGranted) {
+        _wakeWordEnabled = false;
+        HermesConfig.wakeWordEnabled = false;
+        _setError('Нет доступа к микрофону.');
+        return;
+      }
+      try {
+        final ignored = await _platform.invokeMethod<bool>(
+              'isBatteryOptimizationIgnored',
+            ) ??
+            false;
+        if (!ignored) {
+          await _platform.invokeMethod('requestBatteryOptimizationDisable');
+        }
+        final hasOverlay =
+            await _platform.invokeMethod<bool>('hasOverlayPermission') ?? false;
+        if (!hasOverlay) {
+          await _platform.invokeMethod('requestOverlayPermission');
+        }
+        if (await Permission.notification.isDenied) {
+          await Permission.notification.request();
+        }
+      } catch (e) {
+        debugPrint('[Assistant] wake-word setup failed: $e');
+      }
       await _startWakeWordListening();
     } else {
       await _wakeWord.stopListening();

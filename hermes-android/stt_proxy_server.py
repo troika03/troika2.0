@@ -16,9 +16,14 @@ import sys
 import time
 import asyncio
 import hmac
-import tempfile
+import io
 from pathlib import Path
 from dotenv import load_dotenv
+
+# Direct script execution must resolve product modules from this checkout.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from hermes_constants import get_hermes_home
+from troika_product.voice import guarded_voice, read_audio_upload
 
 # Подгружаем .env из возможных мест. В Docker переменные уже приходят
 # через env_file/environment, а домашняя папка может быть недоступна
@@ -31,12 +36,7 @@ def _try_load_env(path: Path) -> None:
     except (PermissionError, OSError):
         pass
 
-try:
-    _home = Path.home()
-except (RuntimeError, OSError):
-    _home = Path("/tmp")
-_try_load_env(_home / ".troika" / ".env")
-_try_load_env(_home / "troika" / ".env")
+_try_load_env(get_hermes_home() / ".env")
 
 from aiohttp import web, ClientSession, FormData
 import logging
@@ -63,7 +63,7 @@ GROQ_KEYS = _collect_groq_keys()
 GROQ_API_KEY = GROQ_KEYS[0] if GROQ_KEYS else ""  # обратная совместимость
 API_SERVER_KEY = os.getenv("API_SERVER_KEY", "").strip()
 PORT = int(os.getenv("STT_PROXY_PORT", "8643"))
-HOST = "0.0.0.0"
+HOST = os.getenv("STT_PROXY_HOST", "127.0.0.1")
 PRODUCT_AUTH_ENABLED = os.getenv("TROIKA_PRODUCT_AUTH_ENABLED", "").strip().lower() in {
     "1", "true", "yes", "on",
 }
@@ -103,8 +103,10 @@ GROQ_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 # ── Local faster-whisper (lazy init) ──────────────────────────────────────
 
 _local_model = None
+_local_init_task = None
 _local_init_error: str = ""
 _local_lock = asyncio.Lock()
+_inference_lock = asyncio.Lock()
 
 
 def _init_local_model_sync():
@@ -144,31 +146,33 @@ def _init_local_model_sync():
 
 
 async def _ensure_local_model():
-    global _local_model
+    global _local_model, _local_init_task
     if _local_model is not None:
         return _local_model
     async with _local_lock:
         if _local_model is not None:
             return _local_model
-        # blocking → in thread
-        loop = asyncio.get_running_loop()
-        model, device, compute = await loop.run_in_executor(None, _init_local_model_sync)
-        _local_model = (model, device, compute)
+        if _local_init_task is None:
+            _local_init_task = asyncio.get_running_loop().run_in_executor(None, _init_local_model_sync)
+        try:
+            _local_model = await asyncio.shield(_local_init_task)
+        except Exception:
+            _local_init_task = None
+            raise
         return _local_model
 
 
 async def _transcribe_local(audio_bytes: bytes, language: str) -> tuple[str, dict]:
-    """Сохраняет во временный файл и гоняет через faster-whisper."""
+    """Decode from RAM and keep one native inference slot until it finishes."""
     model, device, compute = await _ensure_local_model()
-    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-    try:
-        tmp.write(audio_bytes)
-        tmp.flush()
-        tmp.close()
+    if _inference_lock.locked():
+        raise web.HTTPServiceUnavailable(text="Speech worker is busy")
+    await _inference_lock.acquire()
 
-        def _run():
+    def _run():
+        with io.BytesIO(audio_bytes) as source:
             segments, info = model.transcribe(
-                tmp.name,
+                source,
                 language=language or None,
                 beam_size=1,
                 vad_filter=True,
@@ -179,22 +183,19 @@ async def _transcribe_local(audio_bytes: bytes, language: str) -> tuple[str, dic
             text_parts = [seg.text for seg in segments]
             return "".join(text_parts).strip(), info
 
-        loop = asyncio.get_running_loop()
-        text, info = await loop.run_in_executor(None, _run)
-        meta = {
-            "backend": "local",
-            "device": device,
-            "compute": compute,
-            "model": LOCAL_MODEL_SIZE,
-            "language": getattr(info, "language", language),
-            "duration": round(getattr(info, "duration", 0.0) or 0.0, 2),
-        }
-        return text, meta
-    finally:
-        try:
-            os.unlink(tmp.name)
-        except Exception:
-            pass
+    future = asyncio.get_running_loop().run_in_executor(None, _run)
+    future.add_done_callback(lambda _: _inference_lock.release())
+    # Cancelling the HTTP request cannot stop CTranslate2's native worker.
+    # Shield preserves the capacity slot until that worker really finishes.
+    text, info = await asyncio.shield(future)
+    return text, {
+        "backend": "local",
+        "device": device,
+        "compute": compute,
+        "model": LOCAL_MODEL_SIZE,
+        "language": getattr(info, "language", language),
+        "duration": round(getattr(info, "duration", 0.0) or 0.0, 2),
+    }
 
 
 class _GroqRateLimited(RuntimeError):
@@ -203,7 +204,7 @@ class _GroqRateLimited(RuntimeError):
 
 async def _groq_post(audio_bytes: bytes, filename: str, language: str, model: str, api_key: str) -> str:
     form = FormData()
-    form.add_field("file", audio_bytes, filename=filename, content_type="audio/m4a")
+    form.add_field("file", audio_bytes, filename=filename, content_type="application/octet-stream")
     form.add_field("model", model)
     form.add_field("language", language)
     form.add_field("response_format", "json")
@@ -218,11 +219,9 @@ async def _groq_post(audio_bytes: bytes, filename: str, language: str, model: st
             timeout=int(os.getenv("GROQ_STT_TIMEOUT", "8")),
         ) as resp:
             if resp.status == 429:
-                err = await resp.text()
-                raise _GroqRateLimited(f"Groq 429: {err}")
+                raise _GroqRateLimited("Groq 429")
             if resp.status != 200:
-                err = await resp.text()
-                raise RuntimeError(f"Groq {resp.status}: {err}")
+                raise RuntimeError(f"Groq {resp.status}")
             data = await resp.json()
             return (data.get("text", "") or "").strip()
 
@@ -320,9 +319,7 @@ async def health(request):
         "status": "ok",
         "backend": STT_BACKEND,
         "local_ready": _local_model is not None,
-        "local_init_error": _local_init_error or None,
-        "groq_key_set": bool(GROQ_KEYS),
-        "groq_keys_count": len(GROQ_KEYS),
+        "auth_ready": ACCESS_REGISTRY is not None if PRODUCT_AUTH_ENABLED else API_KEY_CONFIGURED,
         "service": "hermes-stt-proxy"
     })
 
@@ -335,8 +332,12 @@ async def transcribe(request):
             return web.json_response(
                 {"error": "STT proxy product authentication is unavailable"}, status=503
             )
-        if ACCESS_REGISTRY.authenticate(token) is None:
+        principal = ACCESS_REGISTRY.authenticate(token)
+        if principal is None:
             return web.json_response({"error": "Invalid API key"}, status=401)
+        session_id = request.headers.get("X-Hermes-Session-Id", "")
+        if not session_id or not ACCESS_REGISTRY.claim_session(principal, session_id):
+            return web.json_response({"error": "Invalid voice session"}, status=403)
     else:
         if not API_KEY_CONFIGURED:
             return web.json_response(
@@ -348,22 +349,19 @@ async def transcribe(request):
         if not hmac.compare_digest(token, API_SERVER_KEY):
             return web.json_response({"error": "Invalid API key"}, status=401)
 
-    reader = await request.multipart()
-    audio_data = None
-    audio_filename = "voice.m4a"
-    language = "ru"
+    async def operation():
+        audio_data, language = await read_audio_upload(request)
+        return await _transcribe_audio(audio_data, language)
 
-    async for field in reader:
-        if field.name == "file":
-            audio_filename = field.filename or "voice.m4a"
-            audio_data = await field.read()
-        elif field.name == "language":
-            language = (await field.text()).strip() or "ru"
+    if PRODUCT_AUTH_ENABLED:
+        return await guarded_voice(
+            operation, registry=ACCESS_REGISTRY, token=token, request=request,
+        )
+    async with asyncio.timeout(90):
+        return await operation()
 
-    if not audio_data:
-        return web.json_response({"error": "No audio file in request"}, status=400)
 
-    log.info(f"Got audio: {len(audio_data)} bytes, lang={language}")
+async def _transcribe_audio(audio_data, language):
 
     backend_order: list[str] = []
     if STT_BACKEND == "local":
@@ -373,28 +371,28 @@ async def transcribe(request):
     else:  # auto
         backend_order = ["local", "groq"]
 
-    last_err = None
     for backend in backend_order:
         t0 = time.monotonic()
         try:
             if backend == "local":
                 text, meta = await _transcribe_local(audio_data, language)
             else:
-                text, meta = await _transcribe_groq(audio_data, audio_filename, language)
+                text, meta = await _transcribe_groq(audio_data, "voice.wav", language)
             meta["latency_s"] = round(time.monotonic() - t0, 2)
             if _looks_like_hallucination(text):
-                log.info("[%s] hallucination filtered: %r (%.1fs)", backend, text, meta["latency_s"])
+                log.info("[%s] empty speech (%.1fs)", backend, meta["latency_s"])
                 return web.json_response({"text": "", "meta": meta})
-            log.info("[%s] %r (%.1fs)", backend, text, meta["latency_s"])
+            log.info("[%s] transcription completed (%.1fs)", backend, meta["latency_s"])
             return web.json_response({"text": text, "meta": meta})
+        except web.HTTPException:
+            raise
         except Exception as e:
-            last_err = e
-            log.warning("backend %s failed: %s", backend, e)
+            log.warning("backend %s failed (%s)", backend, type(e).__name__)
             continue
 
     return web.json_response(
-        {"error": f"all backends failed: {last_err}"},
-        status=500,
+        {"error": "Speech recognition is temporarily unavailable"},
+        status=503,
     )
 
 
@@ -402,29 +400,17 @@ def main():
     if STT_BACKEND in ("groq", "auto") and not GROQ_API_KEY:
         log.warning("GROQ_API_KEY не задан — Groq backend будет пропущен")
 
-    if STT_BACKEND in ("local", "auto"):
-        # Прогрев модели в фоне — не блокируем старт, но первое распознавание
-        # будет быстрым.
-        async def _warmup():
-            try:
-                await _ensure_local_model()
-            except Exception as e:
-                log.warning("local backend warmup failed: %s", e)
-
-        async def _start():
-            asyncio.create_task(_warmup())
-
     app = web.Application(client_max_size=50 * 1024 * 1024)
     app.router.add_get("/health", health)
     app.router.add_post("/v1/audio/transcriptions", transcribe)
     if STT_BACKEND in ("local", "auto"):
         async def _on_startup(app):
-            asyncio.create_task(_ensure_local_model() if False else _warmup_safe())
+            asyncio.create_task(_warmup_safe())
         async def _warmup_safe():
             try:
                 await _ensure_local_model()
             except Exception as e:
-                log.warning("local warmup failed: %s", e)
+                log.warning("local warmup failed (%s)", type(e).__name__)
         app.on_startup.append(_on_startup)
 
     log.info(f"🎙️  Hermes STT Proxy запущен на http://{HOST}:{PORT}")
@@ -436,7 +422,7 @@ def main():
         log.error("STT proxy product auth unavailable: %s", PRODUCT_AUTH_ERROR or "unknown error")
     elif not PRODUCT_AUTH_ENABLED and not API_KEY_CONFIGURED:
         log.error("STT proxy will reject requests until API_SERVER_KEY is a unique secret")
-    log.info(f"    STT_BACKEND={STT_BACKEND}  GROQ_API_KEY={'✓' if GROQ_API_KEY else '✗'}")
+    log.info("    STT_BACKEND=%s", STT_BACKEND)
     log.info(f"    Local model: {LOCAL_MODEL_SIZE} (device={LOCAL_DEVICE}, compute={LOCAL_COMPUTE or 'auto'})")
     log.info(f"    Endpoint: POST /v1/audio/transcriptions")
 

@@ -185,9 +185,8 @@
 - Проверено: 35 focused Python tests, `ruff`, `compileall`; Flutter test 4/4;
   `flutter analyze --no-fatal-infos` без ошибок/предупреждений (31 прежний
   informational suggestion); debug APK успешно собран. Дополнительно прошёл
-  171 API regression test (1 skipped); один legacy-тест system prompt зависит
-  от глобального `~/.troika/active_project.json`, поэтому для чистого прогона
-  его нужно сделать hermetic.
+  171 API regression test (1 skipped). Зависимость API-теста от личного
+  `~/.troika/active_project.json` позже устранена autouse-изоляцией.
 
 ## Выполнено: восстановлена идентичность Тройки (2026-09-10)
 
@@ -211,10 +210,39 @@
   `git diff --check` прошли. После перезапуска локального product API на
   `127.0.0.1:8765` живой запрос «Как тебя зовут?» вернул «Я Тройка».
 
+## Выполнено: безопасный голосовой контур (2026-09-11)
+
+- Product Android использует тот же origin, HTTPS/порт и tenant-owned session
+  для чата и `/v1/audio/transcriptions`; отдельный legacy-порт `8643` сохранён
+  только для старых установок без `trk_live_` token.
+- STT worker запускается отдельным процессом только на `127.0.0.1:8766` через
+  `python -m troika_product.voice_proxy`. Gateway принимает голос только после
+  device-token auth и session ownership, затем сам пересылает его worker.
+- Upload и ответы ограничены 10 МБ; есть 90-секундный deadline, одна локальная
+  inference slot, server kill switch и повторная проверка token каждые 250 мс.
+  Revoke, отключение функции, timeout и недоступный worker покрыты тестами.
+- STT, Edge TTS и Android MediaPlayer работают в памяти. Временные audio-файлы
+  на сервере не создаются; старый Android TTS cache удаляется при запуске.
+- Транскрипты и TTS-текст не пишутся в operator logs. Product agent пишет
+  `msg='<redacted>'`; тела ошибок provider не попадают в ответы и логи.
+- Wake word по умолчанию выключен. Разрешения микрофона, фоновой работы,
+  overlay и уведомлений запрашиваются только после отдельного opt-in. Ручной
+  push-to-talk не оставляет постоянно слушающий sticky service.
+- На Samsung A22 установлен актуальный debug APK. Физически пройден полный
+  цикл push-to-talk → локальный faster-whisper → общая product session →
+  OpenRouter → Edge TTS → последовательное воспроизведение нескольких фраз из
+  памяти. Синтетическая речь через динамик ПК распознаётся нестабильно из-за
+  эха; это вопрос настройки VAD/акустики, а не маршрута или авторизации.
+- Проверено: product/API regression — `209 passed, 1 skipped`; Flutter — 6/6;
+  `ruff`, `compileall`, `flutter analyze --no-fatal-infos` и debug APK build.
+  Analyze сообщает только 31 прежнюю informational-рекомендацию. Физическую
+  проверку barge-in и реальный обрыв сети ещё нужно повторить человеком; их
+  failure/cancel paths уже покрыты автоматическими тестами.
+
 ## Ближайший порядок работы
 
-1. Восстановить голосовой E2E на текущем Android: STT proxy, TTS, перебивание и
-   единая tenant-owned сессия.
+1. Повторить на Samsung ручную проверку barge-in и реального обрыва сети;
+   настроить VAD/эхоподавление по результату, не меняя security boundary.
 2. Довести проактивного личного ассистента: tenant-owned очередь/in-app inbox,
    доставка и Android UI поверх уже готовых notification preferences и quiet
    hours, без global jobs.
@@ -261,6 +289,8 @@
 
 - backend и health endpoint;
 - бесплатный агентный ответ через OpenRouter;
+- общий безопасный voice route: push-to-talk, локальный STT и потоковый Edge
+  TTS в памяти;
 - вызов product tools моделью;
 - индивидуальная авторизация пользователя/устройства и изоляция сессии;
 - разовое подтверждение действий;
@@ -282,12 +312,9 @@
   дают product live vision. Целевая архитектура, consent и security gates
   зафиксированы в `docs/TROIKA_CAPABILITY_RESTORATION_PLAN.md`.
 - Физический Android-телефон успешно авторизован через ADB; актуальный debug APK
-  установлен, текстовый чат и `android_status` проверены. Текущий USB-туннель —
-  только dev-транспорт: production потребует домен, HTTPS/WSS и нормальный
-  pairing/login без ADB.
-- Голосовой STT сейчас не работает в этом тестовом runtime: Android обращается
-  к `127.0.0.1:8643`, но STT proxy не запущен и USB reverse для `8643` не
-  настроен. Текстовый чат и Android WebSocket от этого не зависят.
+  установлен, текстовый чат, `android_status` и голосовой цикл проверены.
+  Текущий USB-туннель — только dev-транспорт: production потребует домен,
+  HTTPS/WSS и нормальный pairing/login без ADB.
 - Accessibility на тестовом телефоне выключен. Поэтому `status`, battery и
   network работают, но нажатия, свайпы и ввод в другие приложения потребуют
   отдельного включения Тройки в Спец. возможностях Android.
@@ -333,6 +360,10 @@
 - [x] Пройден локальный product API smoke-test с token, approval и DOCX artifact.
 - [x] Пройден ручной end-to-end тест на физическом Android-телефоне: текстовый
       чат, device-token auth, WebSocket и `android_status`.
+- [x] Пройден физический голосовой E2E: push-to-talk, tenant-owned session,
+      локальный STT, модель и потоковый TTS без audio-файлов.
+- [ ] Повторно проверены человеком barge-in и реальный обрыв сети; автоматические
+      revoke/kill-switch/timeout/network-failure тесты уже есть.
 - [ ] Пройден physical tap тест сохранения artifact в выбранную папку Android
       (APK установлена, но ADB нестабилен во время UI-проверки).
 - [x] Зафиксирован подробный план восстановления возможностей и безопасного

@@ -1,11 +1,12 @@
 package com.troika.hermes_assistant
 
 import android.content.Context
+import android.media.MediaDataSource
 import android.media.MediaPlayer
 import android.util.Log
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.CompletableFuture
@@ -18,8 +19,8 @@ import java.util.concurrent.atomic.AtomicReference
 /**
  * Воспроизведение голоса через серверный Edge TTS вместо локального Android TTS.
  *
- * Скачивает MP3 с PC, играет через MediaPlayer.
- * Кэширует последние ответы по хешу текста — избегаем повторного синтеза.
+ * Скачивает MP3 с сервера и играет из памяти через MediaPlayer.
+ * Ответы пользователя и синтезированное аудио на диск не записываются.
  */
 class EdgeTtsPlayer(
     private val ctx: Context,
@@ -32,7 +33,8 @@ class EdgeTtsPlayer(
 ) {
     private val tag = "EdgeTts"
     private val player = AtomicReference<MediaPlayer?>(null)
-    private val cacheDir = File(ctx.cacheDir, "edge_tts").also { it.mkdirs() }
+    private val currentSource = AtomicReference<MediaDataSource?>(null)
+    private val legacyCacheDir = File(ctx.cacheDir, "edge_tts")
     private val currentDoneCallback = AtomicReference<(() -> Unit)?>(null)
     private val streamCancelled = AtomicBoolean(false)
 
@@ -40,6 +42,11 @@ class EdgeTtsPlayer(
     // мы вырезаем тег один раз и прикладываем тон ко ВСЕМ предложениям этого
     // ответа, чтобы вся фраза звучала единым настроением (а не только первая).
     private val currentTone = AtomicReference<String?>(null)
+
+    init {
+        // Remove audio left by builds that used the old persistent TTS cache.
+        try { legacyCacheDir.deleteRecursively() } catch (_: Exception) {}
+    }
 
     private val emoTagRe = Regex("""\[emo:\s*([A-Za-zА-Яа-яЁё_]+)\s*]""")
 
@@ -71,6 +78,7 @@ class EdgeTtsPlayer(
                 try { if (it.isPlaying) it.stop() } catch (_: Exception) {}
                 try { it.release() } catch (_: Exception) {}
             }
+            try { currentSource.getAndSet(null)?.close() } catch (_: Exception) {}
         } catch (_: Exception) {}
         // Отстрелить колбэк прошлой озвучки (если был), чтобы её ожидающий
         // проснулся и не завис.
@@ -96,10 +104,10 @@ class EdgeTtsPlayer(
 
         val t = Thread {
             try {
-                val file = synthesizeOrCached(cleaned, tone)
+                val audio = synthesize(cleaned, tone)
                 if (generation.get() != myGen) return@Thread  // нас перебили — молчим
-                if (file != null && file.length() > 0) {
-                    playFile(file, myGen)
+                if (audio != null && audio.isNotEmpty()) {
+                    playBytes(audio, myGen)
                 } else {
                     Log.w(tag, "synth returned empty, fallback to silence")
                     invokeDoneOnce(myGen)
@@ -124,6 +132,7 @@ class EdgeTtsPlayer(
                 try { if (it.isPlaying) it.stop() } catch (_: Exception) {}
                 it.release()
             }
+            try { currentSource.getAndSet(null)?.close() } catch (_: Exception) {}
         } catch (_: Exception) {}
         // Отстрелить колбэк текущей озвучки (кто ждёт — проснётся).
         currentDoneCallback.getAndSet(null)?.let {
@@ -163,7 +172,7 @@ class EdgeTtsPlayer(
         // пока N+1, N+2 уже качаются. Порядок речи сохраняется, тишина исчезает.
         val n = sentences.size
         @Suppress("UNCHECKED_CAST")
-        val slots = arrayOfNulls<CompletableFuture<File?>>(n) as Array<CompletableFuture<File?>>
+        val slots = arrayOfNulls<CompletableFuture<ByteArray?>>(n) as Array<CompletableFuture<ByteArray?>>
         for (i in 0 until n) slots[i] = CompletableFuture()
 
         // Сколько фраз держим «в полёте» одновременно. 3 — компромисс: убирает
@@ -181,12 +190,12 @@ class EdgeTtsPlayer(
                 if (streamCancelled.get() || generation.get() != myGen) return
                 val i = nextIndex.getAndIncrement()
                 if (i >= n) return
-                val file: File? = try {
-                    synthesizeOrCached(sentences[i], tone)
+                val audio: ByteArray? = try {
+                    synthesize(sentences[i], tone)
                 } catch (e: Exception) {
                     Log.e(tag, "stream synth #$i: ${e.message}"); null
                 }
-                slots[i].complete(file)
+                slots[i].complete(audio)
             }
         }
         repeat(lookahead) { pool.submit { pump() } }
@@ -197,16 +206,16 @@ class EdgeTtsPlayer(
             try {
                 for (i in 0 until n) {
                     if (streamCancelled.get() || generation.get() != myGen) break
-                    val file = try {
+                    val audio = try {
                         slots[i].get(60, TimeUnit.SECONDS)
                     } catch (e: Exception) {
                         Log.e(tag, "stream slot #$i wait: ${e.message}"); null
                     }
                     if (streamCancelled.get() || generation.get() != myGen) break
-                    if (file != null && file.length() > 0) {
-                        playFileBlocking(file, myGen)
+                    if (audio != null && audio.isNotEmpty()) {
+                        playBytesBlocking(audio, myGen)
                     } else {
-                        Log.w(tag, "stream: empty file for sentence #$i")
+                        Log.w(tag, "stream: empty audio for sentence #$i")
                     }
                 }
             } catch (e: Exception) {
@@ -246,25 +255,30 @@ class EdgeTtsPlayer(
         return merged
     }
 
-    /** Синхронное проигрывание одного файла — блокирует до завершения. */
-    private fun playFileBlocking(file: File, myGen: Int) {
+    /** Синхронное проигрывание аудио из памяти — блокирует до завершения. */
+    private fun playBytesBlocking(audio: ByteArray, myGen: Int) {
         if (generation.get() != myGen) return  // нас перебили до старта
         val done = Object()
         val mp = MediaPlayer()
+        val source = ByteArraySource(audio)
         try {
             val attrs = android.media.AudioAttributes.Builder()
                 .setUsage(android.media.AudioAttributes.USAGE_ASSISTANT)
                 .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
                 .build()
             mp.setAudioAttributes(attrs)
-            mp.setDataSource(file.absolutePath)
+            mp.setDataSource(source)
             mp.setOnCompletionListener {
+                try { source.close() } catch (_: Exception) {}
+                currentSource.compareAndSet(source, null)
                 try { it.release() } catch (_: Exception) {}
                 player.compareAndSet(it, null)
                 synchronized(done) { done.notify() }
             }
             mp.setOnErrorListener { p, what, extra ->
                 Log.e(tag, "MediaPlayer error: $what/$extra")
+                try { source.close() } catch (_: Exception) {}
+                currentSource.compareAndSet(source, null)
                 try { p.release() } catch (_: Exception) {}
                 player.compareAndSet(p, null)
                 synchronized(done) { done.notify() }
@@ -273,17 +287,25 @@ class EdgeTtsPlayer(
             mp.prepare()
             // Финальная проверка: если за время prepare() нас перебили — не играем.
             if (generation.get() != myGen) {
+                try { source.close() } catch (_: Exception) {}
                 try { mp.release() } catch (_: Exception) {}
                 return
             }
             player.set(mp)
+            currentSource.set(source)
             mp.setVolume(1.0f, 1.0f)
             mp.start()
             synchronized(done) {
-                try { done.wait(120000) } catch (_: Exception) {}
+                val deadline = System.currentTimeMillis() + 120_000L
+                while (generation.get() == myGen && player.get() === mp) {
+                    val remaining = deadline - System.currentTimeMillis()
+                    if (remaining <= 0L) break
+                    try { done.wait(minOf(250L, remaining)) } catch (_: Exception) { break }
+                }
             }
         } catch (e: Exception) {
             Log.e(tag, "playBlocking error: ${e.message}")
+            try { source.close() } catch (_: Exception) {}
             try { mp.release() } catch (_: Exception) {}
         }
     }
@@ -296,17 +318,7 @@ class EdgeTtsPlayer(
         try { cb() } catch (e: Exception) { Log.e(tag, "onDone error: ${e.message}") }
     }
 
-    private fun synthesizeOrCached(text: String, tone: String? = null): File? {
-        // Ключ кэша включает все параметры голоса + тон эмоции — смена
-        // rate/pitch/volume/tone = новый кэш (иначе радостная фраза достанет
-        // нейтральный mp3 из кэша).
-        val paramHash = "${voice}_r${(rate * 100).toInt()}_p${pitch}_v${volume}_t${tone ?: ""}"
-        val hash = text.hashCode().toString().replace("-", "n")
-        val cached = File(cacheDir, "tts_${hash}_${paramHash}.mp3")
-        if (cached.exists() && cached.length() > 100) {
-            return cached
-        }
-
+    private fun synthesize(text: String, tone: String? = null): ByteArray? {
         val url = "$serverUrl/v1/audio/speech"
         val body = JSONObject().apply {
             put("input", text)
@@ -326,33 +338,36 @@ class EdgeTtsPlayer(
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
             setRequestProperty("Accept", "audio/mpeg")
         }
-        conn.outputStream.use { it.write(body) }
+        try {
+            conn.outputStream.use { it.write(body) }
 
-        if (conn.responseCode != 200) {
-            val err = try { conn.errorStream?.bufferedReader()?.readText() } catch (_: Exception) { null }
-            Log.e(tag, "TTS HTTP ${conn.responseCode}: ${err?.take(300)}")
-            return null
+            if (conn.responseCode != 200) {
+                Log.e(tag, "TTS HTTP ${conn.responseCode}")
+                return null
+            }
+
+            val output = ByteArrayOutputStream()
+            val buffer = ByteArray(8192)
+            conn.inputStream.use { input ->
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    if (output.size() + count > MAX_AUDIO_BYTES) {
+                        throw IllegalStateException("TTS response too large")
+                    }
+                    output.write(buffer, 0, count)
+                }
+            }
+            return output.toByteArray()
+        } finally {
+            conn.disconnect()
         }
-
-        val tmp = File(cacheDir, "tts_partial_$hash.mp3")
-        FileOutputStream(tmp).use { out ->
-            conn.inputStream.use { it.copyTo(out) }
-        }
-        // Атомарно переименовываем чтобы кэш не содержал недописанные файлы
-        tmp.renameTo(cached)
-
-        // Чистим старый кэш — оставляем последние 50 файлов
-        val files = cacheDir.listFiles { f -> f.name.startsWith("tts_") }?.sortedBy { it.lastModified() }
-        if (files != null && files.size > 50) {
-            files.take(files.size - 50).forEach { it.delete() }
-        }
-
-        return cached
     }
 
-    private fun playFile(file: File, myGen: Int) {
+    private fun playBytes(audio: ByteArray, myGen: Int) {
         if (generation.get() != myGen) return  // нас перебили до старта
         val mp = MediaPlayer()
+        val source = ByteArraySource(audio)
         try {
             // КРИТИЧНО: на Android 11+ без AudioAttributes MediaPlayer может играть тихо
             // или быть подавлен системой если другое app держит audio focus.
@@ -364,16 +379,18 @@ class EdgeTtsPlayer(
                 .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
                 .build()
             mp.setAudioAttributes(attrs)
-            mp.setDataSource(file.absolutePath)
+            mp.setDataSource(source)
             mp.setOnCompletionListener {
+                try { source.close() } catch (_: Exception) {}
+                currentSource.compareAndSet(source, null)
                 try { it.release() } catch (_: Exception) {}
                 player.compareAndSet(it, null)
                 invokeDoneOnce(myGen)
             }
             mp.setOnErrorListener { p, what, extra ->
-                Log.e(tag, "MediaPlayer error: $what/$extra (file=${file.name}, size=${file.length()})")
-                // Удалим битый файл из кэша чтобы при следующем speak() пересинтезировать
-                try { file.delete() } catch (_: Exception) {}
+                Log.e(tag, "MediaPlayer error: $what/$extra")
+                try { source.close() } catch (_: Exception) {}
+                currentSource.compareAndSet(source, null)
                 try { p.release() } catch (_: Exception) {}
                 player.compareAndSet(p, null)
                 invokeDoneOnce(myGen)
@@ -381,33 +398,53 @@ class EdgeTtsPlayer(
             }
             mp.setOnPreparedListener {
                 it.setVolume(1.0f, 1.0f)
-                Log.i(tag, "MediaPlayer prepared: file=${file.name}, duration=${it.duration}ms")
+                Log.i(tag, "MediaPlayer prepared: duration=${it.duration}ms")
             }
             mp.prepare()
             // Если за время prepare() пришёл новый speak() — не играем устаревшее.
             if (generation.get() != myGen) {
+                try { source.close() } catch (_: Exception) {}
                 try { mp.release() } catch (_: Exception) {}
                 return
             }
             player.set(mp)
+            currentSource.set(source)
             mp.start()
         } catch (e: Exception) {
             Log.e(tag, "play error: ${e.message}", e)
-            // Удалим битый файл
-            try { file.delete() } catch (_: Exception) {}
+            try { source.close() } catch (_: Exception) {}
             try { mp.release() } catch (_: Exception) {}
             invokeDoneOnce(myGen)
         }
     }
 
-    /** Очистить весь TTS-кэш. Используется когда подозреваем что кэш содержит битые
-     *  файлы (например после смены TTS-движка). Вызвать вручную при необходимости. */
+    /** Remove audio files left by pre-product versions. */
     fun clearCache() {
         try {
-            cacheDir.listFiles()?.forEach { it.delete() }
-            Log.i(tag, "TTS cache cleared")
+            legacyCacheDir.deleteRecursively()
+            Log.i(tag, "Legacy TTS cache cleared")
         } catch (e: Exception) {
             Log.w(tag, "clearCache failed: ${e.message}")
         }
+    }
+
+    private class ByteArraySource(private var bytes: ByteArray?) : MediaDataSource() {
+        override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int {
+            val current = bytes ?: return -1
+            if (position >= current.size) return -1
+            val count = minOf(size, current.size - position.toInt())
+            System.arraycopy(current, position.toInt(), buffer, offset, count)
+            return count
+        }
+
+        override fun getSize(): Long = bytes?.size?.toLong() ?: 0L
+
+        override fun close() {
+            bytes = null
+        }
+    }
+
+    companion object {
+        private const val MAX_AUDIO_BYTES = 10 * 1024 * 1024
     }
 }

@@ -86,7 +86,7 @@ class HermesConfig {
   static set voiceEnabled(bool v) => _prefs.setBool(_keyVoiceEnabled, v);
 
   static bool get wakeWordEnabled =>
-      _prefs.getBool(_keyWakeWordEnabled) ?? true;
+      _prefs.getBool(_keyWakeWordEnabled) ?? false;
 
   static set wakeWordEnabled(bool v) => _prefs.setBool(_keyWakeWordEnabled, v);
 
@@ -124,6 +124,20 @@ class HermesConfig {
 
   /// URL для Chat Completions API
   static String get chatCompletionsUrl => '$serverUrl/v1/chat/completions';
+
+  /// Product voice shares the authenticated API origin, including HTTPS/port.
+  /// Legacy local installations keep their separate STT proxy.
+  static Uri get transcriptionUri {
+    final base = Uri.parse(serverUrl);
+    final sttBase =
+        apiKey.startsWith('trk_live_') ? base : base.replace(port: 8643);
+    return sttBase.replace(
+      path:
+          '${base.path.replaceAll(RegExp(r'/+$'), '')}/v1/audio/transcriptions',
+      query: null,
+      fragment: null,
+    );
+  }
 
   /// URL structured runs (стриминг мыслей и вызовов через SSE)
   static String get runsUrl => '$serverUrl/v1/runs';

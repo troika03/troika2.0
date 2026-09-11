@@ -10,6 +10,22 @@ void main() {
 
   test('does not ship a shared API key', () {
     expect(HermesConfig.defaultApiKey, isEmpty);
+    expect(HermesConfig.wakeWordEnabled, isFalse);
+  });
+
+  test('product STT preserves HTTPS origin, prefix and port', () {
+    HermesConfig.apiKey = 'trk_live_test';
+    HermesConfig.serverUrl = 'https://example.test:9443/troika/';
+    expect(HermesConfig.transcriptionUri.toString(),
+        'https://example.test:9443/troika/v1/audio/transcriptions');
+    HermesConfig.serverUrl = 'http://127.0.0.1:8765';
+    expect(HermesConfig.transcriptionUri.port, 8765);
+  });
+
+  test('legacy STT keeps its local proxy port', () {
+    HermesConfig.apiKey = 'legacy-test-key';
+    HermesConfig.serverUrl = 'http://127.0.0.1:8642';
+    expect(HermesConfig.transcriptionUri.port, 8643);
   });
 
   test('creates one private session identity for voice and text', () {

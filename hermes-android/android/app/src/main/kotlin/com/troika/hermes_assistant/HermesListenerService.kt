@@ -55,6 +55,7 @@ class HermesListenerService : Service() {
         const val PREF_KEY = "flutter.hermes_api_key"
         const val PREF_SESSION_KEY = "flutter.hermes_session_key"
         const val PREF_SESSION_ID = "flutter.hermes_session_id"
+        const val PREF_WAKE_WORD_ENABLED = "flutter.hermes_wake_word_enabled"
 
         /** URL и ключ задаются при подключении аккаунта; общих production-дефолтов нет. */
         fun resolvedUrl(prefs: android.content.SharedPreferences): String {
@@ -138,6 +139,7 @@ class HermesListenerService : Service() {
     private val isRunning = AtomicBoolean(false)
     private val isTranscribing = AtomicBoolean(false)
     private val isInDialog = AtomicBoolean(false)
+    private val manualDialogActive = AtomicBoolean(false)
     private val listenerPaused = AtomicBoolean(false)
     private var wakeLock: PowerManager.WakeLock? = null
     private var listenerThread: Thread? = null
@@ -332,6 +334,13 @@ class HermesListenerService : Service() {
         return monitor
     }
 
+    private fun wakeWordEnabled(): Boolean =
+        getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_WAKE_WORD_ENABLED, false)
+
+    private fun phoneControlEnabled(): Boolean =
+        getSharedPreferences(PREFS, MODE_PRIVATE)
+            .getBoolean("flutter.hermes_phone_control_enabled", false)
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // КРИТИЧНО: startForeground() надо вызывать в первые 5 секунд жизни сервиса,
         // иначе Android кидает ForegroundServiceDidNotStartInTimeException и краш.
@@ -346,9 +355,10 @@ class HermesListenerService : Service() {
         when (intent?.action) {
             ACTION_STOP -> { stopSelf(); return START_NOT_STICKY }
             ACTION_TRIGGER_DIALOG -> {
-                startListening()  // если ещё не запущен — запустим
+                if (wakeWordEnabled()) startListening() else startEdgeTts()
                 if (isInDialog.compareAndSet(false, true)) {
-                    thread(name = "HermesDialogManual") { runDialog() }
+                    manualDialogActive.set(true)
+                    thread(name = "HermesDialogManual") { runDialog(manual = true) }
                 }
             }
             ACTION_INTERRUPT_TTS -> {
@@ -358,14 +368,25 @@ class HermesListenerService : Service() {
                 try { tts?.stop() } catch (_: Exception) {}
             }
             ACTION_REFRESH_PHONE_BRIDGE -> refreshPhoneBridge()
-            else -> startListening()
+            else -> {
+                if (wakeWordEnabled()) {
+                    startListening()
+                } else if (phoneControlEnabled()) {
+                    startPhoneBridge()
+                } else {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+            }
         }
-        return START_STICKY
+        return if (wakeWordEnabled() || phoneControlEnabled()) START_STICKY
+        else START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun startListening() {
+        if (!wakeWordEnabled()) return
         // startForeground уже вызван в onStartCommand — здесь не дублируем
         if (wakeLock == null) {
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -557,7 +578,7 @@ class HermesListenerService : Service() {
         if (result == null) {
             logWatchdog("STT self-test FAIL (транскрипция вернула null)")
         } else {
-            logWatchdog("STT self-test OK (text='${result.take(40)}')")
+            logWatchdog("STT self-test OK")
         }
     }
 
@@ -576,7 +597,7 @@ class HermesListenerService : Service() {
         if (answer.isBlank()) {
             logWatchdog("brain self-test FAIL (empty, ${took}ms)")
         } else {
-            logWatchdog("brain self-test OK (${took}ms, '${answer.take(40)}')")
+            logWatchdog("brain self-test OK (${took}ms)")
         }
     }
 
@@ -830,7 +851,7 @@ class HermesListenerService : Service() {
         val text = russianLowercase(raw)
 
         if (raw.isNotEmpty() && !isWhisperHallucination(text)) {
-            android.util.Log.d("HermesListener", "heard='$raw' norm='$text'")
+            android.util.Log.d("HermesListener", "Speech recognized")
             sendDebugToFlutter(raw)
             val matched = WAKE_WORDS.firstOrNull { text.contains(it) }
             // АТОМАРНО: compareAndSet вместо get()+set() — иначе между проверкой
@@ -921,7 +942,7 @@ class HermesListenerService : Service() {
      *   Выход если: 7 сек тишины ИЛИ юзер сказал "хватит/стоп/спасибо пока"
      * История сообщений сохраняется между итерациями для follow-up вопросов.
      */
-    private fun runDialog() {
+    private fun runDialog(manual: Boolean = false) {
         listenerPaused.set(true)
         dialogStartMs.set(System.currentTimeMillis())
         Thread.sleep(400)
@@ -954,7 +975,7 @@ class HermesListenerService : Service() {
             // recordUtterance (~350мс) прикрывает эхо. Экономия ~300мс до старта записи.
             Thread.sleep(250)
 
-            while (isRunning.get()) {
+            while (isRunning.get() || (manual && manualDialogActive.get())) {
                 // Запись вопроса
                 HermesOverlay.get(this).updateStatus(
                     if (firstTurn) "🎙 Говори..." else "🎙 Продолжай..."
@@ -1102,8 +1123,10 @@ class HermesListenerService : Service() {
             HermesOverlay.get(this).hide()
         } finally {
             isInDialog.set(false)
+            manualDialogActive.set(false)
             listenerPaused.set(false)
             dialogStartMs.set(0)
+            if (manual && !wakeWordEnabled() && !phoneControlEnabled()) stopSelf()
         }
     }
 
@@ -1364,7 +1387,9 @@ class HermesListenerService : Service() {
             return null
         }
         val apiKey = resolvedKey(prefs)
-        val sttUrl = serverUrl.replace(Regex(":\\d+$"), ":8643") +
+        val sttBase = if (apiKey.startsWith("trk_live_")) serverUrl
+            else serverUrl.replace(Regex(":\\d+$"), ":8643")
+        val sttUrl = sttBase +
             "/v1/audio/transcriptions"
 
         return try {
@@ -1377,39 +1402,42 @@ class HermesListenerService : Service() {
                 if (apiKey.isNotBlank()) {
                     setRequestProperty("Authorization", "Bearer $apiKey")
                 }
+                setRequestProperty("X-Hermes-Session-Id", resolvedSessionId(prefs))
+                instanceFollowRedirects = false
                 setRequestProperty(
                     "Content-Type",
                     "multipart/form-data; boundary=$boundary"
                 )
             }
 
-            DataOutputStream(conn.outputStream).use { out ->
-                out.writeBytes("--$boundary\r\n")
-                out.writeBytes("Content-Disposition: form-data; name=\"language\"\r\n\r\n")
-                out.writeBytes("ru\r\n")
-                out.writeBytes("--$boundary\r\n")
-                out.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"voice.wav\"\r\n")
-                out.writeBytes("Content-Type: audio/wav\r\n\r\n")
-                out.write(wav)
-                out.writeBytes("\r\n--$boundary--\r\n")
-                out.flush()
-            }
+            try {
+                DataOutputStream(conn.outputStream).use { out ->
+                    out.writeBytes("--$boundary\r\n")
+                    out.writeBytes("Content-Disposition: form-data; name=\"language\"\r\n\r\n")
+                    out.writeBytes("ru\r\n")
+                    out.writeBytes("--$boundary\r\n")
+                    out.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"voice.wav\"\r\n")
+                    out.writeBytes("Content-Type: audio/wav\r\n\r\n")
+                    out.write(wav)
+                    out.writeBytes("\r\n--$boundary--\r\n")
+                    out.flush()
+                }
 
-            if (conn.responseCode == 200) {
-                val resp = conn.inputStream.bufferedReader().readText()
-                // Используем JSONObject вместо ручного regex — он сам декодирует \uXXXX
-                try {
-                    JSONObject(resp).optString("text", "")
-                } catch (e: Exception) {
-                    android.util.Log.e("HermesListener", "STT json parse err: ${e.message}")
+                if (conn.responseCode == 200) {
+                    val resp = conn.inputStream.bufferedReader().use { it.readText() }
+                    // Используем JSONObject вместо ручного regex — он сам декодирует \uXXXX
+                    try {
+                        JSONObject(resp).optString("text", "")
+                    } catch (e: Exception) {
+                        android.util.Log.e("HermesListener", "STT json parse err: ${e.message}")
+                        null
+                    }
+                } else {
+                    android.util.Log.e("HermesListener", "STT ${conn.responseCode}")
                     null
                 }
-            } else {
-                android.util.Log.e(
-                    "HermesListener",
-                    "STT ${conn.responseCode}: ${conn.errorStream?.bufferedReader()?.readText()}"
-                )
-                null
+            } finally {
+                conn.disconnect()
             }
         } catch (e: Exception) {
             android.util.Log.e("HermesListener", "STT err: ${e.message}")
@@ -1474,6 +1502,7 @@ class HermesListenerService : Service() {
 
     override fun onDestroy() {
         isRunning.set(false)
+        manualDialogActive.set(false)
         listenerThread?.interrupt()
         watchdogThread?.interrupt()
         watchdogThread = null
@@ -1491,7 +1520,12 @@ class HermesListenerService : Service() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        // Перезапустить сервис если пользователь свайпнул приложение
+        // Restart only capabilities the user explicitly left enabled.
+        if (!wakeWordEnabled() && !phoneControlEnabled()) {
+            stopSelf()
+            super.onTaskRemoved(rootIntent)
+            return
+        }
         val restartIntent = Intent(applicationContext, HermesListenerService::class.java)
             .apply { action = ACTION_START }
         val pi = PendingIntent.getService(
@@ -1521,9 +1555,13 @@ class HermesListenerService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val wakeEnabled = wakeWordEnabled()
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Тройка слушает")
-            .setContentText("Скажи «Тройка» чтобы активировать")
+            .setContentTitle(if (wakeEnabled) "Тройка слушает" else "Тройка активна")
+            .setContentText(
+                if (wakeEnabled) "Скажи «Тройка» чтобы активировать"
+                else "Идёт голосовой диалог или подключено управление телефоном"
+            )
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentIntent(openPi)
             .addAction(android.R.drawable.ic_delete, "Остановить", stopPi)

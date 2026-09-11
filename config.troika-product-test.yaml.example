@@ -15,6 +15,15 @@ platform_toolsets:
   api_server:
     - troika-product
 
+platforms:
+  api_server:
+    enabled: true
+    extra:
+      # Server-side kill switch; no APK release is needed to disable voice.
+      product_voice_enabled: true
+      # Private loopback/container worker. Clients never choose this address.
+      product_stt_url: http://127.0.0.1:8766
+
 agent:
   max_turns: 90
   tool_use_enforcement: true
@@ -27,4 +36,3 @@ stt:
 openrouter:
   response_cache: true
   response_cache_ttl: 300
-

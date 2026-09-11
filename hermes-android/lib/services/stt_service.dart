@@ -11,16 +11,12 @@ class SttService {
   static const Duration _timeout = Duration(seconds: 30);
 
   Future<String> transcribe(File audioFile) async {
-    // STT прокси работает на порту 8643 (рядом с Hermes 8642)
-    final baseUrl = HermesConfig.serverUrl.replaceFirst(
-      RegExp(r':\d+$'),
-      ':8643',
-    );
-    final uri = Uri.parse('$baseUrl/v1/audio/transcriptions');
+    final uri = HermesConfig.transcriptionUri;
 
     try {
       final request = http.MultipartRequest('POST', uri)
         ..headers['Authorization'] = 'Bearer ${HermesConfig.apiKey}'
+        ..headers['X-Hermes-Session-Id'] = HermesConfig.sessionId
         ..fields['language'] = 'ru'
         ..files.add(await http.MultipartFile.fromPath(
           'file',
@@ -31,7 +27,8 @@ class SttService {
         ));
 
       final streamed = await request.send().timeout(_timeout);
-      final response = await http.Response.fromStream(streamed);
+      final response =
+          await http.Response.fromStream(streamed).timeout(_timeout);
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -39,10 +36,10 @@ class SttService {
       }
 
       throw HermesApiException(
-          'STT ошибка ${response.statusCode}: ${response.body}');
+          'Распознавание речи недоступно (${response.statusCode}).');
     } on SocketException {
       throw HermesApiException(
-          'Нет связи с STT сервером.\nЗапусти на PC: python stt_proxy_server.py');
+          'Нет связи с сервером распознавания речи. Проверь подключение.');
     } on TimeoutException {
       throw HermesApiException('STT не отвечает.');
     }
