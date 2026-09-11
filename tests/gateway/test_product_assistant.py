@@ -30,6 +30,8 @@ def test_assistant_api_isolated_and_idempotent(tmp_path):
         second = registry.issue_device_token(registry.create_device(second_user, name="B", platform="android"))
         with patch("tools.job_runner.cleanup_orphan_jobs", return_value=0), patch("tools.job_runner.ensure_watchdog_started"):
             assert await adapter.connect()
+        event_task = adapter._assistant_event_task
+        assert event_task is not None
         try:
             port = adapter._site._server.sockets[0].getsockname()[1]
             async with ClientSession(base_url=f"http://127.0.0.1:{port}") as client:
@@ -55,6 +57,7 @@ def test_assistant_api_isolated_and_idempotent(tmp_path):
                 assert len(messages) == 0
         finally:
             await adapter.disconnect()
+        assert event_task.done()
     asyncio.run(scenario())
 
 

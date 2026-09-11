@@ -856,6 +856,16 @@ class APIServerAdapter(BasePlatformAdapter):
         self._access_registry = None
         self._artifact_store = None
         self._proactive_store = None
+        self._assistant_event_task: Optional[asyncio.Task[Any]] = None
+        try:
+            assistant_interval = float(
+                extra.get("product_assistant_event_interval_seconds", 60)
+            )
+        except (TypeError, ValueError):
+            assistant_interval = 60.0
+        self._assistant_event_interval = (
+            assistant_interval if 15 <= assistant_interval <= 3600 else 60.0
+        )
         self._product_auth_error: Optional[str] = None
         self._product_artifact_error: Optional[str] = None
         self._product_artifact_db: Optional[Path] = None
@@ -4996,6 +5006,25 @@ class APIServerAdapter(BasePlatformAdapter):
                 self._run_statuses.pop(run_id, None)
                 self._run_owners.pop(run_id, None)
 
+    async def _run_assistant_event_engine(self) -> None:
+        """Create useful private inbox events without external side effects."""
+        while True:
+            try:
+                generated = await asyncio.to_thread(
+                    self._proactive_store.generate_due_events
+                )
+                if generated:
+                    logger.info(
+                        "[%s] generated %d private assistant inbox event(s)",
+                        self.name,
+                        generated,
+                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("[%s] assistant event scan failed", self.name)
+            await asyncio.sleep(self._assistant_event_interval)
+
     # ------------------------------------------------------------------
     # BasePlatformAdapter interface
     # ------------------------------------------------------------------
@@ -5170,6 +5199,11 @@ class APIServerAdapter(BasePlatformAdapter):
             await self._site.start()
 
             self._mark_connected()
+            if self._proactive_store is not None:
+                event_task = asyncio.create_task(self._run_assistant_event_engine())
+                self._assistant_event_task = event_task
+                self._background_tasks.add(event_task)
+                event_task.add_done_callback(self._background_tasks.discard)
             if not self._api_key:
                 logger.warning(
                     "[%s] ⚠️  No API key configured (API_SERVER_KEY / platforms.api_server.key). "
@@ -5191,6 +5225,14 @@ class APIServerAdapter(BasePlatformAdapter):
     async def disconnect(self) -> None:
         """Stop the aiohttp web server."""
         self._mark_disconnected()
+        event_task = self._assistant_event_task
+        self._assistant_event_task = None
+        if event_task is not None and not event_task.done():
+            event_task.cancel()
+            try:
+                await event_task
+            except asyncio.CancelledError:
+                pass
         if self._site:
             await self._site.stop()
             self._site = None

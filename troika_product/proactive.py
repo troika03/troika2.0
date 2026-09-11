@@ -45,6 +45,10 @@ def _normalize_social(value: str) -> str:
     return re.sub(r"[^\wа-яё]+", " ", value.lower()).strip()
 
 
+def _bounded(value: str, maximum: int) -> str:
+    return value if len(value) <= maximum else value[: maximum - 1].rstrip() + "…"
+
+
 def _clean_text(value: object, name: str, *, minimum: int, maximum: int) -> str:
     if not isinstance(value, str):
         raise ValueError(f"{name} must be text")
@@ -586,6 +590,15 @@ class ProactiveStore:
                 "WHERE id = ? AND user_id = ?",
                 (clean_status, now, clean_id, principal.user_id),
             )
+            connection.execute(
+                "UPDATE troika_projects SET updated_at = ? WHERE id = ? AND user_id = ?",
+                (now, row["project_id"], principal.user_id),
+            )
+            connection.execute(
+                "DELETE FROM troika_inbox_messages WHERE user_id = ? AND task_id = ? "
+                "AND kind = 'proactive' AND delivered_at IS NULL",
+                (principal.user_id, clean_id),
+            )
             if clean_status in {"completed", "cancelled"}:
                 connection.execute(
                     "DELETE FROM troika_inbox_messages WHERE user_id = ? AND task_id = ? "
@@ -708,6 +721,193 @@ class ProactiveStore:
                 "WHERE id = ? AND user_id = ? AND delivered_at IS NULL",
                 (now, row["id"], user_id),
             )
+
+    def _insert_generated_event(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        user_id: str,
+        category: str,
+        title: str,
+        body: str,
+        reason: str,
+        project_id: str,
+        task_id: str | None,
+        requires_approval: bool,
+        idempotency_key: str,
+        now: float,
+    ) -> bool:
+        cursor = connection.execute(
+            "INSERT OR IGNORE INTO troika_inbox_messages "
+            "(id, user_id, kind, category, title, body, reason, project_id, task_id, "
+            "available_at, requires_approval, idempotency_key, created_at) "
+            "VALUES (?, ?, 'proactive', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                self._id("msg"),
+                user_id,
+                category,
+                _bounded(title, 160),
+                _bounded(body, 1000),
+                _bounded(reason, 300),
+                project_id,
+                task_id,
+                now,
+                requires_approval,
+                idempotency_key,
+                now,
+            ),
+        )
+        return cursor.rowcount == 1
+
+    def generate_due_events(self, *, now: datetime | None = None) -> int:
+        """Generate deterministic in-app follow-ups for active opted-in users."""
+        instant = now or datetime.now(timezone.utc)
+        if instant.tzinfo is None or instant.utcoffset() is None:
+            raise ValueError("now must be timezone-aware")
+        timestamp = instant.astimezone(timezone.utc).timestamp()
+        generated = 0
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            user_rows = connection.execute(
+                "SELECT DISTINCT users.id FROM troika_users AS users "
+                "JOIN troika_devices AS devices ON devices.user_id = users.id "
+                "JOIN troika_api_tokens AS tokens ON tokens.device_id = devices.id "
+                "WHERE users.status = 'active' AND devices.status = 'active' "
+                "AND tokens.revoked_at IS NULL "
+                "AND (tokens.expires_at IS NULL OR tokens.expires_at > ?)",
+                (timestamp,),
+            ).fetchall()
+            for user_row in user_rows:
+                user_id = str(user_row["id"])
+                try:
+                    preferences = self._preferences(connection, user_id)
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    continue
+                if not preferences.proactive_enabled:
+                    continue
+                pending_count = int(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM troika_inbox_messages WHERE user_id = ? "
+                        "AND kind = 'proactive' AND delivered_at IS NULL",
+                        (user_id,),
+                    ).fetchone()[0]
+                )
+                event_capacity = max(0, 3 - pending_count)
+                if event_capacity == 0:
+                    continue
+
+                task_rows = connection.execute(
+                    "SELECT tasks.*, projects.name AS project_name "
+                    "FROM troika_project_tasks AS tasks "
+                    "JOIN troika_projects AS projects ON projects.id = tasks.project_id "
+                    "WHERE tasks.user_id = ? AND projects.user_id = ? "
+                    "AND projects.status NOT IN ('completed', 'archived') "
+                    "AND tasks.status NOT IN ('completed', 'cancelled') "
+                    "ORDER BY tasks.updated_at LIMIT 500",
+                    (user_id, user_id),
+                ).fetchall()
+                projects_with_task_event: set[str] = set()
+                user_generated = 0
+                for task in task_rows:
+                    due_at = float(task["due_at"]) if task["due_at"] is not None else None
+                    due_soon = due_at is not None and timestamp <= due_at <= timestamp + 86_400
+                    category = ""
+                    title = ""
+                    body = ""
+                    reason = ""
+                    requires_approval = False
+                    event_version = ""
+                    if task["action_mode"] == "propose_action" and due_soon:
+                        category = "decision_needed"
+                        title = f"Нужно решение: {task['title']}"
+                        body = (
+                            f"В проекте «{task['project_name']}» ожидается решение: "
+                            f"{task['action_summary']}. Тройка ничего не выполнит без "
+                            "отдельного подтверждения."
+                        )
+                        reason = "До срока задачи осталось меньше суток."
+                        requires_approval = True
+                        event_version = f"decision:{due_at:.0f}"
+                    elif task["status"] == "blocked" and float(task["updated_at"]) <= timestamp - 86_400:
+                        category = "blocked_task"
+                        title = f"Задача заблокирована: {task['title']}"
+                        body = (
+                            f"В проекте «{task['project_name']}» блокировка не менялась "
+                            "больше суток. Нужен следующий шаг или решение."
+                        )
+                        reason = "Задача остаётся в статусе blocked больше 24 часов."
+                        event_version = f"blocked:{float(task['updated_at']):.0f}"
+                    elif due_soon:
+                        category = "deadline"
+                        title = f"Приближается срок: {task['title']}"
+                        body = (
+                            f"В проекте «{task['project_name']}» до срока осталось меньше "
+                            "суток. Проверь статус задачи или перенеси срок."
+                        )
+                        reason = "Срок открытой задачи наступит в течение 24 часов."
+                        event_version = f"deadline:{due_at:.0f}"
+                    if not category:
+                        continue
+                    if self._insert_generated_event(
+                        connection,
+                        user_id=user_id,
+                        category=category,
+                        title=title,
+                        body=body,
+                        reason=reason,
+                        project_id=str(task["project_id"]),
+                        task_id=str(task["id"]),
+                        requires_approval=requires_approval,
+                        idempotency_key=f"event:{event_version}:{task['id']}",
+                        now=timestamp,
+                    ):
+                        generated += 1
+                        user_generated += 1
+                        projects_with_task_event.add(str(task["project_id"]))
+                        if user_generated >= event_capacity:
+                            break
+
+                if user_generated >= event_capacity:
+                    continue
+                stale_projects = connection.execute(
+                    "SELECT projects.id, projects.name, projects.updated_at, "
+                    "COUNT(tasks.id) AS open_count "
+                    "FROM troika_projects AS projects "
+                    "JOIN troika_project_tasks AS tasks ON tasks.project_id = projects.id "
+                    "AND tasks.user_id = projects.user_id "
+                    "AND tasks.status NOT IN ('completed', 'cancelled') "
+                    "WHERE projects.user_id = ? AND projects.is_active = 1 "
+                    "AND projects.status = 'active' AND projects.updated_at <= ? "
+                    "GROUP BY projects.id, projects.name, projects.updated_at",
+                    (user_id, timestamp - 7 * 86_400),
+                ).fetchall()
+                for project in stale_projects:
+                    project_id = str(project["id"])
+                    if project_id in projects_with_task_event:
+                        continue
+                    if self._insert_generated_event(
+                        connection,
+                        user_id=user_id,
+                        category="progress_review",
+                        title=f"Пора проверить проект: {project['name']}",
+                        body=(
+                            f"В проекте осталось открытых задач: {int(project['open_count'])}. "
+                            "Обновлений не было неделю — выбери следующий конкретный шаг."
+                        ),
+                        reason="Активный проект с открытыми задачами не обновлялся 7 дней.",
+                        project_id=project_id,
+                        task_id=None,
+                        requires_approval=False,
+                        idempotency_key=(
+                            f"event:progress:{project_id}:{float(project['updated_at']):.0f}"
+                        ),
+                        now=timestamp,
+                    ):
+                        generated += 1
+                        user_generated += 1
+                        if user_generated >= event_capacity:
+                            break
+        return generated
 
     def list_inbox(
         self, principal: AccessPrincipal, *, unread_only: bool = False,

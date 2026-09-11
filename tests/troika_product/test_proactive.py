@@ -80,3 +80,92 @@ def test_proactive_requires_concrete_context_and_caps_delivery(tmp_path):
         store.enqueue_message(first, kind="proactive", category="progress_review", title=f"Разбор проекта {number}", body=f"Проверь измеримый результат проекта {number}.", reason="Плановый обзор прогресса проекта.", project_id=project.id, available_at=now.isoformat(), idempotency_key=f"review-{number}")
     delivered = store.list_inbox(first, now=now)
     assert len(delivered) == 3
+
+
+def test_event_scan_generates_only_concrete_idempotent_follow_ups(tmp_path):
+    access, store, first, _ = _setup(tmp_path)
+    project = store.create_project(first, name="Релиз")
+    access.set_notification_preferences(
+        first, NotificationPreferences(proactive_enabled=True)
+    )
+    scan_at = datetime.now(timezone.utc) + timedelta(days=2)
+    store.create_task(
+        first,
+        project_id=project.id,
+        title="Закрыть тесты",
+        due_at=(scan_at + timedelta(hours=12)).isoformat(),
+        idempotency_key="deadline-task",
+    )
+    store.create_task(
+        first,
+        project_id=project.id,
+        title="Опубликовать сборку",
+        due_at=(scan_at + timedelta(hours=6)).isoformat(),
+        action_mode="propose_action",
+        action_summary="опубликовать проверенную Android-сборку",
+        idempotency_key="decision-task",
+    )
+    blocked = store.create_task(
+        first,
+        project_id=project.id,
+        title="Получить доступ",
+        idempotency_key="blocked-task",
+    )
+    store.update_task(first, blocked.id, status="blocked")
+
+    assert store.generate_due_events(now=scan_at) == 3
+    assert store.generate_due_events(now=scan_at) == 0
+    delivered = store.list_inbox(first, now=scan_at)
+    assert {item.category for item in delivered} == {
+        "deadline",
+        "decision_needed",
+        "blocked_task",
+    }
+    decision = next(item for item in delivered if item.category == "decision_needed")
+    assert decision.requires_approval is True
+    assert "отдельного подтверждения" in decision.body
+
+
+def test_event_scan_requires_opt_in_and_an_active_token(tmp_path):
+    access = AccessRegistry(tmp_path / "access.db")
+    user_id = access.create_user("owner@example.com")
+    device_id = access.create_device(user_id, name="Phone", platform="android")
+    token = access.issue_device_token(device_id)
+    principal = access.authenticate(token)
+    assert principal is not None
+    store = ProactiveStore(access.database_path)
+    project = store.create_project(principal, name="Проект")
+    scan_at = datetime.now(timezone.utc) + timedelta(hours=1)
+    store.create_task(
+        principal,
+        project_id=project.id,
+        title="Проверить срок",
+        due_at=(scan_at + timedelta(hours=2)).isoformat(),
+        idempotency_key="token-lifecycle-task",
+    )
+    assert store.generate_due_events(now=scan_at) == 0
+    access.set_notification_preferences(
+        principal, NotificationPreferences(proactive_enabled=True)
+    )
+    assert access.revoke_token(token) is True
+    assert store.generate_due_events(now=scan_at) == 0
+
+
+def test_event_scan_reviews_only_stale_active_projects(tmp_path):
+    access, store, first, _ = _setup(tmp_path)
+    project = store.create_project(first, name="Долгий проект")
+    store.create_task(
+        first,
+        project_id=project.id,
+        title="Выбрать следующий шаг",
+        idempotency_key="stale-project-task",
+    )
+    access.set_notification_preferences(
+        first, NotificationPreferences(proactive_enabled=True)
+    )
+    scan_at = datetime.now(timezone.utc) + timedelta(days=8)
+    assert store.generate_due_events(now=scan_at) == 1
+    messages = store.list_inbox(first, now=scan_at)
+    assert len(messages) == 1
+    assert messages[0].category == "progress_review"
+    assert "открытых задач: 1" in messages[0].body
