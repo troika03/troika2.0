@@ -189,14 +189,25 @@
 
 ## Ближайший порядок работы
 
-1. Довести проактивного личного ассистента: tenant-owned очередь/in-app inbox,
+1. Восстановить голосовой E2E на текущем Android: STT proxy, TTS, перебивание и
+   единая tenant-owned сессия.
+2. Довести проактивного личного ассистента: tenant-owned очередь/in-app inbox,
    доставка и Android UI поверх уже готовых notification preferences и quiet
    hours, без global jobs.
-2. Расширять paired-phone slice только после явного privacy review каждой категории (calendar, phone files, screen, calls/SMS).
-3. Настроить воспроизводимую среду и минимальный зелёный CI baseline; отдельно обновить Android Gradle/Kotlin до будущих требований Flutter.
-4. Заменить legacy response store на tenant-owned storage либо оставить endpoint выключенным до этой миграции.
-5. Добавить lifecycle удаления данных: artifacts, saved locations, диалоги, memory и account deletion.
-6. Спроектировать subscription billing: продукты, платежные периоды, webhooks, отмена, возвраты и поддержка.
+3. Реализовать безопасный `screen.snapshot` через MediaProjection. Только после
+   physical E2E и threat-model review переходить к WebRTC screen assist и
+   CameraX live vision.
+4. Расширять paired-phone control после отдельного privacy review каждой
+   capability. Просмотр экрана, управление UI, камера, микрофон, clipboard,
+   календарь, файлы, звонки и SMS не объединять в одно разрешение.
+5. Настроить воспроизводимую среду и минимальный зелёный CI baseline; отдельно
+   обновить Android Gradle/Kotlin до будущих требований Flutter.
+6. Заменить legacy response store на tenant-owned storage либо оставить endpoint
+   выключенным до этой миграции.
+7. Добавить lifecycle удаления данных: artifacts, saved locations, диалоги,
+   memory, временные vision-данные и account deletion.
+8. Спроектировать subscription billing: продукты, платежные периоды, webhooks,
+   отмена, возвраты и поддержка.
 
 ## Проверенный рабочий срез и бесплатная модель (2026-09-10)
 
@@ -242,6 +253,10 @@
 - Нет подписок, платежей, webhook-биллинга, отмен и возвратов.
 - Проактивные личные сообщения/начало разговора ещё не возвращены в безопасной
   multi-user модели.
+- Зрение с камеры или экрана в реальном времени ещё не реализовано. Есть старые
+  screenshot/read-screen заготовки и безопасное открытие camera app, но они не
+  дают product live vision. Целевая архитектура, consent и security gates
+  зафиксированы в `docs/TROIKA_CAPABILITY_RESTORATION_PLAN.md`.
 - Физический Android-телефон успешно авторизован через ADB; актуальный debug APK
   установлен, текстовый чат и `android_status` проверены. Текущий USB-туннель —
   только dev-транспорт: production потребует домен, HTTPS/WSS и нормальный
@@ -296,4 +311,8 @@
       чат, device-token auth, WebSocket и `android_status`.
 - [ ] Пройден physical tap тест сохранения artifact в выбранную папку Android
       (APK установлена, но ADB нестабилен во время UI-проверки).
+- [x] Зафиксирован подробный план восстановления возможностей и безопасного
+      live vision для экрана/камеры.
+- [ ] Реализован и проверен `screen.snapshot` с явным MediaProjection consent.
+- [ ] Реализованы и проверены WebRTC screen assist и CameraX live vision.
 - [ ] Готов production deployment и self-service подписочный контур.
