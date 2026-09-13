@@ -308,21 +308,45 @@
   прямо сообщающего об отправке настроенной vision-модели.
 - Проверено: 108 связанных Python security/API тестов, Ruff, Flutter tests 6/6,
   Flutter analyze без ошибок (31 прежнее info), debug APK build. Physical E2E
-  MediaProjection на Samsung ещё не пройден, поэтому Фаза 3 не считается
-  полностью закрытой и WebRTC/CameraX live начинать нельзя.
+  MediaProjection на Samsung затем пройден отдельно; детали ниже.
+
+## Проверено: physical E2E screen.snapshot на Samsung (2026-09-13)
+
+- На Samsung SM-A225F установлен актуальный debug APK. Физически проверены
+  системный MediaProjection consent, foreground service и кнопка «Остановить»:
+  Stop отзывает projection до отправки и удаляет `ScreenCaptureService`.
+- Полный product API путь прошёл успешно: личный device token, WebSocket,
+  `/v1/runs`, отдельный approval `once`, один JPEG-кадр, внешний opt-in
+  vision provider и финальный текстовый анализ. Модель точно распознала экран
+  «Помощник», его задачи и настройки; после кадра MediaProjection и capture
+  service остановились автоматически.
+- Physical fail-closed также подтверждён: при выключенном или отвязанном
+  Accessibility guard команда вернула
+  `accessibility_required_for_sensitive_screen_guard` и не передала кадр.
+  После явного включения сервиса безопасный экран был обработан.
+- В интеграции найден и исправлен дефект регистрации: async handler был без
+  `is_async=True`, поэтому основной tool loop получал coroutine вместо JSON.
+  Добавлен регрессионный тест; связанный security/API набор после исправления:
+  `24 passed` (2 прежних DeprecationWarning вне нового кода).
+- В `troika_vision_sessions` после успешного вызова есть только metadata и
+  статус `consumed`; колонок изображения нет. Поиск в runtime-логах не нашёл
+  data URL или JPEG base64. Nonce и device token в вывод не попадали.
+- Реальный банковский/password/OTP экран пока не использовался в physical
+  тесте. До его безопасной проверки и threat-model review Фаза 3 остаётся
+  закрытой beta; `screen.live` и CameraX live не начинаем.
 
 ## Ближайший порядок работы
 
 1. Повторить на Samsung ручную проверку barge-in и реального обрыва сети;
    настроить VAD/эхоподавление по результату, не меняя security boundary.
-2. После подключения Samsung физически проверить Android-экран «Помощник» и
-   фоновый event engine. Затем пройти MediaProjection consent для
-   `screen.snapshot`; retention/account deletion и push token lifecycle остаются
-   отдельными этапами до включения push.
-3. Пройти physical E2E готового `screen.snapshot`: consent, Stop до отправки,
-   sensitive-screen block, один кадр и реальный opt-in vision provider. Только
-   после этого и threat-model review переходить к WebRTC screen assist и
-   CameraX live vision.
+2. Физически проверить Android-экран «Помощник» и фоновый event engine;
+   retention/account deletion и push token lifecycle остаются отдельными
+   этапами до включения push.
+3. Завершить physical security-проверку `screen.snapshot` на специально
+   подготовленном sensitive-screen fixture и провести threat-model review.
+   Consent, Stop, fail-closed Accessibility guard, один кадр и реальный opt-in
+   vision provider уже проверены. Только после review переходить к WebRTC
+   screen assist и CameraX live vision.
 4. Расширять paired-phone control после отдельного privacy review каждой
    capability. Просмотр экрана, управление UI, камера, микрофон, clipboard,
    календарь, файлы, звонки и SMS не объединять в одно разрешение.
@@ -452,8 +476,10 @@
 - [x] Реализована default-off основа `screen.snapshot` с одноразовой
       user/device session, MediaProjection consent, Stop, size cap, policy guard
       и отдельным toolset.
-- [ ] Пройден physical E2E `screen.snapshot` на Samsung с реальным consent и
-      opt-in vision provider.
+- [x] Пройден physical E2E `screen.snapshot` на Samsung: реальный consent,
+      Stop, fail-closed Accessibility guard, один кадр и opt-in vision provider.
+- [ ] Пройден отдельный physical sensitive-screen fixture и threat-model review
+      перед переходом к live vision.
 - [ ] Реализованы и проверены WebRTC screen assist и CameraX live vision.
 - [x] Фоновый event engine создаёт осмысленные follow-up по срокам, блокировкам,
       решениям и прогрессу только при opt-in и действующем device token.

@@ -59,6 +59,12 @@ def test_screen_snapshot_requires_both_feature_flags():
         clear_session_override("TROIKA_PRODUCT_SCREEN_SNAPSHOT_ENABLED")
 
 
+def test_screen_snapshot_registry_bridges_async_handler():
+    entry = troika_screen_tool.registry.get_entry("troika_screen_snapshot")
+    assert entry is not None
+    assert entry.is_async is True
+
+
 def test_screen_snapshot_returns_analysis_without_raw_frame(tmp_path, monkeypatch):
     database, principal = _identity(tmp_path)
     fake_bridge = _FakeBridge()

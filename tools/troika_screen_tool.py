@@ -226,5 +226,6 @@ registry.register(
     schema=SCHEMA,
     handler=_handle,
     check_fn=_available,
+    is_async=True,
     emoji="👁️",
 )

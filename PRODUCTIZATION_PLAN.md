@@ -74,8 +74,9 @@
 - Внешние мессенджеры, Telegram-автоматизация, отправка сообщений.
 - Генерация медиа, тяжёлые coder-задачи, браузерная автоматизация.
 - Одиночный снимок экрана: реализован с MediaProjection, одноразовой
-  user/device session, Stop и лимитом кадра; остаётся выключенным до physical
-  E2E и явного opt-in на конкретный vision provider.
+  user/device session, Stop и лимитом кадра. Physical E2E безопасного экрана и
+  opt-in vision provider пройден; функция остаётся выключенной по умолчанию до
+  sensitive-screen fixture и threat-model review.
 
 ### Полностью выключить на старте
 

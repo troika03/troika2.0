@@ -374,9 +374,15 @@ Play Integrity можно использовать как дополнитель
   является явным operator opt-in на отправку кадра настроенному vision provider;
   каждый кадр дополнительно требует пользовательского approval с описанием
   последствия.
-- Автоматические security-тесты и debug APK build пройдены. Готовность Фазы 3
-  пока не закрыта: нужен physical E2E системного consent, кнопки Stop,
-  sensitive-screen block и реального vision provider на Samsung.
+- Physical E2E на Samsung SM-A225F пройден: системный consent, Stop до
+  отправки, fail-closed при недоступном Accessibility guard, отдельный approval,
+  один кадр, реальный opt-in vision provider и автоматическая остановка после
+  кадра. Raw frame не найден в БД и runtime-логах. По результату исправлена
+  регистрация async tool handler (`is_async=True`) и добавлен регрессионный
+  тест.
+- Для полного закрытия Фазы 3 остаются physical sensitive-screen fixture и
+  threat-model review. До них feature flags остаются выключенными по умолчанию,
+  а WebRTC/CameraX live не начинается.
 
 **Задачи**
 
