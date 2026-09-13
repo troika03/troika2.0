@@ -273,9 +273,13 @@
 - Проверено: `80 passed` для связанного product/API среза; `ruff`, `py_compile`
   и `git diff --check`; Flutter tests 6/6; полный
   `flutter analyze --no-fatal-infos` без ошибок и с 31 прежним
-  informational-замечанием; debug APK собрана. `adb devices -l` не показал
-  устройств, поэтому обновлённый экран, physical tap, MediaProjection consent и
-  `screen.snapshot` остаются физически непроверенными.
+  informational-замечанием; debug APK собрана.
+- Physical E2E на Samsung SM-A225F пройден 2026-09-13. Временный проект и задача
+  со сроком создали детерминированное сообщение `decision_needed`: UI показал
+  конкретную задачу, проект, причину «до срока меньше суток» и предупреждение,
+  что действие не выполнится без отдельного подтверждения. `requires_approval`
+  был `true`. После проверки fixture удалён, исходные reminders/proactive/quiet
+  hours восстановлены, inbox и список проектов снова пусты.
 
 ## Реализовано: безопасная основа screen.snapshot (2026-09-13)
 
@@ -343,9 +347,8 @@
 
 1. Повторить на Samsung ручную проверку barge-in и реального обрыва сети;
    настроить VAD/эхоподавление по результату, не меняя security boundary.
-2. Физически проверить Android-экран «Помощник» и фоновый event engine;
-   retention/account deletion и push token lifecycle остаются отдельными
-   этапами до включения push.
+2. Реализовать retention/account deletion и проверить push token lifecycle до
+   подключения push; in-app inbox и physical event-engine E2E уже работают.
 3. Перед реализацией WebRTC screen assist отдельно спроектировать signaling,
    TURN, hardware-backed device keys, heartbeat/revoke и изолированный vision
    worker. Закрытая snapshot beta не расширяет разрешение до live vision.
@@ -471,6 +474,9 @@
 - [x] Android получил экран «Помощник» с inbox, причинами сообщений, проектами,
       задачами, изменением статуса и настройкой времени reminders/proactive/quiet
       hours. Push намеренно не включён.
+- [x] Пройден physical E2E Android-экрана «Помощник» и фонового event engine:
+      конкретный `decision_needed`, причина, проект/задача и обязательный
+      approval показаны на Samsung.
 - [ ] Пройден physical tap тест сохранения artifact в выбранную папку Android
       (APK установлена, но ADB нестабилен во время UI-проверки).
 - [x] Зафиксирован подробный план восстановления возможностей и безопасного
