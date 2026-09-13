@@ -19,6 +19,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import java.util.TimeZone
 
 class MainActivity : FlutterActivity() {
 
@@ -135,6 +136,9 @@ class MainActivity : FlutterActivity() {
                     // Тройка знала где Миша даже когда запрос идёт из текстового чата
                     // (а не только через wake-word Kotlin-путь).
                     result.success(DeviceContext.asHeaderValue(applicationContext))
+                }
+                "getTimeZoneId" -> {
+                    result.success(TimeZone.getDefault().id)
                 }
                 "shareFile" -> {
                     val path = call.argument<String>("path") ?: ""

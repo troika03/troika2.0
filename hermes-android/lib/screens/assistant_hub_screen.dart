@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/hermes_api_service.dart';
 import '../theme/troika_theme.dart';
 
@@ -9,6 +10,7 @@ class AssistantHubScreen extends StatefulWidget {
 }
 
 class _AssistantHubScreenState extends State<AssistantHubScreen> {
+  static const _platform = MethodChannel('com.troika.hermes/background');
   final HermesApiService _api = HermesApiService();
   List<TroikaProject> _projects = const [];
   List<TroikaTask> _tasks = const [];
@@ -141,6 +143,7 @@ class _AssistantHubScreenState extends State<AssistantHubScreen> {
         initialTime: TimeOfDay(hour: now.hour, minute: now.minute));
     if (time == null) return null;
     return DateTime(date.year, date.month, date.day, time.hour, time.minute)
+        .toUtc()
         .toIso8601String();
   }
 
@@ -193,6 +196,48 @@ class _AssistantHubScreenState extends State<AssistantHubScreen> {
     } catch (error) {
       _showError(error.toString());
       await _load();
+    }
+  }
+
+  Future<void> _configureQuietHours() async {
+    final prefs = _preferences;
+    if (prefs == null) return;
+    TimeOfDay parse(String value) {
+      final parts = value.split(':');
+      return TimeOfDay(
+          hour: int.tryParse(parts.first) ?? 22,
+          minute: parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0);
+    }
+
+    final start = await showTimePicker(
+        context: context, initialTime: parse(prefs.quietStart));
+    if (start == null || !mounted) return;
+    final end = await showTimePicker(
+        context: context, initialTime: parse(prefs.quietEnd));
+    if (end == null) return;
+    String timezone = prefs.timezone;
+    try {
+      final detected = await _platform.invokeMethod<String>('getTimeZoneId');
+      if (detected == 'UTC' || (detected?.contains('/') ?? false)) {
+        timezone = detected!;
+      }
+    } catch (_) {}
+    String format(TimeOfDay value) =>
+        '${value.hour.toString().padLeft(2, '0')}:'
+        '${value.minute.toString().padLeft(2, '0')}';
+    await _savePreferences(prefs.copyWith(
+        quietHoursEnabled: true,
+        timezone: timezone,
+        quietStart: format(start),
+        quietEnd: format(end)));
+  }
+
+  Future<void> _updateTaskStatus(TroikaTask task, String status) async {
+    try {
+      await _api.updateAssistantTaskStatus(task.id, status);
+      await _load();
+    } catch (error) {
+      _showError(error.toString());
     }
   }
 
@@ -257,7 +302,11 @@ class _AssistantHubScreenState extends State<AssistantHubScreen> {
                       _empty(_activeProject == null
                           ? 'Выбери проект.'
                           : 'В активном проекте нет открытых задач.'),
-                    for (final task in _tasks) _TaskCard(task: task),
+                    for (final task in _tasks)
+                      _TaskCard(
+                          task: task,
+                          onStatusChanged: (status) =>
+                              _updateTaskStatus(task, status)),
                     _section('Правила сообщений', null),
                     _Panel(
                         child: Column(children: [
@@ -298,6 +347,11 @@ class _AssistantHubScreenState extends State<AssistantHubScreen> {
                               '(${prefs?.timezone ?? 'UTC'})',
                               style: const TextStyle(
                                   color: TroikaColors.textMuted)),
+                          secondary: IconButton(
+                              tooltip: 'Настроить время',
+                              onPressed: _configureQuietHours,
+                              icon: const Icon(Icons.schedule,
+                                  color: TroikaColors.brand)),
                           value: prefs?.quietHoursEnabled ?? false,
                           onChanged: (value) {
                             if (prefs != null) {
@@ -411,7 +465,8 @@ class _ProjectCard extends StatelessWidget {
 
 class _TaskCard extends StatelessWidget {
   final TroikaTask task;
-  const _TaskCard({required this.task});
+  final ValueChanged<String> onStatusChanged;
+  const _TaskCard({required this.task, required this.onStatusChanged});
   @override
   Widget build(BuildContext context) => _Panel(
           child: Row(children: [
@@ -439,6 +494,16 @@ class _TaskCard extends StatelessWidget {
         ])),
         if (task.requiresApproval)
           const Icon(Icons.verified_user_outlined,
-              color: TroikaColors.brand, size: 18)
+              color: TroikaColors.brand, size: 18),
+        PopupMenuButton<String>(
+            tooltip: 'Изменить статус',
+            icon: const Icon(Icons.more_vert, color: TroikaColors.textMuted),
+            onSelected: onStatusChanged,
+            itemBuilder: (context) => const [
+                  PopupMenuItem(value: 'in_progress', child: Text('В работе')),
+                  PopupMenuItem(value: 'blocked', child: Text('Заблокирована')),
+                  PopupMenuItem(value: 'completed', child: Text('Завершена')),
+                  PopupMenuItem(value: 'cancelled', child: Text('Отменена')),
+                ])
       ]));
 }

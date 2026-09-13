@@ -74,6 +74,10 @@ def test_proactive_requires_concrete_context_and_caps_delivery(tmp_path):
     with pytest.raises(ValueError):
         store.enqueue_message(first, kind="proactive", category="progress_review", title="Привет!", body="Как дела?", reason="Проверка проекта.", project_id=project.id, idempotency_key="punctuated-social")
     with pytest.raises(ValueError):
+        store.enqueue_message(first, kind="proactive", category="progress_review", title="Привет привет", body="Как дела как дела?", reason="Проверка проекта.", project_id=project.id, idempotency_key="repeated-social")
+    with pytest.raises(ValueError):
+        store.enqueue_message(first, kind="proactive", category="progress_review", title="Привет, как дела?", body="Добрый день!", reason="Проверка проекта.", project_id=project.id, idempotency_key="mixed-social")
+    with pytest.raises(ValueError):
         store.enqueue_message(first, kind="proactive", category="progress_review", title="Проверить проект", body="Есть конкретный прогресс проекта.", reason="Проверка проекта.", project_id=project.id, requires_approval="false", idempotency_key="invalid-approval")
     now = datetime(2026, 9, 11, 10, tzinfo=timezone.utc)
     for number in range(4):

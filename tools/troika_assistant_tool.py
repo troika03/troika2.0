@@ -75,6 +75,30 @@ def _handle(args: dict[str, Any], **_: Any) -> str:
             result = store.update_task(
                 principal, args.get("task_id"), status=args.get("status")
             ).to_dict()
+        elif action == "reminder_schedule":
+            if not args.get("due_at"):
+                raise ValueError("reminder_schedule requires due_at")
+            title = args.get("title")
+            message_id = store.enqueue_message(
+                principal,
+                kind="reminder",
+                category="reminder",
+                title=title,
+                body=args.get("body") or f"Напоминание: {title}.",
+                reason=args.get("reason") or "Пользователь явно попросил это напоминание.",
+                project_id=args.get("project_id"),
+                task_id=args.get("task_id"),
+                available_at=args.get("due_at"),
+                requires_approval=False,
+                idempotency_key=args.get("idempotency_key"),
+            )
+            result = {
+                "message_id": message_id,
+                "kind": "reminder",
+                "delivery_enabled": store.notification_preferences(
+                    principal
+                ).reminders_enabled,
+            }
         elif action == "follow_up_schedule":
             message_id = store.enqueue_message(
                 principal,
@@ -106,6 +130,9 @@ SCHEMA = {
     "description": (
         "Persist the user's private projects, notes, tasks, reminders, and concrete follow-ups. "
         "Use when the user says to remember something for a project, add work, or remind later. "
+        "Use reminder_schedule only for a reminder explicitly requested by the user. Use "
+        "follow_up_schedule only for a concrete project follow-up allowed by proactive opt-in. "
+        "If reminder_schedule returns delivery_enabled=false, tell the user to enable reminders. "
         "Never schedule greetings or generic check-ins. Future external actions are proposals only; "
         "execute them later through the relevant tool and its separate approval."
     ),
@@ -117,7 +144,7 @@ SCHEMA = {
                 "enum": [
                     "project_create", "project_list", "project_activate",
                     "note_add", "note_list", "task_add", "task_list",
-                    "task_update", "follow_up_schedule",
+                    "task_update", "reminder_schedule", "follow_up_schedule",
                 ],
             },
             "project_id": {"type": "string", "description": "Omit to use active project."},

@@ -45,6 +45,20 @@ def _normalize_social(value: str) -> str:
     return re.sub(r"[^\wа-яё]+", " ", value.lower()).strip()
 
 
+def _is_empty_social(value: str) -> bool:
+    """Return true when text contains only repeated generic social phrases."""
+    remaining = _normalize_social(value)
+    if not remaining:
+        return False
+    for phrase in sorted(_EMPTY_SOCIAL, key=len, reverse=True):
+        remaining = re.sub(
+            rf"(?<!\w){re.escape(phrase)}(?!\w)",
+            " ",
+            remaining,
+        )
+    return not " ".join(remaining.split())
+
+
 def _bounded(value: str, maximum: int) -> str:
     return value if len(value) <= maximum else value[: maximum - 1].rstrip() + "…"
 
@@ -633,9 +647,8 @@ class ProactiveStore:
         clean_title = _clean_text(title, "title", minimum=3, maximum=160)
         clean_body = _clean_text(body, "body", minimum=8, maximum=1000)
         clean_reason = _clean_text(reason, "reason", minimum=8, maximum=300)
-        social_parts = (_normalize_social(clean_title), _normalize_social(clean_body))
-        if any(part in _EMPTY_SOCIAL for part in social_parts) or (
-            " ".join(social_parts) in _EMPTY_SOCIAL
+        if _is_empty_social(clean_title) or _is_empty_social(clean_body) or _is_empty_social(
+            f"{clean_title} {clean_body}"
         ):
             raise ValueError("generic social check-ins are not proactive messages")
         if type(requires_approval) is not bool:
@@ -692,6 +705,12 @@ class ProactiveStore:
         if row is None:
             return NotificationPreferences()
         return NotificationPreferences.from_dict(json.loads(row["preferences_json"]))
+
+    def notification_preferences(self, principal: AccessPrincipal) -> NotificationPreferences:
+        """Read current delivery consent for tool result reporting."""
+        with self._connect() as connection:
+            self._require_principal(connection, principal)
+            return self._preferences(connection, principal.user_id)
 
     def _claim_due(self, connection: sqlite3.Connection, user_id: str, now: float) -> None:
         preferences = self._preferences(connection, user_id)

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from aiohttp import ClientSession
@@ -41,7 +42,8 @@ def test_assistant_api_isolated_and_idempotent(tmp_path):
                 response = await client.post("/v1/assistant/projects", json={"name": "Запуск", "summary": "Beta"}, headers=h1)
                 assert response.status == 201
                 project = (await response.json())["project"]
-                task_body = {"project_id": project["id"], "title": "Проверить сборку", "due_at": "2026-09-12T10:00:00+03:00"}
+                due_at = datetime.now(timezone.utc) + timedelta(days=30)
+                task_body = {"project_id": project["id"], "title": "Проверить сборку", "due_at": due_at.isoformat()}
                 first_task = await client.post("/v1/assistant/tasks", json=task_body, headers={**h1, "Idempotency-Key": "build-v1"})
                 second_task = await client.post("/v1/assistant/tasks", json={**task_body, "title": "Другой текст"}, headers={**h1, "Idempotency-Key": "build-v1"})
                 assert first_task.status == second_task.status == 201

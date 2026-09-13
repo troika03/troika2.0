@@ -538,6 +538,20 @@ class HermesApiService {
         as Map<String, dynamic>)['task'] as Map<String, dynamic>);
   }
 
+  Future<TroikaTask> updateAssistantTaskStatus(
+      String taskId, String status) async {
+    final response = await http
+        .patch(
+            Uri.parse('${HermesConfig.serverUrl}/v1/assistant/tasks/'
+                '${Uri.encodeComponent(taskId)}'),
+            headers: HermesConfig.headers,
+            body: json.encode({'status': status}))
+        .timeout(const Duration(seconds: 15));
+    _checkAssistantResponse(response, 'Статус задачи не обновлён');
+    return TroikaTask.fromJson((json.decode(utf8.decode(response.bodyBytes))
+        as Map<String, dynamic>)['task'] as Map<String, dynamic>);
+  }
+
   Future<List<TroikaInboxMessage>> listAssistantInbox(
       {bool unreadOnly = false}) async {
     final uri = Uri.parse('${HermesConfig.serverUrl}/v1/assistant/inbox')
@@ -747,14 +761,17 @@ class TroikaNotificationPreferences {
   TroikaNotificationPreferences copyWith(
           {bool? remindersEnabled,
           bool? proactiveEnabled,
-          bool? quietHoursEnabled}) =>
+          bool? quietHoursEnabled,
+          String? timezone,
+          String? quietStart,
+          String? quietEnd}) =>
       TroikaNotificationPreferences(
           remindersEnabled: remindersEnabled ?? this.remindersEnabled,
           proactiveEnabled: proactiveEnabled ?? this.proactiveEnabled,
           quietHoursEnabled: quietHoursEnabled ?? this.quietHoursEnabled,
-          timezone: timezone,
-          quietStart: quietStart,
-          quietEnd: quietEnd);
+          timezone: timezone ?? this.timezone,
+          quietStart: quietStart ?? this.quietStart,
+          quietEnd: quietEnd ?? this.quietEnd);
 }
 
 class SessionSummary {

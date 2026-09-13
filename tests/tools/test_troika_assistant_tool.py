@@ -1,10 +1,13 @@
 """Authenticated persistent assistant tool checks."""
 
 import json
+from datetime import datetime, timedelta, timezone
 
 from gateway.session_context import clear_session_override, set_session_override
 from tools import troika_assistant_tool
 from troika_product.access import AccessRegistry
+from troika_product.notifications import NotificationPreferences
+from troika_product.proactive import ProactiveStore
 
 
 def _overrides(database, principal):
@@ -68,3 +71,45 @@ def test_tool_persists_project_note_and_task(tmp_path):
     assert note["ok"] is True
     assert task["ok"] is True
     assert task["result"]["project_id"] == project["id"]
+
+
+def test_explicit_reminder_does_not_require_proactive_opt_in(tmp_path):
+    database = tmp_path / "access.db"
+    registry = AccessRegistry(database)
+    user_id = registry.create_user("reminders@example.com")
+    token = registry.issue_device_token(
+        registry.create_device(user_id, name="Phone", platform="android")
+    )
+    principal = registry.authenticate(token)
+    assert principal is not None
+    registry.set_notification_preferences(
+        principal,
+        NotificationPreferences(reminders_enabled=True, proactive_enabled=False),
+    )
+    store = ProactiveStore(database)
+    due_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+    overrides = _overrides(database, principal)
+    try:
+        for name, value in overrides.items():
+            set_session_override(name, value)
+        result = json.loads(
+            troika_assistant_tool._handle(
+                {
+                    "action": "reminder_schedule",
+                    "title": "Проверить сборку",
+                    "due_at": due_at.isoformat(),
+                    "idempotency_key": "explicit-build-reminder",
+                }
+            )
+        )
+    finally:
+        for name in reversed(overrides):
+            clear_session_override(name)
+
+    assert result["ok"] is True
+    assert result["result"]["kind"] == "reminder"
+    assert result["result"]["delivery_enabled"] is True
+    delivered = store.list_inbox(principal, now=due_at)
+    assert len(delivered) == 1
+    assert delivered[0].kind == "reminder"
+    assert delivered[0].title == "Проверить сборку"
