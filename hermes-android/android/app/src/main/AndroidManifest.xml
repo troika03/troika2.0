@@ -9,6 +9,7 @@
     <!-- Работа в фоне (wake-word сервис) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"/>
     <!-- Уведомления (статус wake-word сервиса) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Не давать системе убивать процесс -->
@@ -87,6 +88,11 @@
         <service
             android:name=".HermesListenerService"
             android:foregroundServiceType="microphone|location"
+            android:exported="false"/>
+
+        <service
+            android:name=".ScreenCaptureService"
+            android:foregroundServiceType="mediaProjection"
             android:exported="false"/>
 
         <!-- ── Accessibility-сервис для управления другими приложениями ── -->

@@ -70,7 +70,11 @@ class PhoneBridgeClient(
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                Log.d(tag, "Received: ${text.take(200)}")
+                if (text.contains("screen_snapshot")) {
+                    Log.d(tag, "Received screen snapshot command (details redacted)")
+                } else {
+                    Log.d(tag, "Received: ${text.take(200)}")
+                }
                 handleCommand(text)
             }
 

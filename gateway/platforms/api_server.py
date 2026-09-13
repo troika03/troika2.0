@@ -847,6 +847,18 @@ class APIServerAdapter(BasePlatformAdapter):
                 os.getenv("TROIKA_PRODUCT_VOICE_ENABLED", "true"),
             )
         )
+        self._product_screen_snapshot_enabled = _coerce_config_bool(
+            extra.get(
+                "product_screen_snapshot_enabled",
+                os.getenv("TROIKA_PRODUCT_SCREEN_SNAPSHOT_ENABLED", "false"),
+            )
+        )
+        self._product_screen_external_vision_enabled = _coerce_config_bool(
+            extra.get(
+                "product_screen_external_vision_enabled",
+                os.getenv("TROIKA_PRODUCT_SCREEN_EXTERNAL_VISION_ENABLED", "false"),
+            )
+        )
         self._product_stt_url = str(
             extra.get(
                 "product_stt_url",
@@ -1387,6 +1399,11 @@ class APIServerAdapter(BasePlatformAdapter):
             # Device/PC/server actions need a separately paired companion and
             # explicit product approval model before product exposure.
             enabled_toolsets = ["troika-product"]
+            if (
+                self._product_screen_snapshot_enabled
+                and self._product_screen_external_vision_enabled
+            ):
+                enabled_toolsets.append("troika-screen-snapshot")
 
         max_iterations = int(os.getenv("HERMES_MAX_ITERATIONS", "90"))
 
@@ -1519,6 +1536,15 @@ class APIServerAdapter(BasePlatformAdapter):
                 "notification_preferences": self._access_registry is not None,
                 "assistant_projects": self._proactive_store is not None,
                 "assistant_inbox": self._proactive_store is not None,
+                "screen_snapshot": bool(
+                    self._access_registry is not None
+                    and self._product_screen_snapshot_enabled
+                    and self._product_screen_external_vision_enabled
+                ),
+                "screen_snapshot_external_vision": bool(
+                    self._access_registry is not None
+                    and self._product_screen_external_vision_enabled
+                ),
                 "product_quota_enforcement": self._product_quotas_enabled,
                 "session_continuity_header": "X-Hermes-Session-Id",
                 "session_key_header": "X-Hermes-Session-Key",
@@ -4216,6 +4242,14 @@ class APIServerAdapter(BasePlatformAdapter):
                     "TROIKA_PRODUCT_ARTIFACTS_AVAILABLE",
                     "1" if self._artifact_store is not None else "0",
                 )
+                set_session_override(
+                    "TROIKA_PRODUCT_SCREEN_SNAPSHOT_ENABLED",
+                    "1" if self._product_screen_snapshot_enabled else "0",
+                )
+                set_session_override(
+                    "TROIKA_PRODUCT_SCREEN_EXTERNAL_VISION_ENABLED",
+                    "1" if self._product_screen_external_vision_enabled else "0",
+                )
                 product_override_names.extend(
                     [
                         "TROIKA_PRODUCT_MODE",
@@ -4223,6 +4257,8 @@ class APIServerAdapter(BasePlatformAdapter):
                         "TROIKA_PRODUCT_DEVICE_ID",
                         "TROIKA_PRODUCT_TOKEN_ID",
                         "TROIKA_PRODUCT_ARTIFACTS_AVAILABLE",
+                        "TROIKA_PRODUCT_SCREEN_SNAPSHOT_ENABLED",
+                        "TROIKA_PRODUCT_SCREEN_EXTERNAL_VISION_ENABLED",
                     ]
                 )
                 if self._product_artifact_db is not None:
@@ -4564,6 +4600,14 @@ class APIServerAdapter(BasePlatformAdapter):
                                 "TROIKA_PRODUCT_ARTIFACTS_AVAILABLE",
                                 "1" if self._artifact_store is not None else "0",
                             )
+                            set_session_override(
+                                "TROIKA_PRODUCT_SCREEN_SNAPSHOT_ENABLED",
+                                "1" if self._product_screen_snapshot_enabled else "0",
+                            )
+                            set_session_override(
+                                "TROIKA_PRODUCT_SCREEN_EXTERNAL_VISION_ENABLED",
+                                "1" if self._product_screen_external_vision_enabled else "0",
+                            )
                             product_override_names.extend(
                                 [
                                     "TROIKA_PRODUCT_MODE",
@@ -4571,6 +4615,8 @@ class APIServerAdapter(BasePlatformAdapter):
                                     "TROIKA_PRODUCT_DEVICE_ID",
                                     "TROIKA_PRODUCT_TOKEN_ID",
                                     "TROIKA_PRODUCT_ARTIFACTS_AVAILABLE",
+                                    "TROIKA_PRODUCT_SCREEN_SNAPSHOT_ENABLED",
+                                    "TROIKA_PRODUCT_SCREEN_EXTERNAL_VISION_ENABLED",
                                 ]
                             )
                             if self._product_artifact_db is not None:

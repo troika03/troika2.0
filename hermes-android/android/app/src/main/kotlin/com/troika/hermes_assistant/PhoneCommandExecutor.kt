@@ -22,7 +22,11 @@ object PhoneCommandExecutor {
     private const val TAG = "PhoneExec"
 
     fun execute(ctx: Context, action: String, params: JSONObject): JSONObject {
-        Log.i(TAG, "exec action=$action params=$params")
+        if (action == "screen_snapshot") {
+            Log.i(TAG, "exec action=screen_snapshot params=<redacted>")
+        } else {
+            Log.i(TAG, "exec action=$action params=$params")
+        }
         return when (action) {
             "open_app" -> openApp(ctx, params.optString("app"))
             "call" -> dial(ctx, params.optString("number"))
@@ -95,6 +99,7 @@ object PhoneCommandExecutor {
             "network" -> PhoneSystem.network(ctx)
             "camera_photo" -> PhoneSystem.cameraTakePhoto(ctx, params.optBoolean("front", false))
             "screenshot" -> accessibility { it.takeScreenshot() }
+            "screen_snapshot" -> ScreenCaptureService.capture(params)
             // ── Календарь ───────────────────────────────────────────
             "calendar_list_calendars" -> PhoneCalendar.listCalendars(ctx)
             "calendar_list_events" -> PhoneCalendar.listEvents(

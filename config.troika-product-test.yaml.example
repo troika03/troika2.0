@@ -21,6 +21,10 @@ platforms:
     extra:
       # Server-side kill switch; no APK release is needed to disable voice.
       product_voice_enabled: true
+      # Separate default-off screen capability. The second flag explicitly
+      # allows one reduced frame to leave the phone for the vision provider.
+      product_screen_snapshot_enabled: false
+      product_screen_external_vision_enabled: false
       # Private loopback/container worker. Clients never choose this address.
       product_stt_url: http://127.0.0.1:8766
 

@@ -547,6 +547,12 @@ TOOLSETS = {
         "includes": ["web", "vision", "image_gen"]
     },
 
+    "troika-screen-snapshot": {
+        "description": "Opt-in, consent-bound Troika Android screen snapshot",
+        "tools": ["troika_screen_snapshot"],
+        "includes": [],
+    },
+
     "troika-product": {
         "description": "Hosted Troika toolkit with private files and paired-phone controls.",
         "tools": ["troika_assistant"],

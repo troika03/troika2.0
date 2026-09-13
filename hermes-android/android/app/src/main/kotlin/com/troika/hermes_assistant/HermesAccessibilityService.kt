@@ -181,6 +181,41 @@ class HermesAccessibilityService : AccessibilityService() {
         }
     }
 
+    /** Package only, used locally to block sensitive screens before capture. */
+    fun activePackageName(): String? = rootInActiveWindow?.packageName?.toString()
+
+    /** Fail-closed local check; collected text is never returned or logged. */
+    fun hasSensitiveContentOnScreen(): Boolean {
+        val root = rootInActiveWindow ?: return true
+        val text = StringBuilder()
+        fun collect(node: AccessibilityNodeInfo?, depth: Int): Boolean {
+            if (node == null || depth > 40) return false
+            if (node.isPassword) return true
+            if (text.length < 16_000) {
+                node.text?.let { text.append(' ').append(it) }
+                node.contentDescription?.let { text.append(' ').append(it) }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    node.hintText?.let { text.append(' ').append(it) }
+                }
+            }
+            for (index in 0 until node.childCount) {
+                if (collect(node.getChild(index), depth + 1)) return true
+            }
+            return false
+        }
+        if (collect(root, 0)) return true
+        val visible = text.toString().lowercase()
+        val sensitiveLabels = listOf(
+            "verification code", "one-time code", "one time code", "otp",
+            "код подтверждения", "одноразовый код", "cvc", "cvv",
+            "recovery phrase", "seed phrase", "private key",
+            "фраза восстановления", "секретный ключ",
+        )
+        if (sensitiveLabels.any(visible::contains)) return true
+        val digits = visible.replace(Regex("[\\s-]"), "")
+        return Regex("(?<!\\d)\\d{13,19}(?!\\d)").containsMatchIn(digits)
+    }
+
     // -----------------------------------------------------------------
     // Internals
     // -----------------------------------------------------------------

@@ -157,6 +157,8 @@ def test_product_capabilities_do_not_advertise_global_responses_api(tmp_path) ->
     assert "responses" not in payload["endpoints"]
     assert payload["features"]["private_artifacts"] is True
     assert payload["features"]["product_quota_enforcement"] is False
+    assert payload["features"]["screen_snapshot"] is False
+    assert payload["features"]["screen_snapshot_external_vision"] is False
     assert "artifacts" in payload["endpoints"]
 
 
@@ -273,6 +275,7 @@ def test_product_toolset_only_exposes_paired_phone_safe_slice() -> None:
         "android_file_write",
         "android_file_delete",
         "android_screenshot",
+        "troika_screen_snapshot",
         "android_calendar_create_event",
         "find_tool",
         "run_tool",
@@ -315,6 +318,47 @@ def test_product_mode_ignores_operator_toolset_override(tmp_path, monkeypatch) -
 
     adapter._create_agent()
     assert captured["enabled_toolsets"] == ["troika-product"]
+
+
+def test_product_screen_toolset_requires_explicit_external_vision_opt_in(
+    tmp_path, monkeypatch
+) -> None:
+    captured = {}
+
+    class FakeAgent:
+        def __init__(self, **kwargs) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr("run_agent.AIAgent", FakeAgent)
+    monkeypatch.setattr(
+        "gateway.run._resolve_runtime_agent_kwargs", lambda: {"api_key": "test"}
+    )
+    monkeypatch.setattr("gateway.run._resolve_gateway_model", lambda: "test/model")
+    monkeypatch.setattr("gateway.run._load_gateway_config", lambda: {})
+    monkeypatch.setattr(
+        "gateway.run.GatewayRunner._load_reasoning_config", staticmethod(dict)
+    )
+    monkeypatch.setattr(
+        "gateway.run.GatewayRunner._load_fallback_model", staticmethod(lambda: None)
+    )
+    adapter = APIServerAdapter(
+        PlatformConfig(
+            enabled=True,
+            extra={
+                "product_auth_enabled": True,
+                "product_auth_db": str(tmp_path / "access.db"),
+                "product_screen_snapshot_enabled": True,
+                "product_screen_external_vision_enabled": True,
+            },
+        )
+    )
+    monkeypatch.setattr(adapter, "_ensure_session_db", lambda: None)
+
+    adapter._create_agent()
+    assert captured["enabled_toolsets"] == [
+        "troika-product",
+        "troika-screen-snapshot",
+    ]
 
 
 def test_product_action_rejects_session_wide_confirmation(tmp_path) -> None:

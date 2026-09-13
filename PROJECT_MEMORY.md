@@ -277,6 +277,40 @@
   устройств, поэтому обновлённый экран, physical tap, MediaProjection consent и
   `screen.snapshot` остаются физически непроверенными.
 
+## Реализовано: безопасная основа screen.snapshot (2026-09-13)
+
+- Добавлено metadata-only хранилище `troika_vision_sessions`. Сессия живёт не
+  более 120 секунд, привязана к аутентифицированным user/device/token и
+  capability `screen.snapshot`, хранит только SHA-256 nonce и расходуется один
+  раз. Чужой owner, replay, expiry и revoked token отклоняются атомарно.
+- Android получил отдельный MediaProjection foreground service. Разрешение
+  выдаётся только системным диалогом, живёт две минуты или один снимок,
+  отображает постоянное уведомление и имеет Stop в уведомлении и экране
+  «Помощник». Старый скрытый Accessibility screenshot в product toolset не
+  добавлялся.
+- Перед кадром локальный guard требует имя активного package и блокирует system
+  permission UI, notification shade/settings, банки, кошельки, authenticator и
+  password managers. Android secure-window запреты не обходятся; список package
+  можно расширить локальной настройкой.
+- Кадр уменьшается до 1280 по длинной стороне, максимум 1280×720 пикселей и
+  600 KiB JPEG. WebSocket payload остаётся ниже 1 MiB. Сервер сверяет session
+  echo, лимит base64, размеры, JPEG signature и передаёт кадр vision только в
+  памяти. Raw image не попадает в tool-result, SQLite, debug logs или историю
+  агента; после вызова ссылки очищаются.
+- Видимый текст считается недоверенным: отдельный system prompt запрещает
+  исполнять команды, QR и ссылки из изображения и раскрывать пароль, OTP,
+  платёжные данные, recovery phrase или private key. Sensitive response
+  закрывается policy block.
+- `troika_screen_snapshot` находится только в `troika-screen-snapshot`.
+  `product_screen_snapshot_enabled` и
+  `product_screen_external_vision_enabled` выключены по умолчанию; tool
+  появляется только при обоих flags и всё равно требует отдельного approval,
+  прямо сообщающего об отправке настроенной vision-модели.
+- Проверено: 108 связанных Python security/API тестов, Ruff, Flutter tests 6/6,
+  Flutter analyze без ошибок (31 прежнее info), debug APK build. Physical E2E
+  MediaProjection на Samsung ещё не пройден, поэтому Фаза 3 не считается
+  полностью закрытой и WebRTC/CameraX live начинать нельзя.
+
 ## Ближайший порядок работы
 
 1. Повторить на Samsung ручную проверку barge-in и реального обрыва сети;
@@ -285,8 +319,9 @@
    фоновый event engine. Затем пройти MediaProjection consent для
    `screen.snapshot`; retention/account deletion и push token lifecycle остаются
    отдельными этапами до включения push.
-3. Реализовать безопасный `screen.snapshot` через MediaProjection. Только после
-   physical E2E и threat-model review переходить к WebRTC screen assist и
+3. Пройти physical E2E готового `screen.snapshot`: consent, Stop до отправки,
+   sensitive-screen block, один кадр и реальный opt-in vision provider. Только
+   после этого и threat-model review переходить к WebRTC screen assist и
    CameraX live vision.
 4. Расширять paired-phone control после отдельного privacy review каждой
    capability. Просмотр экрана, управление UI, камера, микрофон, clipboard,
@@ -414,7 +449,11 @@
       (APK установлена, но ADB нестабилен во время UI-проверки).
 - [x] Зафиксирован подробный план восстановления возможностей и безопасного
       live vision для экрана/камеры.
-- [ ] Реализован и проверен `screen.snapshot` с явным MediaProjection consent.
+- [x] Реализована default-off основа `screen.snapshot` с одноразовой
+      user/device session, MediaProjection consent, Stop, size cap, policy guard
+      и отдельным toolset.
+- [ ] Пройден physical E2E `screen.snapshot` на Samsung с реальным consent и
+      opt-in vision provider.
 - [ ] Реализованы и проверены WebRTC screen assist и CameraX live vision.
 - [x] Фоновый event engine создаёт осмысленные follow-up по срокам, блокировкам,
       решениям и прогрессу только при opt-in и действующем device token.

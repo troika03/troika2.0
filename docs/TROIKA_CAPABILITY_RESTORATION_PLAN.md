@@ -351,6 +351,33 @@ Play Integrity можно использовать как дополнитель
 
 ### Фаза 3. Безопасный snapshot экрана
 
+**Статус реализации 2026-09-13**
+
+- Создана одноразовая `vision_session` с TTL до 120 секунд, привязкой к
+  `user_id`, `device_id`, `token_id`, capability и хэшем nonce. Повторное
+  использование, другой владелец, истёкший или отозванный token отклоняются.
+- Android использует отдельный MediaProjection foreground service. Системное
+  согласие действует две минуты или один кадр; постоянное уведомление и кнопка
+  «Остановить» позволяют отозвать его до отправки.
+- Телефон локально блокирует permission UI, notification shade, settings,
+  известные категории банков, кошельков, OTP и password manager. Без активного
+  Accessibility package guard захват закрывается, а secure-window ограничения
+  Android не обходятся.
+- JPEG уменьшается до 1280 по длинной стороне, максимум 1280×720 пикселей и
+  600 KiB. Сервер проверяет base64, JPEG magic, размеры и session echo до vision.
+- Raw frame обрабатывается только в памяти, не возвращается в историю агента и
+  не имеет колонок в БД. Vision prompt считает весь текст кадра недоверенными
+  данными и блокирует секреты, OTP и платёжные данные.
+- Tool живёт только в `troika-screen-snapshot`. Оба server flags
+  `product_screen_snapshot_enabled` и
+  `product_screen_external_vision_enabled` по умолчанию выключены. Второй флаг
+  является явным operator opt-in на отправку кадра настроенному vision provider;
+  каждый кадр дополнительно требует пользовательского approval с описанием
+  последствия.
+- Автоматические security-тесты и debug APK build пройдены. Готовность Фазы 3
+  пока не закрыта: нужен physical E2E системного consent, кнопки Stop,
+  sensitive-screen block и реального vision provider на Samsung.
+
 **Задачи**
 
 - Создать `vision_session` и capability `screen.snapshot`.

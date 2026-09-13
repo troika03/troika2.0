@@ -63,6 +63,7 @@ def test_product_bridge_marks_only_state_queries_as_read_only() -> None:
     assert not ProductPhoneBridge.requires_confirmation("battery")
     assert ProductPhoneBridge.requires_confirmation("open_app")
     assert not ProductPhoneBridge.requires_confirmation("send_sms")
+    assert ProductPhoneBridge.requires_confirmation("screen_snapshot")
 
 
 def test_product_tool_availability_is_scoped_to_current_device() -> None:

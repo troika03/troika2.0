@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
@@ -27,7 +28,9 @@ class MainActivity : FlutterActivity() {
     private val REQ_CALENDAR = 7421
     private val REQ_LOCATION = 7422
     private val REQ_LOCATION_BG = 7423
+    private val REQ_SCREEN_CAPTURE = 7424
     private var methodChannel: MethodChannel? = null
+    private var pendingScreenConsentResult: MethodChannel.Result? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -139,6 +142,26 @@ class MainActivity : FlutterActivity() {
                 }
                 "getTimeZoneId" -> {
                     result.success(TimeZone.getDefault().id)
+                }
+                "requestScreenSnapshotConsent" -> {
+                    if (ScreenCaptureService.isReady()) {
+                        result.success(true)
+                    } else if (pendingScreenConsentResult != null) {
+                        result.error("consent_pending", "Screen consent is already open", null)
+                    } else {
+                        pendingScreenConsentResult = result
+                        if (!requestScreenSnapshotConsent()) {
+                            pendingScreenConsentResult?.success(false)
+                            pendingScreenConsentResult = null
+                        }
+                    }
+                }
+                "isScreenSnapshotReady" -> {
+                    result.success(ScreenCaptureService.isReady())
+                }
+                "stopScreenSnapshot" -> {
+                    stopService(ScreenCaptureService.stopIntent(this))
+                    result.success(null)
                 }
                 "shareFile" -> {
                     val path = call.argument<String>("path") ?: ""
@@ -457,6 +480,32 @@ class MainActivity : FlutterActivity() {
             REQ_LOCATION_BG ->
                 methodChannel?.invokeMethod("background_location_result", hasBackgroundLocation())
         }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun requestScreenSnapshotConsent(): Boolean {
+        if (ScreenCaptureService.isReady()) return true
+        val manager = getSystemService(MediaProjectionManager::class.java) ?: return false
+        startActivityForResult(manager.createScreenCaptureIntent(), REQ_SCREEN_CAPTURE)
+        return true
+    }
+
+    @Deprecated("Uses the platform MediaProjection consent result")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQ_SCREEN_CAPTURE) return
+        if (resultCode == RESULT_OK && data != null) {
+            val serviceIntent = ScreenCaptureService.startIntent(this, resultCode, data)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+            pendingScreenConsentResult?.success(true)
+        } else {
+            pendingScreenConsentResult?.success(false)
+        }
+        pendingScreenConsentResult = null
     }
 
     @Suppress("BatteryLife")

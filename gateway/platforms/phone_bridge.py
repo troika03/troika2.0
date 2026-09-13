@@ -157,6 +157,7 @@ class ProductPhoneBridge:
             "brightness",
             "torch",
             "camera_photo",
+            "screen_snapshot",
         }
     )
     READ_ONLY_ACTIONS = frozenset({"status", "battery", "network"})
