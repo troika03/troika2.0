@@ -380,9 +380,12 @@ Play Integrity можно использовать как дополнитель
   кадра. Raw frame не найден в БД и runtime-логах. По результату исправлена
   регистрация async tool handler (`is_async=True`) и добавлен регрессионный
   тест.
-- Для полного закрытия Фазы 3 остаются physical sensitive-screen fixture и
-  threat-model review. До них feature flags остаются выключенными по умолчанию,
-  а WebRTC/CameraX live не начинается.
+- Physical fixture с fake password node и подписью «Одноразовый код» вернул
+  `sensitive_screen_blocked` до vision; session закрылась как `cancelled`, raw
+  frame и base64 в логах отсутствуют. Threat-model review записан в
+  `docs/SCREEN_SNAPSHOT_THREAT_MODEL.md`.
+- Фаза 3 закрыта для закрытой beta. Feature flags остаются выключенными по
+  умолчанию. Этот review не распространяется на WebRTC/CameraX live.
 
 **Задачи**
 

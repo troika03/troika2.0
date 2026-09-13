@@ -331,9 +331,13 @@
 - В `troika_vision_sessions` после успешного вызова есть только metadata и
   статус `consumed`; колонок изображения нет. Поиск в runtime-логах не нашёл
   data URL или JPEG base64. Nonce и device token в вывод не попадали.
-- Реальный банковский/password/OTP экран пока не использовался в physical
-  тесте. До его безопасной проверки и threat-model review Фаза 3 остаётся
-  закрытой beta; `screen.live` и CameraX live не начинаем.
+- Physical sensitive-screen fixture с fake password node и подписью
+  «Одноразовый код» вернул `sensitive_screen_blocked` до vision; session получила
+  `cancelled`, raw frame и base64 в логах отсутствуют. Threat-model review
+  зафиксирован в `docs/SCREEN_SNAPSHOT_THREAT_MODEL.md`.
+- Фаза 3 закрыта для закрытой beta с обоими server flags по умолчанию `false`.
+  Это не разрешение на `screen.live`, UI control или CameraX live: для них нужны
+  отдельные threat models, consent и production transport.
 
 ## Ближайший порядок работы
 
@@ -342,11 +346,9 @@
 2. Физически проверить Android-экран «Помощник» и фоновый event engine;
    retention/account deletion и push token lifecycle остаются отдельными
    этапами до включения push.
-3. Завершить physical security-проверку `screen.snapshot` на специально
-   подготовленном sensitive-screen fixture и провести threat-model review.
-   Consent, Stop, fail-closed Accessibility guard, один кадр и реальный opt-in
-   vision provider уже проверены. Только после review переходить к WebRTC
-   screen assist и CameraX live vision.
+3. Перед реализацией WebRTC screen assist отдельно спроектировать signaling,
+   TURN, hardware-backed device keys, heartbeat/revoke и изолированный vision
+   worker. Закрытая snapshot beta не расширяет разрешение до live vision.
 4. Расширять paired-phone control после отдельного privacy review каждой
    capability. Просмотр экрана, управление UI, камера, микрофон, clipboard,
    календарь, файлы, звонки и SMS не объединять в одно разрешение.
@@ -478,8 +480,8 @@
       и отдельным toolset.
 - [x] Пройден physical E2E `screen.snapshot` на Samsung: реальный consent,
       Stop, fail-closed Accessibility guard, один кадр и opt-in vision provider.
-- [ ] Пройден отдельный physical sensitive-screen fixture и threat-model review
-      перед переходом к live vision.
+- [x] Пройден physical sensitive-screen fixture и зафиксирован threat-model
+      review для одноразового snapshot.
 - [ ] Реализованы и проверены WebRTC screen assist и CameraX live vision.
 - [x] Фоновый event engine создаёт осмысленные follow-up по срокам, блокировкам,
       решениям и прогрессу только при opt-in и действующем device token.

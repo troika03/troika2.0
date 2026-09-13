@@ -75,8 +75,9 @@
 - Генерация медиа, тяжёлые coder-задачи, браузерная автоматизация.
 - Одиночный снимок экрана: реализован с MediaProjection, одноразовой
   user/device session, Stop и лимитом кадра. Physical E2E безопасного экрана и
-  opt-in vision provider пройден; функция остаётся выключенной по умолчанию до
-  sensitive-screen fixture и threat-model review.
+  opt-in vision provider, sensitive-screen fixture и threat-model review
+  пройдены; функция остаётся выключенной по умолчанию и включается отдельно
+  только для закрытой beta.
 
 ### Полностью выключить на старте
 
