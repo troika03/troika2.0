@@ -129,14 +129,24 @@ Product toolset умеет создавать DOCX, PDF и PPTX. Файл сна
 Access Framework; широкое разрешение «All files access» для этого не нужно.
 До подтверждения выбора файл остаётся только во временном кэше приложения.
 
+## Личная память
+
+Экран «Помощник → Память» показывает owner-scoped факты, предпочтения и правила
+общения. Пользователь может создать, исправить или удалить запись; удаление
+подтверждается отдельно. Эти записи подмешиваются только в prompt владельца.
+
+API: `GET/POST /v1/memories` и `PATCH/DELETE /v1/memories/{memory_id}`. Поле
+`user_id` не принимается, а доступ к чужому ID возвращает `404`. Подробный
+контракт и ограничения: [TROIKA_USER_MEMORY.md](TROIKA_USER_MEMORY.md).
+
 ## Экспорт и удаление аккаунта
 
 Кнопка «Экспортировать данные» в Android настройках вызывает
 `GET /v1/account/export` и сохраняет owner-scoped ZIP через системный выбор
 файла. В архив входят переносимые account/device metadata, настройки,
-проекты, задачи, заметки, inbox, usage/audit metadata, диалоги, location data,
-vision metadata и исходные artifacts. Запрос не принимает `user_id` и всегда
-использует владельца проверенного bearer token.
+личная память, проекты, задачи, заметки, inbox, usage/audit metadata, диалоги,
+location data, vision metadata и исходные artifacts. Запрос не принимает
+`user_id` и всегда использует владельца проверенного bearer token.
 
 В Android настройках кнопка «Удалить аккаунт и данные» доступна только для
 индивидуального `trk_live_…` token. Пользователь должен вручную ввести
@@ -144,8 +154,9 @@ vision metadata и исходные artifacts. Запрос не принима�
 
 Сервер сразу отзывает токены всех устройств пользователя, закрывает их phone
 WebSocket и прерывает активные run. Затем он удаляет историю и transcripts,
-проекты, задачи, заметки, inbox, настройки уведомлений, audit/usage, документы,
-saved locations, device context и временную metadata screen snapshot. Сбой
+личную память, проекты, задачи, заметки, inbox, настройки уведомлений,
+audit/usage, документы, saved locations, device context и временную metadata
+screen snapshot. Сбой
 очистки оставляет недоступный `deleting` tombstone; gateway продолжает удаление
 после перезапуска. Ответ `202 deletion_pending` означает, что доступ уже
 отозван, а очистка ещё завершается.

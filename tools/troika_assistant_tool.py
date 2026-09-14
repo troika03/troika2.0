@@ -9,10 +9,12 @@ from typing import Any
 from gateway.session_context import get_session_env
 from tools.registry import registry
 from troika_product.access import AccessPrincipal
+from troika_product.memory import MemoryStore
 from troika_product.proactive import ProactiveStore
 
 
-def _identity_and_store() -> tuple[AccessPrincipal, ProactiveStore] | None:
+def _identity_and_stores(
+) -> tuple[AccessPrincipal, ProactiveStore, MemoryStore] | None:
     if get_session_env("TROIKA_PRODUCT_MODE", "") != "1":
         return None
     values = [
@@ -23,14 +25,19 @@ def _identity_and_store() -> tuple[AccessPrincipal, ProactiveStore] | None:
     ]
     if not all(values):
         return None
-    return AccessPrincipal(*values[:3]), ProactiveStore(Path(values[3]))
+    database_path = Path(values[3])
+    return (
+        AccessPrincipal(*values[:3]),
+        ProactiveStore(database_path),
+        MemoryStore(database_path),
+    )
 
 
 def _handle(args: dict[str, Any], **_: Any) -> str:
-    resolved = _identity_and_store()
+    resolved = _identity_and_stores()
     if resolved is None:
         return json.dumps({"ok": False, "error": "product_identity_required"})
-    principal, store = resolved
+    principal, store, memory_store = resolved
     action = str(args.get("action") or "").strip()
     try:
         if action == "project_create":
@@ -75,6 +82,32 @@ def _handle(args: dict[str, Any], **_: Any) -> str:
             result = store.update_task(
                 principal, args.get("task_id"), status=args.get("status")
             ).to_dict()
+        elif action == "memory_add":
+            result = memory_store.create_memory(
+                principal,
+                kind=args.get("memory_kind", "fact"),
+                title=args.get("title"),
+                content=args.get("content"),
+                idempotency_key=args.get("idempotency_key"),
+            ).to_dict()
+        elif action == "memory_list":
+            result = [
+                item.to_dict() for item in memory_store.list_memories(principal)
+            ]
+        elif action == "memory_update":
+            changes = {
+                key: args[key]
+                for key in ("title", "content")
+                if key in args
+            }
+            if "memory_kind" in args:
+                changes["kind"] = args["memory_kind"]
+            result = memory_store.update_memory(
+                principal, args.get("memory_id"), **changes
+            ).to_dict()
+        elif action == "memory_delete":
+            item = memory_store.delete_memory(principal, args.get("memory_id"))
+            result = {"deleted": True, "memory_id": item.id}
         elif action == "reminder_schedule":
             if not args.get("due_at"):
                 raise ValueError("reminder_schedule requires due_at")
@@ -128,8 +161,12 @@ def _handle(args: dict[str, Any], **_: Any) -> str:
 SCHEMA = {
     "name": "troika_assistant",
     "description": (
-        "Persist the user's private projects, notes, tasks, reminders, and concrete follow-ups. "
+        "Persist the user's private memory, projects, notes, tasks, reminders, and concrete follow-ups. "
         "Use when the user says to remember something for a project, add work, or remind later. "
+        "Use memory_add for a durable personal fact, preference, or communication rule only when "
+        "the user explicitly asks to remember it or clearly confirms it. Use memory_update or "
+        "memory_delete only for an explicit change to an existing memory. Never store passwords, "
+        "access tokens, payment credentials, or authentication secrets. "
         "Use reminder_schedule only for a reminder explicitly requested by the user. Use "
         "follow_up_schedule only for a concrete project follow-up allowed by proactive opt-in. "
         "If reminder_schedule returns delivery_enabled=false, tell the user to enable reminders. "
@@ -144,13 +181,19 @@ SCHEMA = {
                 "enum": [
                     "project_create", "project_list", "project_activate",
                     "note_add", "note_list", "task_add", "task_list",
-                    "task_update", "reminder_schedule", "follow_up_schedule",
+                    "task_update", "memory_add", "memory_list", "memory_update",
+                    "memory_delete", "reminder_schedule", "follow_up_schedule",
                 ],
             },
             "project_id": {"type": "string", "description": "Omit to use active project."},
             "name": {"type": "string"},
             "summary": {"type": "string"},
             "note_kind": {"type": "string", "enum": ["idea", "decision", "context"]},
+            "memory_id": {"type": "string"},
+            "memory_kind": {
+                "type": "string",
+                "enum": ["fact", "preference", "instruction"],
+            },
             "content": {"type": "string"},
             "task_id": {"type": "string"},
             "title": {"type": "string"},

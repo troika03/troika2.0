@@ -39,6 +39,71 @@ def test_assistant_api_isolated_and_idempotent(tmp_path):
                 h1 = {"Authorization": f"Bearer {first}"}
                 h2 = {"Authorization": f"Bearer {second}"}
                 assert (await client.get("/v1/assistant/projects")).status == 401
+                assert (await client.get("/v1/memories")).status == 401
+                memory_response = await client.post(
+                    "/v1/memories",
+                    json={
+                        "kind": "preference",
+                        "title": "Ответы",
+                        "content": "Отвечай по-русски.",
+                    },
+                    headers={**h1, "Idempotency-Key": "android-memory-answer-v1"},
+                )
+                assert memory_response.status == 201
+                memory = (await memory_response.json())["memory"]
+                second_memory_response = await client.post(
+                    "/v1/memories",
+                    json={
+                        "kind": "fact",
+                        "title": "SECOND USER PRIVATE MEMORY",
+                        "content": "SECOND USER SECRET CONTEXT",
+                    },
+                    headers=h2,
+                )
+                assert second_memory_response.status == 201
+                listed = await (await client.get("/v1/memories", headers=h1)).json()
+                assert [item["id"] for item in listed["memories"]] == [memory["id"]]
+                assert (
+                    await client.patch(
+                        f"/v1/memories/{memory['id']}",
+                        json={"title": "Чужая правка"},
+                        headers=h2,
+                    )
+                ).status == 404
+                assert (
+                    await client.delete(
+                        f"/v1/memories/{memory['id']}", headers=h2
+                    )
+                ).status == 404
+                assert (
+                    await client.post(
+                        "/v1/memories",
+                        json={
+                            "title": "Попытка подмены",
+                            "content": "Нельзя выбрать владельца.",
+                            "user_id": second_user,
+                        },
+                        headers=h1,
+                    )
+                ).status == 400
+                updated_response = await client.patch(
+                    f"/v1/memories/{memory['id']}",
+                    json={"title": "Стиль ответов"},
+                    headers=h1,
+                )
+                assert updated_response.status == 200
+                assert (await updated_response.json())["memory"]["title"] == "Стиль ответов"
+                deleted_response = await client.delete(
+                    f"/v1/memories/{memory['id']}", headers=h1
+                )
+                assert deleted_response.status == 200
+                assert (await deleted_response.json()) == {
+                    "deleted": True,
+                    "memory_id": memory["id"],
+                }
+                assert (
+                    await (await client.get("/v1/memories", headers=h1)).json()
+                )["memories"] == []
                 response = await client.post("/v1/assistant/projects", json={"name": "Запуск", "summary": "Beta"}, headers=h1)
                 assert response.status == 201
                 project = (await response.json())["project"]
@@ -63,13 +128,30 @@ def test_assistant_api_isolated_and_idempotent(tmp_path):
     asyncio.run(scenario())
 
 
-def test_product_context_is_added_to_run_prompt(tmp_path, monkeypatch):
+def test_product_context_is_added_to_prompt_and_isolated(tmp_path, monkeypatch):
     adapter = _adapter(tmp_path)
     registry = adapter._access_registry
     user_id = registry.create_user("one@example.com")
     token = registry.issue_device_token(registry.create_device(user_id, name="A", platform="android"))
     principal = registry.authenticate(token)
     project = adapter._proactive_store.create_project(principal, name="Релиз")
+    adapter._memory_store.create_memory(
+        principal,
+        kind="preference",
+        title="Язык",
+        content="Отвечай на русском языке.",
+    )
+    second_user_id = registry.create_user("two@example.com")
+    second_token = registry.issue_device_token(
+        registry.create_device(second_user_id, name="B", platform="android")
+    )
+    second_principal = registry.authenticate(second_token)
+    assert second_principal is not None
+    adapter._memory_store.create_memory(
+        second_principal,
+        title="SECOND USER PRIVATE MEMORY",
+        content="SECOND USER SECRET CONTEXT",
+    )
     captured = {}
     async def fake_run_agent(**kwargs):
         captured.update(kwargs)
@@ -80,3 +162,6 @@ def test_product_context_is_added_to_run_prompt(tmp_path, monkeypatch):
     response = asyncio.run(adapter._handle_chat_completions(request))
     assert response.status == 200
     assert "Релиз" in captured["ephemeral_system_prompt"]
+    assert "Отвечай на русском языке" in captured["ephemeral_system_prompt"]
+    assert "SECOND USER PRIVATE MEMORY" not in captured["ephemeral_system_prompt"]
+    assert "SECOND USER SECRET CONTEXT" not in captured["ephemeral_system_prompt"]

@@ -673,6 +673,66 @@ class HermesApiService {
     _checkAssistantResponse(response, 'Настройки уведомлений не сохранены');
   }
 
+  Future<List<TroikaMemory>> listMemories() async {
+    final response = await http
+        .get(Uri.parse('${HermesConfig.serverUrl}/v1/memories'),
+            headers: HermesConfig.headers)
+        .timeout(const Duration(seconds: 15));
+    _checkAssistantResponse(response, 'Память недоступна');
+    final data =
+        json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+    return ((data['memories'] as List?) ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(TroikaMemory.fromJson)
+        .toList();
+  }
+
+  Future<TroikaMemory> createMemory(
+      {required String kind,
+      required String title,
+      required String content}) async {
+    final response = await http
+        .post(Uri.parse('${HermesConfig.serverUrl}/v1/memories'),
+            headers: {
+              ...HermesConfig.headers,
+              'Idempotency-Key':
+                  'android-memory-${DateTime.now().microsecondsSinceEpoch}'
+            },
+            body:
+                json.encode({'kind': kind, 'title': title, 'content': content}))
+        .timeout(const Duration(seconds: 15));
+    _checkAssistantResponse(response, 'Запись не сохранена');
+    return TroikaMemory.fromJson((json.decode(utf8.decode(response.bodyBytes))
+        as Map<String, dynamic>)['memory'] as Map<String, dynamic>);
+  }
+
+  Future<TroikaMemory> updateMemory(String memoryId,
+      {required String kind,
+      required String title,
+      required String content}) async {
+    final response = await http
+        .patch(
+            Uri.parse('${HermesConfig.serverUrl}/v1/memories/'
+                '${Uri.encodeComponent(memoryId)}'),
+            headers: HermesConfig.headers,
+            body:
+                json.encode({'kind': kind, 'title': title, 'content': content}))
+        .timeout(const Duration(seconds: 15));
+    _checkAssistantResponse(response, 'Запись не обновлена');
+    return TroikaMemory.fromJson((json.decode(utf8.decode(response.bodyBytes))
+        as Map<String, dynamic>)['memory'] as Map<String, dynamic>);
+  }
+
+  Future<void> deleteMemory(String memoryId) async {
+    final response = await http
+        .delete(
+            Uri.parse('${HermesConfig.serverUrl}/v1/memories/'
+                '${Uri.encodeComponent(memoryId)}'),
+            headers: HermesConfig.headers)
+        .timeout(const Duration(seconds: 15));
+    _checkAssistantResponse(response, 'Запись не удалена');
+  }
+
   static void _checkAssistantResponse(http.Response response, String fallback) {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw HermesApiException('$fallback (${response.statusCode}).');
@@ -755,6 +815,24 @@ class TroikaProject {
       summary: (j['summary'] ?? '').toString(),
       status: (j['status'] ?? '').toString(),
       isActive: j['is_active'] == true);
+}
+
+class TroikaMemory {
+  final String id, kind, title, content, createdAt, updatedAt;
+  TroikaMemory(
+      {required this.id,
+      required this.kind,
+      required this.title,
+      required this.content,
+      required this.createdAt,
+      required this.updatedAt});
+  factory TroikaMemory.fromJson(Map<String, dynamic> j) => TroikaMemory(
+      id: (j['id'] ?? '').toString(),
+      kind: (j['kind'] ?? 'fact').toString(),
+      title: (j['title'] ?? '').toString(),
+      content: (j['content'] ?? '').toString(),
+      createdAt: (j['created_at'] ?? '').toString(),
+      updatedAt: (j['updated_at'] ?? '').toString());
 }
 
 class TroikaTask {

@@ -113,3 +113,64 @@ def test_explicit_reminder_does_not_require_proactive_opt_in(tmp_path):
     assert len(delivered) == 1
     assert delivered[0].kind == "reminder"
     assert delivered[0].title == "Проверить сборку"
+
+
+def test_memory_tool_uses_only_server_derived_owner(tmp_path):
+    database = tmp_path / "access.db"
+    registry = AccessRegistry(database)
+    first_user = registry.create_user("one@example.com")
+    second_user = registry.create_user("two@example.com")
+    first = registry.authenticate(
+        registry.issue_device_token(
+            registry.create_device(first_user, name="First", platform="android")
+        )
+    )
+    second = registry.authenticate(
+        registry.issue_device_token(
+            registry.create_device(second_user, name="Second", platform="android")
+        )
+    )
+    assert first is not None and second is not None
+
+    first_overrides = _overrides(database, first)
+    try:
+        for name, value in first_overrides.items():
+            set_session_override(name, value)
+        created = json.loads(
+            troika_assistant_tool._handle(
+                {
+                    "action": "memory_add",
+                    "memory_kind": "preference",
+                    "title": "Формат",
+                    "content": "Предпочитаю краткие ответы.",
+                    "idempotency_key": "memory-format-v1",
+                }
+            )
+        )["result"]
+    finally:
+        for name in reversed(first_overrides):
+            clear_session_override(name)
+
+    second_overrides = _overrides(database, second)
+    try:
+        for name, value in second_overrides.items():
+            set_session_override(name, value)
+        listed = json.loads(
+            troika_assistant_tool._handle({"action": "memory_list"})
+        )
+        denied = json.loads(
+            troika_assistant_tool._handle(
+                {
+                    "action": "memory_update",
+                    "memory_id": created["id"],
+                    "content": "Чужая правка",
+                }
+            )
+        )
+    finally:
+        for name in reversed(second_overrides):
+            clear_session_override(name)
+
+    assert listed == {"ok": True, "result": []}
+    assert denied["ok"] is False
+    assert denied["error"] == "not_found"

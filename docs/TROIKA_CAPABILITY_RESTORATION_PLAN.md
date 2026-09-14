@@ -510,28 +510,35 @@ Play Integrity можно использовать как дополнитель
   `УДАЛИТЬ`. Сразу отзываются токены всех устройств и закрываются их phone
   WebSocket; активные run прерываются до очистки данных.
 - Удаляются tenant rows, SessionDB/локальные transcripts, artifacts и их bytes,
-  проекты/задачи/заметки/inbox, notification preferences, audit/usage,
-  location fingerprints/device context и metadata-only vision sessions.
+  личная память, проекты/задачи/заметки/inbox, notification preferences,
+  audit/usage, location fingerprints/device context и metadata-only vision
+  sessions.
   Незавершённая очистка хранится как недоступный `deleting` tombstone и
   автоматически продолжается после перезапуска gateway.
 - Интеграционный тест удаляет полный fixture первого пользователя и проверяет,
   что второй пользователь, его transcript, location и artifact остаются.
 - `GET /v1/account/export` создаёт ZIP только для владельца действующего токена.
-  Архив содержит профиль, устройства, настройки, проекты, задачи, заметки,
-  inbox, usage/audit metadata, диалоги, location data, vision metadata и
-  исходные bytes личных artifacts. Android сохраняет архив через системный
-  выбор файла.
+  Архив содержит профиль, устройства, настройки, личную память, проекты,
+  задачи, заметки, inbox, usage/audit metadata, диалоги, location data, vision
+  metadata и исходные bytes личных artifacts. Android сохраняет архив через
+  системный выбор файла.
 - Тест с двумя пользователями проверяет ZIP целиком и доказывает отсутствие
-  чужих ID, email, сообщений, проектов, location и artifact bytes. Bearer-token
-  digests, vision nonce, server paths, system prompts и private model reasoning
-  в экспорт не входят.
+  чужих ID, email, памяти, сообщений, проектов, location и artifact bytes.
+  Bearer-token digests, vision nonce, server paths, system prompts и private
+  model reasoning в экспорт не входят.
 - Retention-периоды и целевая политика object storage/backup зафиксированы в
   `docs/DATA_RETENTION_AND_DELETION_POLICY.md`. Автоматический retention worker,
   production object storage, selective backup deletion, deletion ledger и
   restore rehearsal ещё не реализованы и не проверены.
 - Profile-global `MEMORY.md/USER.md` отключены в product mode, потому что у них
-  нет tenant ownership. User-scoped memory API/UI и автоматическое применение
-  retention остаются открытыми; поэтому вся фаза 9 и launch gate ещё не закрыты.
+  нет tenant ownership. Вместо них реализована таблица `troika_memories` с
+  owner-scoped `GET/POST/PATCH/DELETE /v1/memories`, Android-экраном просмотра,
+  исправления и удаления, явными memory-действиями `troika_assistant` и
+  ограниченным prompt context только текущего владельца. Cross-tenant тесты
+  проверяют список, доступ по ID, prompt, tool, экспорт и удаление аккаунта.
+- Для личной памяти утверждён верхний срок 730 дней после изменения.
+  Автоматическое применение retention остаётся открытым; поэтому вся фаза 9 и
+  launch gate ещё не закрыты.
 
 **Готово, когда**
 
@@ -606,15 +613,13 @@ Play Integrity можно использовать как дополнитель
 
 ## 11. Ближайшая последовательность
 
-1. Реализовать user-scoped memory API/UI: просмотр, исправление, удаление и
-   включение памяти в уже owner-scoped экспорт.
-2. Добавить автоматический retention worker с dry-run, управляемым временем и
+1. Добавить автоматический retention worker с dry-run, управляемым временем и
    проверкой отсутствия cross-tenant удаления.
-3. После выбора production storage реализовать version-aware object purge,
+2. После выбора production storage реализовать version-aware object purge,
    durable deletion ledger, restore scrubber и disaster-recovery rehearsal.
-4. На подключённом Samsung повторить ручные проверки barge-in и реального
+3. На подключённом Samsung повторить ручные проверки barge-in и реального
    обрыва сети; одноразовый тестовый аккаунт использовать для экрана удаления.
-5. Перед WebRTC screen assist отдельно утвердить решения live vision из раздела
+4. Перед WebRTC screen assist отдельно утвердить решения live vision из раздела
    10 и выполнить новый threat-model review.
 
 Такой порядок даёт полезный результат после каждого этапа и не открывает постоянный удалённый доступ к телефону одним большим изменением.

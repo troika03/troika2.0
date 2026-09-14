@@ -383,6 +383,17 @@ def test_confirmed_account_deletion_purges_all_local_user_data(
     )
     registry.consume_chat_request(first)
     registry.record_audit_event("account.fixture", principal=first)
+    adapter._memory_store.create_memory(
+        first,
+        kind="preference",
+        title="Private memory",
+        content="First user's private preference",
+    )
+    second_memory = adapter._memory_store.create_memory(
+        second,
+        title="Second memory",
+        content="Second user's private fact",
+    )
 
     first_project = adapter._proactive_store.create_project(
         first, name="Private project", summary="Private summary"
@@ -477,6 +488,9 @@ def test_confirmed_account_deletion_purges_all_local_user_data(
     assert adapter._artifact_store.read_for_user(
         second.user_id, second_artifact.id
     ) is not None
+    assert [
+        item.id for item in adapter._memory_store.list_memories(second)
+    ] == [second_memory.id]
     assert location_tool.get_device_context(first.memory_scope) == {}
     assert location_tool.get_device_context(second.memory_scope) == {"bssid": "second"}
     assert location_tool._list(first.memory_scope)["count"] == 0
@@ -497,6 +511,7 @@ def test_confirmed_account_deletion_purges_all_local_user_data(
             "troika_usage_daily",
             "troika_audit_events",
             "troika_notification_preferences",
+            "troika_memories",
             "troika_artifacts",
             "troika_projects",
             "troika_project_tasks",
@@ -556,6 +571,17 @@ def test_account_export_contains_only_authenticated_users_data(
     adapter._proactive_store.create_project(
         second, name="SECOND USER PRIVATE PROJECT", summary="SECOND PRIVATE SUMMARY"
     )
+    adapter._memory_store.create_memory(
+        first,
+        kind="instruction",
+        title="First export memory",
+        content="FIRST EXPORT MEMORY CONTENT",
+    )
+    adapter._memory_store.create_memory(
+        second,
+        title="SECOND USER PRIVATE MEMORY",
+        content="SECOND USER PRIVATE MEMORY CONTENT",
+    )
     first_artifact = adapter._artifact_store.create(
         user_id=first.user_id,
         device_id=first.device_id,
@@ -612,6 +638,8 @@ def test_account_export_contains_only_authenticated_users_data(
     assert data["tasks"][0]["title"] == "First export task"
     assert data["notes"][0]["content"] == "First export decision"
     assert data["inbox_messages"][0]["title"] == "First export reminder"
+    assert data["memories"][0]["title"] == "First export memory"
+    assert data["memories"][0]["content"] == "FIRST EXPORT MEMORY CONTENT"
     assert data["notification_preferences"][0]["preferences_json"][
         "reminders_enabled"
     ] is True
@@ -630,6 +658,8 @@ def test_account_export_contains_only_authenticated_users_data(
         "two@example.com",
         "SECOND USER PRIVATE PROJECT",
         "SECOND PRIVATE SUMMARY",
+        "SECOND USER PRIVATE MEMORY",
+        "SECOND USER PRIVATE MEMORY CONTENT",
         "SECOND USER PRIVATE MESSAGE",
         "SECOND_WIFI",
         "SECOND PLACE",

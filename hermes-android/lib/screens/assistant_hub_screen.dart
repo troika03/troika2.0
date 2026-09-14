@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/hermes_api_service.dart';
 import '../theme/troika_theme.dart';
+import 'memory_screen.dart';
 
 class AssistantHubScreen extends StatefulWidget {
   const AssistantHubScreen({super.key});
@@ -309,6 +310,31 @@ class _AssistantHubScreenState extends State<AssistantHubScreen> {
                           child: Text(_error!,
                               style:
                                   const TextStyle(color: TroikaColors.error))),
+                    _section('Память', null),
+                    _Panel(
+                        child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                    color: TroikaColors.brand
+                                        .withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(12)),
+                                child: const Icon(Icons.psychology_outlined,
+                                    color: TroikaColors.brand)),
+                            title: const Text('Что Тройка помнит',
+                                style: TextStyle(color: TroikaColors.text)),
+                            subtitle: const Text(
+                                'Просматривай, исправляй и удаляй личный контекст.',
+                                style:
+                                    TextStyle(color: TroikaColors.textMuted)),
+                            trailing: const Icon(Icons.chevron_right,
+                                color: TroikaColors.textMuted),
+                            onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) => const MemoryScreen())))),
                     _section(
                         'Входящие',
                         IconButton(

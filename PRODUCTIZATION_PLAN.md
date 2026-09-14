@@ -149,9 +149,10 @@ API edge: auth, rate limits, idempotency, audit
 
 Сроки и честные границы удаления зафиксированы в
 [docs/DATA_RETENTION_AND_DELETION_POLICY.md](docs/DATA_RETENTION_AND_DELETION_POLICY.md).
-Owner-scoped ZIP-экспорт и удаление из текущих локальных основных хранилищ
-реализованы. Автоматическое применение retention, production object storage,
-удаление из backup и проверка восстановления ещё не реализованы.
+Owner-scoped личная память с просмотром/правкой/удалением, ZIP-экспорт и
+удаление из текущих локальных основных хранилищ реализованы. Автоматическое
+применение retention, production object storage, удаление из backup и проверка
+восстановления ещё не реализованы.
 
 ### Инструменты и действия
 
@@ -225,7 +226,7 @@ Owner-scoped ZIP-экспорт и удаление из текущих лока
 
 - [ ] Ввести user/device/session model и миграции базы.
 - [ ] API auth, pairing QR, token rotation/revocation.
-- [ ] Перенести memory/files/location на user-scoped storage.
+- [x] Перенести memory/files/location на user-scoped storage.
 - [ ] Добавить quota/usage ledger и server-side limits.
 - [ ] Реализовать privacy controls и audit events.
 - [x] Добавить подтверждаемое удаление локального product-аккаунта: отзыв всех
@@ -234,6 +235,8 @@ Owner-scoped ZIP-экспорт и удаление из текущих лока
       другого пользователя.
 - [x] Добавить self-service ZIP-экспорт всех переносимых данных и artifact bytes
       текущего владельца; тест с двумя пользователями доказывает изоляцию.
+- [x] Добавить owner-scoped память с API и Android CRUD, безопасным prompt
+      context, экспортом и cross-tenant тестами.
 - [x] Определить retention-периоды и политику будущего удаления из backup/object
       storage без утверждения о ещё не реализованной очистке резервных копий.
 - [ ] Реализовать и проверить автоматический retention worker, production

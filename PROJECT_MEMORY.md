@@ -363,8 +363,7 @@
   копиях, затем очищает token/session/consent и закрывает приложение.
 - Общие Hermes `MEMORY.md/USER.md` больше не загружаются в product agent:
   они не имеют tenant ownership и удаления scope. Личный контекст закрытой beta
-  берётся из owner-scoped проектов, задач и заметок. Отдельный user-scoped
-  memory store с просмотром/исправлением/экспортом остаётся задачей фазы 9.
+  берётся из owner-scoped проектов, задач, заметок и отдельной личной памяти.
 - Автоматический тест удаляет данные одного пользователя во всех перечисленных
   локальных хранилищах и одновременно доказывает сохранность второго. Прошли 77
   связанных Python-тестов, Ruff, `py_compile`, `git diff --check` и Flutter
@@ -404,24 +403,52 @@
   других UI-файлах. Дополнительно `test_api_server.py` и
   `test_api_server_runs.py`: 172 passed.
 
+## Выполнено: owner-scoped личная память (2026-09-14)
+
+- Добавлена таблица `troika_memories`: каждая операция повторно проверяет
+  действующий token/device/account и фильтрует `user_id`, полученный только из
+  серверной principal. Поддерживаются факты, предпочтения и правила общения.
+- `GET/POST /v1/memories` и `PATCH/DELETE /v1/memories/{memory_id}` дают
+  просмотр, создание, исправление и удаление. Запросы не принимают `user_id`,
+  а чужой ID возвращает `404`.
+- Product agent по-прежнему запускается с `skip_memory=True` для глобальных
+  Hermes-файлов. В ephemeral prompt добавляются не более 12 последних записей
+  только текущего владельца; блок явно помечен как недоверенные данные.
+- `troika_assistant` получил явные memory actions. Сохранять долговременную
+  память разрешено только по просьбе/подтверждению пользователя; authentication
+  и payment secrets запрещены.
+- Android получил экран «Помощник → Память» с empty/loading/error states,
+  созданием, правкой и подтверждаемым удалением. Память включена в ZIP-экспорт
+  и локальное удаление аккаунта.
+- Тесты с двумя пользователями проверяют store, HTTP, prompt, tool, экспорт и
+  account deletion. Чужую запись нельзя увидеть, исправить или удалить; её
+  заголовок и текст отсутствуют в prompt и ZIP другого владельца.
+- Retention памяти ограничен 730 днями после изменения. Автоматический worker,
+  production object purge, backup deletion ledger и restore scrubber ещё не
+  реализованы и не проверены. Удаление из резервных копий не заявляется.
+- Проверено: связанный Python-срез — 265 passed, 1 skipped; Ruff и compileall
+  прошли. Flutter tests — 9/9, analyze — без ошибок и с 28 прежними info в
+  других UI-файлах, debug APK собрана. `adb devices -l` не нашёл подключённый
+  Samsung, поэтому ручные barge-in и network-drop проверки не выполнялись.
+
 ## Ближайший порядок работы
 
-1. Повторить на Samsung ручную проверку barge-in и реального обрыва сети;
-   настроить VAD/эхоподавление по результату, не меняя security boundary.
-2. Реализовать автоматический retention worker с dry-run и owner-isolation
-   тестами. После выбора production storage добавить object purge, deletion
-   ledger, restore scrubber и disaster-recovery rehearsal.
-3. Перед реализацией WebRTC screen assist отдельно спроектировать signaling,
+1. Реализовать автоматический retention worker с dry-run, управляемым временем
+   и owner-isolation тестами.
+2. После выбора production storage добавить object purge, deletion ledger,
+   restore scrubber и disaster-recovery rehearsal.
+3. На подключённом Samsung повторить ручную проверку barge-in и реального
+   обрыва сети; экран удаления открывать только для одноразового test account.
+4. Перед реализацией WebRTC screen assist отдельно спроектировать signaling,
    TURN, hardware-backed device keys, heartbeat/revoke и изолированный vision
    worker. Закрытая snapshot beta не расширяет разрешение до live vision.
-4. Расширять paired-phone control после отдельного privacy review каждой
+5. Расширять paired-phone control после отдельного privacy review каждой
    capability. Просмотр экрана, управление UI, камера, микрофон, clipboard,
    календарь, файлы, звонки и SMS не объединять в одно разрешение.
-5. Настроить воспроизводимую среду и минимальный зелёный CI baseline; отдельно
+6. Настроить воспроизводимую среду и минимальный зелёный CI baseline; отдельно
    обновить Android Gradle/Kotlin до будущих требований Flutter.
-6. Заменить legacy response store на tenant-owned storage либо оставить endpoint
+7. Заменить legacy response store на tenant-owned storage либо оставить endpoint
    выключенным до этой миграции.
-7. Добавить user-scoped memory UI/API: просмотр, исправление, удаление и экспорт.
 8. Спроектировать subscription billing: продукты, платежные периоды, webhooks,
    отмена, возвраты и поддержка.
 
@@ -462,6 +489,7 @@
 - узкий безопасный набор управления привязанным Android-телефоном;
 - личные notification preferences, quiet hours, проекты, задачи, очередь,
   in-app доставка и Android-экран «Помощник»;
+- owner-scoped личная память с Android CRUD и безопасным prompt context;
 - owner-scoped ZIP-экспорт серверных данных и artifacts через API и Android;
 - Android debug APK, Flutter tests и анализ из предыдущего этапа.
 
@@ -558,6 +586,8 @@
       доказывающим отсутствие данных второго пользователя.
 - [x] Определены retention-периоды и политика будущего удаления из
       backup/object storage с явной отметкой о нереализованных гарантиях.
+- [x] Добавлена owner-scoped личная память: API, Android CRUD, prompt context,
+      tool actions, экспорт, account deletion и cross-tenant тесты.
 - [ ] Реализованы и проверены retention worker, production object purge,
       backup deletion ledger и restore scrubber.
 - [ ] Push для проактивности не включён до автоматического retention и проверки

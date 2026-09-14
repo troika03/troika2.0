@@ -14,6 +14,10 @@ Exposes an HTTP server with endpoints:
 - POST /v1/runs/{run_id}/approval — resolve a pending run approval
 - POST /v1/runs/{run_id}/stop       — interrupt a running agent
 - GET    /v1/account/export         — owner-scoped portable data archive
+- GET    /v1/memories               — owner-scoped long-term memory
+- POST   /v1/memories               — create an owner-scoped memory
+- PATCH  /v1/memories/{memory_id}   — update an owner-scoped memory
+- DELETE /v1/memories/{memory_id}   — delete an owner-scoped memory
 - DELETE /v1/account                — confirmed product account deletion
 - GET  /health                     — health check
 - GET  /health/detailed            — rich status for cross-container dashboard probing
@@ -874,6 +878,7 @@ class APIServerAdapter(BasePlatformAdapter):
         self._access_registry = None
         self._artifact_store = None
         self._proactive_store = None
+        self._memory_store = None
         self._assistant_event_task: Optional[asyncio.Task[Any]] = None
         try:
             assistant_interval = float(
@@ -902,6 +907,9 @@ class APIServerAdapter(BasePlatformAdapter):
                 from troika_product.proactive import ProactiveStore
 
                 self._proactive_store = ProactiveStore(self._product_artifact_db)
+                from troika_product.memory import MemoryStore
+
+                self._memory_store = MemoryStore(self._product_artifact_db)
                 raw_artifact_root = extra.get(
                     "product_artifact_root",
                     os.getenv("TROIKA_PRODUCT_ARTIFACT_ROOT", ""),
@@ -1121,17 +1129,27 @@ class APIServerAdapter(BasePlatformAdapter):
             )
 
     def _assistant_context(self, request: "web.Request") -> str:
-        """Load bounded project context for this authenticated user only."""
+        """Load bounded project and memory context for this user only."""
         principal = self._product_principal(request)
-        if principal is None or self._proactive_store is None:
+        if principal is None:
             return ""
-        try:
-            return self._proactive_store.assistant_context(principal)
-        except PermissionError:
-            return ""
-        except Exception:
-            logger.exception("Product assistant context unavailable")
-            return ""
+        contexts: list[str] = []
+        for label, store in (
+            ("project", self._proactive_store),
+            ("memory", self._memory_store),
+        ):
+            if store is None:
+                continue
+            try:
+                context = store.assistant_context(principal)
+            except PermissionError:
+                return ""
+            except Exception:
+                logger.exception("Product %s context unavailable", label)
+                continue
+            if context:
+                contexts.append(context)
+        return "\n\n".join(contexts)
 
     def _authorize_product_session(
         self, request: "web.Request", session_id: str, *, claim: bool
@@ -1777,6 +1795,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 "notification_preferences": self._access_registry is not None,
                 "assistant_projects": self._proactive_store is not None,
                 "assistant_inbox": self._proactive_store is not None,
+                "private_memory": self._memory_store is not None,
                 "account_export": self._access_registry is not None,
                 "account_deletion": self._access_registry is not None,
                 "screen_snapshot": bool(
@@ -1824,6 +1843,20 @@ class APIServerAdapter(BasePlatformAdapter):
                         },
                         "assistant_inbox": {
                             "method": "GET", "path": "/v1/assistant/inbox",
+                        },
+                        "memories": {
+                            "method": "GET", "path": "/v1/memories",
+                        },
+                        "memory_create": {
+                            "method": "POST", "path": "/v1/memories",
+                        },
+                        "memory_update": {
+                            "method": "PATCH",
+                            "path": "/v1/memories/{memory_id}",
+                        },
+                        "memory_delete": {
+                            "method": "DELETE",
+                            "path": "/v1/memories/{memory_id}",
                         },
                         "account": {
                             "method": "DELETE", "path": "/v1/account",
@@ -1887,6 +1920,112 @@ class APIServerAdapter(BasePlatformAdapter):
                 _openai_error("Notification preferences are temporarily unavailable"), status=503,
             )
         return web.json_response(result.to_dict(), headers={"Cache-Control": "no-store"})
+
+    def _require_memory_principal(self, request: "web.Request") -> Any:
+        auth_err = self._check_auth(request)
+        if auth_err is not None:
+            return auth_err
+        principal = self._product_principal(request)
+        if principal is None or self._memory_store is None:
+            return web.json_response(
+                _openai_error("Private memory is unavailable"),
+                status=503 if self._product_auth_enabled else 404,
+            )
+        return principal
+
+    async def _handle_memories(self, request: "web.Request") -> "web.Response":
+        """List or create memories owned by the authenticated account."""
+        resolved = self._require_memory_principal(request)
+        if isinstance(resolved, web.Response):
+            return resolved
+        try:
+            if request.method == "POST":
+                body = await request.json()
+                if not isinstance(body, dict) or not set(body).issubset(
+                    {"kind", "title", "content"}
+                ):
+                    raise ValueError("invalid memory fields")
+                item = self._memory_store.create_memory(
+                    resolved,
+                    kind=body.get("kind", "fact"),
+                    title=body.get("title"),
+                    content=body.get("content"),
+                    idempotency_key=request.headers.get("Idempotency-Key"),
+                )
+                payload = {"memory": item.to_dict()}
+                status = 201
+                event_type = "memory.created"
+            else:
+                raw_limit = request.query.get("limit", "200")
+                items = self._memory_store.list_memories(
+                    resolved, limit=int(raw_limit)
+                )
+                payload = {"memories": [item.to_dict() for item in items]}
+                status = 200
+                event_type = ""
+        except (ValueError, TypeError, UnicodeError):
+            return web.json_response(
+                _openai_error("Invalid memory", code="invalid_memory"), status=400
+            )
+        except PermissionError:
+            return web.json_response(
+                _openai_error("Product authentication is required"), status=401
+            )
+        except Exception:
+            logger.exception("Product memory unavailable")
+            return web.json_response(
+                _openai_error("Private memory is temporarily unavailable"), status=503
+            )
+        if event_type:
+            self._record_product_audit(request, event_type)
+        return web.json_response(
+            payload, status=status, headers={"Cache-Control": "no-store"}
+        )
+
+    async def _handle_memory_item(self, request: "web.Request") -> "web.Response":
+        """Update or delete one memory without revealing another owner."""
+        resolved = self._require_memory_principal(request)
+        if isinstance(resolved, web.Response):
+            return resolved
+        memory_id = request.match_info.get("memory_id", "")
+        try:
+            if request.method == "PATCH":
+                body = await request.json()
+                if (
+                    not isinstance(body, dict)
+                    or not body
+                    or not set(body).issubset({"kind", "title", "content"})
+                ):
+                    raise ValueError("invalid memory fields")
+                item = self._memory_store.update_memory(
+                    resolved, memory_id, **body
+                )
+                payload = {"memory": item.to_dict()}
+                event_type = "memory.updated"
+            else:
+                item = self._memory_store.delete_memory(resolved, memory_id)
+                payload = {"deleted": True, "memory_id": item.id}
+                event_type = "memory.deleted"
+        except LookupError:
+            return web.json_response(
+                _openai_error("Memory not found", code="memory_not_found"),
+                status=404,
+            )
+        except (ValueError, TypeError, UnicodeError):
+            return web.json_response(
+                _openai_error("Invalid memory", code="invalid_memory"), status=400
+            )
+        except PermissionError:
+            return web.json_response(
+                _openai_error("Product authentication is required"), status=401
+            )
+        except Exception:
+            logger.exception("Product memory mutation failed")
+            return web.json_response(
+                _openai_error("Private memory is temporarily unavailable"), status=503
+            )
+        self._record_product_audit(request, event_type)
+        return web.json_response(payload, headers={"Cache-Control": "no-store"})
 
     def _require_proactive_principal(self, request: "web.Request") -> Any:
         auth_err = self._check_auth(request)
@@ -5352,6 +5491,15 @@ class APIServerAdapter(BasePlatformAdapter):
                     "/v1/account/export", self._handle_export_account
                 )
                 self._app.router.add_delete("/v1/account", self._handle_delete_account)
+            if self._memory_store is not None:
+                self._app.router.add_get("/v1/memories", self._handle_memories)
+                self._app.router.add_post("/v1/memories", self._handle_memories)
+                self._app.router.add_patch(
+                    "/v1/memories/{memory_id}", self._handle_memory_item
+                )
+                self._app.router.add_delete(
+                    "/v1/memories/{memory_id}", self._handle_memory_item
+                )
             self._app.router.add_get(
                 "/v1/notification-preferences", self._handle_notification_preferences,
             )

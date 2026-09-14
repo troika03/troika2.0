@@ -690,6 +690,11 @@ class AccessRegistry:
             )
 
             optional_queries = {
+                "memories": (
+                    "troika_memories",
+                    "SELECT id, kind, title, content, created_at, updated_at "
+                    "FROM troika_memories WHERE user_id = ? ORDER BY created_at, id",
+                ),
                 "projects": (
                     "troika_projects",
                     "SELECT id, name, summary, status, is_active, created_at, updated_at "
@@ -833,6 +838,7 @@ class AccessRegistry:
     def finalize_account_deletion(self, user_id: str) -> None:
         """Delete every product SQLite row for a prepared account atomically."""
         child_tables = (
+            "troika_memories",
             "troika_inbox_messages",
             "troika_project_notes",
             "troika_project_tasks",
