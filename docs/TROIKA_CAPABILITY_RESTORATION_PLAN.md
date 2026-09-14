@@ -516,10 +516,22 @@ Play Integrity можно использовать как дополнитель
   автоматически продолжается после перезапуска gateway.
 - Интеграционный тест удаляет полный fixture первого пользователя и проверяет,
   что второй пользователь, его transcript, location и artifact остаются.
+- `GET /v1/account/export` создаёт ZIP только для владельца действующего токена.
+  Архив содержит профиль, устройства, настройки, проекты, задачи, заметки,
+  inbox, usage/audit metadata, диалоги, location data, vision metadata и
+  исходные bytes личных artifacts. Android сохраняет архив через системный
+  выбор файла.
+- Тест с двумя пользователями проверяет ZIP целиком и доказывает отсутствие
+  чужих ID, email, сообщений, проектов, location и artifact bytes. Bearer-token
+  digests, vision nonce, server paths, system prompts и private model reasoning
+  в экспорт не входят.
+- Retention-периоды и целевая политика object storage/backup зафиксированы в
+  `docs/DATA_RETENTION_AND_DELETION_POLICY.md`. Автоматический retention worker,
+  production object storage, selective backup deletion, deletion ledger и
+  restore rehearsal ещё не реализованы и не проверены.
 - Profile-global `MEMORY.md/USER.md` отключены в product mode, потому что у них
-  нет tenant ownership. User-scoped memory API/UI, экспорт, retention и удаление
-  из production backup/object storage остаются открытыми; поэтому вся фаза 9 и
-  launch gate ещё не закрыты.
+  нет tenant ownership. User-scoped memory API/UI и автоматическое применение
+  retention остаются открытыми; поэтому вся фаза 9 и launch gate ещё не закрыты.
 
 **Готово, когда**
 
@@ -594,12 +606,15 @@ Play Integrity можно использовать как дополнитель
 
 ## 11. Ближайшая последовательность
 
-1. Восстановить голосовой E2E на текущем Samsung A22.
-2. Реализовать личную очередь проактивных сообщений и Android inbox.
-3. Сделать безопасный `screen.snapshot` с MediaProjection и отдельным consent.
-4. Пройти threat-model review и physical E2E snapshot.
-5. Добавить WebRTC screen assist с короткой сессией.
-6. Добавить CameraX snapshot/live после отдельного privacy review.
-7. Только затем объединять vision с подтверждаемым управлением телефоном.
+1. Реализовать user-scoped memory API/UI: просмотр, исправление, удаление и
+   включение памяти в уже owner-scoped экспорт.
+2. Добавить автоматический retention worker с dry-run, управляемым временем и
+   проверкой отсутствия cross-tenant удаления.
+3. После выбора production storage реализовать version-aware object purge,
+   durable deletion ledger, restore scrubber и disaster-recovery rehearsal.
+4. На подключённом Samsung повторить ручные проверки barge-in и реального
+   обрыва сети; одноразовый тестовый аккаунт использовать для экрана удаления.
+5. Перед WebRTC screen assist отдельно утвердить решения live vision из раздела
+   10 и выполнить новый threat-model review.
 
 Такой порядок даёт полезный результат после каждого этапа и не открывает постоянный удалённый доступ к телефону одним большим изменением.

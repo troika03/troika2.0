@@ -13,6 +13,7 @@ Exposes an HTTP server with endpoints:
 - GET  /v1/runs/{run_id}/events    — SSE stream of structured lifecycle events
 - POST /v1/runs/{run_id}/approval — resolve a pending run approval
 - POST /v1/runs/{run_id}/stop       — interrupt a running agent
+- GET    /v1/account/export         — owner-scoped portable data archive
 - DELETE /v1/account                — confirmed product account deletion
 - GET  /health                     — health check
 - GET  /health/detailed            — rich status for cross-container dashboard probing
@@ -1629,6 +1630,56 @@ class APIServerAdapter(BasePlatformAdapter):
             {"status": "deleted"}, headers={"Cache-Control": "no-store"}
         )
 
+    async def _handle_export_account(self, request: "web.Request") -> "web.Response":
+        """GET /v1/account/export — export only the authenticated owner's data."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        principal = self._product_principal(request)
+        if principal is None or self._access_registry is None:
+            return web.json_response(
+                _openai_error("Account export is available only in product mode"),
+                status=404,
+            )
+        self._record_product_audit(request, "account.export_requested")
+        try:
+            from troika_product.data_export import ProductDataExporter
+
+            exporter = ProductDataExporter(
+                registry=self._access_registry,
+                artifact_store=self._artifact_store,
+                session_db=self._ensure_session_db(),
+            )
+            archive_bytes = await asyncio.to_thread(exporter.build_archive, principal)
+        except PermissionError:
+            return web.json_response(
+                _openai_error("Product authentication is required"), status=401
+            )
+        except Exception:
+            logger.exception(
+                "Product account export failed: %s",
+                self._request_audit_log_suffix(request),
+            )
+            return web.json_response(
+                _openai_error(
+                    "Account export is temporarily unavailable",
+                    code="account_export_unavailable",
+                ),
+                status=503,
+            )
+        self._record_product_audit(request, "account.exported")
+        return web.Response(
+            body=archive_bytes,
+            content_type="application/zip",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{exporter.download_filename()}"'
+                ),
+                "Cache-Control": "private, no-store",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
     async def _handle_health(self, request: "web.Request") -> "web.Response":
         """GET /health — simple health check."""
         return web.json_response({"status": "ok", "platform": "hermes-agent"})
@@ -1726,6 +1777,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 "notification_preferences": self._access_registry is not None,
                 "assistant_projects": self._proactive_store is not None,
                 "assistant_inbox": self._proactive_store is not None,
+                "account_export": self._access_registry is not None,
                 "account_deletion": self._access_registry is not None,
                 "screen_snapshot": bool(
                     self._access_registry is not None
@@ -1775,6 +1827,9 @@ class APIServerAdapter(BasePlatformAdapter):
                         },
                         "account": {
                             "method": "DELETE", "path": "/v1/account",
+                        },
+                        "account_export": {
+                            "method": "GET", "path": "/v1/account/export",
                         },
                     }
                     if self._access_registry is not None
@@ -5293,6 +5348,9 @@ class APIServerAdapter(BasePlatformAdapter):
             self._app.router.add_get("/v1/models", self._handle_models)
             self._app.router.add_get("/v1/capabilities", self._handle_capabilities)
             if self._access_registry is not None:
+                self._app.router.add_get(
+                    "/v1/account/export", self._handle_export_account
+                )
                 self._app.router.add_delete("/v1/account", self._handle_delete_account)
             self._app.router.add_get(
                 "/v1/notification-preferences", self._handle_notification_preferences,

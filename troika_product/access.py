@@ -594,6 +594,157 @@ class AccessRegistry:
             ).fetchall()
         return {str(row["session_id"]) for row in rows}
 
+    def export_account_rows(self, principal: AccessPrincipal) -> dict[str, object]:
+        """Return one active account's portable rows in a read transaction.
+
+        Bearer-token digests, vision nonce digests, and artifact storage names
+        are server credentials or implementation details, so they are never
+        included in the user-facing export.
+        """
+
+        def rows(
+            connection: sqlite3.Connection,
+            query: str,
+            parameters: tuple[object, ...],
+        ) -> list[dict[str, object]]:
+            return [dict(row) for row in connection.execute(query, parameters)]
+
+        def decode_json_fields(
+            items: list[dict[str, object]], fields: tuple[str, ...]
+        ) -> list[dict[str, object]]:
+            for item in items:
+                for field in fields:
+                    value = item.get(field)
+                    if isinstance(value, str):
+                        item[field] = json.loads(value)
+            return items
+
+        with self._connect() as connection:
+            connection.execute("BEGIN")
+            self._require_active_principal(connection, principal)
+            existing_tables = {
+                str(row["name"])
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+
+            account = connection.execute(
+                "SELECT id, email, status, created_at FROM troika_users WHERE id = ?",
+                (principal.user_id,),
+            ).fetchone()
+            if account is None:
+                raise PermissionError("active product authentication is required")
+
+            devices = rows(
+                connection,
+                "SELECT id, name, platform, status, created_at "
+                "FROM troika_devices WHERE user_id = ? ORDER BY created_at, id",
+                (principal.user_id,),
+            )
+            tokens = rows(
+                connection,
+                "SELECT tokens.id, tokens.device_id, tokens.expires_at, "
+                "tokens.revoked_at, tokens.created_at "
+                "FROM troika_api_tokens AS tokens "
+                "JOIN troika_devices AS devices ON devices.id = tokens.device_id "
+                "WHERE devices.user_id = ? ORDER BY tokens.created_at, tokens.id",
+                (principal.user_id,),
+            )
+            sessions = rows(
+                connection,
+                "SELECT session_id, device_id, created_at FROM troika_sessions "
+                "WHERE user_id = ? ORDER BY created_at, session_id",
+                (principal.user_id,),
+            )
+            entitlements = rows(
+                connection,
+                "SELECT plan, daily_request_limit, updated_at "
+                "FROM troika_entitlements WHERE user_id = ?",
+                (principal.user_id,),
+            )
+            usage = rows(
+                connection,
+                "SELECT usage_date, requests, updated_at FROM troika_usage_daily "
+                "WHERE user_id = ? ORDER BY usage_date",
+                (principal.user_id,),
+            )
+            audit_events = decode_json_fields(
+                rows(
+                    connection,
+                    "SELECT id, occurred_at, event_type, device_id, session_digest, "
+                    "run_digest, details_json FROM troika_audit_events "
+                    "WHERE user_id = ? ORDER BY occurred_at, id",
+                    (principal.user_id,),
+                ),
+                ("details_json",),
+            )
+            preferences = decode_json_fields(
+                rows(
+                    connection,
+                    "SELECT preferences_json, updated_at "
+                    "FROM troika_notification_preferences WHERE user_id = ?",
+                    (principal.user_id,),
+                ),
+                ("preferences_json",),
+            )
+
+            optional_queries = {
+                "projects": (
+                    "troika_projects",
+                    "SELECT id, name, summary, status, is_active, created_at, updated_at "
+                    "FROM troika_projects WHERE user_id = ? ORDER BY created_at, id",
+                ),
+                "tasks": (
+                    "troika_project_tasks",
+                    "SELECT id, project_id, title, details, status, due_at, action_mode, "
+                    "action_summary, idempotency_key, created_at, updated_at "
+                    "FROM troika_project_tasks WHERE user_id = ? ORDER BY created_at, id",
+                ),
+                "notes": (
+                    "troika_project_notes",
+                    "SELECT id, project_id, kind, content, idempotency_key, created_at "
+                    "FROM troika_project_notes WHERE user_id = ? ORDER BY created_at, id",
+                ),
+                "inbox_messages": (
+                    "troika_inbox_messages",
+                    "SELECT id, kind, category, title, body, reason, project_id, task_id, "
+                    "available_at, delivered_at, read_at, requires_approval, "
+                    "idempotency_key, created_at FROM troika_inbox_messages "
+                    "WHERE user_id = ? ORDER BY created_at, id",
+                ),
+                "vision_sessions": (
+                    "troika_vision_sessions",
+                    "SELECT id, device_id, token_id, capability, status, created_at, "
+                    "expires_at, consumed_at FROM troika_vision_sessions "
+                    "WHERE user_id = ? ORDER BY created_at, id",
+                ),
+                "artifacts": (
+                    "troika_artifacts",
+                    "SELECT id, created_by_device_id, filename, kind, mime_type, byte_size, "
+                    "sha256_digest, created_at FROM troika_artifacts "
+                    "WHERE user_id = ? ORDER BY created_at, id",
+                ),
+            }
+            optional = {
+                key: rows(connection, query, (principal.user_id,))
+                if table in existing_tables
+                else []
+                for key, (table, query) in optional_queries.items()
+            }
+
+        return {
+            "account": dict(account),
+            "devices": devices,
+            "tokens": tokens,
+            "sessions": sessions,
+            "entitlements": entitlements,
+            "usage_daily": usage,
+            "audit_events": audit_events,
+            "notification_preferences": preferences,
+            **optional,
+        }
+
     def prepare_account_deletion(
         self, principal: AccessPrincipal
     ) -> AccountDeletionManifest:

@@ -148,6 +148,9 @@ class HermesConfig {
   /// Подтверждаемое удаление product-аккаунта и серверных данных.
   static String get accountUrl => '$serverUrl/v1/account';
 
+  /// Архив всех переносимых данных текущего product-аккаунта.
+  static String get accountExportUrl => '$serverUrl/v1/account/export';
+
   /// Remove credentials and server-linked state after deletion was accepted.
   static Future<void> clearDeletedAccount() async {
     await setPhoneControlEnabled(false);

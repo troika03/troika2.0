@@ -129,7 +129,14 @@ Product toolset умеет создавать DOCX, PDF и PPTX. Файл сна
 Access Framework; широкое разрешение «All files access» для этого не нужно.
 До подтверждения выбора файл остаётся только во временном кэше приложения.
 
-## Удаление аккаунта
+## Экспорт и удаление аккаунта
+
+Кнопка «Экспортировать данные» в Android настройках вызывает
+`GET /v1/account/export` и сохраняет owner-scoped ZIP через системный выбор
+файла. В архив входят переносимые account/device metadata, настройки,
+проекты, задачи, заметки, inbox, usage/audit metadata, диалоги, location data,
+vision metadata и исходные artifacts. Запрос не принимает `user_id` и всегда
+использует владельца проверенного bearer token.
 
 В Android настройках кнопка «Удалить аккаунт и данные» доступна только для
 индивидуального `trk_live_…` token. Пользователь должен вручную ввести
@@ -144,9 +151,10 @@ saved locations, device context и временную metadata screen snapshot. 
 отозван, а очистка ещё завершается.
 
 Сохранённые пользователем копии документов на Android не удаляются скрыто.
-Текущая closed-beta реализация очищает live local storage сервера. До production
-нужно отдельно утвердить сроки хранения и удаление из backups/object storage;
-этот launch gate пока открыт.
+Текущая closed-beta реализация очищает live local storage сервера. Сроки и
+целевая политика описаны в `docs/DATA_RETENTION_AND_DELETION_POLICY.md`.
+Автоматический retention, production object purge и удаление из backups ещё не
+реализованы и не проверены; этот launch gate открыт.
 
 ## Ограничения beta
 

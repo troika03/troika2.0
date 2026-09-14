@@ -57,7 +57,9 @@
 ## Известные критические проблемы baseline
 
 - Закрытая beta имеет users/devices/tokens/entitlements/quota ledger, но ещё нет self-service регистрации, pairing UI, billing, платежей и поддержки подписок.
-- Точный device context всё ещё требует отдельного opt-in, политики хранения и удаления. Его внешний reverse-geocoding вызов нужно убрать за consent/feature flag.
+- Точный device context требует отдельного opt-in. Верхний срок 24 часа уже
+  зафиксирован, но автоматический retention worker ещё не реализован. Внешний
+  reverse-geocoding остаётся за feature flag и требует отдельного consent.
 - PC tools включены в core toolset; `tools/pc_tool.py` и `troika_voice_daemon.py` были незакоммичены в исходной копии.
 - PC/voice зависимости (`mss`, `pyautogui`, `scipy`, `pyttsx3`) не описаны в dependency manifest.
 - Flutter-проверки восстановлены. TUI dependencies и TUI build ещё не проверены.
@@ -369,16 +371,46 @@
   config tests 6/6. Полный Flutter analyze не нашёл ошибок, остались 28 прежних
   info в других UI-файлах; debug APK успешно собрана. Физическая проверка этого
   экрана не выполнена: во время финальной проверки ADB-устройство не подключено.
-- Production launch gate ещё не закрыт: нужны retention-периоды, экспорт,
-  политика удаления из backup/object storage и disaster-recovery rehearsal.
+- Production launch gate ещё не закрыт: нужны автоматическое применение
+  retention, реальное удаление из backup/object storage и disaster-recovery
+  rehearsal.
+
+## Выполнено: owner-scoped экспорт и retention/backup policy (2026-09-14)
+
+- Добавлен `GET /v1/account/export`. Endpoint не принимает `user_id`: владелец
+  выводится только из действующего product token и повторно проверяется внутри
+  транзакции.
+- ZIP содержит профиль, устройства, безопасные token metadata, настройки,
+  проекты, задачи, заметки, inbox, usage/audit metadata, диалоги, location
+  context/fingerprints, vision metadata и исходные bytes всех artifacts
+  владельца. Архив создаётся в памяти ответа и не сохраняется сервером.
+- Credential digests, vision nonce digests, physical storage paths, server
+  system prompts и private model reasoning исключены. Android получил кнопку
+  экспорта и сохраняет ZIP через системный выбор файла.
+- Интеграционный тест наполняет хранилища двух пользователей и проверяет весь
+  ZIP первого: чужие ID, email, проекты, сообщения, location и artifact bytes
+  отсутствуют.
+- В `docs/DATA_RETENTION_AND_DELETION_POLICY.md` утверждены верхние сроки для
+  диалогов, файлов, проектов, inbox, location, vision metadata, audit и usage.
+  Там же зафиксированы требования к будущим object purge, backup deletion
+  ledger и restore scrubber.
+- Автоматический retention worker, production object storage, selective backup
+  deletion и disaster-recovery rehearsal ещё не реализованы и не проверены.
+  Нельзя утверждать, что удаление из резервных копий работает.
+- Проверено: 16/16 targeted export/auth tests; связанный набор дал 40 passed,
+  затем 5/5 artifact tests прошли отдельным повтором после первого медленного
+  импорта `python-pptx`; Ruff и compileall прошли. Flutter tests 8/8 и полный
+  analyze прошли без ошибок, debug APK собрана; остались 28 прежних info в
+  других UI-файлах. Дополнительно `test_api_server.py` и
+  `test_api_server_runs.py`: 172 passed.
 
 ## Ближайший порядок работы
 
 1. Повторить на Samsung ручную проверку barge-in и реального обрыва сети;
    настроить VAD/эхоподавление по результату, не меняя security boundary.
-2. Определить retention/backup deletion policy, добавить экспорт данных и
-   проверить push token lifecycle до подключения push. Local account deletion
-   и physical in-app event-engine E2E уже работают.
+2. Реализовать автоматический retention worker с dry-run и owner-isolation
+   тестами. После выбора production storage добавить object purge, deletion
+   ledger, restore scrubber и disaster-recovery rehearsal.
 3. Перед реализацией WebRTC screen assist отдельно спроектировать signaling,
    TURN, hardware-backed device keys, heartbeat/revoke и изолированный vision
    worker. Закрытая snapshot beta не расширяет разрешение до live vision.
@@ -430,6 +462,7 @@
 - узкий безопасный набор управления привязанным Android-телефоном;
 - личные notification preferences, quiet hours, проекты, задачи, очередь,
   in-app доставка и Android-экран «Помощник»;
+- owner-scoped ZIP-экспорт серверных данных и artifacts через API и Android;
 - Android debug APK, Flutter tests и анализ из предыдущего этапа.
 
 ### Что ещё не является готовым продуктом
@@ -454,7 +487,8 @@
 - SMS, звонки, clipboard, экран, файлы телефона и календарь намеренно не
   включены в подписочный toolset до отдельного privacy/security review.
 - Нет production deployment с доменом, HTTPS, мониторингом, резервными копиями
-  и процедурой восстановления.
+  и процедурой восстановления. Удаление из backup/object storage не
+  реализовано и не проверено.
 - TUI checks и полностью зелёный hermetic CI baseline ещё не восстановлены.
 - Бесплатный OpenRouter router подходит для разработки и demo, но не даёт
   production SLA: доступны ограниченные запросы, плавающая модель и возможны
@@ -520,5 +554,11 @@
 - [ ] Реализованы и проверены WebRTC screen assist и CameraX live vision.
 - [x] Фоновый event engine создаёт осмысленные follow-up по срокам, блокировкам,
       решениям и прогрессу только при opt-in и действующем device token.
-- [ ] Push для проактивности не включён до retention/account deletion и проверки
+- [x] Добавлен owner-scoped ZIP-экспорт данных с Android save flow и тестом,
+      доказывающим отсутствие данных второго пользователя.
+- [x] Определены retention-периоды и политика будущего удаления из
+      backup/object storage с явной отметкой о нереализованных гарантиях.
+- [ ] Реализованы и проверены retention worker, production object purge,
+      backup deletion ledger и restore scrubber.
+- [ ] Push для проактивности не включён до автоматического retention и проверки
       push token lifecycle; in-app доставка работает.

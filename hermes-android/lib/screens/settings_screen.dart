@@ -31,6 +31,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   int _bargeInThreshold = 1200;
   bool _locationContextEnabled = false;
   bool _phoneControlEnabled = false;
+  bool _exportingAccount = false;
   bool _deletingAccount = false;
 
   // Список доступных голосов Edge TTS с человекочитаемыми описаниями
@@ -483,6 +484,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Настройки сохранены')));
+  }
+
+  Future<void> _exportAccountData() async {
+    setState(() => _exportingAccount = true);
+    try {
+      final saved = await HermesApiService().exportAccountData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            saved ? 'Архив данных сохранён' : 'Сохранение экспорта отменено',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) setState(() => _exportingAccount = false);
+    }
   }
 
   Future<void> _deleteAccount(AssistantService assistant) async {
@@ -1058,12 +1081,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 16),
             _sectionHeader('Аккаунт'),
             const Text(
-              'Удаление отзывает доступ всех устройств и стирает серверную '
-              'историю, проекты, задачи, напоминания и документы.',
+              'Сначала можно сохранить ZIP со всеми переносимыми данными и '
+              'личными файлами. Удаление отзывает доступ всех устройств и '
+              'стирает серверную историю, проекты, задачи, напоминания и документы.',
               style:
                   TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
             ),
             const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _exportingAccount || _deletingAccount
+                  ? null
+                  : _exportAccountData,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFF5A623),
+                side: const BorderSide(color: Color(0xFFF5A623)),
+              ),
+              icon: _exportingAccount
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.archive_outlined, size: 18),
+              label: Text(
+                _exportingAccount ? 'Создаю архив...' : 'Экспортировать данные',
+              ),
+            ),
+            const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed:
                   _deletingAccount ? null : () => _deleteAccount(assistant),

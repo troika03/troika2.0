@@ -147,6 +147,12 @@ API edge: auth, rate limits, idempotency, audit
 4. Шифрование secrets at rest, резервных копий и транспорта; журнал доступа без содержимого сообщений и ключей.
 5. Функции: экспорт данных, удаление аккаунта, настройка retention, очистка памяти и диалогов.
 
+Сроки и честные границы удаления зафиксированы в
+[docs/DATA_RETENTION_AND_DELETION_POLICY.md](docs/DATA_RETENTION_AND_DELETION_POLICY.md).
+Owner-scoped ZIP-экспорт и удаление из текущих локальных основных хранилищ
+реализованы. Автоматическое применение retention, production object storage,
+удаление из backup и проверка восстановления ещё не реализованы.
+
 ### Инструменты и действия
 
 1. Использовать capability-based toolsets: базовые безопасные tools, отдельно документы, отдельно integrations, отдельно PC.
@@ -226,6 +232,12 @@ API edge: auth, rate limits, idempotency, audit
       device tokens, остановка run/phone channels и очистка SQLite, SessionDB,
       transcripts, artifacts, location context и vision metadata без затрагивания
       другого пользователя.
+- [x] Добавить self-service ZIP-экспорт всех переносимых данных и artifact bytes
+      текущего владельца; тест с двумя пользователями доказывает изоляцию.
+- [x] Определить retention-периоды и политику будущего удаления из backup/object
+      storage без утверждения о ещё не реализованной очистке резервных копий.
+- [ ] Реализовать и проверить автоматический retention worker, production
+      object-storage purge, deletion ledger и restore scrubber.
 
 **Выход:** два пользователя не могут увидеть, использовать или удалить данные друг друга; это подтверждается автоматическими тестами.
 

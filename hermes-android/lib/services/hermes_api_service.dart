@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import '../config/hermes_config.dart';
 
@@ -103,6 +104,50 @@ class HermesApiService {
       return response.statusCode == 200;
     } catch (_) {
       return false;
+    }
+  }
+
+  /// Download a complete owner-scoped ZIP and save it through the system picker.
+  Future<bool> exportAccountData() async {
+    if (!HermesConfig.apiKey.startsWith('trk_live_')) {
+      throw HermesApiException(
+          'Экспорт данных доступен после подключения Тройки.');
+    }
+    try {
+      final response = await http
+          .get(
+            Uri.parse(HermesConfig.accountExportUrl),
+            headers: HermesConfig.headers,
+          )
+          .timeout(const Duration(seconds: 90));
+      if (response.statusCode != 200) {
+        throw HermesApiException(
+          'Сервер не создал экспорт (${response.statusCode}): '
+          '${_short(response.body)}',
+        );
+      }
+      final now = DateTime.now().toUtc();
+      final date = '${now.year.toString().padLeft(4, '0')}-'
+          '${now.month.toString().padLeft(2, '0')}-'
+          '${now.day.toString().padLeft(2, '0')}';
+      final isMobile = Platform.isAndroid || Platform.isIOS;
+      final target = await FilePicker.platform.saveFile(
+        dialogTitle: 'Сохранить данные Тройки',
+        fileName: 'troika-data-export-$date.zip',
+        type: FileType.custom,
+        allowedExtensions: const ['zip'],
+        bytes: isMobile ? response.bodyBytes : null,
+      );
+      if (target == null) return false;
+      if (!isMobile) {
+        await File(target).writeAsBytes(response.bodyBytes, flush: true);
+      }
+      return true;
+    } on SocketException {
+      throw HermesApiException('Нет соединения с сервером. Экспорт не создан.');
+    } on TimeoutException {
+      throw HermesApiException(
+          'Сервер не успел создать экспорт. Повтори позже.');
     }
   }
 

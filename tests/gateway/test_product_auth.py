@@ -1,8 +1,10 @@
 """Product-auth integration checks for the OpenAI-compatible API server."""
 
 import asyncio
+from io import BytesIO
 import json
 import sqlite3
+from zipfile import ZipFile
 
 from gateway.config import PlatformConfig
 from gateway.platforms.api_server import APIServerAdapter
@@ -170,11 +172,16 @@ def test_product_capabilities_do_not_advertise_global_responses_api(tmp_path) ->
     assert payload["features"]["product_quota_enforcement"] is False
     assert payload["features"]["screen_snapshot"] is False
     assert payload["features"]["screen_snapshot_external_vision"] is False
+    assert payload["features"]["account_export"] is True
     assert payload["features"]["account_deletion"] is True
     assert "artifacts" in payload["endpoints"]
     assert payload["endpoints"]["account"] == {
         "method": "DELETE",
         "path": "/v1/account",
+    }
+    assert payload["endpoints"]["account_export"] == {
+        "method": "GET",
+        "path": "/v1/account/export",
     }
 
 
@@ -503,6 +510,140 @@ def test_confirmed_account_deletion_purges_all_local_user_data(
     assert account_rows == 0
     assert leaked_rows == 0
     assert first_artifact.id != second_artifact.id
+    session_db.close()
+
+
+def test_account_export_contains_only_authenticated_users_data(
+    tmp_path, monkeypatch
+) -> None:
+    adapter, first_token, second_token = _adapter_with_two_users(tmp_path)
+    first_request = _Request(first_token)
+    second_request = _Request(second_token)
+    assert adapter._check_auth(first_request) is None
+    assert adapter._check_auth(second_request) is None
+    first = first_request["troika_product_principal"]
+    second = second_request["troika_product_principal"]
+    registry = adapter._access_registry
+
+    registry.claim_session(first, "first-export-session")
+    registry.claim_session(second, "second-export-session")
+    registry.set_notification_preferences(
+        first, NotificationPreferences(reminders_enabled=True)
+    )
+    registry.consume_chat_request(first)
+    first_project = adapter._proactive_store.create_project(
+        first, name="First export project", summary="First export summary"
+    )
+    first_task = adapter._proactive_store.create_task(
+        first, project_id=first_project.id, title="First export task"
+    )
+    adapter._proactive_store.add_note(
+        first,
+        project_id=first_project.id,
+        content="First export decision",
+        kind="decision",
+    )
+    adapter._proactive_store.enqueue_message(
+        first,
+        kind="reminder",
+        category="reminder",
+        title="First export reminder",
+        body="Review first export",
+        reason="Explicit export fixture reminder",
+        project_id=first_project.id,
+        task_id=first_task.id,
+    )
+    adapter._proactive_store.create_project(
+        second, name="SECOND USER PRIVATE PROJECT", summary="SECOND PRIVATE SUMMARY"
+    )
+    first_artifact = adapter._artifact_store.create(
+        user_id=first.user_id,
+        device_id=first.device_id,
+        filename="first-export",
+        kind="pdf",
+        data=b"%PDF-FIRST-EXPORT-CONTENT",
+    )
+    second_artifact = adapter._artifact_store.create(
+        user_id=second.user_id,
+        device_id=second.device_id,
+        filename="second-private",
+        kind="pdf",
+        data=b"%PDF-SECOND-USER-PRIVATE-CONTENT",
+    )
+    VisionSessionStore(registry.database_path).create(first)
+
+    session_db = SessionDB(db_path=tmp_path / "state.db")
+    session_db.create_session("first-export-session", "api_server")
+    session_db.append_message(
+        "first-export-session", "user", "FIRST EXPORT PRIVATE MESSAGE"
+    )
+    session_db.create_session("second-export-session", "api_server")
+    session_db.append_message(
+        "second-export-session", "user", "SECOND USER PRIVATE MESSAGE"
+    )
+    adapter._session_db = session_db
+
+    from tools import location_tool
+
+    monkeypatch.setattr(location_tool, "_db_path", lambda: tmp_path / "locations.db")
+    monkeypatch.setattr(
+        location_tool, "_cache_file", lambda: tmp_path / "device_context.json"
+    )
+    location_tool._DEVICE_CONTEXT_CACHE.clear()
+    location_tool.remember_device_context(first.memory_scope, {"ssid": "FIRST_WIFI"})
+    location_tool.remember_device_context(second.memory_scope, {"ssid": "SECOND_WIFI"})
+    assert location_tool._set({"name": "FIRST PLACE"}, first.memory_scope)["ok"]
+    assert location_tool._set({"name": "SECOND PLACE"}, second.memory_scope)["ok"]
+
+    response = asyncio.run(adapter._handle_export_account(_Request(first_token)))
+    assert response.status == 200
+    assert response.content_type == "application/zip"
+    assert response.headers["Cache-Control"] == "private, no-store"
+
+    with ZipFile(BytesIO(response.body)) as archive:
+        names = archive.namelist()
+        payload = json.loads(archive.read("troika-data.json"))
+        unpacked = b"\n".join(archive.read(name) for name in names)
+
+    data = payload["data"]
+    assert data["account"]["id"] == first.user_id
+    assert data["account"]["email"] == "one@example.com"
+    assert data["projects"][0]["name"] == "First export project"
+    assert data["tasks"][0]["title"] == "First export task"
+    assert data["notes"][0]["content"] == "First export decision"
+    assert data["inbox_messages"][0]["title"] == "First export reminder"
+    assert data["notification_preferences"][0]["preferences_json"][
+        "reminders_enabled"
+    ] is True
+    assert len(data["vision_sessions"]) == 1
+    assert data["locations"][0]["device_context"]["ssid"] == "FIRST_WIFI"
+    assert data["conversations"][0]["conversation"]["messages"][0][
+        "content"
+    ] == "FIRST EXPORT PRIVATE MESSAGE"
+    assert data["audit_events"][-1]["event_type"] == "account.export_requested"
+    assert any(first_artifact.id in name for name in names)
+    assert b"%PDF-FIRST-EXPORT-CONTENT" in unpacked
+
+    portable_json = json.dumps(payload, ensure_ascii=False)
+    for forbidden in (
+        second.user_id,
+        "two@example.com",
+        "SECOND USER PRIVATE PROJECT",
+        "SECOND PRIVATE SUMMARY",
+        "SECOND USER PRIVATE MESSAGE",
+        "SECOND_WIFI",
+        "SECOND PLACE",
+        second_artifact.id,
+        "token_digest",
+        "nonce_digest",
+        "storage_name",
+        "system_prompt",
+        "reasoning_content",
+    ):
+        assert forbidden not in portable_json
+        assert forbidden.encode("utf-8") not in unpacked
+    assert b"%PDF-SECOND-USER-PRIVATE-CONTENT" not in unpacked
+    assert first_token.encode("utf-8") not in unpacked
     session_db.close()
 
 

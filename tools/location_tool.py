@@ -264,6 +264,37 @@ def delete_location_scope(session_key: str) -> None:
         connection.close()
 
 
+def export_location_scope(session_key: str) -> Dict[str, Any]:
+    """Return transient context and saved places for exactly one owner scope."""
+    if not session_key:
+        return {"device_context": {}, "saved_locations": []}
+    device_context = dict(_DEVICE_CONTEXT_CACHE.get(session_key, {}))
+    path = _db_path()
+    if not path.exists():
+        return {
+            "device_context": device_context,
+            "saved_locations": [],
+        }
+    connection = _conn()
+    connection.row_factory = sqlite3.Row
+    try:
+        saved_locations = [
+            dict(row)
+            for row in connection.execute(
+                "SELECT name, bssid, ssid, network_type, bluetooth, device_name, "
+                "updated_at FROM locations WHERE session_key = ? "
+                "ORDER BY updated_at, name",
+                (session_key,),
+            ).fetchall()
+        ]
+    finally:
+        connection.close()
+    return {
+        "device_context": device_context,
+        "saved_locations": saved_locations,
+    }
+
+
 def get_device_context(session_key: Optional[str] = None) -> Dict[str, Any]:
     if session_key and session_key in _DEVICE_CONTEXT_CACHE:
         return dict(_DEVICE_CONTEXT_CACHE[session_key])

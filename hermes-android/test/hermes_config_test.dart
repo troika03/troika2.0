@@ -22,6 +22,12 @@ void main() {
     expect(HermesConfig.transcriptionUri.port, 8765);
   });
 
+  test('product account export uses authenticated server origin', () {
+    HermesConfig.serverUrl = 'https://example.test:9443/troika';
+    expect(HermesConfig.accountExportUrl,
+        'https://example.test:9443/troika/v1/account/export');
+  });
+
   test('legacy STT keeps its local proxy port', () {
     HermesConfig.apiKey = 'legacy-test-key';
     HermesConfig.serverUrl = 'http://127.0.0.1:8642';
