@@ -13,6 +13,7 @@ Exposes an HTTP server with endpoints:
 - GET  /v1/runs/{run_id}/events    — SSE stream of structured lifecycle events
 - POST /v1/runs/{run_id}/approval — resolve a pending run approval
 - POST /v1/runs/{run_id}/stop       — interrupt a running agent
+- DELETE /v1/account                — confirmed product account deletion
 - GET  /health                     — health check
 - GET  /health/detailed            — rich status for cross-container dashboard probing
 
@@ -38,6 +39,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
+
+from hermes_constants import get_hermes_home
 
 try:
     from aiohttp import web
@@ -817,6 +820,8 @@ class APIServerAdapter(BasePlatformAdapter):
     and routes them through hermes-agent's AIAgent.
     """
 
+    _ACCOUNT_DELETION_CONFIRMATION = "DELETE_MY_ACCOUNT"
+
     def __init__(self, config: PlatformConfig):
         super().__init__(config, Platform.API_SERVER)
         extra = config.extra or {}
@@ -882,6 +887,7 @@ class APIServerAdapter(BasePlatformAdapter):
         self._product_artifact_error: Optional[str] = None
         self._product_artifact_db: Optional[Path] = None
         self._product_artifact_root: Optional[Path] = None
+        self._product_sessions_dir = get_hermes_home() / "sessions"
         if self._product_auth_enabled:
             try:
                 from troika_product.access import AccessRegistry
@@ -946,6 +952,7 @@ class APIServerAdapter(BasePlatformAdapter):
         # resolves requests by session key, while API clients address the
         # in-flight run by run_id.
         self._run_approval_sessions: Dict[str, str] = {}
+        self._account_deletion_tasks: Dict[str, "asyncio.Task[None]"] = {}
         self._session_db: Optional[Any] = None  # Lazy-init SessionDB for session continuity
 
     @staticmethod
@@ -1429,6 +1436,10 @@ class APIServerAdapter(BasePlatformAdapter):
             fallback_model=fallback_model,
             reasoning_config=reasoning_config,
             gateway_session_key=gateway_session_key,
+            # Hermes' built-in MEMORY.md/USER.md files are profile-global.
+            # Product memory must come only from tenant-owned stores until a
+            # provider implements an account-deletable user scope.
+            skip_memory=self._access_registry is not None,
         )
         # Product conversations can contain voice transcripts and private
         # document text. Keep raw user content out of the operator logs.
@@ -1438,6 +1449,185 @@ class APIServerAdapter(BasePlatformAdapter):
     # ------------------------------------------------------------------
     # HTTP Handlers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _delete_session_files_strict(sessions_dir: Path, session_id: str) -> None:
+        """Delete only direct transcript files and surface cleanup failures."""
+        if not sessions_dir.exists():
+            return
+        exact_names = {f"{session_id}.json", f"{session_id}.jsonl"}
+        dump_prefix = f"request_dump_{session_id}_"
+        targets = [
+            entry
+            for entry in sessions_dir.iterdir()
+            if entry.name in exact_names
+            or (entry.name.startswith(dump_prefix) and entry.name.endswith(".json"))
+        ]
+        for target in targets:
+            if target.is_dir():
+                raise OSError("session cleanup target is unexpectedly a directory")
+            target.unlink(missing_ok=True)
+        remaining = [target.name for target in targets if target.exists()]
+        if remaining:
+            raise OSError("session transcript cleanup was incomplete")
+
+    def _purge_account_data_sync(self, user_id: str) -> None:
+        """Purge external local stores, then atomically remove product rows."""
+        if self._access_registry is None:
+            raise RuntimeError("product access registry is unavailable")
+        manifest = self._access_registry.account_deletion_manifest(user_id)
+        from tools.location_tool import delete_location_scope
+
+        for device_id in manifest.device_ids:
+            delete_location_scope(f"troika:{user_id}:{device_id}")
+        if self._artifact_store is None:
+            if manifest.artifact_count:
+                raise RuntimeError("private artifact storage is unavailable")
+        else:
+            self._artifact_store.delete_all_files_for_user(user_id)
+
+        if manifest.session_ids:
+            session_db = self._ensure_session_db()
+            if session_db is None:
+                raise RuntimeError("session storage is unavailable")
+            for session_id in manifest.session_ids:
+                session_db.delete_session(session_id)
+                self._delete_session_files_strict(
+                    self._product_sessions_dir, session_id
+                )
+                if session_db.get_session(session_id) is not None:
+                    raise RuntimeError("session deletion was incomplete")
+
+        self._access_registry.finalize_account_deletion(user_id)
+
+    def _forget_account_runs(self, user_id: str) -> None:
+        """Remove transient outputs and approvals owned by a deleted account."""
+        run_ids = [
+            run_id
+            for run_id, owner in list(self._run_owners.items())
+            if owner[0] == user_id
+        ]
+        for run_id in run_ids:
+            try:
+                from tools.approval import unregister_gateway_notify
+
+                approval_key = self._run_approval_sessions.get(run_id)
+                if approval_key:
+                    unregister_gateway_notify(approval_key)
+            except Exception:
+                pass
+            self._run_streams.pop(run_id, None)
+            self._run_streams_created.pop(run_id, None)
+            self._active_run_agents.pop(run_id, None)
+            self._active_run_tasks.pop(run_id, None)
+            self._run_statuses.pop(run_id, None)
+            self._run_owners.pop(run_id, None)
+            self._run_approval_sessions.pop(run_id, None)
+
+    async def _complete_account_deletion(self, user_id: str) -> None:
+        """Stop account activity and finish a crash-recoverable deletion."""
+        if self._access_registry is None:
+            raise RuntimeError("product access registry is unavailable")
+        manifest = self._access_registry.account_deletion_manifest(user_id)
+        from gateway.platforms.phone_bridge import product_bridge
+
+        await product_bridge.disconnect_devices(set(manifest.device_ids))
+        owned_run_ids = [
+            run_id
+            for run_id, owner in list(self._run_owners.items())
+            if owner[0] == user_id
+        ]
+        for run_id in owned_run_ids:
+            agent = self._active_run_agents.get(run_id)
+            if agent is not None:
+                try:
+                    agent.interrupt("Account deletion requested")
+                except Exception:
+                    pass
+        active_tasks = [
+            self._active_run_tasks[run_id]
+            for run_id in owned_run_ids
+            if run_id in self._active_run_tasks
+            and not self._active_run_tasks[run_id].done()
+        ]
+        if active_tasks:
+            await asyncio.gather(*active_tasks, return_exceptions=True)
+        await asyncio.to_thread(self._purge_account_data_sync, user_id)
+        self._forget_account_runs(user_id)
+
+    def _start_account_deletion(self, user_id: str) -> "asyncio.Task[None]":
+        existing = self._account_deletion_tasks.get(user_id)
+        if existing is not None and not existing.done():
+            return existing
+        task = asyncio.create_task(self._complete_account_deletion(user_id))
+        self._account_deletion_tasks[user_id] = task
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+        def _remove(completed: "asyncio.Task[None]") -> None:
+            if self._account_deletion_tasks.get(user_id) is completed:
+                self._account_deletion_tasks.pop(user_id, None)
+            try:
+                completed.result()
+            except asyncio.CancelledError:
+                return
+            except Exception:
+                logger.exception("Product account deletion requires recovery")
+
+        task.add_done_callback(_remove)
+        return task
+
+    async def _handle_delete_account(self, request: "web.Request") -> "web.Response":
+        """DELETE /v1/account — explicit, authenticated full local deletion."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        principal = self._product_principal(request)
+        if principal is None or self._access_registry is None:
+            return web.json_response(
+                _openai_error("Account deletion is available only in product mode"),
+                status=404,
+            )
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response(_openai_error("Invalid JSON body"), status=400)
+        if (
+            not isinstance(body, dict)
+            or body.get("confirmation") != self._ACCOUNT_DELETION_CONFIRMATION
+        ):
+            return web.json_response(
+                _openai_error(
+                    "Exact account deletion confirmation is required",
+                    code="account_deletion_confirmation_required",
+                ),
+                status=400,
+            )
+        try:
+            self._access_registry.prepare_account_deletion(principal)
+        except PermissionError:
+            return web.json_response(
+                _openai_error("Product authentication is required"), status=401
+            )
+        task = self._start_account_deletion(principal.user_id)
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=10.0)
+        except asyncio.TimeoutError:
+            return web.json_response(
+                {"status": "deletion_pending"},
+                status=202,
+                headers={"Cache-Control": "no-store"},
+            )
+        except Exception:
+            logger.exception("Product account deletion failed")
+            return web.json_response(
+                {"status": "deletion_pending"},
+                status=202,
+                headers={"Cache-Control": "no-store"},
+            )
+        return web.json_response(
+            {"status": "deleted"}, headers={"Cache-Control": "no-store"}
+        )
 
     async def _handle_health(self, request: "web.Request") -> "web.Response":
         """GET /health — simple health check."""
@@ -1536,6 +1726,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 "notification_preferences": self._access_registry is not None,
                 "assistant_projects": self._proactive_store is not None,
                 "assistant_inbox": self._proactive_store is not None,
+                "account_deletion": self._access_registry is not None,
                 "screen_snapshot": bool(
                     self._access_registry is not None
                     and self._product_screen_snapshot_enabled
@@ -1581,6 +1772,9 @@ class APIServerAdapter(BasePlatformAdapter):
                         },
                         "assistant_inbox": {
                             "method": "GET", "path": "/v1/assistant/inbox",
+                        },
+                        "account": {
+                            "method": "DELETE", "path": "/v1/account",
                         },
                     }
                     if self._access_registry is not None
@@ -5098,6 +5292,8 @@ class APIServerAdapter(BasePlatformAdapter):
             self._app.router.add_get("/v1/health", self._handle_health)
             self._app.router.add_get("/v1/models", self._handle_models)
             self._app.router.add_get("/v1/capabilities", self._handle_capabilities)
+            if self._access_registry is not None:
+                self._app.router.add_delete("/v1/account", self._handle_delete_account)
             self._app.router.add_get(
                 "/v1/notification-preferences", self._handle_notification_preferences,
             )
@@ -5250,6 +5446,9 @@ class APIServerAdapter(BasePlatformAdapter):
                 self._assistant_event_task = event_task
                 self._background_tasks.add(event_task)
                 event_task.add_done_callback(self._background_tasks.discard)
+            if self._access_registry is not None:
+                for user_id in self._access_registry.pending_account_deletions():
+                    self._start_account_deletion(user_id)
             if not self._api_key:
                 logger.warning(
                     "[%s] ⚠️  No API key configured (API_SERVER_KEY / platforms.api_server.key). "

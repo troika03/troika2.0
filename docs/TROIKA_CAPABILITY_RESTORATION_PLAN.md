@@ -504,6 +504,23 @@ Play Integrity можно использовать как дополнитель
 - Self-service регистрация, login, recovery и список устройств.
 - Ротация и отзыв refresh token.
 
+**Текущий срез (2026-09-14)**
+
+- Реализован подтверждаемый `DELETE /v1/account` и Android UI с вводом
+  `УДАЛИТЬ`. Сразу отзываются токены всех устройств и закрываются их phone
+  WebSocket; активные run прерываются до очистки данных.
+- Удаляются tenant rows, SessionDB/локальные transcripts, artifacts и их bytes,
+  проекты/задачи/заметки/inbox, notification preferences, audit/usage,
+  location fingerprints/device context и metadata-only vision sessions.
+  Незавершённая очистка хранится как недоступный `deleting` tombstone и
+  автоматически продолжается после перезапуска gateway.
+- Интеграционный тест удаляет полный fixture первого пользователя и проверяет,
+  что второй пользователь, его transcript, location и artifact остаются.
+- Profile-global `MEMORY.md/USER.md` отключены в product mode, потому что у них
+  нет tenant ownership. User-scoped memory API/UI, экспорт, retention и удаление
+  из production backup/object storage остаются открытыми; поэтому вся фаза 9 и
+  launch gate ещё не закрыты.
+
 **Готово, когда**
 
 - удаление подтверждено тестом по всем хранилищам и backup policy;

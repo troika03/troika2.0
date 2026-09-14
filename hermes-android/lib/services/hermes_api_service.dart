@@ -106,6 +106,36 @@ class HermesApiService {
     }
   }
 
+  /// Irreversibly delete the authenticated product account on the server.
+  /// A 202 means cleanup continues server-side, but the token is already revoked.
+  Future<bool> deleteAccount() async {
+    if (!HermesConfig.apiKey.startsWith('trk_live_')) {
+      throw HermesApiException(
+          'Удаление аккаунта доступно после подключения Тройки.');
+    }
+    try {
+      final response = await http
+          .delete(
+            Uri.parse(HermesConfig.accountUrl),
+            headers: HermesConfig.headers,
+            body: json.encode({'confirmation': 'DELETE_MY_ACCOUNT'}),
+          )
+          .timeout(const Duration(seconds: 20));
+      if (response.statusCode != 200 && response.statusCode != 202) {
+        throw HermesApiException(
+          'Сервер не завершил удаление (${response.statusCode}): '
+          '${_short(response.body)}',
+        );
+      }
+      return response.statusCode == 200;
+    } on SocketException {
+      throw HermesApiException('Нет соединения с сервером. Аккаунт не удалён.');
+    } on TimeoutException {
+      throw HermesApiException(
+          'Сервер не подтвердил удаление. Попробуй ещё раз.');
+    }
+  }
+
   /// Отправить сообщение (текст + опционально картинки) в общую сессию.
   ///
   /// История на сервере (state.db) ведётся по session-id, поэтому мы НЕ

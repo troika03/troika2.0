@@ -343,12 +343,42 @@
   Это не разрешение на `screen.live`, UI control или CameraX live: для них нужны
   отдельные threat models, consent и production transport.
 
+## Выполнено: local account deletion lifecycle (2026-09-14)
+
+- Product API получил `DELETE /v1/account` с обязательной точной confirmation.
+  Запрос сначала переводит пользователя в crash-recoverable состояние
+  `deleting`, отзывает токены всех его устройств и закрывает их WebSocket.
+- После остановки активных run удаляются transient run outputs/approvals,
+  SessionDB и transcript-файлы, проекты, задачи, заметки, inbox, notification
+  preferences, entitlement/usage, audit, metadata vision sessions, документы и
+  их opaque storage bucket. Saved location fingerprints и временный device
+  context удаляются для каждого device scope.
+- Очистка внешних локальных хранилищ идёт до атомарного удаления product SQLite
+  rows. При сбое токены остаются отозванными, tombstone сохраняет ссылки для
+  повторной очистки; gateway автоматически возобновляет её после перезапуска.
+- Android показывает опасную операцию только для product token, требует ввести
+  `УДАЛИТЬ`, честно предупреждает о необратимости и сохранённых на телефоне
+  копиях, затем очищает token/session/consent и закрывает приложение.
+- Общие Hermes `MEMORY.md/USER.md` больше не загружаются в product agent:
+  они не имеют tenant ownership и удаления scope. Личный контекст закрытой beta
+  берётся из owner-scoped проектов, задач и заметок. Отдельный user-scoped
+  memory store с просмотром/исправлением/экспортом остаётся задачей фазы 9.
+- Автоматический тест удаляет данные одного пользователя во всех перечисленных
+  локальных хранилищах и одновременно доказывает сохранность второго. Прошли 77
+  связанных Python-тестов, Ruff, `py_compile`, `git diff --check` и Flutter
+  config tests 6/6. Полный Flutter analyze не нашёл ошибок, остались 28 прежних
+  info в других UI-файлах; debug APK успешно собрана. Физическая проверка этого
+  экрана не выполнена: во время финальной проверки ADB-устройство не подключено.
+- Production launch gate ещё не закрыт: нужны retention-периоды, экспорт,
+  политика удаления из backup/object storage и disaster-recovery rehearsal.
+
 ## Ближайший порядок работы
 
 1. Повторить на Samsung ручную проверку barge-in и реального обрыва сети;
    настроить VAD/эхоподавление по результату, не меняя security boundary.
-2. Реализовать retention/account deletion и проверить push token lifecycle до
-   подключения push; in-app inbox и physical event-engine E2E уже работают.
+2. Определить retention/backup deletion policy, добавить экспорт данных и
+   проверить push token lifecycle до подключения push. Local account deletion
+   и physical in-app event-engine E2E уже работают.
 3. Перед реализацией WebRTC screen assist отдельно спроектировать signaling,
    TURN, hardware-backed device keys, heartbeat/revoke и изолированный vision
    worker. Закрытая snapshot beta не расширяет разрешение до live vision.
@@ -359,8 +389,7 @@
    обновить Android Gradle/Kotlin до будущих требований Flutter.
 6. Заменить legacy response store на tenant-owned storage либо оставить endpoint
    выключенным до этой миграции.
-7. Добавить lifecycle удаления данных: artifacts, saved locations, диалоги,
-   memory, временные vision-данные и account deletion.
+7. Добавить user-scoped memory UI/API: просмотр, исправление, удаление и экспорт.
 8. Спроектировать subscription billing: продукты, платежные периоды, webhooks,
    отмена, возвраты и поддержка.
 

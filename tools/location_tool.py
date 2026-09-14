@@ -69,7 +69,7 @@ def _load_cache_from_disk() -> None:
         logger.debug("device_context cache load failed: %s", e)
 
 
-def _save_cache_to_disk() -> None:
+def _save_cache_to_disk(*, strict: bool = False) -> None:
     """Сохранить весь кеш в файл. Вызывается после remember_device_context."""
     try:
         p = _cache_file()
@@ -79,6 +79,8 @@ def _save_cache_to_disk() -> None:
         tmp.replace(p)
     except Exception as e:
         logger.debug("device_context cache save failed: %s", e)
+        if strict:
+            raise
 
 
 # Загружаем сразу при импорте модуля.
@@ -238,6 +240,28 @@ def clear_device_context(session_key: str) -> None:
         return
     if _DEVICE_CONTEXT_CACHE.pop(session_key, None) is not None:
         _save_cache_to_disk()
+
+
+def delete_location_scope(session_key: str) -> None:
+    """Delete transient context and saved fingerprints for one product scope."""
+    if not session_key:
+        return
+    _DEVICE_CONTEXT_CACHE.pop(session_key, None)
+    # Reverse-geocode entries are keyed only by rounded coordinates, so their
+    # owner cannot be identified safely. Clear this short-lived process cache.
+    _GEOCODE_CACHE.clear()
+    _save_cache_to_disk(strict=True)
+    path = _db_path()
+    if not path.exists():
+        return
+    connection = _conn()
+    try:
+        connection.execute(
+            "DELETE FROM locations WHERE session_key = ?", (session_key,)
+        )
+        connection.commit()
+    finally:
+        connection.close()
 
 
 def get_device_context(session_key: Optional[str] = None) -> Dict[str, Any]:

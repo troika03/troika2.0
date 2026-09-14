@@ -215,6 +215,25 @@ class ProductPhoneBridge:
             self._pending.pop(key, None)
             return {"ok": False, "error": "phone_command_timeout"}
 
+    async def disconnect_devices(self, device_ids: set[str]) -> None:
+        """Close revoked device sockets and release their pending commands."""
+        clean_ids = {str(device_id) for device_id in device_ids if device_id}
+        async with self._lock:
+            sockets = [
+                self._connections.pop(device_id, None) for device_id in clean_ids
+            ]
+            pending_keys = [key for key in self._pending if key[0] in clean_ids]
+        for key in pending_keys:
+            future = self._pending.pop(key, None)
+            if future is not None and not future.done():
+                future.set_result({"ok": False, "error": "device_access_revoked"})
+        for ws in sockets:
+            if ws is not None and not ws.closed:
+                try:
+                    await ws.close(code=1008, message=b"device access revoked")
+                except Exception:
+                    logger.debug("Failed to close revoked product phone socket")
+
     async def handle_connection(
         self,
         request: web.Request,

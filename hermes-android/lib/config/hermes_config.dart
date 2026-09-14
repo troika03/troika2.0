@@ -145,6 +145,22 @@ class HermesConfig {
   /// Личные документы текущего аккаунта Тройки.
   static String get artifactsUrl => '$serverUrl/v1/artifacts';
 
+  /// Подтверждаемое удаление product-аккаунта и серверных данных.
+  static String get accountUrl => '$serverUrl/v1/account';
+
+  /// Remove credentials and server-linked state after deletion was accepted.
+  static Future<void> clearDeletedAccount() async {
+    await setPhoneControlEnabled(false);
+    await _prefs.setBool(_keyWakeWordEnabled, false);
+    await _prefs.setBool(_keyLocationContextEnabled, false);
+    await _prefs.setBool(_keyOnboardingDone, false);
+    await _prefs.remove(_keyApiKey);
+    await _prefs.remove(_keySessionKey);
+    await _prefs.remove(_keySessionId);
+    _sessionKey = '';
+    _sessionId = '';
+  }
+
   /// Единая сессия для голоса и текста конкретной установки приложения.
   /// Идентификаторы генерируются случайно один раз и не разделяются между людьми.
   static String get sessionId => _sessionId;

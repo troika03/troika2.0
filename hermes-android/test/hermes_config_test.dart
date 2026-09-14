@@ -50,4 +50,25 @@ void main() {
     await HermesConfig.setPhoneControlEnabled(true);
     expect(HermesConfig.phoneControlEnabled, isTrue);
   });
+
+  test('clears deleted account credentials and rotates local session',
+      () async {
+    HermesConfig.apiKey = 'trk_live_private';
+    HermesConfig.onboardingDone = true;
+    await HermesConfig.setLocationContextEnabled(true);
+    await HermesConfig.setPhoneControlEnabled(true);
+    final previousSession = HermesConfig.sessionId;
+
+    await HermesConfig.clearDeletedAccount();
+
+    expect(HermesConfig.apiKey, isEmpty);
+    expect(HermesConfig.onboardingDone, isFalse);
+    expect(HermesConfig.locationContextEnabled, isFalse);
+    expect(HermesConfig.phoneControlEnabled, isFalse);
+    expect(HermesConfig.sessionId, isEmpty);
+
+    await HermesConfig.init();
+    expect(HermesConfig.sessionId, startsWith('mobile-'));
+    expect(HermesConfig.sessionId, isNot(previousSession));
+  });
 }

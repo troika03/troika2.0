@@ -62,6 +62,16 @@ class AuditEvent:
     details: dict[str, str | int | float | bool | None]
 
 
+@dataclass(frozen=True)
+class AccountDeletionManifest:
+    """Data references needed to finish an already-authorized deletion."""
+
+    user_id: str
+    device_ids: tuple[str, ...]
+    session_ids: tuple[str, ...]
+    artifact_count: int
+
+
 class AccessRegistry:
     """SQLite-backed registry for beta access and device-bound API tokens."""
 
@@ -583,3 +593,127 @@ class AccessRegistry:
                 (principal.user_id,),
             ).fetchall()
         return {str(row["session_id"]) for row in rows}
+
+    def prepare_account_deletion(
+        self, principal: AccessPrincipal
+    ) -> AccountDeletionManifest:
+        """Revoke an account immediately and return its cleanup manifest.
+
+        The account remains as a ``deleting`` tombstone until filesystem and
+        SessionDB cleanup succeeds.  This keeps deletion retryable after a
+        process crash without allowing any revoked token to authenticate.
+        """
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._require_active_principal(connection, principal)
+            now = time.time()
+            connection.execute(
+                "UPDATE troika_users SET status = 'deleting' WHERE id = ?",
+                (principal.user_id,),
+            )
+            connection.execute(
+                "UPDATE troika_devices SET status = 'revoked' WHERE user_id = ?",
+                (principal.user_id,),
+            )
+            connection.execute(
+                "UPDATE troika_api_tokens SET revoked_at = COALESCE(revoked_at, ?) "
+                "WHERE device_id IN (SELECT id FROM troika_devices WHERE user_id = ?)",
+                (now, principal.user_id),
+            )
+            return self._account_deletion_manifest(connection, principal.user_id)
+
+    def account_deletion_manifest(self, user_id: str) -> AccountDeletionManifest:
+        """Return cleanup references for a persisted ``deleting`` account."""
+        with self._connect() as connection:
+            return self._account_deletion_manifest(connection, user_id)
+
+    @staticmethod
+    def _account_deletion_manifest(
+        connection: sqlite3.Connection, user_id: str
+    ) -> AccountDeletionManifest:
+        user = connection.execute(
+            "SELECT status FROM troika_users WHERE id = ?", (user_id,)
+        ).fetchone()
+        if user is None or user["status"] != "deleting":
+            raise ValueError("account is not pending deletion")
+        device_ids = tuple(
+            str(row["id"])
+            for row in connection.execute(
+                "SELECT id FROM troika_devices WHERE user_id = ? ORDER BY id",
+                (user_id,),
+            ).fetchall()
+        )
+        session_ids = tuple(
+            str(row["session_id"])
+            for row in connection.execute(
+                "SELECT session_id FROM troika_sessions WHERE user_id = ? "
+                "ORDER BY session_id",
+                (user_id,),
+            ).fetchall()
+        )
+        tables = {
+            str(row["name"])
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        artifact_count = 0
+        if "troika_artifacts" in tables:
+            row = connection.execute(
+                "SELECT COUNT(*) AS count FROM troika_artifacts WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+            artifact_count = int(row["count"])
+        return AccountDeletionManifest(
+            user_id=user_id,
+            device_ids=device_ids,
+            session_ids=session_ids,
+            artifact_count=artifact_count,
+        )
+
+    def pending_account_deletions(self) -> tuple[str, ...]:
+        """List crash-recoverable account deletion tombstones."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT id FROM troika_users WHERE status = 'deleting' ORDER BY id"
+            ).fetchall()
+        return tuple(str(row["id"]) for row in rows)
+
+    def finalize_account_deletion(self, user_id: str) -> None:
+        """Delete every product SQLite row for a prepared account atomically."""
+        child_tables = (
+            "troika_inbox_messages",
+            "troika_project_notes",
+            "troika_project_tasks",
+            "troika_projects",
+            "troika_vision_sessions",
+            "troika_artifacts",
+            "troika_notification_preferences",
+            "troika_audit_events",
+            "troika_usage_daily",
+            "troika_entitlements",
+            "troika_sessions",
+        )
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._account_deletion_manifest(connection, user_id)
+            existing_tables = {
+                str(row["name"])
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                ).fetchall()
+            }
+            for table in child_tables:
+                if table in existing_tables:
+                    connection.execute(
+                        f"DELETE FROM {table} WHERE user_id = ?", (user_id,)
+                    )
+            connection.execute(
+                "DELETE FROM troika_api_tokens WHERE device_id IN "
+                "(SELECT id FROM troika_devices WHERE user_id = ?)",
+                (user_id,),
+            )
+            connection.execute("DELETE FROM troika_devices WHERE user_id = ?", (user_id,))
+            cursor = connection.execute("DELETE FROM troika_users WHERE id = ?", (user_id,))
+            if cursor.rowcount != 1:
+                raise RuntimeError("account deletion did not remove the user tombstone")

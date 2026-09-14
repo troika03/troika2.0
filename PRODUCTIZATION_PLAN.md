@@ -222,6 +222,10 @@ API edge: auth, rate limits, idempotency, audit
 - [ ] Перенести memory/files/location на user-scoped storage.
 - [ ] Добавить quota/usage ledger и server-side limits.
 - [ ] Реализовать privacy controls и audit events.
+- [x] Добавить подтверждаемое удаление локального product-аккаунта: отзыв всех
+      device tokens, остановка run/phone channels и очистка SQLite, SessionDB,
+      transcripts, artifacts, location context и vision metadata без затрагивания
+      другого пользователя.
 
 **Выход:** два пользователя не могут увидеть, использовать или удалить данные друг друга; это подтверждается автоматическими тестами.
 

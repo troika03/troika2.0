@@ -2,10 +2,14 @@
 
 import asyncio
 import json
+import sqlite3
 
 from gateway.config import PlatformConfig
 from gateway.platforms.api_server import APIServerAdapter
+from hermes_state import SessionDB
 from toolsets import resolve_toolset
+from troika_product.notifications import NotificationPreferences
+from troika_product.vision_sessions import VisionSessionStore
 
 
 class _Request(dict):
@@ -44,6 +48,13 @@ class _ChatRequest(_Request):
 
     async def json(self) -> dict:
         return self._body
+
+
+class _AccountRequest(_ChatRequest):
+    def __init__(self, token: str, body: dict) -> None:
+        super().__init__(token, body)
+        self.method = "DELETE"
+        self.path_qs = "/v1/account"
 
 
 def _adapter_with_two_users(tmp_path, *, quotas_enabled=False):
@@ -159,7 +170,12 @@ def test_product_capabilities_do_not_advertise_global_responses_api(tmp_path) ->
     assert payload["features"]["product_quota_enforcement"] is False
     assert payload["features"]["screen_snapshot"] is False
     assert payload["features"]["screen_snapshot_external_vision"] is False
+    assert payload["features"]["account_deletion"] is True
     assert "artifacts" in payload["endpoints"]
+    assert payload["endpoints"]["account"] == {
+        "method": "DELETE",
+        "path": "/v1/account",
+    }
 
 
 def test_product_artifact_api_is_owner_scoped(tmp_path) -> None:
@@ -318,6 +334,200 @@ def test_product_mode_ignores_operator_toolset_override(tmp_path, monkeypatch) -
 
     adapter._create_agent()
     assert captured["enabled_toolsets"] == ["troika-product"]
+    assert captured["skip_memory"] is True
+
+
+def test_confirmed_account_deletion_purges_all_local_user_data(
+    tmp_path, monkeypatch
+) -> None:
+    adapter, first_token, second_token = _adapter_with_two_users(tmp_path)
+    first_request = _Request(first_token)
+    second_request = _Request(second_token)
+    assert adapter._check_auth(first_request) is None
+    assert adapter._check_auth(second_request) is None
+    first = first_request["troika_product_principal"]
+    second = second_request["troika_product_principal"]
+    registry = adapter._access_registry
+    first_extra_token = registry.issue_device_token(
+        registry.create_device(
+            first.user_id, name="First tablet", platform="android"
+        )
+    )
+    from tools import location_tool
+
+    monkeypatch.setattr(location_tool, "_db_path", lambda: tmp_path / "locations.db")
+    monkeypatch.setattr(
+        location_tool, "_cache_file", lambda: tmp_path / "device_context.json"
+    )
+    location_tool._DEVICE_CONTEXT_CACHE.clear()
+    location_tool.remember_device_context(first.memory_scope, {"bssid": "first"})
+    location_tool.remember_device_context(second.memory_scope, {"bssid": "second"})
+    assert location_tool._set({"name": "home"}, first.memory_scope)["ok"]
+    assert location_tool._set({"name": "home"}, second.memory_scope)["ok"]
+
+    registry.claim_session(first, "first-private-session")
+    registry.claim_session(second, "second-private-session")
+    registry.set_notification_preferences(
+        first,
+        NotificationPreferences(
+            reminders_enabled=True,
+            proactive_enabled=True,
+        ),
+    )
+    registry.consume_chat_request(first)
+    registry.record_audit_event("account.fixture", principal=first)
+
+    first_project = adapter._proactive_store.create_project(
+        first, name="Private project", summary="Private summary"
+    )
+    first_task = adapter._proactive_store.create_task(
+        first, project_id=first_project.id, title="Private task"
+    )
+    adapter._proactive_store.add_note(
+        first,
+        project_id=first_project.id,
+        content="Private project decision",
+        kind="decision",
+    )
+    adapter._proactive_store.enqueue_message(
+        first,
+        kind="reminder",
+        category="reminder",
+        title="Private reminder",
+        body="Review the private project result",
+        reason="The user explicitly requested this reminder",
+        project_id=first_project.id,
+        task_id=first_task.id,
+    )
+
+    first_artifact = adapter._artifact_store.create(
+        user_id=first.user_id,
+        device_id=first.device_id,
+        filename="private",
+        kind="pdf",
+        data=b"%PDF-first-private",
+    )
+    second_artifact = adapter._artifact_store.create(
+        user_id=second.user_id,
+        device_id=second.device_id,
+        filename="second",
+        kind="pdf",
+        data=b"%PDF-second-private",
+    )
+    VisionSessionStore(registry.database_path).create(first)
+
+    session_db = SessionDB(db_path=tmp_path / "state.db")
+    session_db.create_session("first-private-session", "api_server")
+    session_db.append_message(
+        "first-private-session", "user", "first private message"
+    )
+    session_db.create_session("second-private-session", "api_server")
+    session_db.append_message(
+        "second-private-session", "user", "second private message"
+    )
+    adapter._session_db = session_db
+    adapter._product_sessions_dir = tmp_path / "sessions"
+    adapter._product_sessions_dir.mkdir()
+    first_transcript = adapter._product_sessions_dir / "first-private-session.jsonl"
+    second_transcript = adapter._product_sessions_dir / "second-private-session.jsonl"
+    first_transcript.write_text("first private transcript", encoding="utf-8")
+    second_transcript.write_text("second private transcript", encoding="utf-8")
+    adapter._run_owners["run-first-private"] = (first.user_id, first.device_id)
+    adapter._run_statuses["run-first-private"] = {
+        "status": "completed",
+        "output": "first private output",
+    }
+    adapter._run_owners["run-second-private"] = (second.user_id, second.device_id)
+    adapter._run_statuses["run-second-private"] = {
+        "status": "completed",
+        "output": "second private output",
+    }
+
+    missing_confirmation = asyncio.run(
+        adapter._handle_delete_account(_AccountRequest(first_token, {}))
+    )
+    assert missing_confirmation.status == 400
+    assert registry.authenticate(first_token) == first
+
+    deleted = asyncio.run(
+        adapter._handle_delete_account(
+            _AccountRequest(first_token, {"confirmation": "DELETE_MY_ACCOUNT"})
+        )
+    )
+    assert deleted.status == 200
+    assert json.loads(deleted.body) == {"status": "deleted"}
+    assert registry.authenticate(first_token) is None
+    assert registry.authenticate(first_extra_token) is None
+    assert registry.authenticate(second_token) == second
+    assert session_db.get_session("first-private-session") is None
+    assert session_db.get_session("second-private-session") is not None
+    assert not first_transcript.exists()
+    assert second_transcript.exists()
+    assert "run-first-private" not in adapter._run_statuses
+    assert "run-first-private" not in adapter._run_owners
+    assert "run-second-private" in adapter._run_statuses
+    assert "run-second-private" in adapter._run_owners
+    assert adapter._artifact_store.read_for_user(
+        second.user_id, second_artifact.id
+    ) is not None
+    assert location_tool.get_device_context(first.memory_scope) == {}
+    assert location_tool.get_device_context(second.memory_scope) == {"bssid": "second"}
+    assert location_tool._list(first.memory_scope)["count"] == 0
+    assert location_tool._list(second.memory_scope)["count"] == 1
+    assert adapter._artifact_store.storage_root.joinpath(
+        adapter._artifact_store._user_bucket(first.user_id)
+    ).exists() is False
+
+    with sqlite3.connect(registry.database_path) as connection:
+        account_rows = connection.execute(
+            "SELECT COUNT(*) FROM troika_users WHERE id = ?", (first.user_id,)
+        ).fetchone()[0]
+        leaked_rows = 0
+        for table in (
+            "troika_devices",
+            "troika_sessions",
+            "troika_entitlements",
+            "troika_usage_daily",
+            "troika_audit_events",
+            "troika_notification_preferences",
+            "troika_artifacts",
+            "troika_projects",
+            "troika_project_tasks",
+            "troika_project_notes",
+            "troika_inbox_messages",
+            "troika_vision_sessions",
+        ):
+            leaked_rows += connection.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE user_id = ?", (first.user_id,)
+            ).fetchone()[0]
+    assert account_rows == 0
+    assert leaked_rows == 0
+    assert first_artifact.id != second_artifact.id
+    session_db.close()
+
+
+def test_account_deletion_revokes_access_before_cleanup_failure(
+    tmp_path, monkeypatch
+) -> None:
+    adapter, first_token, _ = _adapter_with_two_users(tmp_path)
+    request = _Request(first_token)
+    assert adapter._check_auth(request) is None
+    principal = request["troika_product_principal"]
+
+    def fail_cleanup(_user_id: str) -> None:
+        raise OSError("simulated storage failure")
+
+    monkeypatch.setattr(adapter, "_purge_account_data_sync", fail_cleanup)
+    response = asyncio.run(
+        adapter._handle_delete_account(
+            _AccountRequest(first_token, {"confirmation": "DELETE_MY_ACCOUNT"})
+        )
+    )
+
+    assert response.status == 202
+    assert json.loads(response.body) == {"status": "deletion_pending"}
+    assert adapter._access_registry.authenticate(first_token) is None
+    assert principal.user_id in adapter._access_registry.pending_account_deletions()
 
 
 def test_product_screen_toolset_requires_explicit_external_vision_opt_in(

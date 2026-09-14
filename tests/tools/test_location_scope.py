@@ -39,6 +39,32 @@ def test_location_context_can_be_cleared_after_consent_revocation(tmp_path, monk
     assert location_tool.get_device_context("user-one") == {}
 
 
+def test_account_scope_deletion_clears_context_and_saved_locations(
+    tmp_path, monkeypatch
+) -> None:
+    db_path = tmp_path / "locations.db"
+    cache_path = tmp_path / "context.json"
+    monkeypatch.setattr(location_tool, "_db_path", lambda: db_path)
+    monkeypatch.setattr(location_tool, "_cache_file", lambda: cache_path)
+    location_tool._DEVICE_CONTEXT_CACHE.clear()
+    location_tool._DEVICE_CONTEXT_CACHE.update(
+        {
+            "user-one": {"bssid": "aa"},
+            "user-two": {"bssid": "bb"},
+        }
+    )
+    location_tool._set({"name": "home"}, "user-one")
+    location_tool._set({"name": "home"}, "user-two")
+
+    location_tool.delete_location_scope("user-one")
+
+    assert location_tool.get_device_context("user-one") == {}
+    assert location_tool.get_device_context("user-two") == {"bssid": "bb"}
+    assert location_tool._list("user-one")["count"] == 0
+    assert location_tool._list("user-two")["count"] == 1
+    assert "user-one" not in cache_path.read_text(encoding="utf-8")
+
+
 def test_reverse_geocoding_is_off_without_operator_feature_flag(monkeypatch) -> None:
     location_tool._GEOCODE_CACHE.clear()
     monkeypatch.delenv("TROIKA_EXTERNAL_GEOCODING_ENABLED", raising=False)

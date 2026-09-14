@@ -12,6 +12,7 @@ from hashlib import sha256
 import os
 from pathlib import Path
 import re
+import shutil
 import sqlite3
 import tempfile
 import time
@@ -298,6 +299,15 @@ class ArtifactStore:
             # harmless opaque orphan for an operator cleanup job.
             pass
         return self._artifact_from_row(row)
+
+    def delete_all_files_for_user(self, user_id: str) -> None:
+        """Remove one user's opaque artifact bucket before metadata deletion."""
+        clean_user_id = self._validate_owner(user_id, "user id")
+        bucket = (self.storage_root / self._user_bucket(clean_user_id)).resolve()
+        if bucket.parent != self.storage_root:
+            raise ArtifactIntegrityError("artifact bucket escaped storage root")
+        if bucket.exists():
+            shutil.rmtree(bucket)
 
 
 def _constant_time_digest_equal(first: str, second: str) -> bool:

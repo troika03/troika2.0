@@ -31,6 +31,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   int _bargeInThreshold = 1200;
   bool _locationContextEnabled = false;
   bool _phoneControlEnabled = false;
+  bool _deletingAccount = false;
 
   // Список доступных голосов Edge TTS с человекочитаемыми описаниями
   static const _voices = [
@@ -484,6 +485,106 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ).showSnackBar(const SnackBar(content: Text('Настройки сохранены')));
   }
 
+  Future<void> _deleteAccount(AssistantService assistant) async {
+    final confirmationController = TextEditingController();
+    var exactConfirmation = false;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF17150F),
+          title: const Text(
+            'Удалить аккаунт?',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Сервер удалит историю диалогов, проекты, задачи, напоминания, '
+                'документы и данные устройства. Отменить это нельзя. Копии '
+                'файлов, уже сохранённые на телефоне, останутся.',
+                style: TextStyle(color: Colors.white70, height: 1.4),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Для подтверждения введи УДАЛИТЬ',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: confirmationController,
+                autofocus: true,
+                style: const TextStyle(color: Colors.white),
+                onChanged: (value) => setDialogState(
+                  () => exactConfirmation = value.trim() == 'УДАЛИТЬ',
+                ),
+                decoration: const InputDecoration(hintText: 'УДАЛИТЬ'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Отмена'),
+            ),
+            TextButton(
+              onPressed: exactConfirmation
+                  ? () => Navigator.pop(dialogContext, true)
+                  : null,
+              child: const Text(
+                'Удалить навсегда',
+                style: TextStyle(color: Color(0xFFE57373)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    confirmationController.dispose();
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _deletingAccount = true);
+    try {
+      final completed = await HermesApiService().deleteAccount();
+      await assistant.setWakeWordEnabled(false);
+      await HermesConfig.clearDeletedAccount();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: const Color(0xFF17150F),
+          title: Text(
+            completed ? 'Аккаунт удалён' : 'Удаление принято',
+            style: const TextStyle(color: Colors.white),
+          ),
+          content: Text(
+            completed
+                ? 'Данные удалены, доступ устройства отозван.'
+                : 'Доступ уже отозван. Сервер завершит очистку автоматически.',
+            style: const TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Закрыть приложение'),
+            ),
+          ],
+        ),
+      );
+      await SystemNavigator.pop();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _deletingAccount = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final assistant = context.watch<AssistantService>();
@@ -559,7 +660,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             value: assistant.wakeWordEnabled,
             onChanged: (v) => assistant.setWakeWordEnabled(v),
-            activeColor: const Color(0xFFF5A623),
+            activeThumbColor: const Color(0xFFF5A623),
           ),
           const SizedBox(height: 24),
           const Divider(color: Colors.white10),
@@ -809,7 +910,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             value: _bargeInEnabled,
             onChanged: _saveBargeInEnabled,
-            activeColor: const Color(0xFFF5A623),
+            activeThumbColor: const Color(0xFFF5A623),
             contentPadding: EdgeInsets.zero,
           ),
           if (_bargeInEnabled) ...[
@@ -939,7 +1040,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: TextStyle(color: Colors.white38, fontSize: 12),
             ),
             value: _locationContextEnabled,
-            activeColor: const Color(0xFFF5A623),
+            activeThumbColor: const Color(0xFFF5A623),
             onChanged: _setLocationContextEnabled,
           ),
           OutlinedButton.icon(
@@ -951,6 +1052,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: const Icon(Icons.my_location, size: 18),
             label: const Text('Разрешить местоположение'),
           ),
+          if (HermesConfig.apiKey.startsWith('trk_live_')) ...[
+            const SizedBox(height: 24),
+            const Divider(color: Colors.white10),
+            const SizedBox(height: 16),
+            _sectionHeader('Аккаунт'),
+            const Text(
+              'Удаление отзывает доступ всех устройств и стирает серверную '
+              'историю, проекты, задачи, напоминания и документы.',
+              style:
+                  TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed:
+                  _deletingAccount ? null : () => _deleteAccount(assistant),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFE57373),
+                side: const BorderSide(color: Color(0xFFE57373)),
+              ),
+              icon: _deletingAccount
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.delete_forever, size: 18),
+              label: Text(
+                _deletingAccount ? 'Удаляю...' : 'Удалить аккаунт и данные',
+              ),
+            ),
+          ],
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: _save,

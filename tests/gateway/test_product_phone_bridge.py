@@ -13,6 +13,7 @@ class _FakeSocket:
         self.bridge = bridge
         self.device_id = device_id
         self.sent: list[dict] = []
+        self.close_code: int | None = None
 
     async def send_json(self, payload: dict) -> None:
         self.sent.append(payload)
@@ -24,6 +25,10 @@ class _FakeSocket:
             )
 
         asyncio.create_task(respond())
+
+    async def close(self, *, code: int, message: bytes) -> None:
+        self.closed = True
+        self.close_code = code
 
 
 def test_product_bridge_routes_command_only_to_selected_device() -> None:
@@ -64,6 +69,27 @@ def test_product_bridge_marks_only_state_queries_as_read_only() -> None:
     assert ProductPhoneBridge.requires_confirmation("open_app")
     assert not ProductPhoneBridge.requires_confirmation("send_sms")
     assert ProductPhoneBridge.requires_confirmation("screen_snapshot")
+
+
+def test_product_bridge_disconnects_only_revoked_account_devices() -> None:
+    async def scenario() -> None:
+        bridge = ProductPhoneBridge()
+        revoked = _FakeSocket(bridge, "revoked-device")
+        retained = _FakeSocket(bridge, "retained-device")
+        bridge._connections["revoked-device"] = revoked
+        bridge._connections["retained-device"] = retained
+        pending = asyncio.get_running_loop().create_future()
+        bridge._pending[("revoked-device", "pending-command")] = pending
+
+        await bridge.disconnect_devices({"revoked-device"})
+
+        assert revoked.closed
+        assert revoked.close_code == 1008
+        assert not retained.closed
+        assert "retained-device" in bridge._connections
+        assert await pending == {"ok": False, "error": "device_access_revoked"}
+
+    asyncio.run(scenario())
 
 
 def test_product_tool_availability_is_scoped_to_current_device() -> None:
