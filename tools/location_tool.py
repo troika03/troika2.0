@@ -50,10 +50,15 @@ logger = logging.getLogger(__name__)
 # кеш пишется в hermes_home/device_context.json — при импорте модуля
 # восстанавливается, при обновлении — перезаписывается.
 _DEVICE_CONTEXT_CACHE: Dict[str, Dict[str, Any]] = {}
+_DEVICE_CONTEXT_RECEIVED_AT: Dict[str, float] = {}
 
 
 def _cache_file() -> Path:
     return get_hermes_home() / "device_context.json"
+
+
+def _cache_timestamps_file() -> Path:
+    return _cache_file().with_name("device_context_timestamps.json")
 
 
 def _load_cache_from_disk() -> None:
@@ -65,6 +70,17 @@ def _load_cache_from_disk() -> None:
         data = json.loads(p.read_text(encoding="utf-8"))
         if isinstance(data, dict):
             _DEVICE_CONTEXT_CACHE.update({k: v for k, v in data.items() if isinstance(v, dict)})
+            fallback = p.stat().st_mtime
+            _DEVICE_CONTEXT_RECEIVED_AT.update(
+                {key: fallback for key in _DEVICE_CONTEXT_CACHE}
+            )
+        timestamps_path = _cache_timestamps_file()
+        if timestamps_path.exists():
+            timestamps = json.loads(timestamps_path.read_text(encoding="utf-8"))
+            if isinstance(timestamps, dict):
+                for key, value in timestamps.items():
+                    if key in _DEVICE_CONTEXT_CACHE and isinstance(value, (int, float)):
+                        _DEVICE_CONTEXT_RECEIVED_AT[key] = float(value)
     except Exception as e:
         logger.debug("device_context cache load failed: %s", e)
 
@@ -77,6 +93,19 @@ def _save_cache_to_disk(*, strict: bool = False) -> None:
         tmp = p.with_suffix(".tmp")
         tmp.write_text(json.dumps(_DEVICE_CONTEXT_CACHE, ensure_ascii=False), encoding="utf-8")
         tmp.replace(p)
+        timestamps_path = _cache_timestamps_file()
+        timestamps_tmp = timestamps_path.with_suffix(".tmp")
+        timestamps_tmp.write_text(
+            json.dumps(
+                {
+                    key: _DEVICE_CONTEXT_RECEIVED_AT.get(key, p.stat().st_mtime)
+                    for key in _DEVICE_CONTEXT_CACHE
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        timestamps_tmp.replace(timestamps_path)
     except Exception as e:
         logger.debug("device_context cache save failed: %s", e)
         if strict:
@@ -222,12 +251,15 @@ def _conn() -> sqlite3.Connection:
     return c
 
 
-def remember_device_context(session_key: str, ctx: Dict[str, Any]) -> None:
+def remember_device_context(
+    session_key: str, ctx: Dict[str, Any], *, now: float | None = None
+) -> None:
     """Вызывается api_server при получении X-Hermes-Device-Context."""
     if not session_key:
         logger.debug("device context ignored: no session scope")
         return
     _DEVICE_CONTEXT_CACHE[session_key] = dict(ctx) if ctx else {}
+    _DEVICE_CONTEXT_RECEIVED_AT[session_key] = time.time() if now is None else float(now)
     # Пишем на диск чтобы пережить рестарт gateway. Иначе после каждого
     # рестарта Тройка не знает где Миша, пока он снова не заговорит wake-word'ом
     # (Flutter-путь пока не шлёт X-Hermes-Device-Context header).
@@ -238,7 +270,9 @@ def clear_device_context(session_key: str) -> None:
     """Remove transient device context when a product user revokes consent."""
     if not session_key:
         return
-    if _DEVICE_CONTEXT_CACHE.pop(session_key, None) is not None:
+    removed = _DEVICE_CONTEXT_CACHE.pop(session_key, None) is not None
+    _DEVICE_CONTEXT_RECEIVED_AT.pop(session_key, None)
+    if removed:
         _save_cache_to_disk()
 
 
@@ -247,6 +281,7 @@ def delete_location_scope(session_key: str) -> None:
     if not session_key:
         return
     _DEVICE_CONTEXT_CACHE.pop(session_key, None)
+    _DEVICE_CONTEXT_RECEIVED_AT.pop(session_key, None)
     # Reverse-geocode entries are keyed only by rounded coordinates, so their
     # owner cannot be identified safely. Clear this short-lived process cache.
     _GEOCODE_CACHE.clear()
@@ -262,6 +297,49 @@ def delete_location_scope(session_key: str) -> None:
         connection.commit()
     finally:
         connection.close()
+
+
+def prune_location_scope(
+    session_key: str, *, context_cutoff: float, location_cutoff: float,
+    dry_run: bool = True,
+) -> Dict[str, int]:
+    """Apply transient-context and saved-location retention to one scope."""
+    if not session_key:
+        return {"device_context": 0, "saved_locations": 0}
+    context_count = 0
+    received_at = _DEVICE_CONTEXT_RECEIVED_AT.get(session_key, 0.0)
+    if session_key in _DEVICE_CONTEXT_CACHE and received_at < context_cutoff:
+        context_count = 1
+        if not dry_run:
+            _DEVICE_CONTEXT_CACHE.pop(session_key, None)
+            _DEVICE_CONTEXT_RECEIVED_AT.pop(session_key, None)
+            _GEOCODE_CACHE.clear()
+            _save_cache_to_disk(strict=True)
+
+    location_count = 0
+    path = _db_path()
+    if path.exists():
+        connection = sqlite3.connect(path) if dry_run else _conn()
+        try:
+            row = connection.execute(
+                "SELECT COUNT(*) FROM locations "
+                "WHERE session_key = ? AND COALESCE(updated_at, 0) < ?",
+                (session_key, float(location_cutoff)),
+            ).fetchone()
+            location_count = int(row[0])
+            if location_count and not dry_run:
+                connection.execute(
+                    "DELETE FROM locations WHERE session_key = ? "
+                    "AND COALESCE(updated_at, 0) < ?",
+                    (session_key, float(location_cutoff)),
+                )
+                connection.commit()
+        finally:
+            connection.close()
+    return {
+        "device_context": context_count,
+        "saved_locations": location_count,
+    }
 
 
 def export_location_scope(session_key: str) -> Dict[str, Any]:

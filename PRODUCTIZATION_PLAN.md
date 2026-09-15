@@ -239,8 +239,11 @@ Owner-scoped личная память с просмотром/правкой/у
       context, экспортом и cross-tenant тестами.
 - [x] Определить retention-периоды и политику будущего удаления из backup/object
       storage без утверждения о ещё не реализованной очистке резервных копий.
-- [ ] Реализовать и проверить автоматический retention worker, production
-      object-storage purge, deletion ledger и restore scrubber.
+- [x] Реализовать автоматический owner-scoped retention worker для текущих
+      локальных SQLite/filesystem stores: startup/6-hour loop, dry-run,
+      управляемое время, privacy-safe counters и cross-tenant тест.
+- [ ] Реализовать и проверить production object-storage purge, deletion ledger
+      и restore scrubber; локальный worker не подтверждает удаление из backup.
 
 **Выход:** два пользователя не могут увидеть, использовать или удалить данные друг друга; это подтверждается автоматическими тестами.
 

@@ -880,6 +880,8 @@ class APIServerAdapter(BasePlatformAdapter):
         self._proactive_store = None
         self._memory_store = None
         self._assistant_event_task: Optional[asyncio.Task[Any]] = None
+        self._retention_task: Optional[asyncio.Task[Any]] = None
+        self._retention_last_report: Optional[Dict[str, Any]] = None
         try:
             assistant_interval = float(
                 extra.get("product_assistant_event_interval_seconds", 60)
@@ -888,6 +890,30 @@ class APIServerAdapter(BasePlatformAdapter):
             assistant_interval = 60.0
         self._assistant_event_interval = (
             assistant_interval if 15 <= assistant_interval <= 3600 else 60.0
+        )
+        self._retention_enabled = self._product_auth_enabled and _coerce_config_bool(
+            extra.get(
+                "product_retention_enabled",
+                os.getenv("TROIKA_PRODUCT_RETENTION_ENABLED", "true"),
+            )
+        )
+        self._retention_dry_run = _coerce_config_bool(
+            extra.get(
+                "product_retention_dry_run",
+                os.getenv("TROIKA_PRODUCT_RETENTION_DRY_RUN", "false"),
+            )
+        )
+        try:
+            retention_interval = float(
+                extra.get(
+                    "product_retention_interval_seconds",
+                    os.getenv("TROIKA_PRODUCT_RETENTION_INTERVAL_SECONDS", "21600"),
+                )
+            )
+        except (TypeError, ValueError):
+            retention_interval = 21600.0
+        self._retention_interval = (
+            retention_interval if 300 <= retention_interval <= 86400 else 21600.0
         )
         self._product_auth_error: Optional[str] = None
         self._product_artifact_error: Optional[str] = None
@@ -1798,6 +1824,8 @@ class APIServerAdapter(BasePlatformAdapter):
                 "private_memory": self._memory_store is not None,
                 "account_export": self._access_registry is not None,
                 "account_deletion": self._access_registry is not None,
+                "automatic_retention": self._retention_enabled,
+                "retention_dry_run": self._retention_dry_run,
                 "screen_snapshot": bool(
                     self._access_registry is not None
                     and self._product_screen_snapshot_enabled
@@ -5459,6 +5487,39 @@ class APIServerAdapter(BasePlatformAdapter):
                 logger.exception("[%s] assistant event scan failed", self.name)
             await asyncio.sleep(self._assistant_event_interval)
 
+    def _run_retention_once_sync(self) -> Dict[str, Any]:
+        """Apply the approved retention policy to current local stores."""
+        if self._access_registry is None:
+            raise RuntimeError("product access registry is unavailable")
+        from troika_product.retention import RetentionWorker
+
+        worker = RetentionWorker(
+            self._access_registry,
+            artifact_store=self._artifact_store,
+            session_db=self._ensure_session_db(),
+            sessions_dir=self._product_sessions_dir,
+            session_file_purger=self._delete_session_files_strict,
+        )
+        return worker.run(dry_run=self._retention_dry_run).to_dict()
+
+    async def _run_retention_engine(self) -> None:
+        """Run retention at startup and then on the configured interval."""
+        while True:
+            try:
+                report = await asyncio.to_thread(self._run_retention_once_sync)
+                self._retention_last_report = report
+                log = logger.warning if report.get("failures") else logger.info
+                log(
+                    "[%s] product retention completed: %s",
+                    self.name,
+                    json.dumps(report, sort_keys=True, separators=(",", ":")),
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("[%s] product retention failed", self.name)
+            await asyncio.sleep(self._retention_interval)
+
     # ------------------------------------------------------------------
     # BasePlatformAdapter interface
     # ------------------------------------------------------------------
@@ -5652,6 +5713,11 @@ class APIServerAdapter(BasePlatformAdapter):
                 self._assistant_event_task = event_task
                 self._background_tasks.add(event_task)
                 event_task.add_done_callback(self._background_tasks.discard)
+            if self._retention_enabled:
+                retention_task = asyncio.create_task(self._run_retention_engine())
+                self._retention_task = retention_task
+                self._background_tasks.add(retention_task)
+                retention_task.add_done_callback(self._background_tasks.discard)
             if self._access_registry is not None:
                 for user_id in self._access_registry.pending_account_deletions():
                     self._start_account_deletion(user_id)
@@ -5682,6 +5748,14 @@ class APIServerAdapter(BasePlatformAdapter):
             event_task.cancel()
             try:
                 await event_task
+            except asyncio.CancelledError:
+                pass
+        retention_task = self._retention_task
+        self._retention_task = None
+        if retention_task is not None and not retention_task.done():
+            retention_task.cancel()
+            try:
+                await retention_task
             except asyncio.CancelledError:
                 pass
         if self._site:

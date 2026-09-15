@@ -57,9 +57,9 @@
 ## Известные критические проблемы baseline
 
 - Закрытая beta имеет users/devices/tokens/entitlements/quota ledger, но ещё нет self-service регистрации, pairing UI, billing, платежей и поддержки подписок.
-- Точный device context требует отдельного opt-in. Верхний срок 24 часа уже
-  зафиксирован, но автоматический retention worker ещё не реализован. Внешний
-  reverse-geocoding остаётся за feature flag и требует отдельного consent.
+- Точный device context требует отдельного opt-in и автоматически очищается
+  через 24 часа owner-scoped retention worker. Внешний reverse-geocoding
+  остаётся за feature flag и требует отдельного consent.
 - PC tools включены в core toolset; `tools/pc_tool.py` и `troika_voice_daemon.py` были незакоммичены в исходной копии.
 - PC/voice зависимости (`mss`, `pyautogui`, `scipy`, `pyttsx3`) не описаны в dependency manifest.
 - Flutter-проверки восстановлены. TUI dependencies и TUI build ещё не проверены.
@@ -370,9 +370,8 @@
   config tests 6/6. Полный Flutter analyze не нашёл ошибок, остались 28 прежних
   info в других UI-файлах; debug APK успешно собрана. Физическая проверка этого
   экрана не выполнена: во время финальной проверки ADB-устройство не подключено.
-- Production launch gate ещё не закрыт: нужны автоматическое применение
-  retention, реальное удаление из backup/object storage и disaster-recovery
-  rehearsal.
+- Production launch gate ещё не закрыт: нужны реальное удаление из
+  backup/object storage и disaster-recovery rehearsal.
 
 ## Выполнено: owner-scoped экспорт и retention/backup policy (2026-09-14)
 
@@ -393,9 +392,9 @@
   диалогов, файлов, проектов, inbox, location, vision metadata, audit и usage.
   Там же зафиксированы требования к будущим object purge, backup deletion
   ledger и restore scrubber.
-- Автоматический retention worker, production object storage, selective backup
-  deletion и disaster-recovery rehearsal ещё не реализованы и не проверены.
-  Нельзя утверждать, что удаление из резервных копий работает.
+- Production object storage, selective backup deletion и disaster-recovery
+  rehearsal ещё не реализованы и не проверены. Нельзя утверждать, что удаление
+  из резервных копий работает.
 - Проверено: 16/16 targeted export/auth tests; связанный набор дал 40 passed,
   затем 5/5 artifact tests прошли отдельным повтором после первого медленного
   импорта `python-pptx`; Ruff и compileall прошли. Flutter tests 8/8 и полный
@@ -423,33 +422,60 @@
 - Тесты с двумя пользователями проверяют store, HTTP, prompt, tool, экспорт и
   account deletion. Чужую запись нельзя увидеть, исправить или удалить; её
   заголовок и текст отсутствуют в prompt и ZIP другого владельца.
-- Retention памяти ограничен 730 днями после изменения. Автоматический worker,
-  production object purge, backup deletion ledger и restore scrubber ещё не
-  реализованы и не проверены. Удаление из резервных копий не заявляется.
+- Retention памяти ограничен 730 днями после изменения и применяется локальным
+  worker. Production object purge, backup deletion ledger и restore scrubber
+  ещё не реализованы и не проверены. Удаление из резервных копий не заявляется.
 - Проверено: связанный Python-срез — 265 passed, 1 skipped; Ruff и compileall
   прошли. Flutter tests — 9/9, analyze — без ошибок и с 28 прежними info в
   других UI-файлах, debug APK собрана. `adb devices -l` не нашёл подключённый
   Samsung, поэтому ручные barge-in и network-drop проверки не выполнялись.
 
+## Выполнено: автоматический retention локальных данных (2026-09-15)
+
+- `troika_product.retention.RetentionWorker` применяет утверждённые сроки к
+  текущим product SQLite, SessionDB, локальным transcripts/artifacts, transient
+  device context и location fingerprints. Решения принимаются по переданному
+  времени; dry-run использует те же выборки без изменения данных.
+- Gateway запускает owner-scoped worker при старте и затем каждые шесть часов.
+  Есть флаги enabled/dry-run/interval и операторская команда
+  `python -m troika_product ... retention`; отчёт содержит только счётчики
+  категорий и коды ошибок без user ID и содержимого.
+- Просроченный token digest удаляется. У отозванного устройства очищаются имя
+  и platform, а непрозрачный ID остаётся только как внешний ключ к данным с
+  более длинным сроком. Миграция добавляет `revoked_at` без потери старых rows.
+- Строгий artifact purge считает удаление успешным только после удаления
+  локальных bytes. Session metadata, SessionDB row и transcript очищаются до
+  удаления owner mapping. Все SQL-изменения содержат owner scope.
+- Тест с управляемым временем сначала подтверждает неизменность dry-run, затем
+  очищает просроченные данные одного владельца и сохраняет свежие данные этого
+  владельца и просроченные данные второго. Отдельно проверен lifecycle фоновой
+  задачи gateway.
+- Проверено: product/retention Python-срез — 98 passed; общие API server tests —
+  172 passed; retention tests — 3/3. Ruff, compileall и `git diff --check`
+  прошли. Flutter tests — 9/9, analyze — без ошибок и с 28 прежними info. ADB
+  запущен, но подключённых устройств нет; ручные barge-in и network-drop
+  проверки не выполнялись.
+- Production object storage и backup pipeline не подключены. Version-aware
+  object purge, deletion ledger, restore scrubber и DR rehearsal не реализованы
+  и не проверены; удаление из резервных копий не заявляется.
+
 ## Ближайший порядок работы
 
-1. Реализовать автоматический retention worker с dry-run, управляемым временем
-   и owner-isolation тестами.
-2. После выбора production storage добавить object purge, deletion ledger,
+1. После выбора production storage добавить object purge, deletion ledger,
    restore scrubber и disaster-recovery rehearsal.
-3. На подключённом Samsung повторить ручную проверку barge-in и реального
+2. На подключённом Samsung повторить ручную проверку barge-in и реального
    обрыва сети; экран удаления открывать только для одноразового test account.
-4. Перед реализацией WebRTC screen assist отдельно спроектировать signaling,
+3. Перед реализацией WebRTC screen assist отдельно спроектировать signaling,
    TURN, hardware-backed device keys, heartbeat/revoke и изолированный vision
    worker. Закрытая snapshot beta не расширяет разрешение до live vision.
-5. Расширять paired-phone control после отдельного privacy review каждой
+4. Расширять paired-phone control после отдельного privacy review каждой
    capability. Просмотр экрана, управление UI, камера, микрофон, clipboard,
    календарь, файлы, звонки и SMS не объединять в одно разрешение.
-6. Настроить воспроизводимую среду и минимальный зелёный CI baseline; отдельно
+5. Настроить воспроизводимую среду и минимальный зелёный CI baseline; отдельно
    обновить Android Gradle/Kotlin до будущих требований Flutter.
-7. Заменить legacy response store на tenant-owned storage либо оставить endpoint
+6. Заменить legacy response store на tenant-owned storage либо оставить endpoint
    выключенным до этой миграции.
-8. Спроектировать subscription billing: продукты, платежные периоды, webhooks,
+7. Спроектировать subscription billing: продукты, платежные периоды, webhooks,
    отмена, возвраты и поддержка.
 
 ## Проверенный рабочий срез и бесплатная модель (2026-09-10)
@@ -588,7 +614,9 @@
       backup/object storage с явной отметкой о нереализованных гарантиях.
 - [x] Добавлена owner-scoped личная память: API, Android CRUD, prompt context,
       tool actions, экспорт, account deletion и cross-tenant тесты.
-- [ ] Реализованы и проверены retention worker, production object purge,
-      backup deletion ledger и restore scrubber.
-- [ ] Push для проактивности не включён до автоматического retention и проверки
-      push token lifecycle; in-app доставка работает.
+- [x] Реализован и проверен автоматический owner-scoped retention worker для
+      текущих локальных SQLite/filesystem stores, включая dry-run.
+- [ ] Реализованы и проверены production object purge, backup deletion ledger,
+      restore scrubber и disaster-recovery rehearsal.
+- [ ] Push для проактивности не включён до проверки push token lifecycle;
+      in-app доставка работает.

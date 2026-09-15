@@ -25,6 +25,10 @@ platforms:
       # allows one reduced frame to leave the phone for the vision provider.
       product_screen_snapshot_enabled: false
       product_screen_external_vision_enabled: false
+      # Local SQLite/filesystem retention runs at startup and every six hours.
+      product_retention_enabled: true
+      product_retention_dry_run: false
+      product_retention_interval_seconds: 21600
       # Private loopback/container worker. Clients never choose this address.
       product_stt_url: http://127.0.0.1:8766
 

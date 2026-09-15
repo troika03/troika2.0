@@ -527,18 +527,20 @@ Play Integrity можно использовать как дополнитель
   Bearer-token digests, vision nonce, server paths, system prompts и private
   model reasoning в экспорт не входят.
 - Retention-периоды и целевая политика object storage/backup зафиксированы в
-  `docs/DATA_RETENTION_AND_DELETION_POLICY.md`. Автоматический retention worker,
-  production object storage, selective backup deletion, deletion ledger и
-  restore rehearsal ещё не реализованы и не проверены.
+  `docs/DATA_RETENTION_AND_DELETION_POLICY.md`. Автоматический owner-scoped
+  worker применяет их к текущим локальным SQLite/filesystem stores, имеет
+  dry-run, управляемое время и privacy-safe counters. Production object storage,
+  selective backup deletion, deletion ledger и restore rehearsal ещё не
+  реализованы и не проверены.
 - Profile-global `MEMORY.md/USER.md` отключены в product mode, потому что у них
   нет tenant ownership. Вместо них реализована таблица `troika_memories` с
   owner-scoped `GET/POST/PATCH/DELETE /v1/memories`, Android-экраном просмотра,
   исправления и удаления, явными memory-действиями `troika_assistant` и
   ограниченным prompt context только текущего владельца. Cross-tenant тесты
   проверяют список, доступ по ID, prompt, tool, экспорт и удаление аккаунта.
-- Для личной памяти утверждён верхний срок 730 дней после изменения.
-  Автоматическое применение retention остаётся открытым; поэтому вся фаза 9 и
-  launch gate ещё не закрыты.
+- Для личной памяти утверждён верхний срок 730 дней после изменения; локальный
+  retention worker применяет его по `user_id`. Фаза 9 и launch gate ещё не
+  закрыты из-за отсутствия проверенного object/backup lifecycle.
 
 **Готово, когда**
 
@@ -613,13 +615,11 @@ Play Integrity можно использовать как дополнитель
 
 ## 11. Ближайшая последовательность
 
-1. Добавить автоматический retention worker с dry-run, управляемым временем и
-   проверкой отсутствия cross-tenant удаления.
-2. После выбора production storage реализовать version-aware object purge,
+1. После выбора production storage реализовать version-aware object purge,
    durable deletion ledger, restore scrubber и disaster-recovery rehearsal.
-3. На подключённом Samsung повторить ручные проверки barge-in и реального
+2. На подключённом Samsung повторить ручные проверки barge-in и реального
    обрыва сети; одноразовый тестовый аккаунт использовать для экрана удаления.
-4. Перед WebRTC screen assist отдельно утвердить решения live vision из раздела
+3. Перед WebRTC screen assist отдельно утвердить решения live vision из раздела
    10 и выполнить новый threat-model review.
 
 Такой порядок даёт полезный результат после каждого этапа и не открывает постоянный удалённый доступ к телефону одним большим изменением.

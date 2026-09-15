@@ -13,6 +13,9 @@ TROIKA_PRODUCT_AUTH_ENABLED=true
 TROIKA_PRODUCT_AUTH_DB=/opt/data/troika_access.db
 TROIKA_PRODUCT_QUOTAS_ENABLED=false
 TROIKA_PRODUCT_ARTIFACT_ROOT=/opt/data/troika_artifacts
+TROIKA_PRODUCT_RETENTION_ENABLED=true
+TROIKA_PRODUCT_RETENTION_DRY_RUN=false
+TROIKA_PRODUCT_RETENTION_INTERVAL_SECONDS=21600
 ```
 
 Запусти gateway и STT proxy из корня репозитория. API server и STT proxy будут
@@ -164,8 +167,17 @@ screen snapshot. Сбой
 Сохранённые пользователем копии документов на Android не удаляются скрыто.
 Текущая closed-beta реализация очищает live local storage сервера. Сроки и
 целевая политика описаны в `docs/DATA_RETENTION_AND_DELETION_POLICY.md`.
-Автоматический retention, production object purge и удаление из backups ещё не
-реализованы и не проверены; этот launch gate открыт.
+Автоматический owner-scoped retention текущих SQLite/filesystem stores
+реализован. Перед первым apply оператор может выполнить безопасный preview:
+
+```bash
+python -m troika_product --database /opt/data/troika_access.db retention \
+  --artifact-root /opt/data/troika_artifacts \
+  --session-database /opt/data/state.db --sessions-dir /opt/data/sessions
+```
+
+Команда не удаляет данные без `--apply`. Production object purge и удаление из
+backups ещё не реализованы и не проверены; этот launch gate открыт.
 
 ## Ограничения beta
 

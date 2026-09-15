@@ -103,6 +103,7 @@ class AccessRegistry:
                     name TEXT NOT NULL,
                     platform TEXT NOT NULL,
                     status TEXT NOT NULL DEFAULT 'active',
+                    revoked_at REAL,
                     created_at REAL NOT NULL
                 );
 
@@ -167,6 +168,18 @@ class AccessRegistry:
                 CREATE INDEX IF NOT EXISTS idx_troika_audit_events_device_time
                     ON troika_audit_events(device_id, occurred_at DESC);
                 """
+            )
+            device_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(troika_devices)")
+            }
+            if "revoked_at" not in device_columns:
+                connection.execute(
+                    "ALTER TABLE troika_devices ADD COLUMN revoked_at REAL"
+                )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_troika_devices_user_revoked "
+                "ON troika_devices(user_id, status, revoked_at)"
             )
 
     @staticmethod
@@ -638,7 +651,7 @@ class AccessRegistry:
 
             devices = rows(
                 connection,
-                "SELECT id, name, platform, status, created_at "
+                "SELECT id, name, platform, status, revoked_at, created_at "
                 "FROM troika_devices WHERE user_id = ? ORDER BY created_at, id",
                 (principal.user_id,),
             )
@@ -768,8 +781,9 @@ class AccessRegistry:
                 (principal.user_id,),
             )
             connection.execute(
-                "UPDATE troika_devices SET status = 'revoked' WHERE user_id = ?",
-                (principal.user_id,),
+                "UPDATE troika_devices SET status = 'revoked', "
+                "revoked_at = COALESCE(revoked_at, ?) WHERE user_id = ?",
+                (now, principal.user_id),
             )
             connection.execute(
                 "UPDATE troika_api_tokens SET revoked_at = COALESCE(revoked_at, ?) "

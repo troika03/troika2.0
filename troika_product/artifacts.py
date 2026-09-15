@@ -300,6 +300,37 @@ class ArtifactStore:
             pass
         return self._artifact_from_row(row)
 
+    def purge_for_user(self, user_id: str, artifact_id: str) -> Artifact | None:
+        """Delete one owner's bytes and metadata, surfacing storage failures.
+
+        Retention uses this stricter path so a successful metric means the
+        local artifact bytes are actually gone.  The public delete endpoint
+        keeps its existing fail-closed behavior when an opaque orphan cannot
+        be removed immediately.
+        """
+        clean_user_id = self._validate_owner(user_id, "user id")
+        if not _OPAQUE_ID.fullmatch(str(artifact_id or "")):
+            return None
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT id, user_id, filename, kind, mime_type, byte_size, "
+                "storage_name, created_at FROM troika_artifacts "
+                "WHERE id = ? AND user_id = ?",
+                (artifact_id, clean_user_id),
+            ).fetchone()
+            if row is None:
+                return None
+            target = self._path_for(clean_user_id, str(row["storage_name"]))
+            target.unlink(missing_ok=True)
+            if target.exists():
+                raise OSError("artifact byte cleanup was incomplete")
+            connection.execute(
+                "DELETE FROM troika_artifacts WHERE id = ? AND user_id = ?",
+                (artifact_id, clean_user_id),
+            )
+        return self._artifact_from_row(row)
+
     def delete_all_files_for_user(self, user_id: str) -> None:
         """Remove one user's opaque artifact bucket before metadata deletion."""
         clean_user_id = self._validate_owner(user_id, "user id")
