@@ -233,13 +233,11 @@
 - На Samsung A22 установлен актуальный debug APK. Физически пройден полный
   цикл push-to-talk → локальный faster-whisper → общая product session →
   OpenRouter → Edge TTS → последовательное воспроизведение нескольких фраз из
-  памяти. Синтетическая речь через динамик ПК распознаётся нестабильно из-за
-  эха; это вопрос настройки VAD/акустики, а не маршрута или авторизации.
+  памяти. Повторная проверка barge-in и потери соединения выполнена 2026-09-15;
+  актуальные результаты зафиксированы ниже.
 - Проверено: product/API regression — `209 passed, 1 skipped`; Flutter — 6/6;
   `ruff`, `compileall`, `flutter analyze --no-fatal-infos` и debug APK build.
-  Analyze сообщает только 31 прежнюю informational-рекомендацию. Физическую
-  проверку barge-in и реальный обрыв сети ещё нужно повторить человеком; их
-  failure/cancel paths уже покрыты автоматическими тестами.
+  Analyze сообщает только 31 прежнюю informational-рекомендацию.
 
 ## Выполнено: полезный помощник и фоновый event engine (2026-09-13)
 
@@ -427,8 +425,7 @@
   ещё не реализованы и не проверены. Удаление из резервных копий не заявляется.
 - Проверено: связанный Python-срез — 265 passed, 1 skipped; Ruff и compileall
   прошли. Flutter tests — 9/9, analyze — без ошибок и с 28 прежними info в
-  других UI-файлах, debug APK собрана. `adb devices -l` не нашёл подключённый
-  Samsung, поэтому ручные barge-in и network-drop проверки не выполнялись.
+  других UI-файлах, debug APK собрана.
 
 ## Выполнено: автоматический retention локальных данных (2026-09-15)
 
@@ -452,30 +449,40 @@
   задачи gateway.
 - Проверено: product/retention Python-срез — 98 passed; общие API server tests —
   172 passed; retention tests — 3/3. Ruff, compileall и `git diff --check`
-  прошли. Flutter tests — 9/9, analyze — без ошибок и с 28 прежними info. ADB
-  запущен, но подключённых устройств нет; ручные barge-in и network-drop
-  проверки не выполнялись.
+  прошли. Flutter tests — 9/9, analyze — без ошибок и с 28 прежними info.
 - Production object storage и backup pipeline не подключены. Version-aware
   object purge, deletion ledger, restore scrubber и DR rehearsal не реализованы
   и не проверены; удаление из резервных копий не заявляется.
+
+## Проверено: Samsung barge-in и потеря соединения (2026-09-15)
+
+- На Samsung SM-A225F product-приложение прошло повторный голосовой сценарий с
+  локальным authenticated gateway и отдельным приватным STT worker. Во время
+  активного TTS русская тестовая реплика дала события `BargeIn calibrated` и
+  `barge-in detected`, то есть сервис выполнил штатный путь перебивания.
+- Удаление `adb reverse` не завершило уже открытый SSE-поток, поэтому активное
+  соединение дополнительно оборвано остановкой тестового gateway. Android
+  показал error state без зависания; после запуска gateway следующий запрос в
+  том же приложении получил обычный ответ.
+- Тестовые gateway/STT процессы и USB reverse остановлены, громкость телефона
+  возвращена к исходному уровню. Экран удаления не открывался, настоящий
+  аккаунт не удалялся.
 
 ## Ближайший порядок работы
 
 1. После выбора production storage добавить object purge, deletion ledger,
    restore scrubber и disaster-recovery rehearsal.
-2. На подключённом Samsung повторить ручную проверку barge-in и реального
-   обрыва сети; экран удаления открывать только для одноразового test account.
-3. Перед реализацией WebRTC screen assist отдельно спроектировать signaling,
+2. Перед реализацией WebRTC screen assist отдельно спроектировать signaling,
    TURN, hardware-backed device keys, heartbeat/revoke и изолированный vision
    worker. Закрытая snapshot beta не расширяет разрешение до live vision.
-4. Расширять paired-phone control после отдельного privacy review каждой
+3. Расширять paired-phone control после отдельного privacy review каждой
    capability. Просмотр экрана, управление UI, камера, микрофон, clipboard,
    календарь, файлы, звонки и SMS не объединять в одно разрешение.
-5. Настроить воспроизводимую среду и минимальный зелёный CI baseline; отдельно
+4. Настроить воспроизводимую среду и минимальный зелёный CI baseline; отдельно
    обновить Android Gradle/Kotlin до будущих требований Flutter.
-6. Заменить legacy response store на tenant-owned storage либо оставить endpoint
+5. Заменить legacy response store на tenant-owned storage либо оставить endpoint
    выключенным до этой миграции.
-7. Спроектировать subscription billing: продукты, платежные периоды, webhooks,
+6. Спроектировать subscription billing: продукты, платежные периоды, webhooks,
    отмена, возвраты и поддержка.
 
 ## Проверенный рабочий срез и бесплатная модель (2026-09-10)
@@ -532,7 +539,8 @@
   дают product live vision. Целевая архитектура, consent и security gates
   зафиксированы в `docs/TROIKA_CAPABILITY_RESTORATION_PLAN.md`.
 - Физический Android-телефон успешно авторизован через ADB; актуальный debug APK
-  установлен, текстовый чат, `android_status` и голосовой цикл проверены.
+  установлен, текстовый чат, `android_status`, голосовой цикл, barge-in и
+  восстановление после потери соединения проверены.
   Текущий USB-туннель — только dev-транспорт: production потребует домен,
   HTTPS/WSS и нормальный pairing/login без ADB.
 - Accessibility на тестовом телефоне выключен. Поэтому `status`, battery и
@@ -583,8 +591,8 @@
       чат, device-token auth, WebSocket и `android_status`.
 - [x] Пройден физический голосовой E2E: push-to-talk, tenant-owned session,
       локальный STT, модель и потоковый TTS без audio-файлов.
-- [ ] Повторно проверены человеком barge-in и реальный обрыв сети; автоматические
-      revoke/kill-switch/timeout/network-failure тесты уже есть.
+- [x] Повторно проверены на Samsung barge-in и реальный обрыв активного
+      соединения с последующим успешным запросом после восстановления gateway.
 - [x] Реализован первый срез Фазы 2: tenant-owned проекты, заметки, задачи,
       сроки, idempotent reminders, in-app inbox, quiet hours, opt-in и лимит
       проактивных сообщений.
