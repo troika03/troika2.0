@@ -1,0 +1,52 @@
+name: TUI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ui-tui/**'
+      - '.github/workflows/tui.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ui-tui/**'
+      - '.github/workflows/tui.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tui-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: 22.22.1
+          cache: npm
+          cache-dependency-path: ui-tui/package-lock.json
+
+      - name: Install dependencies from lockfile
+        working-directory: ui-tui
+        run: npm ci --no-audit --no-fund
+
+      - name: Type-check
+        working-directory: ui-tui
+        run: npm run type-check
+
+      - name: Test
+        working-directory: ui-tui
+        run: npm test
+
+      - name: Build
+        working-directory: ui-tui
+        run: npm run build

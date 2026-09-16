@@ -248,6 +248,11 @@ Play Integrity можно использовать как дополнитель
 - Убрать секреты из APK, логов и crash reports.
 - Добавить kill switches для voice, proactive, vision, phone control и PC Companion.
 
+Текущий статус: clean TUI install, type-check, tests и production build
+восстановлены; отдельный workflow использует Node 22.22.1 и `npm ci`. Общий
+Python/web/Flutter/Android baseline и platform-specific upstream failures ещё
+нужно довести до launch gate.
+
 **Готово, когда**
 
 - одна команда воспроизводимо собирает backend и APK;
@@ -627,7 +632,10 @@ Play Integrity можно использовать как дополнитель
 
 1. После выбора production storage реализовать version-aware object purge,
    durable deletion ledger, restore scrubber и disaster-recovery rehearsal.
-2. Перед WebRTC screen assist отдельно утвердить решения live vision из раздела
+2. Довести общий Python/web/Android CI baseline; TUI-срез уже имеет
+   воспроизводимые clean install, type-check, tests и build. Legacy Responses
+   API оставлять выключенным в product mode до tenant-owned storage.
+3. Перед WebRTC screen assist отдельно утвердить решения live vision из раздела
    10 и выполнить новый threat-model review.
 
 Такой порядок даёт полезный результат после каждого этапа и не открывает постоянный удалённый доступ к телефону одним большим изменением.

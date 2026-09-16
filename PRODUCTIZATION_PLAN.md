@@ -151,8 +151,9 @@ API edge: auth, rate limits, idempotency, audit
 [docs/DATA_RETENTION_AND_DELETION_POLICY.md](docs/DATA_RETENTION_AND_DELETION_POLICY.md).
 Owner-scoped личная память с просмотром/правкой/удалением, ZIP-экспорт и
 удаление из текущих локальных основных хранилищ реализованы. Автоматическое
-применение retention, production object storage, удаление из backup и проверка
-восстановления ещё не реализованы.
+применение retention к локальным SQLite/filesystem-хранилищам также реализовано.
+Production object storage, удаление из backup, deletion ledger, restore scrubber
+и проверка восстановления ещё не реализованы.
 
 ### Инструменты и действия
 
@@ -167,9 +168,12 @@ Owner-scoped личная память с просмотром/правкой/у
 ### Воспроизводимая среда
 
 - Python 3.11+ устанавливается единым `uv sync --extra ...` сценарием; Windows и Linux имеют проверенные команды.
-- `scripts/run_tests.sh` получает Windows-эквивалент или становится кроссплатформенным Python runner.
+- `scripts/run_tests.sh` использует кроссплатформенный Python runner; default
+  ограничен восемью workers для воспроизводимости на Windows.
 - Все зависимости новых функций добавляются в `pyproject.toml`, имеют верхние границы по правилам репозитория, затем обновляется `uv.lock`.
-- Android получает фиксированную версию Flutter в CI; TUI/web — lockfile и `npm ci`.
+- Android получает фиксированную версию Flutter в CI; TUI/web — lockfile и
+  `npm ci`. Для TUI добавлен отдельный Node 22.22.1 workflow с type-check,
+  Vitest и production build.
 
 ### Обязательные тесты
 
@@ -217,7 +221,10 @@ Owner-scoped личная память с просмотром/правкой/у
 - [ ] Не добавлять крупные функции до закрытия P0.
 - [ ] Зафиксировать новую рабочую копию и закоммитить текущие нужные наработки отдельными тематическими коммитами.
 - [ ] Убрать из public default PC/Kali/self-improve и персональные константы.
-- [ ] Восстановить Python env, web/TUI/Flutter checks, сделать baseline CI зелёным.
+- [x] Восстановить clean TUI install, type-check, tests и build; закрепить их
+      отдельным минимальным CI workflow.
+- [ ] Довести общий Python/web/Flutter/Android baseline до зелёного на
+      поддерживаемых CI платформах.
 - [ ] Создать staging окружение, отдельное от личного gateway.
 
 **Выход:** проект собирается и тестируется воспроизводимо, без публичных секретов и персональных defaults.

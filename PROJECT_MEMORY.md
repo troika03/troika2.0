@@ -62,7 +62,9 @@
   остаётся за feature flag и требует отдельного consent.
 - PC tools включены в core toolset; `tools/pc_tool.py` и `troika_voice_daemon.py` были незакоммичены в исходной копии.
 - PC/voice зависимости (`mss`, `pyautogui`, `scipy`, `pyttsx3`) не описаны в dependency manifest.
-- Flutter-проверки восстановлены. TUI dependencies и TUI build ещё не проверены.
+- Flutter-проверки восстановлены. Для TUI восстановлены clean install,
+  type-check, tests и production build; отдельный CI workflow закрепляет Node
+  22.22.1 и `npm ci`.
 - Android debug APK собирается, но Flutter предупреждает о будущем minimum:
   Android Gradle Plugin 8.11.1 и Kotlin 2.2.20; обновлять отдельным коммитом.
 - Web dashboard собирался успешно, но имеет крупный main bundle.
@@ -468,20 +470,40 @@
   возвращена к исходному уровню. Экран удаления не открывался, настоящий
   аккаунт не удалялся.
 
+## Выполнено: воспроизводимый TUI baseline (2026-09-16)
+
+- Clean `npm ci` из lockfile теперь достаточен для запуска TUI-тестов: `pretest`
+  собирает локальный `@hermes/ink`, поэтому тесты не зависят от оставшегося в
+  рабочей копии `dist`.
+- Исправлены TypeScript-сигнатура stdio, передача voice TTS state в slash
+  handler, расчёт доступной ширины ввода и platform-aware terminal paths.
+  Windows-тесты больше не подменяют целевую POSIX-платформу платформой host.
+- `scripts/run_tests.sh` по-прежнему является единым входом для Python;
+  параллельный runner по умолчанию ограничен восемью workers, чтобы clean
+  Windows-прогон не создавал ложные timeout из-за resource starvation.
+- Добавлен отдельный TUI workflow с фиксированным Node 22.22.1, `npm ci`,
+  type-check, Vitest и production build. Локально: 854 passed, 8 skipped;
+  Python TUI gateway/CLI slice: 328 passed; Flutter: 9 passed, analyze без
+  ошибок (28 существующих info diagnostics).
+- Полный upstream Python-набор на native Windows запущен отдельно и не считается
+  зелёным: в нём остаются несвязанные POSIX/Windows path, HOME, socket и shell
+  failures. Они не маскируются результатом TUI workflow.
+
 ## Ближайший порядок работы
 
 1. После выбора production storage добавить object purge, deletion ledger,
    restore scrubber и disaster-recovery rehearsal.
-2. Перед реализацией WebRTC screen assist отдельно спроектировать signaling,
+2. Довести общий Python/web/Android baseline до зелёного на поддерживаемых CI
+   платформах; TUI-срез уже воспроизводим. Отдельно обновить Android
+   Gradle/Kotlin до будущих требований Flutter.
+3. Перед реализацией WebRTC screen assist отдельно спроектировать signaling,
    TURN, hardware-backed device keys, heartbeat/revoke и изолированный vision
    worker. Закрытая snapshot beta не расширяет разрешение до live vision.
-3. Расширять paired-phone control после отдельного privacy review каждой
+4. Расширять paired-phone control после отдельного privacy review каждой
    capability. Просмотр экрана, управление UI, камера, микрофон, clipboard,
    календарь, файлы, звонки и SMS не объединять в одно разрешение.
-4. Настроить воспроизводимую среду и минимальный зелёный CI baseline; отдельно
-   обновить Android Gradle/Kotlin до будущих требований Flutter.
-5. Заменить legacy response store на tenant-owned storage либо оставить endpoint
-   выключенным до этой миграции.
+5. Legacy Responses API оставлять выключенным в product mode, пока response
+   store не заменён на tenant-owned storage.
 6. Спроектировать subscription billing: продукты, платежные периоды, webhooks,
    отмена, возвраты и поддержка.
 
@@ -551,7 +573,9 @@
 - Нет production deployment с доменом, HTTPS, мониторингом, резервными копиями
   и процедурой восстановления. Удаление из backup/object storage не
   реализовано и не проверено.
-- TUI checks и полностью зелёный hermetic CI baseline ещё не восстановлены.
+- TUI clean install, type-check, tests и build восстановлены и вынесены в
+  отдельный CI workflow. Общий hermetic baseline репозитория ещё не зелёный на
+  native Windows из-за несвязанных platform-specific upstream failures.
 - Бесплатный OpenRouter router подходит для разработки и demo, но не даёт
   production SLA: доступны ограниченные запросы, плавающая модель и возможны
   задержки/временная недоступность.
@@ -580,7 +604,8 @@
 - [x] Стабилизирован Git baseline новой копии и опубликован в новом GitHub repo.
 - [x] Запущена P0 security foundation.
 - [x] Восстановлены Flutter test/analyze и Android debug build.
-- [ ] Восстановлены TUI проверки.
+- [x] Восстановлены TUI clean install, type-check, tests, build и отдельный CI
+      workflow.
 - [x] Реализованы beta account/device/session/entitlement/usage foundation.
 - [x] Возвращены безопасные личные DOCX/PDF/PPTX и рабочий Android files UI.
 - [x] Добавлено сохранение artifact-файлов на телефон через системный выбор
