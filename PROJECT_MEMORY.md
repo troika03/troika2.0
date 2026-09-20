@@ -56,7 +56,9 @@
 
 ## Известные критические проблемы baseline
 
-- Закрытая beta имеет users/devices/tokens/entitlements/quota ledger, но ещё нет self-service регистрации, pairing UI, billing, платежей и поддержки подписок.
+- Закрытая beta имеет self-service регистрацию/вход, users/devices/tokens,
+  entitlements и quota ledger. Ещё нет восстановления пароля, подтверждения
+  почты, billing, платежей и поддержки подписок.
 - Точный device context требует отдельного opt-in и автоматически очищается
   через 24 часа owner-scoped retention worker. Внешний reverse-geocoding
   остаётся за feature flag и требует отдельного consent.
@@ -489,6 +491,33 @@
   зелёным: в нём остаются несвязанные POSIX/Windows path, HOME, socket и shell
   failures. Они не маскируются результатом TUI workflow.
 
+## Выполнено: бесплатный локальный режим и регистрация (2026-09-20)
+
+- Существующий сетевой ассистент не удалён и остаётся fallback для облачных
+  возможностей. Перед ним добавлен детерминированный local-command layer без
+  вызова модели.
+- Android выполняет локально открытие приложений, поиск/навигацию, будильник и
+  таймер, громкость/яркость, фонарик, battery/network/time/date, media keys,
+  системную навигацию, уведомления, прокрутку и разделы настроек. Ручной голос
+  использует Android SpeechRecognizer с offline preference; полностью
+  гарантированный offline STT потребует поставки отдельной модели.
+- Windows выполняет только allowlist-команды без передачи пользовательского
+  текста в shell: приложения и папки, настройки, web search, экранный снимок,
+  рабочий стол, блокировка, активное окно, media/volume keys, battery/time/date.
+- Добавлены self-service `POST /v1/auth/register` и `/v1/auth/login`. Пароль
+  хранится как salted scrypt digest; приложение получает отдельный
+  `trk_live_…` device token. Старые ручные подключения сохранены.
+- Новый экран регистрации/входа запускается до permission onboarding. Адрес
+  тестового API можно вшить через `TROIKA_SERVER_URL` или указать вручную;
+  после сохранённого входа локальные команды не требуют работающего API.
+- Подробный план бесплатного Local, облачного тарифа с лимитом и Pro/BYOK:
+  `docs/TROIKA_OFFLINE_BETA_LAUNCH_PLAN.md`.
+- Проверено: product auth tests `27 passed`; Flutter tests `9 passed`; analyze
+  без ошибок (28 прежних info diagnostics). Android Kotlin скомпилирован,
+  создан валидный debug APK. Flutter-команда зависла уже после записи APK и
+  была остановлена. Windows build на этой машине не стартовал из-за старого
+  каталога plugin symlinks; Dart-код Windows прошёл analyze.
+
 ## Ближайший порядок работы
 
 1. После выбора production storage добавить object purge, deletion ledger,
@@ -550,8 +579,8 @@
 
 ### Что ещё не является готовым продуктом
 
-- Нет self-service регистрации, входа, восстановления доступа и управления
-  аккаунтом из приложения.
+- Self-service регистрация и вход есть. Пока нет подтверждения почты,
+  восстановления пароля, ротации сессий и полноценного управления устройствами.
 - Нет подписок, платежей, webhook-биллинга, отмен и возвратов.
 - Проактивность работает через связанный с проектами/задачами in-app inbox и
   безопасный фоновый event engine. Push ещё не реализован до завершения retention
@@ -607,6 +636,10 @@
 - [x] Восстановлены TUI clean install, type-check, tests, build и отдельный CI
       workflow.
 - [x] Реализованы beta account/device/session/entitlement/usage foundation.
+- [x] Добавлены self-service регистрация/вход и device token без удаления
+      прежнего ручного подключения.
+- [x] Добавлен бесплатный local-command layer для Android и Windows без вызова
+      облачной модели; сетевой агент сохранён как отдельный fallback.
 - [x] Возвращены безопасные личные DOCX/PDF/PPTX и рабочий Android files UI.
 - [x] Добавлено сохранение artifact-файлов на телефон через системный выбор
       папки.

@@ -1080,6 +1080,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const Divider(color: Colors.white10),
             const SizedBox(height: 16),
             _sectionHeader('Аккаунт'),
+            if (HermesConfig.accountEmail.isNotEmpty) ...[
+              Text(
+                HermesConfig.accountEmail,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
             const Text(
               'Сначала можно сохранить ZIP со всеми переносимыми данными и '
               'личными файлами. Удаление отзывает доступ всех устройств и '

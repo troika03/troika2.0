@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.speech.RecognizerIntent
 import android.view.WindowManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -20,6 +21,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import java.util.Locale
 import java.util.TimeZone
 
 class MainActivity : FlutterActivity() {
@@ -29,8 +31,10 @@ class MainActivity : FlutterActivity() {
     private val REQ_LOCATION = 7422
     private val REQ_LOCATION_BG = 7423
     private val REQ_SCREEN_CAPTURE = 7424
+    private val REQ_LOCAL_SPEECH = 7425
     private var methodChannel: MethodChannel? = null
     private var pendingScreenConsentResult: MethodChannel.Result? = null
+    private var pendingLocalSpeechResult: MethodChannel.Result? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -142,6 +146,25 @@ class MainActivity : FlutterActivity() {
                 }
                 "getTimeZoneId" -> {
                     result.success(TimeZone.getDefault().id)
+                }
+                "executeLocalCommand" -> {
+                    val raw = call.argument<String>("text")?.trim().orEmpty()
+                    val response = if (raw.isEmpty()) null else
+                        PhoneCommands.tryExecute(
+                            applicationContext,
+                            raw.lowercase(Locale.forLanguageTag("ru-RU")),
+                            raw
+                        )
+                    result.success(
+                        mapOf(
+                            "handled" to (response != null),
+                            "response" to (response ?: ""),
+                            "heard" to raw,
+                        )
+                    )
+                }
+                "recognizeLocalCommand" -> {
+                    startLocalSpeechRecognition(result)
                 }
                 "requestScreenSnapshotConsent" -> {
                     if (ScreenCaptureService.isReady()) {
@@ -493,19 +516,89 @@ class MainActivity : FlutterActivity() {
     @Deprecated("Uses the platform MediaProjection consent result")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != REQ_SCREEN_CAPTURE) return
-        if (resultCode == RESULT_OK && data != null) {
-            val serviceIntent = ScreenCaptureService.startIntent(this, resultCode, data)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(serviceIntent)
-            } else {
-                startService(serviceIntent)
+        if (requestCode == REQ_LOCAL_SPEECH) {
+            val pending = pendingLocalSpeechResult
+            pendingLocalSpeechResult = null
+            if (pending == null) return
+            if (resultCode != RESULT_OK || data == null) {
+                pending.success(
+                    mapOf("handled" to false, "response" to "", "heard" to "")
+                )
+                return
             }
-            pendingScreenConsentResult?.success(true)
-        } else {
-            pendingScreenConsentResult?.success(false)
+            val heard = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+                ?.trim()
+                .orEmpty()
+            val response = if (heard.isEmpty()) null else
+                PhoneCommands.tryExecute(
+                    applicationContext,
+                    heard.lowercase(Locale.forLanguageTag("ru-RU")),
+                    heard,
+                )
+            pending.success(
+                mapOf(
+                    "handled" to (response != null),
+                    "response" to (response ?: ""),
+                    "heard" to heard,
+                )
+            )
+            return
         }
-        pendingScreenConsentResult = null
+        if (requestCode == REQ_SCREEN_CAPTURE) {
+            if (resultCode == RESULT_OK && data != null) {
+                val serviceIntent = ScreenCaptureService.startIntent(this, resultCode, data)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(serviceIntent)
+                } else {
+                    startService(serviceIntent)
+                }
+                pendingScreenConsentResult?.success(true)
+            } else {
+                pendingScreenConsentResult?.success(false)
+            }
+            pendingScreenConsentResult = null
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun startLocalSpeechRecognition(result: MethodChannel.Result) {
+        if (pendingLocalSpeechResult != null) {
+            result.error("speech_pending", "Распознавание уже запущено", null)
+            return
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            result.error("microphone_denied", "Нет доступа к микрофону", null)
+            return
+        }
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(
+                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+            )
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "ru-RU")
+            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Скажите команду Тройке")
+        }
+        if (intent.resolveActivity(packageManager) == null) {
+            result.error(
+                "speech_unavailable",
+                "На устройстве нет системного распознавания речи",
+                null,
+            )
+            return
+        }
+        pendingLocalSpeechResult = result
+        try {
+            startActivityForResult(intent, REQ_LOCAL_SPEECH)
+        } catch (e: Exception) {
+            pendingLocalSpeechResult = null
+            result.error("speech_failed", e.message ?: "Не удалось открыть распознавание", null)
+        }
     }
 
     @Suppress("BatteryLife")

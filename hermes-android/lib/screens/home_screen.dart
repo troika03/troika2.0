@@ -20,18 +20,16 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // Первый запуск: сервер ещё не настроен — мягко уводим новичка в Настройки.
+    // Без сервера приложение остаётся полезным: локальные команды работают,
+    // а AI-функции появятся после входа и выбора тарифа.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (HermesConfig.serverUrl.trim().isEmpty && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Укажи адрес сервера, чтобы начать'),
+            content:
+                Text('Локальный режим: команды работают без облачной модели'),
             duration: Duration(seconds: 4),
           ),
-        );
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const SettingsScreen()),
         );
       }
     });

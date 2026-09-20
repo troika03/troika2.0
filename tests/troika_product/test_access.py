@@ -7,6 +7,41 @@ from troika_product.access import AccessRegistry
 from troika_product.__main__ import main
 
 
+def test_self_registration_stores_a_hash_and_authenticates(tmp_path) -> None:
+    database = tmp_path / "access.db"
+    registry = AccessRegistry(database)
+    user_id = registry.register_account("New@Example.com", "safe-password-123")
+
+    assert (
+        registry.authenticate_password("new@example.com", "safe-password-123")
+        == user_id
+    )
+    assert registry.authenticate_password("new@example.com", "wrong-password") is None
+
+    import sqlite3
+
+    with sqlite3.connect(database) as connection:
+        row = connection.execute(
+            "SELECT email, password_salt, password_digest FROM troika_users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+    assert row is not None
+    assert row[0] == "new@example.com"
+    assert row[1] and row[2]
+    assert "safe-password-123" not in row
+
+
+def test_self_registration_rejects_duplicate_email(tmp_path) -> None:
+    registry = AccessRegistry(tmp_path / "access.db")
+    registry.register_account("new@example.com", "safe-password-123")
+    try:
+        registry.register_account("NEW@example.com", "another-password-123")
+    except ValueError as exc:
+        assert "already exists" in str(exc)
+    else:
+        raise AssertionError("duplicate registration must fail")
+
+
 def test_token_authentication_and_revocation(tmp_path) -> None:
     registry = AccessRegistry(tmp_path / "access.db")
     user_id = registry.create_user("one@example.com")
@@ -97,7 +132,10 @@ def test_audit_log_has_no_raw_session_or_prompt_content(tmp_path) -> None:
     )
     event = registry.list_audit_events(user_id)[0]
     assert event.event_type == "request.accepted"
-    assert event.session_digest is not None and "private-session" not in event.session_digest
+    assert (
+        event.session_digest is not None
+        and "private-session" not in event.session_digest
+    )
     assert event.run_digest is not None and "run_private" not in event.run_digest
     assert event.details == {"endpoint": "runs", "remaining": 49}
 
@@ -109,7 +147,9 @@ def test_audit_log_has_no_raw_session_or_prompt_content(tmp_path) -> None:
         raise AssertionError("audit records must reject message-like fields")
 
 
-def test_audit_command_shows_only_privacy_safe_fields(tmp_path, monkeypatch, capsys) -> None:
+def test_audit_command_shows_only_privacy_safe_fields(
+    tmp_path, monkeypatch, capsys
+) -> None:
     database = tmp_path / "access.db"
     registry = AccessRegistry(database)
     user_id = registry.create_user("one@example.com")

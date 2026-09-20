@@ -110,6 +110,22 @@ class HermesAccessibilityService : AccessibilityService() {
         return if (performGlobalAction(GLOBAL_ACTION_BACK)) ok("back") else err("back_failed")
     }
 
+    fun pressHome(): JSONObject {
+        return if (performGlobalAction(GLOBAL_ACTION_HOME)) ok("home") else err("home_failed")
+    }
+
+    fun pressRecents(): JSONObject {
+        return if (performGlobalAction(GLOBAL_ACTION_RECENTS)) ok("recents") else err("recents_failed")
+    }
+
+    fun openNotifications(): JSONObject {
+        return if (performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)) {
+            ok("notifications")
+        } else {
+            err("notifications_failed")
+        }
+    }
+
     /**
      * Сделать скриншот текущего экрана через AccessibilityService API (Android 11+).
      * Возвращает base64-PNG в поле "image".

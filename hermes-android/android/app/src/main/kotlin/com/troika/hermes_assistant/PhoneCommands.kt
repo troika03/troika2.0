@@ -3,6 +3,7 @@ package com.troika.hermes_assistant
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
+import android.view.KeyEvent
 import android.net.Uri
 import android.provider.AlarmClock
 import android.provider.Settings
@@ -148,7 +149,124 @@ object PhoneCommands {
             return openSettings(ctx, Settings.ACTION_BLUETOOTH_SETTINGS, "настройки Bluetooth")
         }
 
+        // Фонарик
+        if (norm.contains("фонарик") || norm.contains("вспышку")) {
+            val on = !(norm.contains("выключ") || norm.contains("погаси"))
+            val result = PhoneSystem.torch(ctx, on)
+            return if (result.optBoolean("ok")) {
+                if (on) "Фонарик включён" else "Фонарик выключен"
+            } else {
+                "Не удалось переключить фонарик"
+            }
+        }
+
+        // Состояние устройства
+        if (norm.contains("заряд") || norm.contains("батаре")) {
+            val result = PhoneSystem.battery(ctx)
+            return "Заряд ${result.optInt("level_percent", 0)}%"
+        }
+        if (norm.contains("какая сеть") ||
+            norm.contains("есть интернет") ||
+            norm.contains("подключение к интернету")) {
+            val result = PhoneSystem.network(ctx)
+            if (!result.optBoolean("connected")) return "Сеть не подключена"
+            val transport = when (result.optString("transport")) {
+                "wifi" -> "Wi-Fi"
+                "cellular" -> "мобильная сеть"
+                "ethernet" -> "Ethernet"
+                "vpn" -> "VPN"
+                else -> "сеть"
+            }
+            return "Подключена $transport"
+        }
+
+        // Время и дата
+        if (norm.contains("который час") || norm.contains("сколько времени")) {
+            val now = java.util.Calendar.getInstance()
+            return "Сейчас ${"%02d:%02d".format(
+                now.get(java.util.Calendar.HOUR_OF_DAY),
+                now.get(java.util.Calendar.MINUTE)
+            )}"
+        }
+        if (norm.contains("какая дата") || norm.contains("какое сегодня число")) {
+            val now = java.util.Calendar.getInstance()
+            return "Сегодня ${"%02d.%02d.%04d".format(
+                now.get(java.util.Calendar.DAY_OF_MONTH),
+                now.get(java.util.Calendar.MONTH) + 1,
+                now.get(java.util.Calendar.YEAR)
+            )}"
+        }
+
+        // Управление медиаплеером через стандартные media keys.
+        if (norm.contains("пауза") || norm.contains("продолжи музыку") ||
+            norm.contains("включи музыку")) {
+            dispatchMediaKey(ctx, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+            return "Готово"
+        }
+        if (norm.contains("следующий трек") || norm.contains("следующая песня")) {
+            dispatchMediaKey(ctx, KeyEvent.KEYCODE_MEDIA_NEXT)
+            return "Следующий трек"
+        }
+        if (norm.contains("предыдущий трек") || norm.contains("предыдущая песня")) {
+            dispatchMediaKey(ctx, KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+            return "Предыдущий трек"
+        }
+
+        // Системная навигация. Требует отдельно включённый AccessibilityService.
+        if (norm == "назад" || norm.contains("вернись назад")) {
+            return accessibilityResult("Назад") { it.pressBack() }
+        }
+        if (norm == "домой" || norm.contains("на главный экран")) {
+            return accessibilityResult("Открываю главный экран") { it.pressHome() }
+        }
+        if (norm.contains("последние приложения") || norm.contains("недавние приложения")) {
+            return accessibilityResult("Открываю недавние приложения") { it.pressRecents() }
+        }
+        if (norm.contains("покажи уведомления") || norm.contains("открой уведомления")) {
+            return accessibilityResult("Открываю уведомления") { it.openNotifications() }
+        }
+        if (norm.contains("прокрути вверх") || norm.contains("листай вверх")) {
+            return accessibilityResult("Прокручиваю вверх") { it.swipe("down") }
+        }
+        if (norm.contains("прокрути вниз") || norm.contains("листай вниз")) {
+            return accessibilityResult("Прокручиваю вниз") { it.swipe("up") }
+        }
+
+        // Часто используемые разделы настроек.
+        val settingsTarget = when {
+            norm.contains("настройки звука") -> Settings.ACTION_SOUND_SETTINGS to "настройки звука"
+            norm.contains("настройки экрана") -> Settings.ACTION_DISPLAY_SETTINGS to "настройки экрана"
+            norm.contains("настройки батареи") -> Settings.ACTION_BATTERY_SAVER_SETTINGS to "настройки батареи"
+            norm.contains("настройки приложений") -> Settings.ACTION_APPLICATION_SETTINGS to "настройки приложений"
+            norm.contains("настройки уведомлений") ->
+                "android.settings.NOTIFICATION_SETTINGS" to "настройки уведомлений"
+            norm.contains("настройки геолокации") || norm.contains("настройки местоположения") ->
+                Settings.ACTION_LOCATION_SOURCE_SETTINGS to "настройки геолокации"
+            norm.contains("специальные возможности") ->
+                Settings.ACTION_ACCESSIBILITY_SETTINGS to "специальные возможности"
+            else -> null
+        }
+        if (settingsTarget != null) {
+            return openSettings(ctx, settingsTarget.first, settingsTarget.second)
+        }
+
         return null
+    }
+
+    private fun dispatchMediaKey(ctx: Context, keyCode: Int) {
+        val audio = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+        audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
+    }
+
+    private inline fun accessibilityResult(
+        successText: String,
+        action: (HermesAccessibilityService) -> org.json.JSONObject,
+    ): String {
+        val service = HermesAccessibilityService.instance
+            ?: return "Включи Тройку в разделе специальных возможностей"
+        return if (action(service).optBoolean("ok")) successText
+        else "Не удалось выполнить действие"
     }
 
     private fun findAppPackage(query: String): String? {

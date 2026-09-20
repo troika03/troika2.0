@@ -1318,6 +1318,103 @@ class APIServerAdapter(BasePlatformAdapter):
             status=401,
         )
 
+    async def _handle_product_register(
+        self, request: "web.Request"
+    ) -> "web.Response":
+        """Create a free account and bind one device without operator work."""
+        if self._access_registry is None:
+            return web.json_response(
+                _openai_error("Registration is unavailable"), status=404
+            )
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response(_openai_error("Invalid JSON body"), status=400)
+        if not isinstance(body, dict):
+            return web.json_response(_openai_error("Invalid JSON body"), status=400)
+        email = str(body.get("email", "")).strip()
+        password = body.get("password", "")
+        device_name = str(body.get("device_name", "")).strip()
+        platform = str(body.get("platform", "")).strip().lower()
+        if platform not in {
+            "android", "ios", "windows", "macos", "linux", "web", "desktop"
+        }:
+            return web.json_response(
+                _openai_error("Unsupported device platform", code="invalid_platform"),
+                status=400,
+            )
+        try:
+            user_id = self._access_registry.register_account(
+                email, password, plan="free", daily_request_limit=1
+            )
+            device_id = self._access_registry.create_device(
+                user_id, name=device_name, platform=platform
+            )
+            token = self._access_registry.issue_device_token(device_id)
+        except ValueError as exc:
+            message = str(exc)
+            status = 409 if "already exists" in message else 400
+            return web.json_response(
+                _openai_error(message, code="registration_failed"), status=status
+            )
+        return web.json_response(
+            {
+                "token": token,
+                "token_type": "bearer",
+                "account": {"email": email.lower(), "plan": "free"},
+            },
+            status=201,
+            headers={"Cache-Control": "no-store"},
+        )
+
+    async def _handle_product_login(self, request: "web.Request") -> "web.Response":
+        """Verify account credentials and issue a token for this installation."""
+        if self._access_registry is None:
+            return web.json_response(_openai_error("Login is unavailable"), status=404)
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response(_openai_error("Invalid JSON body"), status=400)
+        if not isinstance(body, dict):
+            return web.json_response(_openai_error("Invalid JSON body"), status=400)
+        email = str(body.get("email", "")).strip()
+        password = body.get("password", "")
+        device_name = str(body.get("device_name", "")).strip()
+        platform = str(body.get("platform", "")).strip().lower()
+        if platform not in {
+            "android", "ios", "windows", "macos", "linux", "web", "desktop"
+        }:
+            return web.json_response(
+                _openai_error("Unsupported device platform", code="invalid_platform"),
+                status=400,
+            )
+        try:
+            user_id = self._access_registry.authenticate_password(email, password)
+        except ValueError:
+            user_id = None
+        if user_id is None:
+            return web.json_response(
+                _openai_error("Invalid email or password", code="invalid_credentials"),
+                status=401,
+            )
+        try:
+            device_id = self._access_registry.create_device(
+                user_id, name=device_name, platform=platform
+            )
+            token = self._access_registry.issue_device_token(device_id)
+        except ValueError:
+            return web.json_response(
+                _openai_error("Account login failed", code="login_failed"), status=400
+            )
+        return web.json_response(
+            {
+                "token": token,
+                "token_type": "bearer",
+                "account": {"email": email.lower()},
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
     # ------------------------------------------------------------------
     # Session header helpers
     # ------------------------------------------------------------------
@@ -1822,6 +1919,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 "assistant_projects": self._proactive_store is not None,
                 "assistant_inbox": self._proactive_store is not None,
                 "private_memory": self._memory_store is not None,
+                "self_registration": self._access_registry is not None,
                 "account_export": self._access_registry is not None,
                 "account_deletion": self._access_registry is not None,
                 "automatic_retention": self._retention_enabled,
@@ -1857,6 +1955,12 @@ class APIServerAdapter(BasePlatformAdapter):
                 "run_stop": {"method": "POST", "path": "/v1/runs/{run_id}/stop"},
                 **(
                     {
+                        "register": {
+                            "method": "POST", "path": "/v1/auth/register",
+                        },
+                        "login": {
+                            "method": "POST", "path": "/v1/auth/login",
+                        },
                         "notification_preferences": {
                             "method": "GET", "path": "/v1/notification-preferences",
                         },
@@ -5548,6 +5652,12 @@ class APIServerAdapter(BasePlatformAdapter):
             self._app.router.add_get("/v1/models", self._handle_models)
             self._app.router.add_get("/v1/capabilities", self._handle_capabilities)
             if self._access_registry is not None:
+                self._app.router.add_post(
+                    "/v1/auth/register", self._handle_product_register
+                )
+                self._app.router.add_post(
+                    "/v1/auth/login", self._handle_product_login
+                )
                 self._app.router.add_get(
                     "/v1/account/export", self._handle_export_account
                 )

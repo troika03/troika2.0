@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from hashlib import sha256
+from hashlib import scrypt, sha256
 import json
 from pathlib import Path
 import secrets
@@ -93,6 +93,8 @@ class AccessRegistry:
                 CREATE TABLE IF NOT EXISTS troika_users (
                     id TEXT PRIMARY KEY,
                     email TEXT NOT NULL UNIQUE,
+                    password_salt TEXT,
+                    password_digest TEXT,
                     status TEXT NOT NULL DEFAULT 'active',
                     created_at REAL NOT NULL
                 );
@@ -181,6 +183,18 @@ class AccessRegistry:
                 "CREATE INDEX IF NOT EXISTS idx_troika_devices_user_revoked "
                 "ON troika_devices(user_id, status, revoked_at)"
             )
+            user_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(troika_users)")
+            }
+            if "password_salt" not in user_columns:
+                connection.execute(
+                    "ALTER TABLE troika_users ADD COLUMN password_salt TEXT"
+                )
+            if "password_digest" not in user_columns:
+                connection.execute(
+                    "ALTER TABLE troika_users ADD COLUMN password_digest TEXT"
+                )
 
     @staticmethod
     def _new_id(prefix: str) -> str:
@@ -208,6 +222,72 @@ class AccessRegistry:
         return normalized
 
     @staticmethod
+    def _password_hash(password: str, salt: bytes) -> str:
+        if not isinstance(password, str) or not 10 <= len(password) <= 128:
+            raise ValueError("password must contain between 10 and 128 characters")
+        return scrypt(
+            password.encode("utf-8"), salt=salt, n=2**14, r=8, p=1, dklen=32
+        ).hex()
+
+    def register_account(
+        self,
+        email: str,
+        password: str,
+        *,
+        plan: str = "free",
+        daily_request_limit: int = 1,
+    ) -> str:
+        """Create a password-backed account atomically for self-registration."""
+        user_id = self._new_id("usr")
+        normalized_email = self._normalize_email(email)
+        clean_plan = self._normalize_plan(plan)
+        limit = self._validate_daily_request_limit(daily_request_limit)
+        salt = secrets.token_bytes(16)
+        digest = self._password_hash(password, salt)
+        now = time.time()
+        with self._connect() as connection:
+            try:
+                connection.execute(
+                    "INSERT INTO troika_users "
+                    "(id, email, password_salt, password_digest, created_at) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (user_id, normalized_email, salt.hex(), digest, now),
+                )
+                connection.execute(
+                    "INSERT INTO troika_entitlements "
+                    "(user_id, plan, daily_request_limit, updated_at) "
+                    "VALUES (?, ?, ?, ?)",
+                    (user_id, clean_plan, limit, now),
+                )
+            except sqlite3.IntegrityError as exc:
+                raise ValueError("an account with this email already exists") from exc
+        return user_id
+
+    def authenticate_password(self, email: str, password: str) -> str | None:
+        """Return the active user ID when email and password match."""
+        normalized_email = self._normalize_email(email)
+        # Validate length before doing the lookup and expensive hash.
+        if not isinstance(password, str) or not 10 <= len(password) <= 128:
+            return None
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT id, password_salt, password_digest FROM troika_users "
+                "WHERE email = ? AND status = 'active'",
+                (normalized_email,),
+            ).fetchone()
+        if row is None or not row["password_salt"] or not row["password_digest"]:
+            return None
+        try:
+            actual = self._password_hash(password, bytes.fromhex(row["password_salt"]))
+        except (TypeError, ValueError):
+            return None
+        return (
+            str(row["id"])
+            if secrets.compare_digest(actual, row["password_digest"])
+            else None
+        )
+
+    @staticmethod
     def _validate_daily_request_limit(value: int) -> int:
         if isinstance(value, bool):
             raise ValueError("daily request limit must be an integer")
@@ -222,8 +302,14 @@ class AccessRegistry:
     @staticmethod
     def _normalize_plan(plan: str) -> str:
         cleaned = str(plan).strip().lower()
-        if not cleaned or len(cleaned) > 60 or not cleaned.replace("_", "").replace("-", "").isalnum():
-            raise ValueError("plan must contain only letters, numbers, hyphens, or underscores")
+        if (
+            not cleaned
+            or len(cleaned) > 60
+            or not cleaned.replace("_", "").replace("-", "").isalnum()
+        ):
+            raise ValueError(
+                "plan must contain only letters, numbers, hyphens, or underscores"
+            )
         return cleaned
 
     def create_user(
@@ -290,8 +376,7 @@ class AccessRegistry:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             entitlement = connection.execute(
-                "SELECT daily_request_limit FROM troika_entitlements "
-                "WHERE user_id = ?",
+                "SELECT daily_request_limit FROM troika_entitlements WHERE user_id = ?",
                 (principal.user_id,),
             ).fetchone()
             if entitlement is None:
@@ -341,7 +426,14 @@ class AccessRegistry:
         if not isinstance(details, dict) or len(details) > 16:
             raise ValueError("audit details must contain at most 16 scalar values")
         normalized: dict[str, str | int | float | bool | None] = {}
-        forbidden = {"api_key", "authorization", "content", "message", "prompt", "token"}
+        forbidden = {
+            "api_key",
+            "authorization",
+            "content",
+            "message",
+            "prompt",
+            "token",
+        }
         for key, value in details.items():
             clean_key = str(key).strip().lower()
             if (
@@ -375,7 +467,11 @@ class AccessRegistry:
         if (
             not clean_event_type
             or len(clean_event_type) > 100
-            or not clean_event_type.replace("_", "").replace("-", "").replace(".", "").isalnum()
+            or not clean_event_type
+            .replace("_", "")
+            .replace("-", "")
+            .replace(".", "")
+            .isalnum()
         ):
             raise ValueError("audit event type is invalid")
         normalized_details = self._normalize_audit_details(details)
@@ -391,7 +487,9 @@ class AccessRegistry:
                     principal.device_id if principal else None,
                     self._audit_reference_digest(session_id),
                     self._audit_reference_digest(run_id),
-                    json.dumps(normalized_details, sort_keys=True, separators=(",", ":")),
+                    json.dumps(
+                        normalized_details, sort_keys=True, separators=(",", ":")
+                    ),
                 ),
             )
         return int(cursor.lastrowid)
@@ -502,7 +600,8 @@ class AccessRegistry:
 
     @staticmethod
     def _require_active_principal(
-        connection: sqlite3.Connection, principal: AccessPrincipal,
+        connection: sqlite3.Connection,
+        principal: AccessPrincipal,
     ) -> None:
         """Recheck ownership and revocation within a preferences transaction."""
         row = connection.execute(
@@ -518,7 +617,9 @@ class AccessRegistry:
         if row is None:
             raise PermissionError("active product authentication is required")
 
-    def notification_preferences(self, principal: AccessPrincipal) -> NotificationPreferences:
+    def notification_preferences(
+        self, principal: AccessPrincipal
+    ) -> NotificationPreferences:
         """Read this authenticated account's preferences, defaulting to opt-out."""
         with self._connect() as connection:
             self._require_active_principal(connection, principal)
@@ -531,7 +632,9 @@ class AccessRegistry:
         return NotificationPreferences.from_dict(json.loads(row["preferences_json"]))
 
     def set_notification_preferences(
-        self, principal: AccessPrincipal, preferences: NotificationPreferences,
+        self,
+        principal: AccessPrincipal,
+        preferences: NotificationPreferences,
     ) -> NotificationPreferences:
         """Atomically replace preferences and record consent without schedule data."""
         validated = NotificationPreferences.from_dict(preferences.to_dict())
@@ -577,7 +680,12 @@ class AccessRegistry:
                 connection.execute(
                     "INSERT INTO troika_sessions (session_id, user_id, device_id, created_at) "
                     "VALUES (?, ?, ?, ?)",
-                    (clean_session_id, principal.user_id, principal.device_id, time.time()),
+                    (
+                        clean_session_id,
+                        principal.user_id,
+                        principal.device_id,
+                        time.time(),
+                    ),
                 )
                 return True
             return (
@@ -884,7 +992,11 @@ class AccessRegistry:
                 "(SELECT id FROM troika_devices WHERE user_id = ?)",
                 (user_id,),
             )
-            connection.execute("DELETE FROM troika_devices WHERE user_id = ?", (user_id,))
-            cursor = connection.execute("DELETE FROM troika_users WHERE id = ?", (user_id,))
+            connection.execute(
+                "DELETE FROM troika_devices WHERE user_id = ?", (user_id,)
+            )
+            cursor = connection.execute(
+                "DELETE FROM troika_users WHERE id = ?", (user_id,)
+            )
             if cursor.rowcount != 1:
                 raise RuntimeError("account deletion did not remove the user tombstone")

@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class HermesConfig {
   static const String _keyServerUrl = 'hermes_server_url';
   static const String _keyApiKey = 'hermes_api_key';
+  static const String _keyAccountEmail = 'troika_account_email';
   static const String _keyGroqKey = 'hermes_groq_key';
   static const String _keyModel = 'hermes_model';
   static const String _keyVoiceEnabled = 'hermes_voice_enabled';
@@ -72,6 +73,26 @@ class HermesConfig {
   static String get apiKey => _prefs.getString(_keyApiKey) ?? defaultApiKey;
 
   static set apiKey(String key) => _prefs.setString(_keyApiKey, key);
+
+  static String get accountEmail =>
+      _prefs.getString(_keyAccountEmail)?.trim() ?? '';
+
+  static bool get signedIn =>
+      accountEmail.isNotEmpty && apiKey.startsWith('trk_live_');
+
+  static Future<void> saveAccount({
+    required String email,
+    required String token,
+  }) async {
+    await _prefs.setString(_keyAccountEmail, email.trim().toLowerCase());
+    await _prefs.setString(_keyApiKey, token.trim());
+  }
+
+  static Future<void> signOut() async {
+    await setPhoneControlEnabled(false);
+    await _prefs.remove(_keyAccountEmail);
+    await _prefs.remove(_keyApiKey);
+  }
 
   static String get groqKey => _prefs.getString(_keyGroqKey) ?? '';
 
@@ -148,6 +169,10 @@ class HermesConfig {
   /// Подтверждаемое удаление product-аккаунта и серверных данных.
   static String get accountUrl => '$serverUrl/v1/account';
 
+  static String get registrationUrl => '$serverUrl/v1/auth/register';
+
+  static String get loginUrl => '$serverUrl/v1/auth/login';
+
   /// Архив всех переносимых данных текущего product-аккаунта.
   static String get accountExportUrl => '$serverUrl/v1/account/export';
 
@@ -158,6 +183,7 @@ class HermesConfig {
     await _prefs.setBool(_keyLocationContextEnabled, false);
     await _prefs.setBool(_keyOnboardingDone, false);
     await _prefs.remove(_keyApiKey);
+    await _prefs.remove(_keyAccountEmail);
     await _prefs.remove(_keySessionKey);
     await _prefs.remove(_keySessionId);
     _sessionKey = '';

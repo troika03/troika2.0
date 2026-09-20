@@ -8,6 +8,7 @@ import 'stt_service.dart';
 import 'tts_service.dart';
 import 'hermes_api_service.dart';
 import 'wake_word_service.dart';
+import 'local_command_service.dart';
 import '../config/hermes_config.dart';
 
 enum AssistantState {
@@ -25,6 +26,7 @@ class AssistantService extends ChangeNotifier {
   final TtsService _tts = TtsService();
   final HermesApiService _hermes = HermesApiService();
   final WakeWordService _wakeWord = WakeWordService();
+  final LocalCommandService _localCommands = LocalCommandService();
 
   AssistantState _state = AssistantState.idle;
   String _lastUserText = '';
@@ -220,6 +222,10 @@ class AssistantService extends ChangeNotifier {
 
     // Android: весь диалог (запись → STT → Hermes → TTS) идёт в нативном сервисе,
     // он сам берёт микрофон без конфликта с listener loop.
+    if (HermesConfig.serverUrl.trim().isEmpty) {
+      await _recognizeLocalAndroidCommand();
+      return;
+    }
     try {
       await _platform.invokeMethod('triggerDialog');
       _setState(AssistantState.processing);
@@ -231,6 +237,33 @@ class AssistantService extends ChangeNotifier {
       });
     } catch (e) {
       _setError('Не удалось запустить диалог: $e');
+    }
+  }
+
+  Future<void> _recognizeLocalAndroidCommand() async {
+    _setState(AssistantState.recording);
+    try {
+      final result = await _localCommands.recognizeAndExecute();
+      final heard = result.heard.trim();
+      if (heard.isEmpty) {
+        _setState(AssistantState.idle);
+        return;
+      }
+      _lastUserText = heard;
+      _messages.add(ChatMessage(role: 'user', text: heard, fromVoice: true));
+      final response = result.handled
+          ? result.response
+          : 'Эта локальная команда пока не поддерживается.';
+      _lastHermesText = response;
+      _messages.add(
+        ChatMessage(role: 'assistant', text: response, fromVoice: true),
+      );
+      notifyListeners();
+      _setState(AssistantState.speaking);
+      await _tts.speak(response);
+      _setState(AssistantState.idle);
+    } catch (e) {
+      _setError('Не удалось выполнить локальную команду: $e');
     }
   }
 
@@ -349,6 +382,40 @@ class AssistantService extends ChangeNotifier {
     notifyListeners();
 
     try {
+      if (imageDataUrls.isEmpty) {
+        final local = await _localCommands.execute(text);
+        if (local.handled) {
+          final response = local.response.isEmpty ? 'Готово' : local.response;
+          _lastHermesText = response;
+          pending
+            ..text = response
+            ..pending = false;
+          notifyListeners();
+          if (speak) {
+            _setState(AssistantState.speaking);
+            await _tts.speak(response);
+          }
+          _setState(AssistantState.idle);
+          return;
+        }
+      }
+
+      if (HermesConfig.serverUrl.trim().isEmpty) {
+        const response = 'Эта локальная команда пока не поддерживается. '
+            'Свободные вопросы будут доступны в AI-тарифе.';
+        _lastHermesText = response;
+        pending
+          ..text = response
+          ..pending = false;
+        notifyListeners();
+        if (speak) {
+          _setState(AssistantState.speaking);
+          await _tts.speak(response);
+        }
+        _setState(AssistantState.idle);
+        return;
+      }
+
       // Стримим «поток мыслей»: размышления и вызовы инструментов
       // появляются в пузыре в реальном времени, пока Тройка работает.
       final response = await _hermes.streamMessage(

@@ -85,7 +85,88 @@ def _adapter_with_two_users(tmp_path, *, quotas_enabled=False):
     return adapter, first_token, second_token
 
 
-def test_product_auth_ignores_legacy_server_key_and_derives_memory_scope(tmp_path) -> None:
+def test_product_registration_and_login_issue_device_tokens(tmp_path) -> None:
+    adapter = APIServerAdapter(
+        PlatformConfig(
+            enabled=True,
+            extra={
+                "product_auth_enabled": True,
+                "product_auth_db": str(tmp_path / "access.db"),
+            },
+        )
+    )
+    registration = asyncio.run(
+        adapter._handle_product_register(
+            _ChatRequest(
+                "",
+                {
+                    "email": "new@example.com",
+                    "password": "safe-password-123",
+                    "device_name": "Test Pixel",
+                    "platform": "android",
+                },
+            )
+        )
+    )
+    registered = json.loads(registration.body)
+    assert registration.status == 201
+    assert registered["account"]["plan"] == "free"
+    assert adapter._access_registry.authenticate(registered["token"]) is not None
+
+    login = asyncio.run(
+        adapter._handle_product_login(
+            _ChatRequest(
+                "",
+                {
+                    "email": "new@example.com",
+                    "password": "safe-password-123",
+                    "device_name": "Test Windows",
+                    "platform": "windows",
+                },
+            )
+        )
+    )
+    logged_in = json.loads(login.body)
+    assert login.status == 200
+    assert adapter._access_registry.authenticate(logged_in["token"]) is not None
+
+
+def test_product_registration_rejects_duplicate_and_bad_password(tmp_path) -> None:
+    adapter = APIServerAdapter(
+        PlatformConfig(
+            enabled=True,
+            extra={
+                "product_auth_enabled": True,
+                "product_auth_db": str(tmp_path / "access.db"),
+            },
+        )
+    )
+    body = {
+        "email": "new@example.com",
+        "password": "safe-password-123",
+        "device_name": "Test Pixel",
+        "platform": "android",
+    }
+    assert (
+        asyncio.run(adapter._handle_product_register(_ChatRequest("", body))).status
+        == 201
+    )
+    assert (
+        asyncio.run(adapter._handle_product_register(_ChatRequest("", body))).status
+        == 409
+    )
+
+    bad_login = asyncio.run(
+        adapter._handle_product_login(
+            _ChatRequest("", {**body, "password": "wrong-password"})
+        )
+    )
+    assert bad_login.status == 401
+
+
+def test_product_auth_ignores_legacy_server_key_and_derives_memory_scope(
+    tmp_path,
+) -> None:
     adapter, first_token, _ = _adapter_with_two_users(tmp_path)
 
     legacy_request = _Request("legacy-bootstrap-key")
@@ -105,8 +186,13 @@ def test_product_session_owner_cannot_be_impersonated(tmp_path) -> None:
     assert adapter._check_auth(first) is None
     assert adapter._check_auth(second) is None
 
-    assert adapter._authorize_product_session(first, "private-session", claim=True) is None
-    assert adapter._authorize_product_session(second, "private-session", claim=True).status == 403
+    assert (
+        adapter._authorize_product_session(first, "private-session", claim=True) is None
+    )
+    assert (
+        adapter._authorize_product_session(second, "private-session", claim=True).status
+        == 403
+    )
 
 
 def test_product_quota_and_run_status_are_isolated(tmp_path) -> None:
@@ -226,7 +312,10 @@ def test_product_artifact_api_is_owner_scoped(tmp_path) -> None:
         adapter._handle_delete_artifact(_ArtifactRequest(first_token, artifact.id))
     )
     assert deleted.status == 200
-    assert adapter._artifact_store.read_for_user(first_principal.user_id, artifact.id) is None
+    assert (
+        adapter._artifact_store.read_for_user(first_principal.user_id, artifact.id)
+        is None
+    )
 
 
 def test_product_device_context_requires_explicit_consent(tmp_path) -> None:
@@ -356,9 +445,7 @@ def test_confirmed_account_deletion_purges_all_local_user_data(
     second = second_request["troika_product_principal"]
     registry = adapter._access_registry
     first_extra_token = registry.issue_device_token(
-        registry.create_device(
-            first.user_id, name="First tablet", platform="android"
-        )
+        registry.create_device(first.user_id, name="First tablet", platform="android")
     )
     from tools import location_tool
 
@@ -436,9 +523,7 @@ def test_confirmed_account_deletion_purges_all_local_user_data(
 
     session_db = SessionDB(db_path=tmp_path / "state.db")
     session_db.create_session("first-private-session", "api_server")
-    session_db.append_message(
-        "first-private-session", "user", "first private message"
-    )
+    session_db.append_message("first-private-session", "user", "first private message")
     session_db.create_session("second-private-session", "api_server")
     session_db.append_message(
         "second-private-session", "user", "second private message"
@@ -485,19 +570,23 @@ def test_confirmed_account_deletion_purges_all_local_user_data(
     assert "run-first-private" not in adapter._run_owners
     assert "run-second-private" in adapter._run_statuses
     assert "run-second-private" in adapter._run_owners
-    assert adapter._artifact_store.read_for_user(
-        second.user_id, second_artifact.id
-    ) is not None
-    assert [
-        item.id for item in adapter._memory_store.list_memories(second)
-    ] == [second_memory.id]
+    assert (
+        adapter._artifact_store.read_for_user(second.user_id, second_artifact.id)
+        is not None
+    )
+    assert [item.id for item in adapter._memory_store.list_memories(second)] == [
+        second_memory.id
+    ]
     assert location_tool.get_device_context(first.memory_scope) == {}
     assert location_tool.get_device_context(second.memory_scope) == {"bssid": "second"}
     assert location_tool._list(first.memory_scope)["count"] == 0
     assert location_tool._list(second.memory_scope)["count"] == 1
-    assert adapter._artifact_store.storage_root.joinpath(
-        adapter._artifact_store._user_bucket(first.user_id)
-    ).exists() is False
+    assert (
+        adapter._artifact_store.storage_root.joinpath(
+            adapter._artifact_store._user_bucket(first.user_id)
+        ).exists()
+        is False
+    )
 
     with sqlite3.connect(registry.database_path) as connection:
         account_rows = connection.execute(
@@ -640,14 +729,16 @@ def test_account_export_contains_only_authenticated_users_data(
     assert data["inbox_messages"][0]["title"] == "First export reminder"
     assert data["memories"][0]["title"] == "First export memory"
     assert data["memories"][0]["content"] == "FIRST EXPORT MEMORY CONTENT"
-    assert data["notification_preferences"][0]["preferences_json"][
-        "reminders_enabled"
-    ] is True
+    assert (
+        data["notification_preferences"][0]["preferences_json"]["reminders_enabled"]
+        is True
+    )
     assert len(data["vision_sessions"]) == 1
     assert data["locations"][0]["device_context"]["ssid"] == "FIRST_WIFI"
-    assert data["conversations"][0]["conversation"]["messages"][0][
-        "content"
-    ] == "FIRST EXPORT PRIVATE MESSAGE"
+    assert (
+        data["conversations"][0]["conversation"]["messages"][0]["content"]
+        == "FIRST EXPORT PRIVATE MESSAGE"
+    )
     assert data["audit_events"][-1]["event_type"] == "account.export_requested"
     assert any(first_artifact.id in name for name in names)
     assert b"%PDF-FIRST-EXPORT-CONTENT" in unpacked
@@ -743,7 +834,11 @@ def test_product_screen_toolset_requires_explicit_external_vision_opt_in(
 
 
 def test_product_action_rejects_session_wide_confirmation(tmp_path) -> None:
-    from tools.approval import _ApprovalEntry, _gateway_queues, unregister_gateway_notify
+    from tools.approval import (
+        _ApprovalEntry,
+        _gateway_queues,
+        unregister_gateway_notify,
+    )
 
     adapter, first_token, _ = _adapter_with_two_users(tmp_path)
     principal = adapter._access_registry.authenticate(first_token)
@@ -754,12 +849,10 @@ def test_product_action_rejects_session_wide_confirmation(tmp_path) -> None:
     adapter._run_owners[run_id] = (principal.user_id, principal.device_id)
     adapter._run_approval_sessions[run_id] = approval_session
     _gateway_queues[approval_session] = [
-        _ApprovalEntry(
-            {
-                "choices": ["once", "deny"],
-                "product_action": True,
-            }
-        )
+        _ApprovalEntry({
+            "choices": ["once", "deny"],
+            "product_action": True,
+        })
     ]
     try:
         response = asyncio.run(

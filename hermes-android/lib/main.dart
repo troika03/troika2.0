@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'config/hermes_config.dart';
 import 'services/assistant_service.dart';
 import 'screens/home_screen.dart';
+import 'screens/auth_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'theme/troika_theme.dart';
 import 'services/thought_translator.dart';
@@ -38,6 +39,9 @@ class HermesApp extends StatefulWidget {
 }
 
 class _HermesAppState extends State<HermesApp> {
+  // Старые ручные подключения продолжают работать. Новая установка сначала
+  // создаёт аккаунт и получает отдельный токен устройства.
+  bool _authenticated = HermesConfig.signedIn || HermesConfig.apiKey.isNotEmpty;
   // Первый запуск показывает онбординг разрешений; после — сразу домой.
   // На десктопе (Windows/Linux/macOS) онбординг ПРОПУСКАЕТСЯ: его разрешения
   // (спец-возможности, поверх окон, фон, геолокация) — андроидные и на ПК не
@@ -61,11 +65,15 @@ class _HermesAppState extends State<HermesApp> {
         title: 'Тройка',
         debugShowCheckedModeBanner: false,
         theme: buildTroikaTheme(),
-        home: _onboarded
-            ? const HomeScreen()
-            : OnboardingScreen(
-                onDone: () => setState(() => _onboarded = true),
-              ),
+        home: !_authenticated
+            ? AuthScreen(
+                onAuthenticated: () => setState(() => _authenticated = true),
+              )
+            : _onboarded
+                ? const HomeScreen()
+                : OnboardingScreen(
+                    onDone: () => setState(() => _onboarded = true),
+                  ),
       ),
     );
   }
