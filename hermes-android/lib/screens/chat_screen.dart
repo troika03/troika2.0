@@ -10,12 +10,18 @@ import '../services/assistant_service.dart';
 import '../services/hermes_api_service.dart';
 import '../services/thought_translator.dart';
 import '../theme/troika_theme.dart';
-import '../widgets/status_orb.dart';
 
 /// Полноценный чат-экран: общая лента голоса и текста, прокрутка,
 /// картинки в пузырях, кликабельные ссылки, отправка фото/файлов.
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  final VoidCallback? onOpenCommands;
+  final VoidCallback? onOpenDocuments;
+
+  const ChatScreen({
+    super.key,
+    this.onOpenCommands,
+    this.onOpenDocuments,
+  });
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -230,21 +236,64 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _emptyState(AssistantService a) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          SizedBox(
-            height: 120,
-            width: 120,
-            child: StatusOrb(state: a.state),
+    final hour = DateTime.now().hour;
+    final greeting = hour < 6
+        ? 'Доброй ночи'
+        : hour < 12
+            ? 'Доброе утро'
+            : hour < 18
+                ? 'Добрый день'
+                : 'Добрый вечер';
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(22, 34, 22, 20),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                greeting,
+                style: const TextStyle(
+                  fontSize: 34,
+                  height: 1.05,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.8,
+                ),
+              ),
+              const SizedBox(height: 9),
+              const Text(
+                'Локальные команды готовы. Интернет не нужен.',
+                style: TextStyle(color: TroikaColors.textMuted, fontSize: 15),
+              ),
+              const SizedBox(height: 26),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _QuickCard(
+                    icon: Icons.grid_view_outlined,
+                    title: 'Команды',
+                    subtitle: 'Телефон и компьютер',
+                    onTap: widget.onOpenCommands,
+                  ),
+                  _QuickCard(
+                    icon: Icons.description_outlined,
+                    title: 'Документ',
+                    subtitle: 'Создать DOCX локально',
+                    onTap: widget.onOpenDocuments,
+                  ),
+                  _QuickCard(
+                    icon: Icons.slideshow_outlined,
+                    title: 'Презентация',
+                    subtitle: 'Создать PPTX локально',
+                    onTap: widget.onOpenDocuments,
+                  ),
+                ],
+              ),
+            ],
           ),
-          const SizedBox(height: 20),
-          Text(
-            'Скажи «тройка» или напиши сообщение',
-            style: TextStyle(color: TroikaColors.textMuted, fontSize: 14),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -370,6 +419,59 @@ Uint8List? _decodeDataUrl(String dataUrl) {
     return base64Decode(dataUrl.substring(idx + 1));
   } catch (_) {
     return null;
+  }
+}
+
+class _QuickCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback? onTap;
+
+  const _QuickCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 210,
+      child: Material(
+        color: TroikaColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, color: TroikaColors.brand, size: 22),
+                const SizedBox(height: 16),
+                Text(title,
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    color: TroikaColors.textMuted,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

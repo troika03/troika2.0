@@ -250,8 +250,11 @@ class AssistantService extends ChangeNotifier {
         ChatMessage(role: 'assistant', text: response, fromVoice: true),
       );
       notifyListeners();
-      _setState(AssistantState.speaking);
-      await _tts.speak(response);
+      final mode = await LocalCommandService.currentMode();
+      if (mode != 'rest') {
+        _setState(AssistantState.speaking);
+        await _tts.speak(response);
+      }
       _setState(AssistantState.idle);
     } catch (e) {
       _setError('Не удалось выполнить локальную команду: $e');

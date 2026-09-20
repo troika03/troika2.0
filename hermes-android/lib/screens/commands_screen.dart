@@ -1,0 +1,260 @@
+import 'package:flutter/material.dart';
+
+import '../services/custom_command_store.dart';
+import '../services/local_command_service.dart';
+import '../theme/troika_theme.dart';
+
+class CommandsScreen extends StatefulWidget {
+  const CommandsScreen({super.key});
+
+  @override
+  State<CommandsScreen> createState() => _CommandsScreenState();
+}
+
+class _CommandsScreenState extends State<CommandsScreen> {
+  static const _actions = <String, String>{
+    'Открыть YouTube': 'открой ютуб',
+    'Открыть Telegram': 'открой телеграм',
+    'Открыть настройки': 'открой настройки',
+    'Включить фонарик': 'включи фонарик',
+    'Выключить фонарик': 'выключи фонарик',
+    'Назвать время': 'который час',
+    'Показать заряд': 'какой заряд',
+    'Режим «Протокол»': 'режим протокол',
+    'Режим «Отдых»': 'режим отдых',
+    'Обычный режим': 'обычный режим',
+  };
+
+  List<CustomCommand> _custom = const [];
+  String _mode = 'normal';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final custom = await CustomCommandStore.load();
+    final mode = await LocalCommandService.currentMode();
+    if (mounted) {
+      setState(() {
+        _custom = custom;
+        _mode = mode;
+      });
+    }
+  }
+
+  Future<void> _setMode(String command) async {
+    final result = await LocalCommandService().execute(command);
+    await _load();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.response)),
+      );
+    }
+  }
+
+  Future<void> _addCommand() async {
+    final phrase = TextEditingController();
+    var action = _actions.values.first;
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: TroikaColors.surface,
+          title: const Text('Новая команда'),
+          content: SizedBox(
+            width: 430,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: phrase,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Что сказать',
+                    hintText: 'Например: пора работать',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: action,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Действие'),
+                  items: _actions.entries
+                      .map((item) => DropdownMenuItem(
+                            value: item.value,
+                            child: Text(item.key),
+                          ))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) setDialogState(() => action = value);
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Добавить'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved != true || phrase.text.trim().isEmpty) return;
+    final updated = [
+      ..._custom.where((item) => item.phrase != phrase.text.trim()),
+      CustomCommand(phrase: phrase.text.trim(), action: action),
+    ];
+    await CustomCommandStore.save(updated);
+    await _load();
+  }
+
+  Future<void> _remove(CustomCommand command) async {
+    await CustomCommandStore.save(
+      _custom.where((item) => item.phrase != command.phrase).toList(),
+    );
+    await _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Команды'),
+        backgroundColor: TroikaColors.bg,
+        surfaceTintColor: Colors.transparent,
+        actions: [
+          TextButton.icon(
+            onPressed: _addCommand,
+            icon: const Icon(Icons.add),
+            label: const Text('Добавить'),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+        children: [
+          const Text('Режимы', style: _sectionStyle),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _modeChip('normal', 'Обычный', 'обычный режим'),
+              _modeChip('protocol', 'Протокол', 'режим протокол'),
+              _modeChip('rest', 'Отдых', 'режим отдых'),
+            ],
+          ),
+          const SizedBox(height: 28),
+          const Text('Команды без интернета', style: _sectionStyle),
+          const SizedBox(height: 10),
+          const _CommandGroup(
+            title: 'Телефон и приложения',
+            commands: [
+              'Открой YouTube / Telegram / браузер / настройки',
+              'Включи фонарик · Выключи фонарик',
+              'Позвони контакту · Открой камеру',
+              'Сделай фото · Сделай скриншот',
+            ],
+          ),
+          const _CommandGroup(
+            title: 'Система и медиа',
+            commands: [
+              'Который час · Какая дата · Какой заряд',
+              'Громче · Тише · Без звука',
+              'Пауза · Следующий трек · Предыдущий трек',
+              'Открой Wi-Fi / Bluetooth / звук / экран',
+            ],
+          ),
+          const _CommandGroup(
+            title: 'Компьютер',
+            commands: [
+              'Открой блокнот / калькулятор / проводник',
+              'Открой Word / Excel / PowerPoint',
+              'Покажи рабочий стол · Закрой окно',
+              'Найди … · Сделай скриншот · Заблокируй компьютер',
+            ],
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              const Expanded(child: Text('Мои команды', style: _sectionStyle)),
+              TextButton(onPressed: _addCommand, child: const Text('Добавить')),
+            ],
+          ),
+          if (_custom.isEmpty)
+            const Text(
+              'Создай свою фразу для готового безопасного действия.',
+              style: TextStyle(color: TroikaColors.textMuted),
+            )
+          else
+            ..._custom.map((command) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('«${command.phrase}»'),
+                  subtitle: Text(command.action),
+                  trailing: IconButton(
+                    tooltip: 'Удалить',
+                    icon: const Icon(Icons.close),
+                    onPressed: () => _remove(command),
+                  ),
+                )),
+        ],
+      ),
+    );
+  }
+
+  Widget _modeChip(String value, String label, String command) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: _mode == value,
+      onSelected: (_) => _setMode(command),
+    );
+  }
+}
+
+const _sectionStyle = TextStyle(
+  color: TroikaColors.text,
+  fontSize: 19,
+  fontWeight: FontWeight.w600,
+);
+
+class _CommandGroup extends StatelessWidget {
+  final String title;
+  final List<String> commands;
+
+  const _CommandGroup({required this.title, required this.commands});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: TroikaColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          ...commands.map((command) => Padding(
+                padding: const EdgeInsets.only(top: 5),
+                child: Text(command,
+                    style: const TextStyle(color: TroikaColors.textMuted)),
+              )),
+        ],
+      ),
+    );
+  }
+}

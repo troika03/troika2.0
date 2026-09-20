@@ -1,7 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import 'custom_command_store.dart';
 
 class LocalCommandResult {
   final bool handled;
@@ -29,6 +32,7 @@ class LocalCommandResult {
 /// Windows uses a strict allowlist. User text is never passed to a shell.
 class LocalCommandService {
   static const _platform = MethodChannel('com.troika.hermes/background');
+  static const _modeKey = 'troika_local_mode';
 
   static const Map<String, String> _windowsApps = {
     'блокнот': 'notepad.exe',
@@ -66,12 +70,16 @@ class LocalCommandService {
   Future<LocalCommandResult> execute(String text) async {
     final clean = text.trim();
     if (clean.isEmpty) return const LocalCommandResult(handled: false);
+    final direct = await _modeCommand(clean);
+    if (direct != null) return direct;
+    final custom = await _customAction(clean);
+    final command = custom ?? clean;
 
     if (Platform.isAndroid) {
       try {
         final value = await _platform.invokeMethod<Map<Object?, Object?>>(
           'executeLocalCommand',
-          {'text': clean},
+          {'text': command},
         );
         return value == null
             ? const LocalCommandResult(handled: false)
@@ -81,7 +89,7 @@ class LocalCommandService {
       }
     }
 
-    if (Platform.isWindows) return _executeWindows(clean);
+    if (Platform.isWindows) return _executeWindows(command);
     return const LocalCommandResult(handled: false);
   }
 
@@ -93,15 +101,63 @@ class LocalCommandService {
       final value = await _platform.invokeMethod<Map<Object?, Object?>>(
         'recognizeLocalCommand',
       );
-      return value == null
+      final result = value == null
           ? const LocalCommandResult(handled: false)
           : LocalCommandResult.fromMap(value);
+      if (!result.handled && result.heard.trim().isNotEmpty) {
+        final retried = await execute(result.heard);
+        return LocalCommandResult(
+          handled: retried.handled,
+          response: retried.response,
+          heard: result.heard,
+        );
+      }
+      return result;
     } on PlatformException catch (e) {
       return LocalCommandResult(
         handled: true,
         response: e.message ?? 'Не удалось распознать команду.',
       );
     }
+  }
+
+  Future<String?> _customAction(String text) async {
+    final normalized = _normalize(text);
+    final commands = await CustomCommandStore.load();
+    for (final command in commands) {
+      if (_normalize(command.phrase) == normalized) return command.action;
+    }
+    return null;
+  }
+
+  Future<LocalCommandResult?> _modeCommand(String text) async {
+    final normalized = _normalize(text);
+    String? mode;
+    String? response;
+    if (normalized == 'режим протокол' || normalized == 'включи протокол') {
+      mode = 'protocol';
+      response =
+          'Режим «Протокол» включён. Команды фиксируются в диалоге кратко.';
+    } else if (normalized == 'режим отдых' ||
+        normalized == 'включи режим отдых' ||
+        normalized == 'режим отдыха') {
+      mode = 'rest';
+      response = 'Режим «Отдых» включён. Голосовые ответы отключены.';
+    } else if (normalized == 'обычный режим' ||
+        normalized == 'выключи режим отдых' ||
+        normalized == 'режим обычный') {
+      mode = 'normal';
+      response = 'Обычный режим включён.';
+    }
+    if (mode == null) return null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_modeKey, mode);
+    return LocalCommandResult(handled: true, response: response!);
+  }
+
+  static Future<String> currentMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_modeKey) ?? 'normal';
   }
 
   Future<LocalCommandResult> _executeWindows(String text) async {
