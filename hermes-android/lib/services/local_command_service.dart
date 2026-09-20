@@ -109,6 +109,7 @@ class LocalCommandService {
     final now = DateTime.now();
 
     if (norm.contains('который час') ||
+        norm.contains('каторый час') ||
         norm == 'время' ||
         norm.contains('сколько времени')) {
       final hh = now.hour.toString().padLeft(2, '0');

@@ -181,7 +181,8 @@ object PhoneCommands {
         }
 
         // Время и дата
-        if (norm.contains("который час") || norm.contains("сколько времени")) {
+        if (norm.contains("который час") || norm.contains("каторый час") ||
+            norm.contains("сколько времени")) {
             val now = java.util.Calendar.getInstance()
             return "Сейчас ${"%02d:%02d".format(
                 now.get(java.util.Calendar.HOUR_OF_DAY),

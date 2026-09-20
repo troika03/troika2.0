@@ -220,24 +220,10 @@ class AssistantService extends ChangeNotifier {
       return;
     }
 
-    // Android: весь диалог (запись → STT → Hermes → TTS) идёт в нативном сервисе,
-    // он сам берёт микрофон без конфликта с listener loop.
-    if (HermesConfig.serverUrl.trim().isEmpty) {
-      await _recognizeLocalAndroidCommand();
-      return;
-    }
-    try {
-      await _platform.invokeMethod('triggerDialog');
-      _setState(AssistantState.processing);
-      // Сбрасываем состояние через 60с (страховка)
-      Future.delayed(const Duration(seconds: 60), () {
-        if (_state == AssistantState.processing) {
-          _setState(AssistantState.idle);
-        }
-      });
-    } catch (e) {
-      _setError('Не удалось запустить диалог: $e');
-    }
+    // Android сначала распознаёт речь системным SpeechRecognizer и проверяет
+    // локальные команды. Облачный запрос выполняется только для свободного
+    // вопроса, поэтому команды продолжают работать без PC/API.
+    await _recognizeLocalAndroidCommand();
   }
 
   Future<void> _recognizeLocalAndroidCommand() async {
@@ -247,6 +233,11 @@ class AssistantService extends ChangeNotifier {
       final heard = result.heard.trim();
       if (heard.isEmpty) {
         _setState(AssistantState.idle);
+        return;
+      }
+      if (!result.handled && HermesConfig.serverUrl.trim().isNotEmpty) {
+        _setState(AssistantState.idle);
+        await sendTextQuery(heard, speak: true);
         return;
       }
       _lastUserText = heard;
