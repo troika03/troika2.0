@@ -14,6 +14,15 @@ void main() {
     expect(result.uiAction, 'create_presentation');
   });
 
+  test('presentation request tolerates common spelling mistakes', () async {
+    final result = await LocalCommandService().execute(
+      'Прошу создать презинтачия',
+    );
+
+    expect(result.handled, isTrue);
+    expect(result.uiAction, 'create_presentation');
+  });
+
   test('document request opens local document builder', () async {
     final result = await LocalCommandService().execute(
       'Сделай документ про отпуск',

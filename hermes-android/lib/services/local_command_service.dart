@@ -173,7 +173,15 @@ class LocalCommandService {
     final create = normalized.contains('создай') ||
         normalized.contains('сделай') ||
         normalized.contains('создать');
-    if (create && normalized.contains('презентац')) {
+    final presentation = [
+      'презентац',
+      'презентач',
+      'презинтац',
+      'презинтач',
+      'призентац',
+      'призентач',
+    ].any(normalized.contains);
+    if (create && presentation) {
       return const LocalCommandResult(
         handled: true,
         response: 'Открываю создание презентации.',
