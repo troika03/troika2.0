@@ -10,11 +10,13 @@ class LocalCommandResult {
   final bool handled;
   final String response;
   final String heard;
+  final String uiAction;
 
   const LocalCommandResult({
     required this.handled,
     this.response = '',
     this.heard = '',
+    this.uiAction = '',
   });
 
   factory LocalCommandResult.fromMap(Map<Object?, Object?> value) {
@@ -22,6 +24,7 @@ class LocalCommandResult {
       handled: value['handled'] == true,
       response: value['response']?.toString() ?? '',
       heard: value['heard']?.toString() ?? '',
+      uiAction: value['uiAction']?.toString() ?? '',
     );
   }
 }
@@ -74,6 +77,10 @@ class LocalCommandService {
     if (direct != null) return direct;
     final custom = await _customAction(clean);
     final command = custom ?? clean;
+    final mappedMode = await _modeCommand(command);
+    if (mappedMode != null) return mappedMode;
+    final workspace = _workspaceCommand(command);
+    if (workspace != null) return workspace;
 
     if (Platform.isAndroid) {
       try {
@@ -110,6 +117,7 @@ class LocalCommandService {
           handled: retried.handled,
           response: retried.response,
           heard: result.heard,
+          uiAction: retried.uiAction,
         );
       }
       return result;
@@ -158,6 +166,29 @@ class LocalCommandService {
   static Future<String> currentMode() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_modeKey) ?? 'normal';
+  }
+
+  static LocalCommandResult? _workspaceCommand(String text) {
+    final normalized = _normalize(text);
+    final create = normalized.contains('создай') ||
+        normalized.contains('сделай') ||
+        normalized.contains('создать');
+    if (create && normalized.contains('презентац')) {
+      return const LocalCommandResult(
+        handled: true,
+        response: 'Открываю создание презентации.',
+        uiAction: 'create_presentation',
+      );
+    }
+    if (create &&
+        (normalized.contains('документ') || normalized.contains('docx'))) {
+      return const LocalCommandResult(
+        handled: true,
+        response: 'Открываю создание документа.',
+        uiAction: 'create_document',
+      );
+    }
+    return null;
   }
 
   Future<LocalCommandResult> _executeWindows(String text) async {

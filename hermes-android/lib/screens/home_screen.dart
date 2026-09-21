@@ -20,6 +20,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String _mode = 'normal';
+  AssistantService? _assistant;
+  bool _openingCommandScreen = false;
 
   @override
   void initState() {
@@ -37,6 +39,31 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final assistant = context.read<AssistantService>();
+    if (identical(_assistant, assistant)) return;
+    _assistant?.removeListener(_handleUiAction);
+    _assistant = assistant..addListener(_handleUiAction);
+  }
+
+  void _handleUiAction() {
+    final request = _assistant?.takePendingUiAction();
+    if (request == null || !mounted || _openingCommandScreen) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      _openingCommandScreen = true;
+      await _open(
+        LocalDocumentsScreen(
+          initialPresentation: request.action == 'create_presentation',
+          initialPrompt: request.prompt,
+        ),
+      );
+      _openingCommandScreen = false;
+    });
+  }
+
   Future<void> _loadMode() async {
     final value = await LocalCommandService.currentMode();
     if (mounted) setState(() => _mode = value);
@@ -45,6 +72,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _open(Widget screen) async {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
     _loadMode();
+  }
+
+  @override
+  void dispose() {
+    _assistant?.removeListener(_handleUiAction);
+    super.dispose();
   }
 
   @override

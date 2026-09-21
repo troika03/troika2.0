@@ -4,18 +4,63 @@ import '../services/local_document_service.dart';
 import '../theme/troika_theme.dart';
 
 class LocalDocumentsScreen extends StatefulWidget {
-  const LocalDocumentsScreen({super.key});
+  final bool initialPresentation;
+  final String initialPrompt;
+
+  const LocalDocumentsScreen({
+    super.key,
+    this.initialPresentation = false,
+    this.initialPrompt = '',
+  });
 
   @override
   State<LocalDocumentsScreen> createState() => _LocalDocumentsScreenState();
 }
 
 class _LocalDocumentsScreenState extends State<LocalDocumentsScreen> {
-  final _title = TextEditingController();
-  final _content = TextEditingController();
+  late final TextEditingController _title;
+  late final TextEditingController _content;
   final _documents = LocalDocumentService();
-  bool _presentation = false;
+  late bool _presentation;
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _presentation = widget.initialPresentation;
+    final topic = _extractTopic(widget.initialPrompt, _presentation);
+    _title = TextEditingController(text: topic.$1);
+    _content = TextEditingController(text: topic.$2);
+  }
+
+  static (String, String) _extractTopic(String prompt, bool presentation) {
+    var topic = prompt
+        .toLowerCase()
+        .replaceAll(RegExp(r'(пожалуйста|прошу)'), '')
+        .replaceAll(RegExp(r'(создай|сделай|создать)'), '')
+        .replaceAll(RegExp(r'(мне|презентацию|презентация|документ)'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (topic.startsWith('на тему ')) topic = topic.substring(8).trim();
+    if (topic == 'на любую тему' || topic == 'любую тему') {
+      topic = 'Как технологии упрощают повседневную жизнь';
+    }
+    if (topic.isEmpty) {
+      return (
+        presentation ? 'Новая презентация' : 'Новый документ',
+        presentation
+            ? 'Введение\n- Главная идея\n- Почему тема важна\n\n---\n\nОсновная часть\n- Первый тезис\n- Второй тезис\n\n---\n\nИтоги\n- Основной вывод'
+            : '',
+      );
+    }
+    final title = '${topic[0].toUpperCase()}${topic.substring(1)}';
+    return (
+      title,
+      presentation
+          ? '$title\n- Цель презентации\n- Ключевой вопрос\n\n---\n\nОсновная часть\n- Первый тезис\n- Второй тезис\n\n---\n\nИтоги\n- Основной вывод'
+          : '',
+    );
+  }
 
   Future<void> _create() async {
     if (_title.text.trim().isEmpty) {

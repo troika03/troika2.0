@@ -36,6 +36,8 @@ class AssistantService extends ChangeNotifier {
   bool _wakeWordEnabled = false;
   RunApprovalRequest? _pendingApproval;
   Completer<String>? _approvalCompleter;
+  String? _pendingUiAction;
+  String _pendingUiPrompt = '';
 
   // Единая лента диалога — голос и текст вперемешку, как в мессенджере.
   final List<ChatMessage> _messages = [];
@@ -55,6 +57,21 @@ class AssistantService extends ChangeNotifier {
   RunApprovalRequest? get pendingApproval => _pendingApproval;
   List<ChatMessage> get messages => List.unmodifiable(_messages);
   bool get historyLoaded => _historyLoaded;
+
+  ({String action, String prompt})? takePendingUiAction() {
+    final action = _pendingUiAction;
+    if (action == null) return null;
+    final request = (action: action, prompt: _pendingUiPrompt);
+    _pendingUiAction = null;
+    _pendingUiPrompt = '';
+    return request;
+  }
+
+  void _queueUiAction(LocalCommandResult result, String prompt) {
+    if (result.uiAction.isEmpty) return;
+    _pendingUiAction = result.uiAction;
+    _pendingUiPrompt = prompt;
+  }
 
   static const _platform = MethodChannel('com.troika.hermes/background');
 
@@ -241,6 +258,7 @@ class AssistantService extends ChangeNotifier {
         return;
       }
       _lastUserText = heard;
+      _queueUiAction(result, heard);
       _messages.add(ChatMessage(role: 'user', text: heard, fromVoice: true));
       final response = result.handled
           ? result.response
@@ -379,6 +397,7 @@ class AssistantService extends ChangeNotifier {
       if (imageDataUrls.isEmpty) {
         final local = await _localCommands.execute(text);
         if (local.handled) {
+          _queueUiAction(local, text);
           final response = local.response.isEmpty ? 'Готово' : local.response;
           _lastHermesText = response;
           pending
