@@ -508,10 +508,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } on HermesApiException catch (error) {
       if (!mounted) return;
       if (error.statusCode == 401) {
-        await HermesConfig.clearRevokedDevice();
-        if (!mounted) return;
-        Navigator.of(context).pop();
-        widget.onSignedOut?.call();
+        await _finishRevokedSession();
         return;
       }
       if (!mounted) return;
@@ -522,6 +519,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } finally {
       if (mounted) setState(() => _loadingDevices = false);
     }
+  }
+
+  Future<void> _finishRevokedSession([AssistantService? assistant]) async {
+    final liveAssistant = assistant ?? context.read<AssistantService>();
+    try {
+      await liveAssistant.setWakeWordEnabled(false);
+    } catch (error) {
+      debugPrint('[Settings] Failed to stop wake listener: $error');
+    }
+    await HermesConfig.clearRevokedDevice();
+    if (!mounted) return;
+    Navigator.of(context).pop();
+    widget.onSignedOut?.call();
   }
 
   Future<void> _revokeAccountDevice(
@@ -563,11 +573,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final result = await HermesApiService().revokeAccountDevice(device.id);
       if (result.current || result.reauthenticationRequired) {
-        await assistant.setWakeWordEnabled(false);
-        await HermesConfig.clearRevokedDevice();
-        if (!mounted) return;
-        Navigator.of(context).pop();
-        widget.onSignedOut?.call();
+        await _finishRevokedSession(assistant);
         return;
       }
       if (!mounted) return;
@@ -577,11 +583,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await _loadAccountDevices();
     } on HermesApiException catch (error) {
       if (error.statusCode == 401) {
-        await assistant.setWakeWordEnabled(false);
-        await HermesConfig.clearRevokedDevice();
-        if (!mounted) return;
-        Navigator.of(context).pop();
-        widget.onSignedOut?.call();
+        await _finishRevokedSession(assistant);
         return;
       }
       if (!mounted) return;

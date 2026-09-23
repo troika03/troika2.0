@@ -8,8 +8,11 @@ on:
       - "gateway/run.py"
       - "gateway/session.py"
       - "gateway/platforms/api_server.py"
+      - "gateway/platforms/base.py"
       - "gateway/platforms/phone_bridge.py"
       - "gateway/session_context.py"
+      - "tools/approval.py"
+      - "tools/registry.py"
       - "tools/troika_*.py"
       - "tools/location_tool.py"
       - "model_tools.py"
@@ -36,8 +39,11 @@ on:
       - "gateway/run.py"
       - "gateway/session.py"
       - "gateway/platforms/api_server.py"
+      - "gateway/platforms/base.py"
       - "gateway/platforms/phone_bridge.py"
       - "gateway/session_context.py"
+      - "tools/approval.py"
+      - "tools/registry.py"
       - "tools/troika_*.py"
       - "tools/location_tool.py"
       - "model_tools.py"
@@ -87,7 +93,7 @@ jobs:
       - name: Install locked project dependencies
         run: |
           uv venv .venv --python 3.11.13
-          uv sync --frozen --extra all
+          uv sync --locked --extra all
 
       - name: Run Troika product and security tests
         run: |

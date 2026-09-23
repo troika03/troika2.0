@@ -536,7 +536,8 @@
   API возвращает одинаковый `404`, audit не содержит идентификатор владельца.
 - В Android-настройках появился список устройств с явной отметкой текущего
   устройства и подтверждением отзыва. Самоотзыв очищает account credentials,
-  выключает phone control/wake и сразу меняет локальный session ID.
+  выключает phone control/wake и location-context consent, останавливает живой
+  wake listener и сразу меняет локальный session ID.
 - Добавлен отдельный product CI для Python security/product тестов, Flutter
   test/analyze/debug APK и web dashboard build. Версии actions, Python, Node,
   Java и Flutter закреплены; dependency installs используют lock-файлы.

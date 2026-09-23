@@ -116,7 +116,7 @@ void main() {
     expect(HermesConfig.apiKey, isEmpty);
     expect(HermesConfig.phoneControlEnabled, isFalse);
     expect(HermesConfig.onboardingDone, isTrue);
-    expect(HermesConfig.locationContextEnabled, isTrue);
+    expect(HermesConfig.locationContextEnabled, isFalse);
     expect(HermesConfig.sessionId, startsWith('mobile-'));
     expect(HermesConfig.sessionId, isNot(previousSession));
   });

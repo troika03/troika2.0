@@ -180,11 +180,13 @@ class HermesConfig {
   static String get accountDevicesUrl => '$serverUrl/v1/account/devices';
 
   /// Remove credentials after this installation revokes its own device.
-  /// Keep local preferences, but rotate the conversation identity so a later
-  /// sign-in cannot reuse the revoked device's server-linked session.
+  /// Keep non-sensitive local preferences, clear account-bound consents, and
+  /// rotate the conversation identity so a later sign-in cannot reuse the
+  /// revoked device's server-linked session.
   static Future<void> clearRevokedDevice() async {
     await setPhoneControlEnabled(false);
     await _prefs.setBool(_keyWakeWordEnabled, false);
+    await _prefs.setBool(_keyLocationContextEnabled, false);
     await _prefs.remove(_keyApiKey);
     await _prefs.remove(_keyAccountEmail);
     _sessionKey = 'mobile-${_newOpaqueId()}';
