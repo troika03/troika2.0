@@ -21,12 +21,13 @@
 
 ## Документы продукта
 
-- [Актуальный план превращения прототипа в продукт](PRODUCTIZATION_PLAN.md)
-- [Исходный план запуска Troika 1.0 (DOCX)](docs/Troika_1.0_Launch_Plan_Final_Updated.docx)
+- [Главный план Troika 1.0 (DOCX)](docs/Troika_1.0_Launch_Plan_Final_Updated.docx)
+- [Рабочий план реализации](PRODUCTIZATION_PLAN.md)
 - [Текущий проверенный статус и принятые решения](PROJECT_MEMORY.md)
 
-DOCX хранится как общий продуктовый референс. При расхождениях актуальными
-считаются решения из `PRODUCTIZATION_PLAN.md` и `PROJECT_MEMORY.md`.
+DOCX — основной план продукта. Он определяет scope, UX, тарифы, порядок релиза
+и Definition of Done. `PROJECT_MEMORY.md` хранит фактический статус реализации,
+а остальные документы уточняют исполнение и не переопределяют DOCX.
 
 ## Почему это не «ещё один голосовой ассистент»
 

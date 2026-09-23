@@ -12,13 +12,14 @@
 Перед работой читать в таком порядке:
 
 1. `D:\troika-product\AGENTS.md` — обязательные правила работы.
-2. `D:\troika-product\PROJECT_MEMORY.md` — актуальное состояние и следующий шаг.
-3. `D:\troika-product\PRODUCTIZATION_PLAN.md` — общий план превращения прототипа
-   в продукт.
-4. `D:\troika-product\docs\TROIKA_CAPABILITY_RESTORATION_PLAN.md` — подробный
+2. `D:\troika-product\docs\Troika_1.0_Launch_Plan_Final_Updated.docx` — главный
+   продуктовый план: scope, UX, тарифы, очередь релиза и Definition of Done.
+3. `D:\troika-product\PROJECT_MEMORY.md` — актуальное состояние и следующий шаг.
+4. `D:\troika-product\PRODUCTIZATION_PLAN.md` — вспомогательный план реализации.
+5. `D:\troika-product\docs\TROIKA_CAPABILITY_RESTORATION_PLAN.md` — подробный
    план возврата голоса, инициативности, управления, документов и безопасного
    просмотра экрана/камеры.
-5. `D:\troika-product\docs\TROIKA_CLOSED_BETA_SETUP.md` — запуск закрытой беты и
+6. `D:\troika-product\docs\TROIKA_CLOSED_BETA_SETUP.md` — запуск закрытой беты и
    выдача доступа устройству.
 
 Глобальное правило маршрутизации также записано в
@@ -37,22 +38,31 @@
 
 ## Цель
 
-Превратить личный форк Hermes в безопасный подписочный продукт «Тройка»: русскоязычный персональный AI-ассистент для текста, голоса, задач и документов.
+Превратить личный форк Hermes в Troika 1.0: voice-first персональный
+AI-ассистент для Android и Windows, где чат остаётся дополнительным интерфейсом.
 
-Не строить «всё сразу». Сначала public MVP, затем закрытая бета, затем платный запуск. Полный план: [PRODUCTIZATION_PLAN.md](PRODUCTIZATION_PLAN.md).
+Главный план: [Troika 1.0 Launch Plan](docs/Troika_1.0_Launch_Plan_Final_Updated.docx).
+Сначала обязательный scope 1.0, затем закрытая beta и публичный платный запуск.
 
 ## Зафиксированные продуктовые решения
 
-1. Базовый продукт — hosted subscription service. Пользователь не вводит ключи моделей для обычного тарифа.
-2. PC control — отдельный локальный Troika Companion, а не default cloud tool.
-3. Любое действие с внешним эффектом требует явного подтверждения и аудита.
-4. Multi-tenancy и приватность — P0 до любых продаж.
-5. Никаких общих секретов, `phone-misha`, единой памяти или публичного HTTP в production.
-6. На текущем этапе пользовательские и тарифные лимиты выключены по решению
-   владельца. Остаются только технические safety-границы. Перед продажами
-   тарифы и cost caps проектируются отдельно; публичное обещание «безлимита»
-   пока не даём.
-7. Если решение меняет назначение функции, доступы, пользовательские данные или видимое клиенту поведение, сначала запросить решение владельца продукта. Не угадывать требования.
+1. Главный план продукта — `docs/Troika_1.0_Launch_Plan_Final_Updated.docx`.
+2. Troika 1.0 — voice-first Android/Windows продукт; чат вторичен.
+3. Базовый продукт — hosted subscription service. Обычный пользователь не
+   вводит ключи моделей; BYOK скрыт для power users.
+4. Целевые тарифы плана: Free, Plus 790 ₽/мес и Pro 1 490 ₽/мес. В production
+   нужен credits/cost engine; локальные команды не расходуют AI credits.
+5. Фоновое локальное пробуждение «Тройка» при выключенном экране — P0 Android.
+6. Единый Troika Agent Runtime использует один Run и до трёх specialist workers;
+   отдельные delegate/MoA/Kanban/job_runner product runtimes не сохраняются.
+7. PC control — отдельный локальный Troika Companion, а не default cloud tool.
+8. Любое действие с внешним эффектом требует явного подтверждения и аудита.
+9. Multi-tenancy и приватность — P0 до любых продаж. Никаких общих секретов,
+   `phone-misha`, единой памяти или публичного HTTP в production.
+10. В текущем dev runtime тарифные квоты временно выключены. До продаж они
+    заменяются credits/cost caps из главного плана; «безлимит» не обещаем.
+11. Если решение меняет назначение функции, доступы, пользовательские данные
+    или видимое клиенту поведение, сначала запросить решение владельца продукта.
 
 ## Известные критические проблемы baseline
 
@@ -527,9 +537,9 @@
 
 ## Выполнено: управление устройствами и product CI (2026-09-23)
 
-- Исходный `Troika_1.0_Launch_Plan_Final_Updated.docx` добавлен в `docs/` и
-  связан из корневого README и productization plan. Он хранится как общий
-  продуктовый референс; текущие решения остаются в этом файле и рабочем плане.
+- `Troika_1.0_Launch_Plan_Final_Updated.docx` добавлен в `docs/`, связан из
+  README и утверждён владельцем как главный продуктовый план. Этот файл хранит
+  текущую правду исполнения, а рабочие планы только уточняют DOCX.
 - Добавлены owner-scoped API для списка и отзыва устройств. Отзыв устройства
   блокирует все его tokens, закрывает phone WebSocket, снимает approval,
   останавливает активный run и закрывает SSE. Чужой device ID не раскрывается:
@@ -546,24 +556,28 @@
   production build успешно собраны. Полный upstream-набор выполнен отдельно;
   native Windows baseline остаётся не зелёным из-за несвязанных path/newline/
   permissions/asyncio тестов и локальных network timeouts.
+- Свежий debug APK установлен поверх данных на Samsung SM-A225F через
+  `adb install -r`: package `com.troika.hermes_assistant`, версия `1.0.0`,
+  установка завершилась `Success`, `MainActivity` запущена и процесс активен.
 
 ## Ближайший порядок работы
 
-1. После выбора production storage добавить object purge, deletion ledger,
-   restore scrubber и disaster-recovery rehearsal.
-2. Проверить новый product CI на GitHub и добавить Windows clean build/installer.
-   Затем отдельно исправить известные native Windows path/newline/asyncio сбои
-   полного upstream baseline; продуктовый Python/web/Android срез уже зелёный.
-3. Перед реализацией WebRTC screen assist отдельно спроектировать signaling,
-   TURN, hardware-backed device keys, heartbeat/revoke и изолированный vision
-   worker. Закрытая snapshot beta не расширяет разрешение до live vision.
-4. Расширять paired-phone control после отдельного privacy review каждой
-   capability. Просмотр экрана, управление UI, камера, микрофон, clipboard,
-   календарь, файлы, звонки и SMS не объединять в одно разрешение.
-5. Legacy Responses API оставлять выключенным в product mode, пока response
-   store не заменён на tenant-owned storage.
-6. Спроектировать subscription billing: продукты, платежные периоды, webhooks,
-   отмена, возвраты и поддержка.
+1. Выполнить Troika-native rebrand по главному плану: сначала полный inventory и
+   migration map, затем небольшие совместимые срезы. LICENSE/NOTICE сохранить.
+2. Довести Python/Docker/Android/Windows/Web CI до зелёного состояния на каждой
+   поддерживаемой платформе; добавить Windows clean build и installer smoke-test.
+3. Убрать двойной install/deploy source и сделать product mode production
+   default. Legacy single-user оставить только явным dev/local режимом.
+4. Закрыть auth P0: password recovery, email verification, logout, logout-all,
+   refresh-token rotation и end-to-end account/device lifecycle.
+5. Пересобрать Android и Windows как voice-first UI: центральный voice orb,
+   короткие статусы, чат как вторичный ввод, упрощённые настройки.
+6. Закрыть Android background voice P0 на физическом телефоне: screen off/lock
+   screen, локальный wake word, TTS, barge-in, Bluetooth, reboot и battery gate.
+7. Свести legacy phone/product delivery к owner-aware Device Service, затем
+   объединить delegate/MoA/Kanban/job_runner в один Troika Agent Runtime.
+8. Реализовать credits/cost ledger и billing Free/Plus/Pro после утверждения
+   production storage, платёжного провайдера и юридических параметров.
 
 ## Проверенный рабочий срез и бесплатная модель (2026-09-10)
 

@@ -11,9 +11,14 @@
   directory is `D:\troikahermes`, switch the working directory to
   `D:\troika-product` and read, in order:
   1. `AGENTS.md`
-  2. `PROJECT_MEMORY.md`
-  3. `PRODUCTIZATION_PLAN.md`
-  4. `docs/TROIKA_CAPABILITY_RESTORATION_PLAN.md`
+  2. `docs/Troika_1.0_Launch_Plan_Final_Updated.docx` — canonical product plan
+  3. `PROJECT_MEMORY.md`
+  4. `PRODUCTIZATION_PLAN.md` — supporting implementation plan
+  5. `docs/TROIKA_CAPABILITY_RESTORATION_PLAN.md`
+- The DOCX above is the primary authority for Troika 1.0 scope, UX, pricing,
+  release order, and Definition of Done. `PROJECT_MEMORY.md` records current
+  implementation truth. Other plans refine execution and must not override the
+  DOCX unless the product owner explicitly changes that decision.
 - Expected branch: `codex/product-foundation`.
 - Expected remote: `https://github.com/troika03/troika2.0.git`.
 - After every completed task, refresh `PROJECT_MEMORY.md`, removing stale facts,
