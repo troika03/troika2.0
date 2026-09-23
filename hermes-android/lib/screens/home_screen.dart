@@ -3,12 +3,15 @@ import 'package:provider/provider.dart';
 
 import '../config/troika_config.dart';
 import '../services/assistant_service.dart';
+import '../services/assistant_result.dart';
 import '../services/local_command_service.dart';
 import '../services/troika_api_service.dart';
 import '../theme/troika_theme.dart';
 import '../widgets/status_orb.dart';
 import 'chat_screen.dart';
 import 'commands_screen.dart';
+import 'assistant_hub_screen.dart';
+import 'files_screen.dart';
 import 'local_documents_screen.dart';
 import 'settings_screen.dart';
 import 'voice_screen.dart';
@@ -149,6 +152,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final voiceHome = _VoiceHome(
       assistant: assistant,
       onOpenText: _openChat,
+      onOpenFiles: () => _open(const FilesScreen()),
+      onOpenSaved: () => _open(const AssistantHubScreen()),
     );
 
     return Scaffold(
@@ -299,8 +304,15 @@ class _Header extends StatelessWidget {
 class _VoiceHome extends StatelessWidget {
   final AssistantService assistant;
   final VoidCallback onOpenText;
+  final VoidCallback onOpenFiles;
+  final VoidCallback onOpenSaved;
 
-  const _VoiceHome({required this.assistant, required this.onOpenText});
+  const _VoiceHome({
+    required this.assistant,
+    required this.onOpenText,
+    required this.onOpenFiles,
+    required this.onOpenSaved,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -357,6 +369,8 @@ class _VoiceHome extends StatelessWidget {
                 _CurrentCards(
                   assistant: assistant,
                   onOpenText: onOpenText,
+                  onOpenFiles: onOpenFiles,
+                  onOpenSaved: onOpenSaved,
                 ),
               ],
             ),
@@ -444,8 +458,15 @@ bool _isActing(AssistantService assistant) {
 class _CurrentCards extends StatelessWidget {
   final AssistantService assistant;
   final VoidCallback onOpenText;
+  final VoidCallback onOpenFiles;
+  final VoidCallback onOpenSaved;
 
-  const _CurrentCards({required this.assistant, required this.onOpenText});
+  const _CurrentCards({
+    required this.assistant,
+    required this.onOpenText,
+    required this.onOpenFiles,
+    required this.onOpenSaved,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -468,14 +489,25 @@ class _CurrentCards extends StatelessWidget {
         ),
       );
     }
-    if (assistant.lastTroikaText.trim().isNotEmpty) {
+    final result = assistant.lastResult;
+    if (result != null && result.summary.isNotEmpty) {
       cards.add(
         _HomeCard(
-          icon: Icons.check_circle_outline,
-          title: 'Последний результат',
-          body: _summary(assistant.lastTroikaText),
-          actionLabel: 'Открыть текст',
-          onAction: onOpenText,
+          icon: _resultIcon(result.kind),
+          title: result.title,
+          body: result.summary,
+          actionLabel: result.kind == AssistantResultKind.file
+              ? 'Открыть файлы'
+              : result.kind == AssistantResultKind.saved
+                  ? 'Открыть задачи'
+                  : result.kind == AssistantResultKind.answer
+                      ? 'Открыть текст'
+                      : 'Подробнее',
+          onAction: result.kind == AssistantResultKind.file
+              ? onOpenFiles
+              : result.kind == AssistantResultKind.saved
+                  ? onOpenSaved
+                  : onOpenText,
         ),
       );
     }
@@ -623,6 +655,15 @@ class _HomeCard extends StatelessWidget {
 String _summary(String value) {
   final compact = value.replaceAll(RegExp(r'\s+'), ' ').trim();
   return compact.length <= 180 ? compact : '${compact.substring(0, 179)}…';
+}
+
+IconData _resultIcon(AssistantResultKind kind) {
+  return switch (kind) {
+    AssistantResultKind.answer => Icons.chat_bubble_outline,
+    AssistantResultKind.action => Icons.check_circle_outline,
+    AssistantResultKind.file => Icons.insert_drive_file_outlined,
+    AssistantResultKind.saved => Icons.bookmark_added_outlined,
+  };
 }
 
 class _DesktopSidebar extends StatelessWidget {

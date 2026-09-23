@@ -6,6 +6,7 @@ import 'package:troika_assistant/config/troika_config.dart';
 import 'package:troika_assistant/screens/chat_screen.dart';
 import 'package:troika_assistant/screens/home_screen.dart';
 import 'package:troika_assistant/services/assistant_service.dart';
+import 'package:troika_assistant/services/assistant_result.dart';
 import 'package:troika_assistant/theme/troika_theme.dart';
 import 'package:troika_assistant/widgets/status_orb.dart';
 
@@ -70,6 +71,67 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     assistant.dispose();
   });
+
+  testWidgets('home prioritizes a completed file over the long answer',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final assistant = _ResultAssistant(
+      const AssistantResult(
+        kind: AssistantResultKind.file,
+        title: 'Отчёт.pdf',
+        summary: 'Файл готов и сохранён.',
+        resourceId: 'art_123',
+      ),
+    );
+
+    await tester.pumpWidget(_app(assistant));
+    await tester.pump();
+
+    expect(find.text('Отчёт.pdf'), findsOneWidget);
+    expect(find.text('Файл готов и сохранён.'), findsOneWidget);
+    expect(find.text('Открыть файлы'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    assistant.dispose();
+  });
+
+  testWidgets('saved task opens the task surface instead of chat',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final assistant = _ResultAssistant(
+      const AssistantResult(
+        kind: AssistantResultKind.saved,
+        title: 'Проверить релиз',
+        summary: 'Задача добавлена на завтра.',
+        resourceId: 'task_123',
+      ),
+    );
+
+    await tester.pumpWidget(_app(assistant));
+    await tester.pump();
+
+    expect(find.text('Проверить релиз'), findsOneWidget);
+    expect(find.text('Открыть задачи'), findsOneWidget);
+    expect(find.text('Открыть текст'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    assistant.dispose();
+  });
+}
+
+class _ResultAssistant extends AssistantService {
+  final AssistantResult result;
+
+  _ResultAssistant(this.result);
+
+  @override
+  AssistantResult get lastResult => result;
 }
 
 Widget _app(AssistantService assistant) {

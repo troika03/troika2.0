@@ -21,9 +21,55 @@ from aiohttp.test_utils import TestClient, TestServer
 from gateway.config import PlatformConfig
 from gateway.platforms.api_server import (
     APIServerAdapter,
+    _safe_product_action_result,
     cors_middleware,
     security_headers_middleware,
 )
+
+
+def test_product_result_sanitizer_exposes_only_allowlisted_metadata():
+    raw = json.dumps({
+        "ok": True,
+        "artifact": {
+            "id": "art_123", "filename": "report.pdf", "kind": "pdf",
+            "storage_path": "C:/private/secret/report.pdf",
+        },
+    })
+    assert _safe_product_action_result("troika_create_pdf", raw) == {
+        "kind": "file", "id": "art_123", "title": "report.pdf", "file_type": "pdf",
+    }
+    assert _safe_product_action_result("terminal", raw) is None
+
+
+def test_product_result_sanitizer_distinguishes_saved_task():
+    raw = json.dumps({
+        "ok": True, "action": "task_add",
+        "result": {"id": "task_123", "title": "Проверить релиз"},
+    })
+    assert _safe_product_action_result("troika_assistant", raw) == {
+        "kind": "task", "id": "task_123", "title": "Проверить релиз",
+    }
+
+
+@pytest.mark.asyncio
+async def test_run_callback_streams_safe_result_but_not_generic_tool_output():
+    adapter = _make_adapter()
+    adapter._run_streams["run-safe"] = asyncio.Queue()
+    callback = adapter._make_run_event_callback("run-safe", asyncio.get_running_loop())
+    raw = json.dumps({
+        "ok": True,
+        "artifact": {"id": "art_1", "filename": "plan.docx", "kind": "docx"},
+    })
+
+    callback("tool.completed", "troika_create_docx", result=raw)
+    await asyncio.sleep(0)
+    safe_event = await adapter._run_streams["run-safe"].get()
+    assert safe_event["result"]["title"] == "plan.docx"
+
+    callback("tool.completed", "terminal", result="private terminal output")
+    await asyncio.sleep(0)
+    generic_event = await adapter._run_streams["run-safe"].get()
+    assert "result" not in generic_event
 
 
 # ---------------------------------------------------------------------------

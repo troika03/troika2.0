@@ -37,6 +37,26 @@ class RunApprovalRequest {
   });
 }
 
+class RunActionResult {
+  final String kind;
+  final String id;
+  final String title;
+
+  const RunActionResult({
+    required this.kind,
+    required this.id,
+    required this.title,
+  });
+
+  factory RunActionResult.fromJson(Map<String, dynamic> json) {
+    return RunActionResult(
+      kind: (json['kind'] ?? '').toString(),
+      id: (json['id'] ?? '').toString(),
+      title: (json['title'] ?? '').toString(),
+    );
+  }
+}
+
 /// One owner-visible device. Credential material never reaches the client.
 class AccountDevice {
   final String id;
@@ -373,6 +393,7 @@ class TroikaApiService {
   ///  - [onThought]   — размышление Тройки (reasoning.available)
   ///  - [onToolStart] — начала вызывать инструмент
   ///  - [onToolDone]  — инструмент отработал (имя, была ли ошибка)
+  ///  - [onResult]    — безопасный структурированный результат действия
   ///  - [onDelta]     — кусочек финального текста ответа (message.delta)
   /// Возвращает полный текст ответа.
   Future<String> streamMessage(
@@ -381,6 +402,7 @@ class TroikaApiService {
     void Function(String thought)? onThought,
     void Function(String tool)? onToolStart,
     void Function(String tool, bool isError)? onToolDone,
+    void Function(RunActionResult result)? onResult,
     void Function(String delta)? onDelta,
     Future<String> Function(RunApprovalRequest request)? onApproval,
   }) async {
@@ -460,6 +482,10 @@ class TroikaApiService {
               (ev['tool'] ?? '').toString(),
               ev['error'] == true,
             );
+            final rawResult = ev['result'];
+            if (rawResult is Map<String, dynamic>) {
+              onResult?.call(RunActionResult.fromJson(rawResult));
+            }
             break;
           case 'message.delta':
             final d = (ev['delta'] ?? '').toString();

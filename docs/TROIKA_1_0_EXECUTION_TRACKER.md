@@ -19,9 +19,11 @@ Status: `[ ]` not reached, `[-]` active/partial, `[x]` verified.
   home now uses a central voice orb, short state text, up to three current
   cards, and a small Text button. Widget tests and APK build pass; the latest
   APK is installed and the home screen is visually verified on Samsung A22.
-- [-] Action-first results: prefer completed action, file, task, or saved result
-  over a long text answer.
-- [ ] One assistant: model, tool, research, and worker routing stay hidden from
+- [x] Action-first results: successful product tools now return only sanitized
+  file/task/reminder metadata to the client. Home prioritizes a short completed
+  result card, opens the relevant files/tasks surface, and restores the last
+  concrete result after restart. Raw output from other tools is never streamed.
+- [-] One assistant: model, tool, research, and worker routing stay hidden from
   the normal user.
 - [ ] Minimum settings: move rare technical controls to Advanced/Developer.
 - [ ] Short truthful statuses: listening, understanding, acting, ready. Do not

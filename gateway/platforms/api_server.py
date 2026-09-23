@@ -73,6 +73,62 @@ MAX_NORMALIZED_TEXT_LENGTH = 65_536  # 64 KB cap for normalized content parts
 MAX_CONTENT_LIST_SIZE = 1_000  # Max items when content is an array
 
 
+def _safe_product_action_result(tool_name: str, raw_result: Any) -> Optional[Dict[str, Any]]:
+    """Expose only owner-safe product result metadata to first-party clients."""
+    if tool_name not in {
+        "troika_create_docx", "troika_create_pdf", "troika_create_pptx",
+        "troika_assistant",
+    }:
+        return None
+    if not isinstance(raw_result, str):
+        return None
+    try:
+        payload = json.loads(raw_result)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict) or payload.get("ok") is not True:
+        return None
+
+    if tool_name.startswith("troika_create_"):
+        artifact = payload.get("artifact")
+        if not isinstance(artifact, dict):
+            return None
+        return {
+            "kind": "file",
+            "id": str(artifact.get("id") or "")[:128],
+            "title": str(artifact.get("filename") or "Файл создан")[:240],
+            "file_type": str(artifact.get("kind") or "")[:32],
+        }
+
+    action = str(payload.get("action") or "")
+    kinds = {
+        "task_add": "task", "task_update": "task",
+        "reminder_schedule": "reminder", "follow_up_schedule": "reminder",
+        "project_create": "saved", "project_activate": "saved",
+        "note_add": "saved", "memory_add": "saved",
+        "memory_update": "saved", "memory_delete": "saved",
+    }
+    kind = kinds.get(action)
+    result = payload.get("result")
+    if kind is None or not isinstance(result, dict):
+        return None
+    result_id = (
+        result.get("id") or result.get("message_id") or result.get("task_id")
+        or result.get("memory_id") or ""
+    )
+    default_titles = {
+        "task": "Задача сохранена",
+        "reminder": "Напоминание сохранено",
+        "saved": "Результат сохранён",
+    }
+    title = result.get("title") or result.get("name") or default_titles[kind]
+    return {
+        "kind": kind,
+        "id": str(result_id)[:128],
+        "title": str(title)[:240],
+    }
+
+
 def _coerce_port(value: Any, default: int = DEFAULT_PORT) -> int:
     """Parse a listen port without letting malformed env/config values crash startup."""
     try:
@@ -5017,14 +5073,20 @@ class APIServerAdapter(BasePlatformAdapter):
                     "preview": preview,
                 })
             elif event_type == "tool.completed":
-                _push({
+                completed = {
                     "event": "tool.completed",
                     "run_id": run_id,
                     "timestamp": ts,
                     "tool": tool_name,
                     "duration": round(kwargs.get("duration", 0), 3),
                     "error": kwargs.get("is_error", False),
-                })
+                }
+                safe_result = _safe_product_action_result(
+                    tool_name or "", kwargs.get("result")
+                )
+                if safe_result is not None:
+                    completed["result"] = safe_result
+                _push(completed)
             elif event_type == "reasoning.available":
                 _push({
                     "event": "reasoning.available",

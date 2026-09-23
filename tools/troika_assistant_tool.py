@@ -128,6 +128,7 @@ def _handle(args: dict[str, Any], **_: Any) -> str:
             result = {
                 "message_id": message_id,
                 "kind": "reminder",
+                "title": title,
                 "delivery_enabled": store.notification_preferences(
                     principal
                 ).reminders_enabled,
@@ -155,7 +156,14 @@ def _handle(args: dict[str, Any], **_: Any) -> str:
         return json.dumps({"ok": False, "error": "not_found", "message": str(exc)})
     except ValueError as exc:
         return json.dumps({"ok": False, "error": "invalid_request", "message": str(exc)})
-    return json.dumps({"ok": True, "result": result}, ensure_ascii=False)
+    payload = {"ok": True, "result": result}
+    if action in {
+        "project_create", "project_activate", "note_add", "task_add",
+        "task_update", "memory_add", "memory_update", "memory_delete",
+        "reminder_schedule", "follow_up_schedule",
+    }:
+        payload["action"] = action
+    return json.dumps(payload, ensure_ascii=False)
 
 
 SCHEMA = {

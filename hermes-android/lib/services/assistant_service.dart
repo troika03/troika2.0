@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'audio_recorder_service.dart';
+import 'assistant_result.dart';
 import 'stt_service.dart';
 import 'tts_service.dart';
 import 'troika_api_service.dart';
@@ -21,6 +24,7 @@ enum AssistantState {
 }
 
 class AssistantService extends ChangeNotifier {
+  static const _lastResultKey = 'troika_last_action_result';
   final AudioRecorderService _recorder = AudioRecorderService();
   final SttService _stt = SttService();
   final TtsService _tts = TtsService();
@@ -31,6 +35,7 @@ class AssistantService extends ChangeNotifier {
   AssistantState _state = AssistantState.idle;
   String _lastUserText = '';
   String _lastTroikaText = '';
+  AssistantResult? _lastResult;
   String _errorMessage = '';
   String _debugHeard = '';
   bool _wakeWordEnabled = false;
@@ -51,6 +56,7 @@ class AssistantService extends ChangeNotifier {
   AssistantState get state => _state;
   String get lastUserText => _lastUserText;
   String get lastTroikaText => _lastTroikaText;
+  AssistantResult? get lastResult => _lastResult;
   String get errorMessage => _errorMessage;
   String get debugHeard => _debugHeard;
   bool get wakeWordEnabled => _wakeWordEnabled;
@@ -76,6 +82,7 @@ class AssistantService extends ChangeNotifier {
   static const _platform = MethodChannel('com.troika.hermes/background');
 
   Future<void> init() async {
+    await _restoreLastResult();
     await _tts.init();
     _wakeWordEnabled = TroikaConfig.wakeWordEnabled;
 
@@ -185,6 +192,7 @@ class AssistantService extends ChangeNotifier {
     _messages.add(ChatMessage(role: role, text: text, fromVoice: true));
     if (role == 'assistant') {
       _lastTroikaText = text;
+      _setLastResult(AssistantResult.forTurn(response: text));
     } else {
       _lastUserText = text;
     }
@@ -264,6 +272,10 @@ class AssistantService extends ChangeNotifier {
           ? result.response
           : 'Эта локальная команда пока не поддерживается.';
       _lastTroikaText = response;
+      _setLastResult(AssistantResult.forTurn(
+        response: response,
+        successfulTools: const ['local_action'],
+      ));
       _messages.add(
         ChatMessage(role: 'assistant', text: response, fromVoice: true),
       );
@@ -310,6 +322,7 @@ class AssistantService extends ChangeNotifier {
       final response = _stripEmoTag(
           await _troika.sendMessage(userMsg, recent: _recentContext()));
       _lastTroikaText = response;
+      _setLastResult(AssistantResult.forTurn(response: response));
       pending
         ..text = response
         ..pending = false;
@@ -400,6 +413,10 @@ class AssistantService extends ChangeNotifier {
           _queueUiAction(local, text);
           final response = local.response.isEmpty ? 'Готово' : local.response;
           _lastTroikaText = response;
+          _setLastResult(AssistantResult.forTurn(
+            response: response,
+            successfulTools: const ['local_action'],
+          ));
           pending
             ..text = response
             ..pending = false;
@@ -417,6 +434,7 @@ class AssistantService extends ChangeNotifier {
         const response = 'Эта локальная команда пока не поддерживается. '
             'Свободные вопросы будут доступны в AI-тарифе.';
         _lastTroikaText = response;
+        _setLastResult(AssistantResult.forTurn(response: response));
         pending
           ..text = response
           ..pending = false;
@@ -431,6 +449,8 @@ class AssistantService extends ChangeNotifier {
 
       // Стримим «поток мыслей»: размышления и вызовы инструментов
       // появляются в пузыре в реальном времени, пока Тройка работает.
+      final successfulTools = <String>[];
+      RunActionResult? structuredResult;
       final response = await _troika.streamMessage(
         userMsg,
         recent: _recentContext(),
@@ -445,8 +465,10 @@ class AssistantService extends ChangeNotifier {
         onToolDone: (tool, isErr) {
           pending.thoughts
               .add(ThoughtStep(ThoughtKind.toolDone, tool, isError: isErr));
+          if (!isErr && tool.trim().isNotEmpty) successfulTools.add(tool);
           notifyListeners();
         },
+        onResult: (result) => structuredResult = result,
         onDelta: (d) {
           // Чистим накопленный текст от тега на каждом апдейте, чтобы
           // [emo:...] не мелькал в пузыре пока идёт стрим.
@@ -457,6 +479,13 @@ class AssistantService extends ChangeNotifier {
       );
       final cleanResponse = _stripEmoTag(response);
       _lastTroikaText = cleanResponse;
+      _setLastResult(AssistantResult.forTurn(
+        response: cleanResponse,
+        successfulTools: successfulTools,
+        structuredKind: structuredResult?.kind ?? '',
+        structuredTitle: structuredResult?.title ?? '',
+        resourceId: structuredResult?.id ?? '',
+      ));
       pending
         ..text = cleanResponse
         ..pending = false;
@@ -480,7 +509,42 @@ class AssistantService extends ChangeNotifier {
     _messages.clear();
     _lastUserText = '';
     _lastTroikaText = '';
+    _lastResult = null;
+    unawaited(_clearStoredResult());
     notifyListeners();
+  }
+
+  void _setLastResult(AssistantResult result) {
+    _lastResult = result;
+    unawaited(_storeLastResult(result));
+  }
+
+  Future<void> _restoreLastResult() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_lastResultKey);
+      if (raw == null || raw.isEmpty) return;
+      final decoded = json.decode(raw);
+      if (decoded is! Map<String, dynamic>) return;
+      final restored = AssistantResult.fromJson(decoded);
+      if (restored.kind != AssistantResultKind.answer) _lastResult = restored;
+    } catch (_) {
+      await _clearStoredResult();
+    }
+  }
+
+  Future<void> _storeLastResult(AssistantResult result) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (result.kind == AssistantResultKind.answer) {
+      await prefs.remove(_lastResultKey);
+      return;
+    }
+    await prefs.setString(_lastResultKey, json.encode(result.toJson()));
+  }
+
+  Future<void> _clearStoredResult() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_lastResultKey);
   }
 
   void _setState(AssistantState s) {
