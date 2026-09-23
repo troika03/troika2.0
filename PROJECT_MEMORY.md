@@ -543,9 +543,9 @@
   Java и Flutter закреплены; dependency installs используют lock-файлы.
 - Проверено локально: product/security `123 passed`, device/auth `29 passed`,
   Flutter `16 passed`, analyze без ошибок, Android debug APK и web dashboard
-  production build успешно собраны. Полный upstream-набор запущен отдельно;
+  production build успешно собраны. Полный upstream-набор выполнен отдельно;
   native Windows baseline остаётся не зелёным из-за несвязанных path/newline/
-  asyncio platform-specific тестов.
+  permissions/asyncio тестов и локальных network timeouts.
 
 ## Ближайший порядок работы
 
