@@ -6,10 +6,10 @@ import 'package:permission_handler/permission_handler.dart';
 import 'audio_recorder_service.dart';
 import 'stt_service.dart';
 import 'tts_service.dart';
-import 'hermes_api_service.dart';
+import 'troika_api_service.dart';
 import 'wake_word_service.dart';
 import 'local_command_service.dart';
-import '../config/hermes_config.dart';
+import '../config/troika_config.dart';
 
 enum AssistantState {
   idle,
@@ -24,13 +24,13 @@ class AssistantService extends ChangeNotifier {
   final AudioRecorderService _recorder = AudioRecorderService();
   final SttService _stt = SttService();
   final TtsService _tts = TtsService();
-  final HermesApiService _hermes = HermesApiService();
+  final TroikaApiService _troika = TroikaApiService();
   final WakeWordService _wakeWord = WakeWordService();
   final LocalCommandService _localCommands = LocalCommandService();
 
   AssistantState _state = AssistantState.idle;
   String _lastUserText = '';
-  String _lastHermesText = '';
+  String _lastTroikaText = '';
   String _errorMessage = '';
   String _debugHeard = '';
   bool _wakeWordEnabled = false;
@@ -50,7 +50,7 @@ class AssistantService extends ChangeNotifier {
 
   AssistantState get state => _state;
   String get lastUserText => _lastUserText;
-  String get lastHermesText => _lastHermesText;
+  String get lastTroikaText => _lastTroikaText;
   String get errorMessage => _errorMessage;
   String get debugHeard => _debugHeard;
   bool get wakeWordEnabled => _wakeWordEnabled;
@@ -77,7 +77,7 @@ class AssistantService extends ChangeNotifier {
 
   Future<void> init() async {
     await _tts.init();
-    _wakeWordEnabled = HermesConfig.wakeWordEnabled;
+    _wakeWordEnabled = TroikaConfig.wakeWordEnabled;
 
     _wakeWord.onWakeWordDetected = _onWakeWordConfirmed;
     _wakeWord.onStatusUpdate = (s) => debugPrint('[WakeWord] $s');
@@ -90,8 +90,8 @@ class AssistantService extends ChangeNotifier {
 
     // Гарантируем что URL/key уже лежат в SharedPreferences с префиксом 'flutter.'
     // (нативный сервис их читает оттуда). Forсируем запись текущих значений.
-    HermesConfig.serverUrl = HermesConfig.serverUrl;
-    HermesConfig.apiKey = HermesConfig.apiKey;
+    TroikaConfig.serverUrl = TroikaConfig.serverUrl;
+    TroikaConfig.apiKey = TroikaConfig.apiKey;
 
     if (_wakeWordEnabled) {
       await _startWakeWordListening();
@@ -104,7 +104,7 @@ class AssistantService extends ChangeNotifier {
   /// Загрузить ленту общей сессии (голос+текст) с сервера.
   Future<void> loadHistory() async {
     try {
-      final loaded = await _hermes.loadSessionHistory();
+      final loaded = await _troika.loadSessionHistory();
       if (loaded.isNotEmpty) {
         _messages
           ..clear()
@@ -121,12 +121,12 @@ class AssistantService extends ChangeNotifier {
 
   Future<void> setWakeWordEnabled(bool enabled) async {
     _wakeWordEnabled = enabled;
-    HermesConfig.wakeWordEnabled = enabled;
+    TroikaConfig.wakeWordEnabled = enabled;
     if (enabled) {
       final micStatus = await Permission.microphone.request();
       if (!micStatus.isGranted) {
         _wakeWordEnabled = false;
-        HermesConfig.wakeWordEnabled = false;
+        TroikaConfig.wakeWordEnabled = false;
         _setError('Нет доступа к микрофону.');
         return;
       }
@@ -184,7 +184,7 @@ class AssistantService extends ChangeNotifier {
     if (dup) return;
     _messages.add(ChatMessage(role: role, text: text, fromVoice: true));
     if (role == 'assistant') {
-      _lastHermesText = text;
+      _lastTroikaText = text;
     } else {
       _lastUserText = text;
     }
@@ -226,7 +226,7 @@ class AssistantService extends ChangeNotifier {
     // Десктоп (Windows/Linux/macOS): нативного фонового сервиса нет —
     // ведём весь диалог на Dart-стороне (push-to-talk). Первое нажатие мик
     // начинает запись, повторное (кнопка stop) — останавливает и обрабатывает
-    // через stopRecordingAndProcess (запись → STT-прокси :8643 → Hermes → TTS).
+    // через stopRecordingAndProcess (запись → STT-прокси :8643 → Troika → TTS).
     if (!Platform.isAndroid) {
       final ok = await _recorder.startRecording();
       if (!ok) {
@@ -252,7 +252,7 @@ class AssistantService extends ChangeNotifier {
         _setState(AssistantState.idle);
         return;
       }
-      if (!result.handled && HermesConfig.serverUrl.trim().isNotEmpty) {
+      if (!result.handled && TroikaConfig.serverUrl.trim().isNotEmpty) {
         _setState(AssistantState.idle);
         await sendTextQuery(heard, speak: true);
         return;
@@ -263,7 +263,7 @@ class AssistantService extends ChangeNotifier {
       final response = result.handled
           ? result.response
           : 'Эта локальная команда пока не поддерживается.';
-      _lastHermesText = response;
+      _lastTroikaText = response;
       _messages.add(
         ChatMessage(role: 'assistant', text: response, fromVoice: true),
       );
@@ -308,8 +308,8 @@ class AssistantService extends ChangeNotifier {
       notifyListeners();
 
       final response = _stripEmoTag(
-          await _hermes.sendMessage(userMsg, recent: _recentContext()));
-      _lastHermesText = response;
+          await _troika.sendMessage(userMsg, recent: _recentContext()));
+      _lastTroikaText = response;
       pending
         ..text = response
         ..pending = false;
@@ -399,7 +399,7 @@ class AssistantService extends ChangeNotifier {
         if (local.handled) {
           _queueUiAction(local, text);
           final response = local.response.isEmpty ? 'Готово' : local.response;
-          _lastHermesText = response;
+          _lastTroikaText = response;
           pending
             ..text = response
             ..pending = false;
@@ -413,10 +413,10 @@ class AssistantService extends ChangeNotifier {
         }
       }
 
-      if (HermesConfig.serverUrl.trim().isEmpty) {
+      if (TroikaConfig.serverUrl.trim().isEmpty) {
         const response = 'Эта локальная команда пока не поддерживается. '
             'Свободные вопросы будут доступны в AI-тарифе.';
-        _lastHermesText = response;
+        _lastTroikaText = response;
         pending
           ..text = response
           ..pending = false;
@@ -431,7 +431,7 @@ class AssistantService extends ChangeNotifier {
 
       // Стримим «поток мыслей»: размышления и вызовы инструментов
       // появляются в пузыре в реальном времени, пока Тройка работает.
-      final response = await _hermes.streamMessage(
+      final response = await _troika.streamMessage(
         userMsg,
         recent: _recentContext(),
         onThought: (t) {
@@ -456,7 +456,7 @@ class AssistantService extends ChangeNotifier {
         onApproval: _waitForApproval,
       );
       final cleanResponse = _stripEmoTag(response);
-      _lastHermesText = cleanResponse;
+      _lastTroikaText = cleanResponse;
       pending
         ..text = cleanResponse
         ..pending = false;
@@ -479,7 +479,7 @@ class AssistantService extends ChangeNotifier {
   void clearConversation() {
     _messages.clear();
     _lastUserText = '';
-    _lastHermesText = '';
+    _lastTroikaText = '';
     notifyListeners();
   }
 

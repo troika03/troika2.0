@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
-import '../config/hermes_config.dart';
+import '../config/troika_config.dart';
 
 class AccountService {
   static const _timeout = Duration(seconds: 20);
@@ -14,7 +14,7 @@ class AccountService {
     required String password,
   }) async {
     await _authenticate(
-      Uri.parse(HermesConfig.registrationUrl),
+      Uri.parse(TroikaConfig.registrationUrl),
       email: email,
       password: password,
       expectedStatus: 201,
@@ -26,7 +26,7 @@ class AccountService {
     required String password,
   }) async {
     await _authenticate(
-      Uri.parse(HermesConfig.loginUrl),
+      Uri.parse(TroikaConfig.loginUrl),
       email: email,
       password: password,
       expectedStatus: 200,
@@ -39,7 +39,7 @@ class AccountService {
     required String password,
     required int expectedStatus,
   }) async {
-    if (HermesConfig.serverUrl.trim().isEmpty) {
+    if (TroikaConfig.serverUrl.trim().isEmpty) {
       throw const AccountException(
         'Сервер регистрации не указан в этой тестовой сборке.',
       );
@@ -65,7 +65,7 @@ class AccountService {
       if (!token.startsWith('trk_live_')) {
         throw const AccountException('Сервер не вернул токен аккаунта.');
       }
-      await HermesConfig.saveAccount(email: email, token: token);
+      await TroikaConfig.saveAccount(email: email, token: token);
     } on SocketException {
       throw const AccountException('Нет соединения с сервером регистрации.');
     } on TimeoutException {

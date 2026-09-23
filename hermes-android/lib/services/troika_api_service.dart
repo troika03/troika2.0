@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
-import '../config/hermes_config.dart';
+import '../config/troika_config.dart';
 
 /// Тип шага в «потоке мыслей» Тройки (что она делает перед ответом).
 enum ThoughtKind {
@@ -134,18 +134,18 @@ class ChatMessage {
   }
 }
 
-/// Сервис для общения с Hermes API Server.
+/// Сервис для общения с Troika API Server.
 /// Использует OpenAI-совместимый Chat Completions API в общей сессии
 /// конкретной установки приложения — той же, что голосовой путь (Kotlin).
-class HermesApiService {
+class TroikaApiService {
   static const Duration _timeout = Duration(seconds: 90);
 
-  /// Проверка подключения к Hermes
+  /// Проверка подключения к Troika.
   Future<bool> checkConnection() async {
     try {
-      final uri = Uri.parse('${HermesConfig.serverUrl}/health');
+      final uri = Uri.parse('${TroikaConfig.serverUrl}/health');
       final response = await http
-          .get(uri, headers: HermesConfig.headers)
+          .get(uri, headers: TroikaConfig.headers)
           .timeout(const Duration(seconds: 5));
       return response.statusCode == 200;
     } catch (_) {
@@ -155,19 +155,19 @@ class HermesApiService {
 
   /// Download a complete owner-scoped ZIP and save it through the system picker.
   Future<bool> exportAccountData() async {
-    if (!HermesConfig.apiKey.startsWith('trk_live_')) {
-      throw HermesApiException(
+    if (!TroikaConfig.apiKey.startsWith('trk_live_')) {
+      throw TroikaApiException(
           'Экспорт данных доступен после подключения Тройки.');
     }
     try {
       final response = await http
           .get(
-            Uri.parse(HermesConfig.accountExportUrl),
-            headers: HermesConfig.headers,
+            Uri.parse(TroikaConfig.accountExportUrl),
+            headers: TroikaConfig.headers,
           )
           .timeout(const Duration(seconds: 90));
       if (response.statusCode != 200) {
-        throw HermesApiException(
+        throw TroikaApiException(
           'Сервер не создал экспорт (${response.statusCode}): '
           '${_short(response.body)}',
         );
@@ -190,9 +190,9 @@ class HermesApiService {
       }
       return true;
     } on SocketException {
-      throw HermesApiException('Нет соединения с сервером. Экспорт не создан.');
+      throw TroikaApiException('Нет соединения с сервером. Экспорт не создан.');
     } on TimeoutException {
-      throw HermesApiException(
+      throw TroikaApiException(
           'Сервер не успел создать экспорт. Повтори позже.');
     }
   }
@@ -200,55 +200,55 @@ class HermesApiService {
   /// Irreversibly delete the authenticated product account on the server.
   /// A 202 means cleanup continues server-side, but the token is already revoked.
   Future<bool> deleteAccount() async {
-    if (!HermesConfig.apiKey.startsWith('trk_live_')) {
-      throw HermesApiException(
+    if (!TroikaConfig.apiKey.startsWith('trk_live_')) {
+      throw TroikaApiException(
           'Удаление аккаунта доступно после подключения Тройки.');
     }
     try {
       final response = await http
           .delete(
-            Uri.parse(HermesConfig.accountUrl),
-            headers: HermesConfig.headers,
+            Uri.parse(TroikaConfig.accountUrl),
+            headers: TroikaConfig.headers,
             body: json.encode({'confirmation': 'DELETE_MY_ACCOUNT'}),
           )
           .timeout(const Duration(seconds: 20));
       if (response.statusCode != 200 && response.statusCode != 202) {
-        throw HermesApiException(
+        throw TroikaApiException(
           'Сервер не завершил удаление (${response.statusCode}): '
           '${_short(response.body)}',
         );
       }
       return response.statusCode == 200;
     } on SocketException {
-      throw HermesApiException('Нет соединения с сервером. Аккаунт не удалён.');
+      throw TroikaApiException('Нет соединения с сервером. Аккаунт не удалён.');
     } on TimeoutException {
-      throw HermesApiException(
+      throw TroikaApiException(
           'Сервер не подтвердил удаление. Попробуй ещё раз.');
     }
   }
 
   /// List devices owned by the authenticated account.
   Future<List<AccountDevice>> listAccountDevices() async {
-    if (!HermesConfig.apiKey.startsWith('trk_live_')) {
-      throw HermesApiException(
+    if (!TroikaConfig.apiKey.startsWith('trk_live_')) {
+      throw TroikaApiException(
         'Устройства доступны после входа в аккаунт.',
       );
     }
     try {
       final response = await http
           .get(
-            Uri.parse(HermesConfig.accountDevicesUrl),
-            headers: HermesConfig.headers,
+            Uri.parse(TroikaConfig.accountDevicesUrl),
+            headers: TroikaConfig.headers,
           )
           .timeout(const Duration(seconds: 15));
       if (response.statusCode == 401) {
-        throw HermesApiException(
+        throw TroikaApiException(
           'Доступ этого устройства отозван. Войди снова.',
           statusCode: 401,
         );
       }
       if (response.statusCode != 200) {
-        throw HermesApiException(
+        throw TroikaApiException(
           'Список устройств недоступен (${response.statusCode}).',
           statusCode: response.statusCode,
         );
@@ -261,11 +261,11 @@ class HermesApiService {
           .where((device) => device.id.isNotEmpty)
           .toList();
     } on SocketException {
-      throw HermesApiException('Нет соединения с сервером устройств.');
+      throw TroikaApiException('Нет соединения с сервером устройств.');
     } on TimeoutException {
-      throw HermesApiException('Сервер устройств не ответил вовремя.');
+      throw TroikaApiException('Сервер устройств не ответил вовремя.');
     } on FormatException {
-      throw HermesApiException('Сервер вернул некорректный список устройств.');
+      throw TroikaApiException('Сервер вернул некорректный список устройств.');
     }
   }
 
@@ -273,31 +273,31 @@ class HermesApiService {
   Future<DeviceRevocationResult> revokeAccountDevice(String deviceId) async {
     final cleanId = deviceId.trim();
     if (cleanId.isEmpty) {
-      throw HermesApiException('Устройство не найдено.');
+      throw TroikaApiException('Устройство не найдено.');
     }
     try {
       final response = await http
           .delete(
             Uri.parse(
-              '${HermesConfig.accountDevicesUrl}/${Uri.encodeComponent(cleanId)}',
+              '${TroikaConfig.accountDevicesUrl}/${Uri.encodeComponent(cleanId)}',
             ),
-            headers: HermesConfig.headers,
+            headers: TroikaConfig.headers,
           )
           .timeout(const Duration(seconds: 15));
       if (response.statusCode == 401) {
-        throw HermesApiException(
+        throw TroikaApiException(
           'Доступ этого устройства уже отозван. Войди снова.',
           statusCode: 401,
         );
       }
       if (response.statusCode == 404) {
-        throw HermesApiException(
+        throw TroikaApiException(
           'Устройство не найдено или доступ уже отозван.',
           statusCode: 404,
         );
       }
       if (response.statusCode != 200) {
-        throw HermesApiException(
+        throw TroikaApiException(
           'Не удалось отозвать устройство (${response.statusCode}).',
           statusCode: response.statusCode,
         );
@@ -309,11 +309,11 @@ class HermesApiService {
         reauthenticationRequired: payload['reauthentication_required'] == true,
       );
     } on SocketException {
-      throw HermesApiException('Нет соединения с сервером устройств.');
+      throw TroikaApiException('Нет соединения с сервером устройств.');
     } on TimeoutException {
-      throw HermesApiException('Сервер не подтвердил отзыв устройства.');
+      throw TroikaApiException('Сервер не подтвердил отзыв устройства.');
     } on FormatException {
-      throw HermesApiException('Сервер вернул некорректный ответ.');
+      throw TroikaApiException('Сервер вернул некорректный ответ.');
     }
   }
 
@@ -333,22 +333,22 @@ class HermesApiService {
     ];
 
     final bodyMap = <String, dynamic>{'messages': messages, 'stream': false};
-    if (HermesConfig.model.isNotEmpty) {
-      bodyMap['model'] = HermesConfig.model;
+    if (TroikaConfig.model.isNotEmpty) {
+      bodyMap['model'] = TroikaConfig.model;
     }
 
     try {
-      final uri = Uri.parse(HermesConfig.chatCompletionsUrl);
-      // Async headers чтобы X-Hermes-Device-Context (GPS/wifi/bt) шёл с каждым
+      final uri = Uri.parse(TroikaConfig.chatCompletionsUrl);
+      // Async headers: legacy X-Hermes-Device-Context (GPS/wifi/bt) уходит с каждым
       // запросом. Иначе Тройка не знает координат Миши пока не пройдёт
       // wake-word диалог (Kotlin шлёт header только оттуда).
-      final chatHdrs = await HermesConfig.chatHeadersAsync();
+      final chatHdrs = await TroikaConfig.chatHeadersAsync();
       final response = await http
           .post(uri, headers: chatHdrs, body: json.encode(bodyMap))
           .timeout(_timeout);
 
       if (response.statusCode != 200) {
-        throw HermesApiException(
+        throw TroikaApiException(
           'API error ${response.statusCode}: ${_short(response.body)}',
         );
       }
@@ -358,11 +358,11 @@ class HermesApiService {
           data['choices'][0]['message']['content'] as String? ?? '';
       return assistantMessage;
     } on SocketException {
-      throw HermesApiException(
+      throw TroikaApiException(
         'Нет соединения с сервером. Проверь что сервер включён.',
       );
     } on TimeoutException {
-      throw HermesApiException('Сервер не ответил вовремя. Попробуй ещё раз.');
+      throw TroikaApiException('Сервер не ответил вовремя. Попробуй ещё раз.');
     }
   }
 
@@ -392,38 +392,38 @@ class HermesApiService {
     final inputContent = message.toApiMessage()['content'];
     final startBody = <String, dynamic>{
       'input': inputContent is String ? inputContent : [message.toApiMessage()],
-      'session_id': HermesConfig.sessionId,
+      'session_id': TroikaConfig.sessionId,
       if (history.isNotEmpty) 'conversation_history': history,
     };
 
     final client = http.Client();
     try {
       // Async headers — с device_context (GPS) для streaming-пути тоже.
-      final chatHdrs = await HermesConfig.chatHeadersAsync();
-      final startReq = http.Request('POST', Uri.parse(HermesConfig.runsUrl))
+      final chatHdrs = await TroikaConfig.chatHeadersAsync();
+      final startReq = http.Request('POST', Uri.parse(TroikaConfig.runsUrl))
         ..headers.addAll(chatHdrs)
         ..body = json.encode(startBody);
       final startResp = await client.send(startReq).timeout(_timeout);
       final startBodyStr = await startResp.stream.bytesToString();
       // Сервер отдаёт 202 Accepted (run стартовал асинхронно), реже 200.
       if (startResp.statusCode != 200 && startResp.statusCode != 202) {
-        throw HermesApiException(
+        throw TroikaApiException(
           'API error ${startResp.statusCode}: ${_short(startBodyStr)}',
         );
       }
       final startData = json.decode(startBodyStr) as Map<String, dynamic>;
       final runId = (startData['run_id'] ?? startData['id'])?.toString();
       if (runId == null || runId.isEmpty) {
-        throw HermesApiException('Сервер не вернул run_id.');
+        throw TroikaApiException('Сервер не вернул run_id.');
       }
 
       // 2) Слушаем поток событий.
-      final evUri = Uri.parse('${HermesConfig.runsUrl}/$runId/events');
+      final evUri = Uri.parse('${TroikaConfig.runsUrl}/$runId/events');
       final evReq = http.Request('GET', evUri)
-        ..headers.addAll(HermesConfig.headers);
+        ..headers.addAll(TroikaConfig.headers);
       final evResp = await client.send(evReq).timeout(_timeout);
       if (evResp.statusCode != 200) {
-        throw HermesApiException(
+        throw TroikaApiException(
           'Поток событий недоступен (${evResp.statusCode}).',
         );
       }
@@ -504,21 +504,21 @@ class HermesApiService {
         // Run упал на сервере — достаём причину из статуса, чтобы показать
         // понятную ошибку, а не пустой пузырь.
         final reason = await _fetchRunError(client, runId);
-        throw HermesApiException(reason);
+        throw TroikaApiException(reason);
       }
       if (full.isEmpty) {
         // Финал не пришёл дельтами — добираем через статус run.
         final r = await _fetchRunResult(client, runId);
         if (r.isEmpty) {
-          throw HermesApiException(await _fetchRunError(client, runId));
+          throw TroikaApiException(await _fetchRunError(client, runId));
         }
         return r;
       }
       return full;
     } on SocketException {
-      throw HermesApiException('Нет соединения с сервером.');
+      throw TroikaApiException('Нет соединения с сервером.');
     } on TimeoutException {
-      throw HermesApiException('Сервер не ответил вовремя.');
+      throw TroikaApiException('Сервер не ответил вовремя.');
     } finally {
       client.close();
     }
@@ -529,14 +529,14 @@ class HermesApiService {
     String runId,
     String choice,
   ) async {
-    final uri = Uri.parse('${HermesConfig.runsUrl}/$runId/approval');
+    final uri = Uri.parse('${TroikaConfig.runsUrl}/$runId/approval');
     final response = await client
         .post(uri,
-            headers: HermesConfig.headers,
+            headers: TroikaConfig.headers,
             body: json.encode({'choice': choice}))
         .timeout(const Duration(seconds: 20));
     if (response.statusCode != 200) {
-      throw HermesApiException(
+      throw TroikaApiException(
         'Не удалось подтвердить действие (${response.statusCode}).',
       );
     }
@@ -545,9 +545,9 @@ class HermesApiService {
   /// Достаёт человеко-понятную причину падения run из его статуса.
   Future<String> _fetchRunError(http.Client client, String runId) async {
     try {
-      final uri = Uri.parse('${HermesConfig.runsUrl}/$runId');
+      final uri = Uri.parse('${TroikaConfig.runsUrl}/$runId');
       final req = http.Request('GET', uri)
-        ..headers.addAll(HermesConfig.headers);
+        ..headers.addAll(TroikaConfig.headers);
       final resp = await client.send(req).timeout(const Duration(seconds: 20));
       final body = await resp.stream.bytesToString();
       final data = json.decode(body) as Map<String, dynamic>;
@@ -569,9 +569,9 @@ class HermesApiService {
   /// Запасной путь: если message.delta не пришли — берём готовый ответ run.
   Future<String> _fetchRunResult(http.Client client, String runId) async {
     try {
-      final uri = Uri.parse('${HermesConfig.runsUrl}/$runId');
+      final uri = Uri.parse('${TroikaConfig.runsUrl}/$runId');
       final req = http.Request('GET', uri)
-        ..headers.addAll(HermesConfig.headers);
+        ..headers.addAll(TroikaConfig.headers);
       final resp = await client.send(req).timeout(const Duration(seconds: 30));
       final body = await resp.stream.bytesToString();
       if (resp.statusCode != 200) return '';
@@ -589,19 +589,19 @@ class HermesApiService {
   /// Загрузить историю общей сессии с сервера (для отрисовки ленты при входе).
   /// Возвращает сообщения по порядку (старые → новые).
   Future<List<ChatMessage>> loadSessionHistory({int limit = 60}) async {
-    final encoded = Uri.encodeComponent(HermesConfig.sessionId);
+    final encoded = Uri.encodeComponent(TroikaConfig.sessionId);
     final uri = Uri.parse(
-      '${HermesConfig.serverUrl}/v1/sessions/$encoded/messages?limit=$limit',
+      '${TroikaConfig.serverUrl}/v1/sessions/$encoded/messages?limit=$limit',
     );
     try {
       final response = await http
-          .get(uri, headers: HermesConfig.headers)
+          .get(uri, headers: TroikaConfig.headers)
           .timeout(const Duration(seconds: 15));
       if (response.statusCode == 404) {
         return []; // сессии ещё нет — пустой чат
       }
       if (response.statusCode != 200) {
-        throw HermesApiException(
+        throw TroikaApiException(
           'История недоступна (${response.statusCode}).',
         );
       }
@@ -624,11 +624,11 @@ class HermesApiService {
       }
       return out;
     } on SocketException {
-      throw HermesApiException(
+      throw TroikaApiException(
         'Нет соединения с сервером — историю взять негде.',
       );
     } on TimeoutException {
-      throw HermesApiException('Сервер не ответил вовремя.');
+      throw TroikaApiException('Сервер не ответил вовремя.');
     }
   }
 
@@ -664,8 +664,8 @@ class HermesApiService {
   // ── Список всех сессий (экран истории) ───────────────────────────────────
   Future<List<TroikaProject>> listAssistantProjects() async {
     final response = await http
-        .get(Uri.parse('${HermesConfig.serverUrl}/v1/assistant/projects'),
-            headers: HermesConfig.headers)
+        .get(Uri.parse('${TroikaConfig.serverUrl}/v1/assistant/projects'),
+            headers: TroikaConfig.headers)
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Проекты недоступны');
     final data =
@@ -679,8 +679,8 @@ class HermesApiService {
   Future<TroikaProject> createAssistantProject(String name,
       {String summary = ''}) async {
     final response = await http
-        .post(Uri.parse('${HermesConfig.serverUrl}/v1/assistant/projects'),
-            headers: HermesConfig.headers,
+        .post(Uri.parse('${TroikaConfig.serverUrl}/v1/assistant/projects'),
+            headers: TroikaConfig.headers,
             body: json.encode({'name': name, 'summary': summary}))
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Проект не создан');
@@ -691,9 +691,9 @@ class HermesApiService {
   Future<void> activateAssistantProject(String projectId) async {
     final response = await http
         .put(
-            Uri.parse('${HermesConfig.serverUrl}/v1/assistant/projects/'
+            Uri.parse('${TroikaConfig.serverUrl}/v1/assistant/projects/'
                 '${Uri.encodeComponent(projectId)}/active'),
-            headers: HermesConfig.headers)
+            headers: TroikaConfig.headers)
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Проект не выбран');
   }
@@ -704,10 +704,10 @@ class HermesApiService {
     if (projectId != null && projectId.isNotEmpty) {
       query['project_id'] = projectId;
     }
-    final uri = Uri.parse('${HermesConfig.serverUrl}/v1/assistant/tasks')
+    final uri = Uri.parse('${TroikaConfig.serverUrl}/v1/assistant/tasks')
         .replace(queryParameters: query);
     final response = await http
-        .get(uri, headers: HermesConfig.headers)
+        .get(uri, headers: TroikaConfig.headers)
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Задачи недоступны');
     final data =
@@ -736,9 +736,9 @@ class HermesApiService {
     }
     if (dueAt != null && dueAt.isNotEmpty) body['due_at'] = dueAt;
     final response = await http
-        .post(Uri.parse('${HermesConfig.serverUrl}/v1/assistant/tasks'),
+        .post(Uri.parse('${TroikaConfig.serverUrl}/v1/assistant/tasks'),
             headers: {
-              ...HermesConfig.headers,
+              ...TroikaConfig.headers,
               'Idempotency-Key':
                   'android-${DateTime.now().microsecondsSinceEpoch}'
             },
@@ -753,9 +753,9 @@ class HermesApiService {
       String taskId, String status) async {
     final response = await http
         .patch(
-            Uri.parse('${HermesConfig.serverUrl}/v1/assistant/tasks/'
+            Uri.parse('${TroikaConfig.serverUrl}/v1/assistant/tasks/'
                 '${Uri.encodeComponent(taskId)}'),
-            headers: HermesConfig.headers,
+            headers: TroikaConfig.headers,
             body: json.encode({'status': status}))
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Статус задачи не обновлён');
@@ -765,10 +765,10 @@ class HermesApiService {
 
   Future<List<TroikaInboxMessage>> listAssistantInbox(
       {bool unreadOnly = false}) async {
-    final uri = Uri.parse('${HermesConfig.serverUrl}/v1/assistant/inbox')
+    final uri = Uri.parse('${TroikaConfig.serverUrl}/v1/assistant/inbox')
         .replace(queryParameters: {'unread_only': unreadOnly.toString()});
     final response = await http
-        .get(uri, headers: HermesConfig.headers)
+        .get(uri, headers: TroikaConfig.headers)
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Входящие недоступны');
     final data =
@@ -782,17 +782,17 @@ class HermesApiService {
   Future<void> markAssistantMessageRead(String messageId) async {
     final response = await http
         .post(
-            Uri.parse('${HermesConfig.serverUrl}/v1/assistant/inbox/'
+            Uri.parse('${TroikaConfig.serverUrl}/v1/assistant/inbox/'
                 '${Uri.encodeComponent(messageId)}/read'),
-            headers: HermesConfig.headers)
+            headers: TroikaConfig.headers)
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Сообщение не обновлено');
   }
 
   Future<TroikaNotificationPreferences> getNotificationPreferences() async {
     final response = await http
-        .get(Uri.parse('${HermesConfig.serverUrl}/v1/notification-preferences'),
-            headers: HermesConfig.headers)
+        .get(Uri.parse('${TroikaConfig.serverUrl}/v1/notification-preferences'),
+            headers: TroikaConfig.headers)
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Настройки уведомлений недоступны');
     return TroikaNotificationPreferences.fromJson(
@@ -802,8 +802,8 @@ class HermesApiService {
   Future<void> setNotificationPreferences(
       TroikaNotificationPreferences preferences) async {
     final response = await http
-        .put(Uri.parse('${HermesConfig.serverUrl}/v1/notification-preferences'),
-            headers: HermesConfig.headers,
+        .put(Uri.parse('${TroikaConfig.serverUrl}/v1/notification-preferences'),
+            headers: TroikaConfig.headers,
             body: json.encode(preferences.toJson()))
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Настройки уведомлений не сохранены');
@@ -811,8 +811,8 @@ class HermesApiService {
 
   Future<List<TroikaMemory>> listMemories() async {
     final response = await http
-        .get(Uri.parse('${HermesConfig.serverUrl}/v1/memories'),
-            headers: HermesConfig.headers)
+        .get(Uri.parse('${TroikaConfig.serverUrl}/v1/memories'),
+            headers: TroikaConfig.headers)
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Память недоступна');
     final data =
@@ -828,9 +828,9 @@ class HermesApiService {
       required String title,
       required String content}) async {
     final response = await http
-        .post(Uri.parse('${HermesConfig.serverUrl}/v1/memories'),
+        .post(Uri.parse('${TroikaConfig.serverUrl}/v1/memories'),
             headers: {
-              ...HermesConfig.headers,
+              ...TroikaConfig.headers,
               'Idempotency-Key':
                   'android-memory-${DateTime.now().microsecondsSinceEpoch}'
             },
@@ -848,9 +848,9 @@ class HermesApiService {
       required String content}) async {
     final response = await http
         .patch(
-            Uri.parse('${HermesConfig.serverUrl}/v1/memories/'
+            Uri.parse('${TroikaConfig.serverUrl}/v1/memories/'
                 '${Uri.encodeComponent(memoryId)}'),
-            headers: HermesConfig.headers,
+            headers: TroikaConfig.headers,
             body:
                 json.encode({'kind': kind, 'title': title, 'content': content}))
         .timeout(const Duration(seconds: 15));
@@ -862,16 +862,16 @@ class HermesApiService {
   Future<void> deleteMemory(String memoryId) async {
     final response = await http
         .delete(
-            Uri.parse('${HermesConfig.serverUrl}/v1/memories/'
+            Uri.parse('${TroikaConfig.serverUrl}/v1/memories/'
                 '${Uri.encodeComponent(memoryId)}'),
-            headers: HermesConfig.headers)
+            headers: TroikaConfig.headers)
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Запись не удалена');
   }
 
   static void _checkAssistantResponse(http.Response response, String fallback) {
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw HermesApiException('$fallback (${response.statusCode}).');
+      throw TroikaApiException('$fallback (${response.statusCode}).');
     }
   }
 
@@ -880,14 +880,14 @@ class HermesApiService {
     int offset = 0,
   }) async {
     final uri = Uri.parse(
-      '${HermesConfig.serverUrl}/v1/sessions?limit=$limit&offset=$offset',
+      '${TroikaConfig.serverUrl}/v1/sessions?limit=$limit&offset=$offset',
     );
     try {
       final response = await http
-          .get(uri, headers: HermesConfig.headers)
+          .get(uri, headers: TroikaConfig.headers)
           .timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) {
-        throw HermesApiException(
+        throw TroikaApiException(
           'История недоступна (${response.statusCode}).',
         );
       }
@@ -899,25 +899,25 @@ class HermesApiService {
           .map(SessionSummary.fromJson)
           .toList();
     } on SocketException {
-      throw HermesApiException(
+      throw TroikaApiException(
         'Нет соединения с сервером — историю взять негде.',
       );
     } on TimeoutException {
-      throw HermesApiException('Сервер не ответил вовремя.');
+      throw TroikaApiException('Сервер не ответил вовремя.');
     }
   }
 
   Future<List<SessionMessage>> getSessionMessages(String sessionId) async {
     final encoded = Uri.encodeComponent(sessionId);
     final uri = Uri.parse(
-      '${HermesConfig.serverUrl}/v1/sessions/$encoded/messages',
+      '${TroikaConfig.serverUrl}/v1/sessions/$encoded/messages',
     );
     try {
       final response = await http
-          .get(uri, headers: HermesConfig.headers)
+          .get(uri, headers: TroikaConfig.headers)
           .timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) {
-        throw HermesApiException('Сессия недоступна (${response.statusCode}).');
+        throw TroikaApiException('Сессия недоступна (${response.statusCode}).');
       }
       final data =
           json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
@@ -927,11 +927,11 @@ class HermesApiService {
           .map(SessionMessage.fromJson)
           .toList();
     } on SocketException {
-      throw HermesApiException(
+      throw TroikaApiException(
         'Нет соединения с сервером — транскрипт взять негде.',
       );
     } on TimeoutException {
-      throw HermesApiException('Сервер не ответил вовремя.');
+      throw TroikaApiException('Сервер не ответил вовремя.');
     }
   }
 }
@@ -1104,10 +1104,10 @@ class SessionMessage {
       );
 }
 
-class HermesApiException implements Exception {
+class TroikaApiException implements Exception {
   final String message;
   final int? statusCode;
-  HermesApiException(this.message, {this.statusCode});
+  TroikaApiException(this.message, {this.statusCode});
 
   @override
   String toString() => message;

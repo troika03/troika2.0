@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/hermes_api_service.dart';
+import '../services/troika_api_service.dart';
 import 'session_detail_screen.dart';
 
 /// Экран истории диалогов: список всех сессий из state.db на сервере.
@@ -12,13 +12,13 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
-  late final HermesApiService _api;
+  late final TroikaApiService _api;
   Future<List<SessionSummary>>? _future;
 
   @override
   void initState() {
     super.initState();
-    _api = HermesApiService();
+    _api = TroikaApiService();
     _reload();
   }
 
@@ -99,9 +99,8 @@ class _SessionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final preview = (session.preview ?? '').trim();
     final title = (session.title ?? '').trim();
-    final shown = title.isNotEmpty
-        ? title
-        : (preview.isNotEmpty ? preview : '(пусто)');
+    final shown =
+        title.isNotEmpty ? title : (preview.isNotEmpty ? preview : '(пусто)');
     final time = _formatTime(session.lastActive);
     return ListTile(
       title: Text(
@@ -152,9 +151,8 @@ class _SessionTile extends StatelessWidget {
     if (ts == null) return '';
     final dt = DateTime.fromMillisecondsSinceEpoch((ts * 1000).round());
     final now = DateTime.now();
-    final sameDay = dt.year == now.year &&
-        dt.month == now.month &&
-        dt.day == now.day;
+    final sameDay =
+        dt.year == now.year && dt.month == now.month && dt.day == now.day;
     final yesterday = now.subtract(const Duration(days: 1));
     final isYesterday = dt.year == yesterday.year &&
         dt.month == yesterday.month &&

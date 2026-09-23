@@ -65,7 +65,7 @@ object PhoneCalendar {
 
     private fun permError(perm: String) = JSONObject().apply {
         put("ok", false)
-        put("error", "calendar_permission_missing: ask user to grant $perm in Settings → Apps → Hermes → Permissions → Calendar (or tap 'Разрешить доступ к календарю' in Hermes settings)")
+        put("error", "calendar_permission_missing: ask user to grant $perm in Settings → Apps → Тройка → Permissions → Calendar (or tap 'Разрешить доступ к календарю' in Тройка settings)")
     }
 
     // ---- list calendars -----------------------------------------------------
@@ -348,7 +348,7 @@ object PhoneCalendar {
     /** Открыть системный экран для запроса календарных permissions через MainActivity. */
     fun requestPermissions(ctx: Context): JSONObject {
         // Можем только направить пользователя на settings — runtime-разрешения
-        // запрашиваются из Activity, а мы в сервисе. Hermes UI делает это сам.
+        // запрашиваются из Activity, а мы в сервисе. Troika UI делает это сам.
         val granted = hasReadPermission(ctx) && hasWritePermission(ctx)
         return JSONObject().apply {
             put("ok", true)
@@ -356,7 +356,7 @@ object PhoneCalendar {
             put("write_granted", hasWritePermission(ctx))
             put("all_granted", granted)
             if (!granted) {
-                put("message", "ask user to open Hermes Settings → 'Разрешить доступ к календарю'")
+                put("message", "ask user to open Тройка Settings → 'Разрешить доступ к календарю'")
             }
         }
     }

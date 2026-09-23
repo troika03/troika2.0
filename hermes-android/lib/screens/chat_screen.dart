@@ -7,7 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import '../services/assistant_service.dart';
-import '../services/hermes_api_service.dart';
+import '../services/troika_api_service.dart';
 import '../services/thought_translator.dart';
 import '../theme/troika_theme.dart';
 
@@ -393,7 +393,7 @@ class _ChatScreenState extends State<ChatScreen> {
               color: TroikaColors.brand,
               onPressed: () {
                 // Десктопный push-to-talk: идёт запись → повторное нажатие
-                // останавливает и обрабатывает (STT → Hermes → TTS).
+                // останавливает и обрабатывает (STT → Troika → TTS).
                 if (a.state == AssistantState.recording) {
                   a.stopRecordingAndProcess();
                 } else if (isBusy) {

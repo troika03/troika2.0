@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../config/hermes_config.dart';
+import '../config/troika_config.dart';
 import '../services/assistant_service.dart';
-import '../services/hermes_api_service.dart';
+import '../services/troika_api_service.dart';
 import '../services/voice_presets.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -89,14 +89,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _urlController = TextEditingController(text: HermesConfig.serverUrl);
-    _apiKeyController = TextEditingController(text: HermesConfig.apiKey);
+    _urlController = TextEditingController(text: TroikaConfig.serverUrl);
+    _apiKeyController = TextEditingController(text: TroikaConfig.apiKey);
     _loadCurrentVoice();
     _loadPresets();
     _loadBargeIn();
-    _locationContextEnabled = HermesConfig.locationContextEnabled;
-    _phoneControlEnabled = HermesConfig.phoneControlEnabled;
-    if (HermesConfig.signedIn) {
+    _locationContextEnabled = TroikaConfig.locationContextEnabled;
+    _phoneControlEnabled = TroikaConfig.phoneControlEnabled;
+    if (TroikaConfig.signedIn) {
       _loadAccountDevices();
     }
   }
@@ -364,10 +364,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     final normalized = _normalizeUrl(_urlController.text);
     _urlController.text = normalized;
-    HermesConfig.serverUrl = normalized;
-    HermesConfig.apiKey = _apiKeyController.text.trim();
+    TroikaConfig.serverUrl = normalized;
+    TroikaConfig.apiKey = _apiKeyController.text.trim();
 
-    final api = HermesApiService();
+    final api = TroikaApiService();
     final ok = await api.checkConnection();
 
     setState(() {
@@ -466,13 +466,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _setLocationContextEnabled(bool enabled) async {
     if (enabled) await _requestLocationPermission();
-    await HermesConfig.setLocationContextEnabled(enabled);
+    await TroikaConfig.setLocationContextEnabled(enabled);
     if (!mounted) return;
     setState(() => _locationContextEnabled = enabled);
   }
 
   Future<void> _setPhoneControlEnabled(bool enabled) async {
-    await HermesConfig.setPhoneControlEnabled(enabled);
+    await TroikaConfig.setPhoneControlEnabled(enabled);
     if (!mounted) return;
     setState(() => _phoneControlEnabled = enabled);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -487,8 +487,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _save() {
-    HermesConfig.serverUrl = _normalizeUrl(_urlController.text);
-    HermesConfig.apiKey = _apiKeyController.text.trim();
+    TroikaConfig.serverUrl = _normalizeUrl(_urlController.text);
+    TroikaConfig.apiKey = _apiKeyController.text.trim();
     Navigator.pop(context);
     ScaffoldMessenger.of(
       context,
@@ -496,16 +496,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadAccountDevices() async {
-    if (!HermesConfig.signedIn || _loadingDevices) return;
+    if (!TroikaConfig.signedIn || _loadingDevices) return;
     setState(() {
       _loadingDevices = true;
       _devicesError = null;
     });
     try {
-      final devices = await HermesApiService().listAccountDevices();
+      final devices = await TroikaApiService().listAccountDevices();
       if (!mounted) return;
       setState(() => _accountDevices = devices);
-    } on HermesApiException catch (error) {
+    } on TroikaApiException catch (error) {
       if (!mounted) return;
       if (error.statusCode == 401) {
         await _finishRevokedSession();
@@ -528,7 +528,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (error) {
       debugPrint('[Settings] Failed to stop wake listener: $error');
     }
-    await HermesConfig.clearRevokedDevice();
+    await TroikaConfig.clearRevokedDevice();
     if (!mounted) return;
     Navigator.of(context).pop();
     widget.onSignedOut?.call();
@@ -571,7 +571,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() => _revokingDeviceId = device.id);
     try {
-      final result = await HermesApiService().revokeAccountDevice(device.id);
+      final result = await TroikaApiService().revokeAccountDevice(device.id);
       if (result.current || result.reauthenticationRequired) {
         await _finishRevokedSession(assistant);
         return;
@@ -581,7 +581,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         SnackBar(content: Text('Доступ «${device.name}» отозван')),
       );
       await _loadAccountDevices();
-    } on HermesApiException catch (error) {
+    } on TroikaApiException catch (error) {
       if (error.statusCode == 401) {
         await _finishRevokedSession(assistant);
         return;
@@ -730,7 +730,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _exportAccountData() async {
     setState(() => _exportingAccount = true);
     try {
-      final saved = await HermesApiService().exportAccountData();
+      final saved = await TroikaApiService().exportAccountData();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -812,9 +812,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() => _deletingAccount = true);
     try {
-      final completed = await HermesApiService().deleteAccount();
+      final completed = await TroikaApiService().deleteAccount();
       await assistant.setWakeWordEnabled(false);
-      await HermesConfig.clearDeletedAccount();
+      await TroikaConfig.clearDeletedAccount();
       if (!mounted) return;
       await showDialog<void>(
         context: context,
@@ -1316,14 +1316,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: const Icon(Icons.my_location, size: 18),
             label: const Text('Разрешить местоположение'),
           ),
-          if (HermesConfig.apiKey.startsWith('trk_live_')) ...[
+          if (TroikaConfig.apiKey.startsWith('trk_live_')) ...[
             const SizedBox(height: 24),
             const Divider(color: Colors.white10),
             const SizedBox(height: 16),
             _sectionHeader('Аккаунт'),
-            if (HermesConfig.accountEmail.isNotEmpty) ...[
+            if (TroikaConfig.accountEmail.isNotEmpty) ...[
               Text(
-                HermesConfig.accountEmail,
+                TroikaConfig.accountEmail,
                 style: const TextStyle(
                   color: Colors.white70,
                   fontWeight: FontWeight.w600,

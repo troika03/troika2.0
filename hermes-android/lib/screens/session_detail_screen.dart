@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/hermes_api_service.dart';
+import '../services/troika_api_service.dart';
 
 /// Полный транскрипт одной сессии — user-сообщения справа, ответы Тройки слева.
 class SessionDetailScreen extends StatefulWidget {
@@ -16,13 +16,13 @@ class SessionDetailScreen extends StatefulWidget {
 }
 
 class _SessionDetailScreenState extends State<SessionDetailScreen> {
-  late final HermesApiService _api;
+  late final TroikaApiService _api;
   Future<List<SessionMessage>>? _future;
 
   @override
   void initState() {
     super.initState();
-    _api = HermesApiService();
+    _api = TroikaApiService();
     _future = _api.getSessionMessages(widget.sessionId);
   }
 

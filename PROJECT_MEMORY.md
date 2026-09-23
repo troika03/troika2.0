@@ -14,9 +14,11 @@
 1. `D:\troika-product\AGENTS.md` — обязательные правила работы.
 2. `D:\troika-product\docs\Troika_1.0_Launch_Plan_Final_Updated.docx` — главный
    продуктовый план: scope, UX, тарифы, очередь релиза и Definition of Done.
-3. `D:\troika-product\PROJECT_MEMORY.md` — актуальное состояние и следующий шаг.
-4. `D:\troika-product\PRODUCTIZATION_PLAN.md` — вспомогательный план реализации.
-5. `D:\troika-product\docs\TROIKA_CAPABILITY_RESTORATION_PLAN.md` — подробный
+3. `D:\troika-product\docs\TROIKA_1_0_EXECUTION_TRACKER.md` — строгий
+   прогресс по плану сверху вниз без пропусков.
+4. `D:\troika-product\PROJECT_MEMORY.md` — актуальное состояние и следующий шаг.
+5. `D:\troika-product\PRODUCTIZATION_PLAN.md` — вспомогательный план реализации.
+6. `D:\troika-product\docs\TROIKA_CAPABILITY_RESTORATION_PLAN.md` — подробный
    план возврата голоса, инициативности, управления, документов и безопасного
    просмотра экрана/камеры.
 6. `D:\troika-product\docs\TROIKA_CLOSED_BETA_SETUP.md` — запуск закрытой беты и
@@ -47,7 +49,9 @@ AI-ассистент для Android и Windows, где чат остаётся 
 ## Зафиксированные продуктовые решения
 
 1. Главный план продукта — `docs/Troika_1.0_Launch_Plan_Final_Updated.docx`.
-2. Troika 1.0 — voice-first Android/Windows продукт; чат вторичен.
+2. План выполняется строго сверху вниз, по каждому пункту. Финальный
+   backlog раздела 20 — release summary, а не замена разделов 1–19.
+3. Troika 1.0 — voice-first Android/Windows продукт; чат вторичен.
 3. Базовый продукт — hosted subscription service. Обычный пользователь не
    вводит ключи моделей; BYOK скрыт для power users.
 4. Целевые тарифы плана: Free, Plus 790 ₽/мес и Pro 1 490 ₽/мес. В production
@@ -560,24 +564,53 @@ AI-ассистент для Android и Windows, где чат остаётся 
   `adb install -r`: package `com.troika.hermes_assistant`, версия `1.0.0`,
   установка завершилась `Success`, `MainActivity` запущена и процесс активен.
 
+## Выполнено: первый Troika-native rebrand срез (2026-09-23)
+
+- Flutter package переименован в `troika_assistant`; Dart конфигурация,
+  API service, exception, root widget и conversation state теперь используют
+  Troika-имена. Файлы конфига и API service также переименованы.
+- Новые Android screenshots сохраняются в `Pictures/Troika`; видимые
+  permission/error strings больше не называют приложение Hermes.
+- Карта миграции и временный compatibility allowlist записаны в
+  `docs/TROIKA_NATIVE_REBRAND_MIGRATION.md`. Android `applicationId`, legacy
+  SharedPreferences, MethodChannel и HTTP headers пока сохранены: прямое
+  переименование потеряет данны или сломает протокол.
+- SharedPreferences получили versioned migration на canonical `troika_*` keys.
+  После update сохраняются token, server URL, session ID, onboarding,
+  wake setting и phone-control consent. На время перехода Flutter пишет
+  canonical и legacy keys, чтобы текущий native service не потерял доступ.
+- Проверено: Flutter `17 passed`; analyze завершён без errors с 29
+  прежними informational diagnostics; debug APK собран. APK установлена
+  поверх данных на Samsung SM-A225F с `Success`; `MainActivity` запущена,
+  процесс активен. Прямая проверка app sandbox без вывода secrets
+  подтвердила migration version `1` и равенство canonical/legacy значений.
+
+## В работе: раздел 1, voice-first home (2026-09-23)
+
+- По решению владельца Word-план теперь выполняется строго сверху
+  вниз, по каждому пункту. Трекер добавлен в
+  `docs/TROIKA_1_0_EXECUTION_TRACKER.md`; AGENTS и README ссылаются на него.
+- Главный Android/Windows Flutter home больше не встраивает чат. В центре
+  находится нажимаемый `StatusOrb`, короткая подсказка, статус
+  listening/understanding/acting/speaking/error и не более трёх карточек.
+  Чат открывается отдельной маленькой кнопкой «Текст».
+- Approval не зависит от открытого чата: home показывает карточку и
+  модальное разовое разрешение. Отказ остаётся fail-closed.
+- Проверено: Flutter `19 passed`, включая mobile/wide voice-first
+  widget tests; analyze без errors с 29 прежними informational diagnostics;
+  debug APK собрана. Последняя APK установлена поверх данных на Samsung
+  SM-A225F (`adb install -r`: `Success`), процесс запущен; главный экран
+  «Что сделать?» с центральным voice orb проверен по physical screenshot.
+
 ## Ближайший порядок работы
 
-1. Выполнить Troika-native rebrand по главному плану: сначала полный inventory и
-   migration map, затем небольшие совместимые срезы. LICENSE/NOTICE сохранить.
-2. Довести Python/Docker/Android/Windows/Web CI до зелёного состояния на каждой
-   поддерживаемой платформе; добавить Windows clean build и installer smoke-test.
-3. Убрать двойной install/deploy source и сделать product mode production
-   default. Legacy single-user оставить только явным dev/local режимом.
-4. Закрыть auth P0: password recovery, email verification, logout, logout-all,
-   refresh-token rotation и end-to-end account/device lifecycle.
-5. Пересобрать Android и Windows как voice-first UI: центральный voice orb,
-   короткие статусы, чат как вторичный ввод, упрощённые настройки.
-6. Закрыть Android background voice P0 на физическом телефоне: screen off/lock
-   screen, локальный wake word, TTS, barge-in, Bluetooth, reboot и battery gate.
-7. Свести legacy phone/product delivery к owner-aware Device Service, затем
-   объединить delegate/MoA/Kanban/job_runner в один Troika Agent Runtime.
-8. Реализовать credits/cost ledger и billing Free/Plus/Pro после утверждения
-   production storage, платёжного провайдера и юридических параметров.
+1. Завершить раздел 1 Word-плана строго по пунктам: voice-first,
+   action-first, один ассистент, минимум настроек, короткие статусы,
+   память под контролем и безопасные approvals. Voice-first home завершён;
+   текущий подпункт — action-first results.
+2. Только после закрытия раздела 1 перейти к разделу 2, затем 3 и так
+   далее до раздела 20. Статус каждого пункта вести в
+   `docs/TROIKA_1_0_EXECUTION_TRACKER.md`.
 
 ## Проверенный рабочий срез и бесплатная модель (2026-09-10)
 
@@ -678,6 +711,9 @@ AI-ассистент для Android и Windows, где чат остаётся 
 - [x] Стабилизирован Git baseline новой копии и опубликован в новом GitHub repo.
 - [x] Запущена P0 security foundation.
 - [x] Восстановлены Flutter test/analyze и Android debug build.
+- [x] Начат Troika-native rebrand: Flutter package, Dart config/API/root widget
+      и видимые native Android strings переведены на Troika; compatibility
+      identifiers задокументированы до безопасной миграции.
 - [x] Восстановлены TUI clean install, type-check, tests, build и отдельный CI
       workflow.
 - [x] Реализованы beta account/device/session/entitlement/usage foundation.

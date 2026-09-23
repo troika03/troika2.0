@@ -337,7 +337,7 @@ object PhoneCommandExecutor {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             ctx.startActivity(intent)
-            return ok(mapOf("message" to "opened settings — user must toggle 'Allow all files access' for Hermes"))
+            return ok(mapOf("message" to "opened settings — user must toggle 'Allow all files access' for Тройка"))
         } catch (e: Exception) {
             // Fallback на общий экран всех приложений с этим permission
             try {
@@ -345,7 +345,7 @@ object PhoneCommandExecutor {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 ctx.startActivity(intent)
-                return ok(mapOf("message" to "opened generic all-files settings — find Hermes in the list"))
+                return ok(mapOf("message" to "opened generic all-files settings — find Тройка in the list"))
             } catch (e2: Exception) {
                 return err("cannot_open_settings: ${e2.message}")
             }
@@ -432,7 +432,7 @@ object PhoneCommandExecutor {
 
     private fun accessibility(block: (HermesAccessibilityService) -> JSONObject): JSONObject {
         val svc = HermesAccessibilityService.instance
-            ?: return err("accessibility_disabled: ask user to enable Hermes in Settings → Accessibility")
+            ?: return err("accessibility_disabled: ask user to enable Тройка in Settings → Accessibility")
         return try {
             block(svc)
         } catch (e: Exception) {

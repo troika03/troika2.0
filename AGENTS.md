@@ -12,9 +12,10 @@
   `D:\troika-product` and read, in order:
   1. `AGENTS.md`
   2. `docs/Troika_1.0_Launch_Plan_Final_Updated.docx` — canonical product plan
-  3. `PROJECT_MEMORY.md`
-  4. `PRODUCTIZATION_PLAN.md` — supporting implementation plan
-  5. `docs/TROIKA_CAPABILITY_RESTORATION_PLAN.md`
+  3. `docs/TROIKA_1_0_EXECUTION_TRACKER.md` — strict top-to-bottom progress
+  4. `PROJECT_MEMORY.md`
+  5. `PRODUCTIZATION_PLAN.md` — supporting implementation plan
+  6. `docs/TROIKA_CAPABILITY_RESTORATION_PLAN.md`
 - The DOCX above is the primary authority for Troika 1.0 scope, UX, pricing,
   release order, and Definition of Done. `PROJECT_MEMORY.md` records current
   implementation truth. Other plans refine execution and must not override the

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_assistant/services/local_command_service.dart';
+import 'package:troika_assistant/services/local_command_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

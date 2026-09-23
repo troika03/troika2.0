@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../config/hermes_config.dart';
+import '../config/troika_config.dart';
 import '../services/account_service.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -25,8 +25,8 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   void initState() {
     super.initState();
-    _server = TextEditingController(text: HermesConfig.serverUrl);
-    _showServer = HermesConfig.serverUrl.trim().isEmpty;
+    _server = TextEditingController(text: TroikaConfig.serverUrl);
+    _showServer = TroikaConfig.serverUrl.trim().isEmpty;
   }
 
   String _normalizedServer() {
@@ -49,7 +49,7 @@ class _AuthScreenState extends State<AuthScreen> {
       setState(() => _error = 'Пароль должен содержать минимум 10 символов.');
       return;
     }
-    HermesConfig.serverUrl = _normalizedServer();
+    TroikaConfig.serverUrl = _normalizedServer();
     setState(() {
       _busy = true;
       _error = null;

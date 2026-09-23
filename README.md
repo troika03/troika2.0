@@ -22,6 +22,7 @@
 ## Документы продукта
 
 - [Главный план Troika 1.0 (DOCX)](docs/Troika_1.0_Launch_Plan_Final_Updated.docx)
+- [Трекер реализации сверху вниз](docs/TROIKA_1_0_EXECUTION_TRACKER.md)
 - [Рабочий план реализации](PRODUCTIZATION_PLAN.md)
 - [Текущий проверенный статус и принятые решения](PROJECT_MEMORY.md)
 

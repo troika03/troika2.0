@@ -3,7 +3,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'config/hermes_config.dart';
+import 'config/troika_config.dart';
 import 'services/assistant_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/auth_screen.dart';
@@ -15,7 +15,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Инициализировать настройки (SharedPreferences)
-  await HermesConfig.init();
+  await TroikaConfig.init();
 
   // Прогреть офлайн-переводчик мыслей EN->RU в фоне (разовая загрузка модели).
   unawaited(ThoughtTranslator.instance.warmUp());
@@ -28,26 +28,26 @@ void main() async {
     ),
   );
 
-  runApp(const HermesApp());
+  runApp(const TroikaApp());
 }
 
-class HermesApp extends StatefulWidget {
-  const HermesApp({super.key});
+class TroikaApp extends StatefulWidget {
+  const TroikaApp({super.key});
 
   @override
-  State<HermesApp> createState() => _HermesAppState();
+  State<TroikaApp> createState() => _TroikaAppState();
 }
 
-class _HermesAppState extends State<HermesApp> {
+class _TroikaAppState extends State<TroikaApp> {
   // Старые ручные подключения продолжают работать. Новая установка сначала
   // создаёт аккаунт и получает отдельный токен устройства.
-  bool _authenticated = HermesConfig.signedIn || HermesConfig.apiKey.isNotEmpty;
+  bool _authenticated = TroikaConfig.signedIn || TroikaConfig.apiKey.isNotEmpty;
   // Первый запуск показывает онбординг разрешений; после — сразу домой.
   // На десктопе (Windows/Linux/macOS) онбординг ПРОПУСКАЕТСЯ: его разрешения
   // (спец-возможности, поверх окон, фон, геолокация) — андроидные и на ПК не
   // применимы; микрофон запрашивается отдельно. Иначе пользователь застревает
   // на экране с неактивной кнопкой. Онбординг остаётся только для Android.
-  bool _onboarded = HermesConfig.onboardingDone || !Platform.isAndroid;
+  bool _onboarded = TroikaConfig.onboardingDone || !Platform.isAndroid;
 
   @override
   Widget build(BuildContext context) {

@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_assistant/services/local_document_service.dart';
+import 'package:troika_assistant/services/local_document_service.dart';
 
 void main() {
   test('builds a DOCX archive with document content', () {

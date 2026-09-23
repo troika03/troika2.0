@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import '../theme/troika_theme.dart';
 
-/// Показывает последний диалог: что сказал пользователь и что ответил Hermes
+/// Показывает последний диалог: что сказал пользователь и что ответила Тройка.
 class ConversationView extends StatelessWidget {
   final String userText;
-  final String hermesText;
+  final String troikaText;
   final String? errorText;
 
   const ConversationView({
     super.key,
     required this.userText,
-    required this.hermesText,
+    required this.troikaText,
     this.errorText,
   });
 
@@ -31,12 +31,14 @@ class ConversationView extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.error_outline, color: TroikaColors.error, size: 16),
+                  const Icon(Icons.error_outline,
+                      color: TroikaColors.error, size: 16),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       errorText!,
-                      style: const TextStyle(color: TroikaColors.error, fontSize: 13),
+                      style: const TextStyle(
+                          color: TroikaColors.error, fontSize: 13),
                     ),
                   ),
                 ],
@@ -50,10 +52,10 @@ class ConversationView extends StatelessWidget {
                 isUser: true,
               ),
             const SizedBox(height: 8),
-            // Ответ Hermes
-            if (hermesText.isNotEmpty)
+            // Ответ Тройки.
+            if (troikaText.isNotEmpty)
               _bubble(
-                text: hermesText,
+                text: troikaText,
                 isUser: false,
               ),
           ],
@@ -79,15 +81,16 @@ class ConversationView extends StatelessWidget {
             bottomRight: Radius.circular(isUser ? 4 : 16),
           ),
           border: Border.all(
-            color: isUser
-                ? TroikaColors.brand.withOpacity(0.28)
-                : Colors.white10,
+            color:
+                isUser ? TroikaColors.brand.withOpacity(0.28) : Colors.white10,
           ),
         ),
         child: Text(
           text,
           style: TextStyle(
-            color: isUser ? TroikaColors.text.withOpacity(0.85) : TroikaColors.text,
+            color: isUser
+                ? TroikaColors.text.withOpacity(0.85)
+                : TroikaColors.text,
             fontSize: 14,
             height: 1.4,
           ),

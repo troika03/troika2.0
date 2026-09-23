@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/hermes_api_service.dart';
+import '../services/troika_api_service.dart';
 import '../theme/troika_theme.dart';
 
 class MemoryScreen extends StatefulWidget {
@@ -10,7 +10,7 @@ class MemoryScreen extends StatefulWidget {
 }
 
 class _MemoryScreenState extends State<MemoryScreen> {
-  final HermesApiService _api = HermesApiService();
+  final TroikaApiService _api = TroikaApiService();
   List<TroikaMemory> _memories = const [];
   bool _loading = true;
   bool _busy = false;

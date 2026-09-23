@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../services/hermes_api_service.dart';
+import '../services/troika_api_service.dart';
 import '../theme/troika_theme.dart';
 import 'memory_screen.dart';
 
@@ -12,7 +12,7 @@ class AssistantHubScreen extends StatefulWidget {
 
 class _AssistantHubScreenState extends State<AssistantHubScreen> {
   static const _platform = MethodChannel('com.troika.hermes/background');
-  final HermesApiService _api = HermesApiService();
+  final TroikaApiService _api = TroikaApiService();
   List<TroikaProject> _projects = const [];
   List<TroikaTask> _tasks = const [];
   List<TroikaInboxMessage> _messages = const [];

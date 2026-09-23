@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_assistant/services/hermes_api_service.dart';
+import 'package:troika_assistant/services/troika_api_service.dart';
 
 void main() {
   test('parses owner memory returned by product API', () {

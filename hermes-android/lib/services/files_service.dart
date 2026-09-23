@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
-import '../config/hermes_config.dart';
+import '../config/troika_config.dart';
 
 /// Один личный документ, созданный Тройкой для текущего аккаунта.
 class TroikaFile {
@@ -57,9 +57,9 @@ class FilesService {
       MethodChannel('com.troika.hermes/background');
 
   Future<List<TroikaFile>> list() async {
-    final uri = Uri.parse(HermesConfig.artifactsUrl);
+    final uri = Uri.parse(TroikaConfig.artifactsUrl);
     final resp =
-        await http.get(uri, headers: HermesConfig.headers).timeout(_timeout);
+        await http.get(uri, headers: TroikaConfig.headers).timeout(_timeout);
     if (resp.statusCode == 404) return [];
     if (resp.statusCode != 200) {
       throw Exception('Не удалось получить файлы (${resp.statusCode}).');
@@ -77,9 +77,9 @@ class FilesService {
     if (!RegExp(r'^art_[0-9a-f]{32}$').hasMatch(file.id)) {
       throw const FormatException('Некорректный идентификатор файла.');
     }
-    final uri = Uri.parse('${HermesConfig.artifactsUrl}/${file.id}/download');
+    final uri = Uri.parse('${TroikaConfig.artifactsUrl}/${file.id}/download');
     final resp = await http
-        .get(uri, headers: HermesConfig.headers)
+        .get(uri, headers: TroikaConfig.headers)
         .timeout(const Duration(seconds: 60));
     if (resp.statusCode != 200) {
       throw HttpException('Не удалось скачать файл (${resp.statusCode}).');
@@ -156,9 +156,9 @@ class FilesService {
       if (!RegExp(r'^art_[0-9a-f]{32}$').hasMatch(file.id)) {
         return 'Некорректный идентификатор файла.';
       }
-      final uri = Uri.parse('${HermesConfig.artifactsUrl}/${file.id}');
+      final uri = Uri.parse('${TroikaConfig.artifactsUrl}/${file.id}');
       final response = await http
-          .delete(uri, headers: HermesConfig.headers)
+          .delete(uri, headers: TroikaConfig.headers)
           .timeout(_timeout);
       if (response.statusCode == 200) return null;
       if (response.statusCode == 404) return 'Файл уже удалён.';

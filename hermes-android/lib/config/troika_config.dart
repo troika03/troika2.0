@@ -4,21 +4,37 @@ import 'dart:math';
 import 'package:flutter/services.dart' show MethodChannel;
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Настройки подключения к Hermes API Server (на сервере)
-class HermesConfig {
-  static const String _keyServerUrl = 'hermes_server_url';
-  static const String _keyApiKey = 'hermes_api_key';
+/// Настройки подключения к Troika API Server.
+class TroikaConfig {
+  static const String _keyServerUrl = 'troika_server_url';
+  static const String _legacyKeyServerUrl = 'hermes_server_url';
+  static const String _keyApiKey = 'troika_api_key';
+  static const String _legacyKeyApiKey = 'hermes_api_key';
   static const String _keyAccountEmail = 'troika_account_email';
-  static const String _keyGroqKey = 'hermes_groq_key';
-  static const String _keyModel = 'hermes_model';
-  static const String _keyVoiceEnabled = 'hermes_voice_enabled';
-  static const String _keyWakeWordEnabled = 'hermes_wake_word_enabled';
-  static const String _keyOnboardingDone = 'hermes_onboarding_done';
-  static const String _keySessionKey = 'hermes_session_key';
-  static const String _keySessionId = 'hermes_session_id';
+  static const String _keyGroqKey = 'troika_groq_key';
+  static const String _legacyKeyGroqKey = 'hermes_groq_key';
+  static const String _keyModel = 'troika_model';
+  static const String _legacyKeyModel = 'hermes_model';
+  static const String _keyVoiceEnabled = 'troika_voice_enabled';
+  static const String _legacyKeyVoiceEnabled = 'hermes_voice_enabled';
+  static const String _keyWakeWordEnabled = 'troika_wake_word_enabled';
+  static const String _legacyKeyWakeWordEnabled = 'hermes_wake_word_enabled';
+  static const String _keyOnboardingDone = 'troika_onboarding_done';
+  static const String _legacyKeyOnboardingDone = 'hermes_onboarding_done';
+  static const String _keySessionKey = 'troika_session_key';
+  static const String _legacyKeySessionKey = 'hermes_session_key';
+  static const String _keySessionId = 'troika_session_id';
+  static const String _legacyKeySessionId = 'hermes_session_id';
   static const String _keyLocationContextEnabled =
+      'troika_location_context_enabled';
+  static const String _legacyKeyLocationContextEnabled =
       'hermes_location_context_enabled';
-  static const String _keyPhoneControlEnabled = 'hermes_phone_control_enabled';
+  static const String _keyPhoneControlEnabled = 'troika_phone_control_enabled';
+  static const String _legacyKeyPhoneControlEnabled =
+      'hermes_phone_control_enabled';
+  static const String _keyBrandMigrationVersion =
+      'troika_brand_migration_version';
+  static const int _brandMigrationVersion = 1;
 
   // Дефолтные значения.
   // Мобильный клиент не содержит адрес общего production-сервера. Его задаёт
@@ -45,18 +61,82 @@ class HermesConfig {
 
   static Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
+    await _migrateLegacyPreferences();
     _sessionKey = _prefs.getString(_keySessionKey)?.trim() ?? '';
     if (_sessionKey.isEmpty) {
       _sessionKey = 'mobile-${_newOpaqueId()}';
-      await _prefs.setString(_keySessionKey, _sessionKey);
+      await _setStringCompat(
+        _keySessionKey,
+        _legacyKeySessionKey,
+        _sessionKey,
+      );
     }
     _sessionId = _prefs.getString(_keySessionId)?.trim() ?? '';
     if (_sessionId.isEmpty) {
       // Mobile keeps one continuous private conversation per installation, so
       // the transcript and memory scopes deliberately use the same opaque ID.
       _sessionId = _sessionKey;
-      await _prefs.setString(_keySessionId, _sessionId);
+      await _setStringCompat(_keySessionId, _legacyKeySessionId, _sessionId);
     }
+  }
+
+  static Future<void> _migrateLegacyPreferences() async {
+    if ((_prefs.getInt(_keyBrandMigrationVersion) ?? 0) >=
+        _brandMigrationVersion) {
+      return;
+    }
+    await _copyString(_keyServerUrl, _legacyKeyServerUrl);
+    await _copyString(_keyApiKey, _legacyKeyApiKey);
+    await _copyString(_keyGroqKey, _legacyKeyGroqKey);
+    await _copyString(_keyModel, _legacyKeyModel);
+    await _copyString(_keySessionKey, _legacyKeySessionKey);
+    await _copyString(_keySessionId, _legacyKeySessionId);
+    await _copyBool(_keyVoiceEnabled, _legacyKeyVoiceEnabled);
+    await _copyBool(_keyWakeWordEnabled, _legacyKeyWakeWordEnabled);
+    await _copyBool(_keyOnboardingDone, _legacyKeyOnboardingDone);
+    await _copyBool(
+      _keyLocationContextEnabled,
+      _legacyKeyLocationContextEnabled,
+    );
+    await _copyBool(_keyPhoneControlEnabled, _legacyKeyPhoneControlEnabled);
+    await _prefs.setInt(_keyBrandMigrationVersion, _brandMigrationVersion);
+  }
+
+  static Future<void> _copyString(String key, String legacyKey) async {
+    if (_prefs.containsKey(key)) return;
+    final value = _prefs.getString(legacyKey);
+    if (value != null) await _prefs.setString(key, value);
+  }
+
+  static Future<void> _copyBool(String key, String legacyKey) async {
+    if (_prefs.containsKey(key)) return;
+    final value = _prefs.getBool(legacyKey);
+    if (value != null) await _prefs.setBool(key, value);
+  }
+
+  static Future<bool> _setStringCompat(
+    String key,
+    String legacyKey,
+    String value,
+  ) async {
+    final stored = await _prefs.setString(key, value);
+    await _prefs.setString(legacyKey, value);
+    return stored;
+  }
+
+  static Future<bool> _setBoolCompat(
+    String key,
+    String legacyKey,
+    bool value,
+  ) async {
+    final stored = await _prefs.setBool(key, value);
+    await _prefs.setBool(legacyKey, value);
+    return stored;
+  }
+
+  static Future<void> _removeCompat(String key, String legacyKey) async {
+    await _prefs.remove(key);
+    await _prefs.remove(legacyKey);
   }
 
   static String _newOpaqueId() {
@@ -68,11 +148,13 @@ class HermesConfig {
   static String get serverUrl =>
       _prefs.getString(_keyServerUrl) ?? defaultServerUrl;
 
-  static set serverUrl(String url) => _prefs.setString(_keyServerUrl, url);
+  static set serverUrl(String url) =>
+      _setStringCompat(_keyServerUrl, _legacyKeyServerUrl, url);
 
   static String get apiKey => _prefs.getString(_keyApiKey) ?? defaultApiKey;
 
-  static set apiKey(String key) => _prefs.setString(_keyApiKey, key);
+  static set apiKey(String key) =>
+      _setStringCompat(_keyApiKey, _legacyKeyApiKey, key);
 
   static String get accountEmail =>
       _prefs.getString(_keyAccountEmail)?.trim() ?? '';
@@ -85,36 +167,40 @@ class HermesConfig {
     required String token,
   }) async {
     await _prefs.setString(_keyAccountEmail, email.trim().toLowerCase());
-    await _prefs.setString(_keyApiKey, token.trim());
+    await _setStringCompat(_keyApiKey, _legacyKeyApiKey, token.trim());
   }
 
   static Future<void> signOut() async {
     await setPhoneControlEnabled(false);
     await _prefs.remove(_keyAccountEmail);
-    await _prefs.remove(_keyApiKey);
+    await _removeCompat(_keyApiKey, _legacyKeyApiKey);
   }
 
   static String get groqKey => _prefs.getString(_keyGroqKey) ?? '';
 
-  static set groqKey(String key) => _prefs.setString(_keyGroqKey, key);
+  static set groqKey(String key) =>
+      _setStringCompat(_keyGroqKey, _legacyKeyGroqKey, key);
 
   static String get model => _prefs.getString(_keyModel) ?? defaultModel;
 
-  static set model(String m) => _prefs.setString(_keyModel, m);
+  static set model(String m) => _setStringCompat(_keyModel, _legacyKeyModel, m);
 
   static bool get voiceEnabled => _prefs.getBool(_keyVoiceEnabled) ?? true;
 
-  static set voiceEnabled(bool v) => _prefs.setBool(_keyVoiceEnabled, v);
+  static set voiceEnabled(bool v) =>
+      _setBoolCompat(_keyVoiceEnabled, _legacyKeyVoiceEnabled, v);
 
   static bool get wakeWordEnabled =>
       _prefs.getBool(_keyWakeWordEnabled) ?? false;
 
-  static set wakeWordEnabled(bool v) => _prefs.setBool(_keyWakeWordEnabled, v);
+  static set wakeWordEnabled(bool v) =>
+      _setBoolCompat(_keyWakeWordEnabled, _legacyKeyWakeWordEnabled, v);
 
   /// Пройден ли экран первичной настройки (онбординг разрешений).
   static bool get onboardingDone => _prefs.getBool(_keyOnboardingDone) ?? false;
 
-  static set onboardingDone(bool v) => _prefs.setBool(_keyOnboardingDone, v);
+  static set onboardingDone(bool v) =>
+      _setBoolCompat(_keyOnboardingDone, _legacyKeyOnboardingDone, v);
 
   /// Explicit user consent for sending GPS/Wi-Fi/Bluetooth context to server.
   /// System location permission alone never enables data transfer.
@@ -122,7 +208,11 @@ class HermesConfig {
       _prefs.getBool(_keyLocationContextEnabled) ?? false;
 
   static Future<void> setLocationContextEnabled(bool value) async {
-    await _prefs.setBool(_keyLocationContextEnabled, value);
+    await _setBoolCompat(
+      _keyLocationContextEnabled,
+      _legacyKeyLocationContextEnabled,
+      value,
+    );
   }
 
   /// Explicit consent for opening the authenticated phone-command channel.
@@ -131,7 +221,11 @@ class HermesConfig {
       _prefs.getBool(_keyPhoneControlEnabled) ?? false;
 
   static Future<void> setPhoneControlEnabled(bool value) async {
-    await _prefs.setBool(_keyPhoneControlEnabled, value);
+    await _setBoolCompat(
+      _keyPhoneControlEnabled,
+      _legacyKeyPhoneControlEnabled,
+      value,
+    );
     if (!Platform.isAndroid) return;
     try {
       const platform = MethodChannel('com.troika.hermes/background');
@@ -185,26 +279,46 @@ class HermesConfig {
   /// revoked device's server-linked session.
   static Future<void> clearRevokedDevice() async {
     await setPhoneControlEnabled(false);
-    await _prefs.setBool(_keyWakeWordEnabled, false);
-    await _prefs.setBool(_keyLocationContextEnabled, false);
-    await _prefs.remove(_keyApiKey);
+    await _setBoolCompat(
+      _keyWakeWordEnabled,
+      _legacyKeyWakeWordEnabled,
+      false,
+    );
+    await _setBoolCompat(
+      _keyLocationContextEnabled,
+      _legacyKeyLocationContextEnabled,
+      false,
+    );
+    await _removeCompat(_keyApiKey, _legacyKeyApiKey);
     await _prefs.remove(_keyAccountEmail);
     _sessionKey = 'mobile-${_newOpaqueId()}';
     _sessionId = _sessionKey;
-    await _prefs.setString(_keySessionKey, _sessionKey);
-    await _prefs.setString(_keySessionId, _sessionId);
+    await _setStringCompat(_keySessionKey, _legacyKeySessionKey, _sessionKey);
+    await _setStringCompat(_keySessionId, _legacyKeySessionId, _sessionId);
   }
 
   /// Remove credentials and server-linked state after deletion was accepted.
   static Future<void> clearDeletedAccount() async {
     await setPhoneControlEnabled(false);
-    await _prefs.setBool(_keyWakeWordEnabled, false);
-    await _prefs.setBool(_keyLocationContextEnabled, false);
-    await _prefs.setBool(_keyOnboardingDone, false);
-    await _prefs.remove(_keyApiKey);
+    await _setBoolCompat(
+      _keyWakeWordEnabled,
+      _legacyKeyWakeWordEnabled,
+      false,
+    );
+    await _setBoolCompat(
+      _keyLocationContextEnabled,
+      _legacyKeyLocationContextEnabled,
+      false,
+    );
+    await _setBoolCompat(
+      _keyOnboardingDone,
+      _legacyKeyOnboardingDone,
+      false,
+    );
+    await _removeCompat(_keyApiKey, _legacyKeyApiKey);
     await _prefs.remove(_keyAccountEmail);
-    await _prefs.remove(_keySessionKey);
-    await _prefs.remove(_keySessionId);
+    await _removeCompat(_keySessionKey, _legacyKeySessionKey);
+    await _removeCompat(_keySessionId, _legacyKeySessionId);
     _sessionKey = '';
     _sessionId = '';
   }
@@ -214,7 +328,7 @@ class HermesConfig {
   static String get sessionId => _sessionId;
   static String get sessionKey => _sessionKey;
 
-  /// Headers для запросов к Hermes
+  /// Headers для запросов к Troika.
   static Map<String, String> get headers {
     final key = apiKey;
     return {
@@ -225,7 +339,7 @@ class HermesConfig {
 
   /// Headers для чата — те же + привязка к общей сессии (голос+текст).
   ///
-  /// НЕ включает X-Hermes-Device-Context — он собирается асинхронно через
+  /// НЕ включает legacy X-Hermes-Device-Context: он собирается асинхронно через
   /// Kotlin MethodChannel (см. [chatHeadersAsync]). Для не-Android платформ
   /// (Windows/Linux/macOS) device context недоступен — там просто эти headers.
   static Map<String, String> get chatHeaders {

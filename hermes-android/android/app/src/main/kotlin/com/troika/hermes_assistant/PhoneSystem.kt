@@ -53,7 +53,7 @@ object PhoneSystem {
             } catch (e: SecurityException) {
                 JSONObject().apply {
                     put("ok", false)
-                    put("error", "clipboard_blocked: Android requires app to be foreground or input-method to read clipboard. Use clipboard_set instead, or bring Hermes UI to front first.")
+                    put("error", "clipboard_blocked: Android requires app to be foreground or input-method to read clipboard. Use clipboard_set instead, or bring Troika UI to front first.")
                 }
             }
         }
@@ -63,7 +63,7 @@ object PhoneSystem {
         val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         return runOnMain {
             try {
-                cm.setPrimaryClip(ClipData.newPlainText("Hermes", text))
+                cm.setPrimaryClip(ClipData.newPlainText("Troika", text))
                 JSONObject().apply { put("ok", true); put("length", text.length) }
             } catch (e: Exception) {
                 JSONObject().apply { put("ok", false); put("error", e.message ?: "clipboard_set_failed") }
@@ -161,14 +161,14 @@ object PhoneSystem {
 
     // ---- Camera (фото) -----------------------------------------------------
     // Получить фото с фронт/тыл камеры — открываем системную камеру в режиме capture.
-    // Сохраняем в Pictures/Hermes и возвращаем путь.
+    // Сохраняем новые снимки в Pictures/Troika и возвращаем путь.
 
     fun cameraTakePhoto(ctx: Context, frontFacing: Boolean = false): JSONObject {
         // Через intent ACTION_IMAGE_CAPTURE — пользователь нажимает кнопку спуска.
         // Без UI-интервенции сделать снимок нельзя без CAMERA permission и сложного кода.
         return try {
             val dir = File(android.os.Environment.getExternalStoragePublicDirectory(
-                android.os.Environment.DIRECTORY_PICTURES), "Hermes")
+                android.os.Environment.DIRECTORY_PICTURES), "Troika")
             dir.mkdirs()
             val file = File(dir, "photo_${System.currentTimeMillis()}.jpg")
             val uri = androidx.core.content.FileProvider.getUriForFile(

@@ -29,7 +29,7 @@ class LocalCommandResult {
   }
 }
 
-/// Executes the small, deterministic command set that needs no Hermes server.
+/// Executes the small, deterministic command set that needs no Troika server.
 ///
 /// Android delegates to the existing native [PhoneCommands] implementation.
 /// Windows uses a strict allowlist. User text is never passed to a shell.

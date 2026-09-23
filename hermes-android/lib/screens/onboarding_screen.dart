@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../config/hermes_config.dart';
+import '../config/troika_config.dart';
 
 /// Экран первичной настройки Тройки «под ключ».
 ///
-/// Сервер и ключ уже вшиты в дефолты ([HermesConfig.defaultServerUrl]).
+/// Сервер и ключ уже вшиты в дефолты ([TroikaConfig.defaultServerUrl]).
 /// Здесь пользователя проводят через системные разрешения, которые Android
 /// нельзя выдать из кода: микрофон, спец-возможности (управление телефоном),
 /// поверх других окон, отключение оптимизации батареи (для работы 24/7).
@@ -99,7 +99,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   bool get _requiredDone => _mic;
 
   void _finish() {
-    HermesConfig.onboardingDone = true;
+    TroikaConfig.onboardingDone = true;
     widget.onDone();
   }
 

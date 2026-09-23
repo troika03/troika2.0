@@ -40,7 +40,7 @@ class AudioRecorderService {
     final dir = await getTemporaryDirectory();
     final ext = isDesktop ? 'wav' : 'm4a';
     _currentPath =
-        '${dir.path}/hermes_voice_${DateTime.now().millisecondsSinceEpoch}.$ext';
+        '${dir.path}/troika_voice_${DateTime.now().millisecondsSinceEpoch}.$ext';
 
     await _recorder.start(
       RecordConfig(

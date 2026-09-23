@@ -1,5 +1,5 @@
-name: hermes_assistant
-description: "Hermes — персональный голосовой ассистент на базе Troika/Hermes Agent"
+name: troika_assistant
+description: "Тройка — персональный голосовой ассистент"
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -16,7 +16,7 @@ dependencies:
   # ── State management ──────────────────────────────────────────
   provider: ^6.1.2
 
-  # ── HTTP клиент для Hermes API ─────────────────────────────────
+  # ── HTTP клиент для Troika API ─────────────────────────────────
   http: ^1.2.0
 
   # ── Запись звука (микрофон) ────────────────────────────────────
