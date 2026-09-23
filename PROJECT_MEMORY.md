@@ -67,8 +67,9 @@
 - Flutter-проверки восстановлены. Для TUI восстановлены clean install,
   type-check, tests и production build; отдельный CI workflow закрепляет Node
   22.22.1 и `npm ci`.
-- Android debug APK собирается, но Flutter предупреждает о будущем minimum:
-  Android Gradle Plugin 8.11.1 и Kotlin 2.2.20; обновлять отдельным коммитом.
+- Android toolchain обновлён до Android Gradle Plugin 8.11.1 и Kotlin 2.2.20;
+  debug APK собирается на Gradle 8.14 и Flutter 3.44.1. Остаётся предупреждение
+  Flutter о будущей миграции плагинов на built-in Kotlin.
 - Web dashboard собирался успешно, но имеет крупный main bundle.
 
 ## Выполнено: P0 initial security foundation (2026-09-09)
@@ -524,13 +525,31 @@
   теперь всегда сначала использует системный SpeechRecognizer и local matcher;
   к облаку уходит только нераспознанная как команда свободная фраза.
 
+## Выполнено: управление устройствами и product CI (2026-09-23)
+
+- Добавлены owner-scoped API для списка и отзыва устройств. Отзыв устройства
+  блокирует все его tokens, закрывает phone WebSocket, снимает approval,
+  останавливает активный run и закрывает SSE. Чужой device ID не раскрывается:
+  API возвращает одинаковый `404`, audit не содержит идентификатор владельца.
+- В Android-настройках появился список устройств с явной отметкой текущего
+  устройства и подтверждением отзыва. Самоотзыв очищает account credentials,
+  выключает phone control/wake и сразу меняет локальный session ID.
+- Добавлен отдельный product CI для Python security/product тестов, Flutter
+  test/analyze/debug APK и web dashboard build. Версии actions, Python, Node,
+  Java и Flutter закреплены; dependency installs используют lock-файлы.
+- Проверено локально: product/security `123 passed`, device/auth `29 passed`,
+  Flutter `16 passed`, analyze без ошибок, Android debug APK и web dashboard
+  production build успешно собраны. Полный upstream-набор запущен отдельно;
+  native Windows baseline остаётся не зелёным из-за несвязанных path/newline/
+  asyncio platform-specific тестов.
+
 ## Ближайший порядок работы
 
 1. После выбора production storage добавить object purge, deletion ledger,
    restore scrubber и disaster-recovery rehearsal.
-2. Довести общий Python/web/Android baseline до зелёного на поддерживаемых CI
-   платформах; TUI-срез уже воспроизводим. Отдельно обновить Android
-   Gradle/Kotlin до будущих требований Flutter.
+2. Проверить новый product CI на GitHub и добавить Windows clean build/installer.
+   Затем отдельно исправить известные native Windows path/newline/asyncio сбои
+   полного upstream baseline; продуктовый Python/web/Android срез уже зелёный.
 3. Перед реализацией WebRTC screen assist отдельно спроектировать signaling,
    TURN, hardware-backed device keys, heartbeat/revoke и изолированный vision
    worker. Закрытая snapshot beta не расширяет разрешение до live vision.
@@ -585,8 +604,9 @@
 
 ### Что ещё не является готовым продуктом
 
-- Self-service регистрация и вход есть. Пока нет подтверждения почты,
-  восстановления пароля, ротации сессий и полноценного управления устройствами.
+- Self-service регистрация, вход, список устройств и их отзыв есть. Пока нет
+  подтверждения почты, восстановления пароля, refresh-token rotation и
+  отдельной команды logout-all.
 - Нет подписок, платежей, webhook-биллинга, отмен и возвратов.
 - Проактивность работает через связанный с проектами/задачами in-app inbox и
   безопасный фоновый event engine. Push ещё не реализован до завершения retention
@@ -645,6 +665,12 @@
 - [x] Реализованы beta account/device/session/entitlement/usage foundation.
 - [x] Добавлены self-service регистрация/вход и device token без удаления
       прежнего ручного подключения.
+- [x] Добавлены owner-scoped список/отзыв устройств, отзыв всех device tokens,
+      завершение активных соединений/runs и Android UI управления устройствами.
+- [x] Android toolchain обновлён до AGP 8.11.1 и Kotlin 2.2.20; debug APK
+      успешно собран на Gradle 8.14 и Flutter 3.44.1.
+- [x] Добавлен отдельный product CI: Python security/product tests, Flutter
+      test/analyze/APK и web dashboard build с закреплёнными версиями.
 - [x] Добавлен бесплатный local-command layer для Android и Windows без вызова
       облачной модели; сетевой агент сохранён как отдельный fallback.
 - [x] Бесплатный Android-режим работает без PC, server URL и ADB-туннеля;
