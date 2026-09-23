@@ -1273,6 +1273,7 @@ class APIServerAdapter(BasePlatformAdapter):
         owner = self._run_owners.get(run_id)
         if (
             principal is not None
+            and self._access_registry.principal_is_active(principal)
             and owner is not None
             and owner == (principal.user_id, principal.device_id)
         ):
@@ -1718,6 +1719,139 @@ class APIServerAdapter(BasePlatformAdapter):
 
         task.add_done_callback(_remove)
         return task
+
+    async def _revoke_device_activity(self, user_id: str, device_id: str) -> None:
+        """Close live channels and stop transient work for one revoked device."""
+        from gateway.platforms.phone_bridge import product_bridge
+
+        await product_bridge.disconnect_devices({device_id})
+        run_ids = [
+            run_id
+            for run_id, owner in list(self._run_owners.items())
+            if owner == (user_id, device_id)
+        ]
+        tasks: list["asyncio.Task[Any]"] = []
+        for run_id in run_ids:
+            approval_key = self._run_approval_sessions.pop(run_id, None)
+            if approval_key:
+                try:
+                    from tools.approval import unregister_gateway_notify
+
+                    unregister_gateway_notify(approval_key)
+                except Exception:
+                    logger.exception(
+                        "Failed to close approval state for revoked product device"
+                    )
+
+            queue = self._run_streams.pop(run_id, None)
+            self._run_streams_created.pop(run_id, None)
+            if queue is not None:
+                try:
+                    while True:
+                        queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+                queue.put_nowait(None)
+
+            self._set_run_status(
+                run_id,
+                "cancelled",
+                last_event="run.cancelled",
+                cancellation_reason="device_revoked",
+            )
+            agent = self._active_run_agents.pop(run_id, None)
+            if agent is not None:
+                try:
+                    agent.interrupt("Device access revoked")
+                except Exception:
+                    pass
+            task = self._active_run_tasks.pop(run_id, None)
+            if task is not None and not task.done():
+                task.cancel()
+                tasks.append(task)
+
+        if tasks:
+            done, pending = await asyncio.wait(tasks, timeout=5.0)
+            for task in done:
+                try:
+                    task.result()
+                except (asyncio.CancelledError, Exception):
+                    pass
+            if pending:
+                logger.warning(
+                    "Timed out stopping %d run(s) for revoked product device",
+                    len(pending),
+                )
+
+    async def _handle_account_devices(
+        self, request: "web.Request"
+    ) -> "web.Response":
+        """GET /v1/account/devices — list the authenticated owner's devices."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        principal = self._product_principal(request)
+        if principal is None or self._access_registry is None:
+            return web.json_response(
+                _openai_error("Device management is available only in product mode"),
+                status=404,
+            )
+        try:
+            devices = [
+                device.to_dict()
+                for device in self._access_registry.list_devices(principal)
+            ]
+        except PermissionError:
+            return web.json_response(
+                _openai_error("Product authentication is required"), status=401
+            )
+        return web.json_response(
+            {"devices": devices}, headers={"Cache-Control": "private, no-store"}
+        )
+
+    async def _handle_revoke_account_device(
+        self, request: "web.Request"
+    ) -> "web.Response":
+        """DELETE /v1/account/devices/{device_id} — revoke one owned device."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        principal = self._product_principal(request)
+        if principal is None or self._access_registry is None:
+            return web.json_response(
+                _openai_error("Device management is available only in product mode"),
+                status=404,
+            )
+        device_id = str(request.match_info.get("device_id", "")).strip()
+        current = device_id == principal.device_id
+        try:
+            revoked = self._access_registry.revoke_device(principal, device_id)
+        except PermissionError:
+            return web.json_response(
+                _openai_error("Product authentication is required"), status=401
+            )
+        if not revoked:
+            self._record_product_audit(
+                request, "device.revoke_denied", details={"reason": "not_found"}
+            )
+            return web.json_response(
+                _openai_error("Device not found", code="device_not_found"),
+                status=404,
+            )
+
+        self._record_product_audit(
+            request, "device.revoked", details={"current": current}
+        )
+        await self._revoke_device_activity(principal.user_id, device_id)
+        return web.json_response(
+            {
+                "status": "revoked",
+                "device_id": device_id,
+                "current": current,
+                "reauthentication_required": current,
+            },
+            headers={"Cache-Control": "private, no-store"},
+        )
 
     async def _handle_delete_account(self, request: "web.Request") -> "web.Response":
         """DELETE /v1/account — explicit, authenticated full local deletion."""
@@ -5660,6 +5794,13 @@ class APIServerAdapter(BasePlatformAdapter):
                 )
                 self._app.router.add_get(
                     "/v1/account/export", self._handle_export_account
+                )
+                self._app.router.add_get(
+                    "/v1/account/devices", self._handle_account_devices
+                )
+                self._app.router.add_delete(
+                    "/v1/account/devices/{device_id}",
+                    self._handle_revoke_account_device,
                 )
                 self._app.router.add_delete("/v1/account", self._handle_delete_account)
             if self._memory_store is not None:

@@ -56,6 +56,44 @@ def test_token_authentication_and_revocation(tmp_path) -> None:
     assert registry.authenticate(token) is None
 
 
+def test_device_management_is_owner_scoped_and_revokes_all_device_tokens(
+    tmp_path,
+) -> None:
+    registry = AccessRegistry(tmp_path / "access.db")
+    first_user = registry.create_user("one@example.com")
+    second_user = registry.create_user("two@example.com")
+    current_device = registry.create_device(
+        first_user, name="Pixel", platform="android"
+    )
+    other_device = registry.create_device(
+        first_user, name="Laptop", platform="windows"
+    )
+    foreign_device = registry.create_device(
+        second_user, name="iPhone", platform="ios"
+    )
+    current_token = registry.issue_device_token(current_device)
+    other_token = registry.issue_device_token(other_device)
+    other_second_token = registry.issue_device_token(other_device)
+    foreign_token = registry.issue_device_token(foreign_device)
+    principal = registry.authenticate(current_token)
+    assert principal is not None
+
+    devices = registry.list_devices(principal)
+    assert {device.id for device in devices} == {current_device, other_device}
+    assert next(device for device in devices if device.id == current_device).current
+    assert not next(device for device in devices if device.id == other_device).current
+
+    assert not registry.revoke_device(principal, foreign_device)
+    assert registry.authenticate(foreign_token) is not None
+    assert registry.revoke_device(principal, other_device)
+    assert registry.authenticate(other_token) is None
+    assert registry.authenticate(other_second_token) is None
+    assert registry.authenticate(current_token) == principal
+    assert next(
+        device for device in registry.list_devices(principal) if device.id == other_device
+    ).status == "revoked"
+
+
 def test_session_claims_are_isolated_between_users(tmp_path) -> None:
     registry = AccessRegistry(tmp_path / "access.db")
     first_user = registry.create_user("one@example.com")

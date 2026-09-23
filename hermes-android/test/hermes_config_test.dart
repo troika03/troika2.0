@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hermes_assistant/config/hermes_config.dart';
+import 'package:hermes_assistant/services/hermes_api_service.dart';
 
 void main() {
   setUp(() async {
@@ -26,6 +27,25 @@ void main() {
     HermesConfig.serverUrl = 'https://example.test:9443/troika';
     expect(HermesConfig.accountExportUrl,
         'https://example.test:9443/troika/v1/account/export');
+    expect(HermesConfig.accountDevicesUrl,
+        'https://example.test:9443/troika/v1/account/devices');
+  });
+
+  test('parses owner-visible device metadata without credentials', () {
+    final device = AccountDevice.fromJson({
+      'id': 'dev_test',
+      'name': 'Телефон',
+      'platform': 'android',
+      'status': 'active',
+      'created_at': 1.5,
+      'current': true,
+    });
+
+    expect(device.id, 'dev_test');
+    expect(device.name, 'Телефон');
+    expect(device.active, isTrue);
+    expect(device.current, isTrue);
+    expect(device.createdAt.millisecondsSinceEpoch, 1500);
   });
 
   test('legacy STT keeps its local proxy port', () {
@@ -74,6 +94,29 @@ void main() {
     expect(HermesConfig.sessionId, isEmpty);
 
     await HermesConfig.init();
+    expect(HermesConfig.sessionId, startsWith('mobile-'));
+    expect(HermesConfig.sessionId, isNot(previousSession));
+  });
+
+  test('clears revoked device credentials and immediately rotates session',
+      () async {
+    await HermesConfig.saveAccount(
+      email: 'owner@example.com',
+      token: 'trk_live_private',
+    );
+    HermesConfig.onboardingDone = true;
+    await HermesConfig.setLocationContextEnabled(true);
+    await HermesConfig.setPhoneControlEnabled(true);
+    final previousSession = HermesConfig.sessionId;
+
+    await HermesConfig.clearRevokedDevice();
+
+    expect(HermesConfig.signedIn, isFalse);
+    expect(HermesConfig.accountEmail, isEmpty);
+    expect(HermesConfig.apiKey, isEmpty);
+    expect(HermesConfig.phoneControlEnabled, isFalse);
+    expect(HermesConfig.onboardingDone, isTrue);
+    expect(HermesConfig.locationContextEnabled, isTrue);
     expect(HermesConfig.sessionId, startsWith('mobile-'));
     expect(HermesConfig.sessionId, isNot(previousSession));
   });

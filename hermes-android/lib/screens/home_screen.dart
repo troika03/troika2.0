@@ -12,7 +12,9 @@ import 'settings_screen.dart';
 import 'voice_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final VoidCallback? onSignedOut;
+
+  const HomeScreen({super.key, this.onSignedOut});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -96,7 +98,13 @@ class _HomeScreenState extends State<HomeScreen> {
         child: wide
             ? Row(
                 children: [
-                  SizedBox(width: 210, child: _DesktopSidebar(open: _open)),
+                  SizedBox(
+                    width: 210,
+                    child: _DesktopSidebar(
+                      open: _open,
+                      onSignedOut: widget.onSignedOut,
+                    ),
+                  ),
                   const VerticalDivider(width: 1, color: Colors.white10),
                   Expanded(
                     child: Column(
@@ -130,7 +138,9 @@ class _HomeScreenState extends State<HomeScreen> {
               onDestinationSelected: (index) {
                 if (index == 1) _open(const CommandsScreen());
                 if (index == 2) _open(const LocalDocumentsScreen());
-                if (index == 3) _open(const SettingsScreen());
+                if (index == 3) {
+                  _open(SettingsScreen(onSignedOut: widget.onSignedOut));
+                }
               },
               destinations: const [
                 NavigationDestination(
@@ -218,8 +228,9 @@ class _Header extends StatelessWidget {
 
 class _DesktopSidebar extends StatelessWidget {
   final Future<void> Function(Widget screen) open;
+  final VoidCallback? onSignedOut;
 
-  const _DesktopSidebar({required this.open});
+  const _DesktopSidebar({required this.open, this.onSignedOut});
 
   @override
   Widget build(BuildContext context) {
@@ -259,7 +270,7 @@ class _DesktopSidebar extends StatelessWidget {
           _NavItem(
             icon: Icons.settings_outlined,
             label: 'Настройки',
-            onTap: () => open(const SettingsScreen()),
+            onTap: () => open(SettingsScreen(onSignedOut: onSignedOut)),
           ),
         ],
       ),

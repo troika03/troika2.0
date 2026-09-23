@@ -63,6 +63,28 @@ class AuditEvent:
 
 
 @dataclass(frozen=True)
+class DeviceSummary:
+    """Owner-visible device metadata with no credential material."""
+
+    id: str
+    name: str
+    platform: str
+    status: str
+    created_at: float
+    current: bool
+
+    def to_dict(self) -> dict[str, str | float | bool]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "platform": self.platform,
+            "status": self.status,
+            "created_at": self.created_at,
+            "current": self.current,
+        }
+
+
+@dataclass(frozen=True)
 class AccountDeletionManifest:
     """Data references needed to finish an already-authorized deletion."""
 
@@ -597,6 +619,70 @@ class AccessRegistry:
                 (time.time(), self._token_digest(token)),
             )
         return cursor.rowcount == 1
+
+    def principal_is_active(self, principal: AccessPrincipal) -> bool:
+        """Recheck a previously authenticated principal against current state."""
+        with self._connect() as connection:
+            try:
+                self._require_active_principal(connection, principal)
+            except PermissionError:
+                return False
+        return True
+
+    def list_devices(self, principal: AccessPrincipal) -> list[DeviceSummary]:
+        """List only devices owned by the authenticated account."""
+        with self._connect() as connection:
+            connection.execute("BEGIN")
+            self._require_active_principal(connection, principal)
+            rows = connection.execute(
+                "SELECT id, name, platform, status, created_at "
+                "FROM troika_devices WHERE user_id = ? "
+                "ORDER BY created_at DESC, id DESC",
+                (principal.user_id,),
+            ).fetchall()
+        return [
+            DeviceSummary(
+                id=str(row["id"]),
+                name=str(row["name"]),
+                platform=str(row["platform"]),
+                status=str(row["status"]),
+                created_at=float(row["created_at"]),
+                current=str(row["id"]) == principal.device_id,
+            )
+            for row in rows
+        ]
+
+    def revoke_device(self, principal: AccessPrincipal, device_id: str) -> bool:
+        """Revoke one owned device and every bearer token issued to it."""
+        clean_device_id = str(device_id).strip()
+        if (
+            not clean_device_id
+            or len(clean_device_id) > 200
+            or any(char in clean_device_id for char in "\r\n\x00")
+        ):
+            return False
+        now = time.time()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._require_active_principal(connection, principal)
+            owned = connection.execute(
+                "SELECT 1 FROM troika_devices WHERE id = ? AND user_id = ?",
+                (clean_device_id, principal.user_id),
+            ).fetchone()
+            if owned is None:
+                return False
+            connection.execute(
+                "UPDATE troika_devices SET status = 'revoked', "
+                "revoked_at = COALESCE(revoked_at, ?) "
+                "WHERE id = ? AND user_id = ?",
+                (now, clean_device_id, principal.user_id),
+            )
+            connection.execute(
+                "UPDATE troika_api_tokens SET revoked_at = COALESCE(revoked_at, ?) "
+                "WHERE device_id = ?",
+                (now, clean_device_id),
+            )
+        return True
 
     @staticmethod
     def _require_active_principal(

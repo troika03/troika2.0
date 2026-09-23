@@ -8,7 +8,9 @@ import '../services/hermes_api_service.dart';
 import '../services/voice_presets.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  final VoidCallback? onSignedOut;
+
+  const SettingsScreen({super.key, this.onSignedOut});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -33,6 +35,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _phoneControlEnabled = false;
   bool _exportingAccount = false;
   bool _deletingAccount = false;
+  bool _loadingDevices = false;
+  String? _devicesError;
+  String? _revokingDeviceId;
+  List<AccountDevice> _accountDevices = const [];
 
   // Список доступных голосов Edge TTS с человекочитаемыми описаниями
   static const _voices = [
@@ -90,6 +96,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadBargeIn();
     _locationContextEnabled = HermesConfig.locationContextEnabled;
     _phoneControlEnabled = HermesConfig.phoneControlEnabled;
+    if (HermesConfig.signedIn) {
+      _loadAccountDevices();
+    }
   }
 
   Future<void> _loadBargeIn() async {
@@ -484,6 +493,236 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Настройки сохранены')));
+  }
+
+  Future<void> _loadAccountDevices() async {
+    if (!HermesConfig.signedIn || _loadingDevices) return;
+    setState(() {
+      _loadingDevices = true;
+      _devicesError = null;
+    });
+    try {
+      final devices = await HermesApiService().listAccountDevices();
+      if (!mounted) return;
+      setState(() => _accountDevices = devices);
+    } on HermesApiException catch (error) {
+      if (!mounted) return;
+      if (error.statusCode == 401) {
+        await HermesConfig.clearRevokedDevice();
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        widget.onSignedOut?.call();
+        return;
+      }
+      if (!mounted) return;
+      setState(() => _devicesError = error.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _devicesError = 'Не удалось загрузить устройства.');
+    } finally {
+      if (mounted) setState(() => _loadingDevices = false);
+    }
+  }
+
+  Future<void> _revokeAccountDevice(
+    AccountDevice device,
+    AssistantService assistant,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF17150F),
+        title: Text(
+          device.current ? 'Выйти на этом устройстве?' : 'Отозвать устройство?',
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          device.current
+              ? 'Текущий сеанс завершится. Для облачных функций потребуется войти снова.'
+              : '«${device.name}» сразу потеряет доступ к аккаунту, задачам и управлению.',
+          style: const TextStyle(color: Colors.white70, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(
+              device.current ? 'Выйти' : 'Отозвать',
+              style: const TextStyle(color: Color(0xFFE57373)),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _revokingDeviceId = device.id);
+    try {
+      final result = await HermesApiService().revokeAccountDevice(device.id);
+      if (result.current || result.reauthenticationRequired) {
+        await assistant.setWakeWordEnabled(false);
+        await HermesConfig.clearRevokedDevice();
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        widget.onSignedOut?.call();
+        return;
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Доступ «${device.name}» отозван')),
+      );
+      await _loadAccountDevices();
+    } on HermesApiException catch (error) {
+      if (error.statusCode == 401) {
+        await assistant.setWakeWordEnabled(false);
+        await HermesConfig.clearRevokedDevice();
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        widget.onSignedOut?.call();
+        return;
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось отозвать устройство.')),
+      );
+    } finally {
+      if (mounted) setState(() => _revokingDeviceId = null);
+    }
+  }
+
+  String _deviceSubtitle(AccountDevice device) {
+    final platform = switch (device.platform) {
+      'android' => 'Android',
+      'windows' => 'Windows',
+      'ios' => 'iOS',
+      'macos' => 'macOS',
+      'linux' => 'Linux',
+      'web' => 'Web',
+      _ => device.platform,
+    };
+    if (!device.active) return '$platform · доступ отозван';
+    if (device.current) return '$platform · это устройство';
+    final local = device.createdAt.toLocal();
+    final date = '${local.day.toString().padLeft(2, '0')}.'
+        '${local.month.toString().padLeft(2, '0')}.${local.year}';
+    return '$platform · добавлено $date';
+  }
+
+  Widget _deviceManagementSection(AssistantService assistant) {
+    if (_loadingDevices && _accountDevices.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+    if (_devicesError != null && _accountDevices.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.03),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _devicesError!,
+              style: const TextStyle(color: Colors.white54, height: 1.4),
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: _loadAccountDevices,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Повторить'),
+            ),
+          ],
+        ),
+      );
+    }
+    if (_accountDevices.isEmpty) {
+      return const Text(
+        'Подключённые устройства пока не найдены.',
+        style: TextStyle(color: Colors.white54, fontSize: 13),
+      );
+    }
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        children: [
+          for (var index = 0; index < _accountDevices.length; index++) ...[
+            if (index > 0)
+              const Divider(height: 1, indent: 56, color: Colors.white10),
+            ListTile(
+              minVerticalPadding: 12,
+              leading: Icon(
+                _accountDevices[index].platform == 'android'
+                    ? Icons.phone_android
+                    : Icons.devices_outlined,
+                color: _accountDevices[index].current
+                    ? const Color(0xFFF5A623)
+                    : Colors.white54,
+              ),
+              title: Text(
+                _accountDevices[index].name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white70),
+              ),
+              subtitle: Text(
+                _deviceSubtitle(_accountDevices[index]),
+                style: const TextStyle(color: Colors.white38, fontSize: 12),
+              ),
+              trailing: _accountDevices[index].active
+                  ? IconButton(
+                      constraints: const BoxConstraints(
+                        minWidth: 48,
+                        minHeight: 48,
+                      ),
+                      tooltip: _accountDevices[index].current
+                          ? 'Выйти на этом устройстве'
+                          : 'Отозвать доступ',
+                      onPressed: _revokingDeviceId == null
+                          ? () => _revokeAccountDevice(
+                                _accountDevices[index],
+                                assistant,
+                              )
+                          : null,
+                      icon: _revokingDeviceId == _accountDevices[index].id
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(
+                              Icons.logout,
+                              color: Color(0xFFE57373),
+                            ),
+                    )
+                  : const SizedBox(width: 48),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   Future<void> _exportAccountData() async {
@@ -1090,6 +1329,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(height: 8),
             ],
+            const Text(
+              'Устройства',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _deviceManagementSection(assistant),
+            const SizedBox(height: 20),
             const Text(
               'Сначала можно сохранить ZIP со всеми переносимыми данными и '
               'личными файлами. Удаление отзывает доступ всех устройств и '

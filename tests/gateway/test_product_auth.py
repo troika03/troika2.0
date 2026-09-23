@@ -59,6 +59,18 @@ class _AccountRequest(_ChatRequest):
         self.path_qs = "/v1/account"
 
 
+class _DeviceRequest(_Request):
+    def __init__(self, token: str, device_id: str = "", *, method: str = "GET") -> None:
+        super().__init__(token)
+        self.method = method
+        self.match_info = {"device_id": device_id}
+        self.path_qs = (
+            f"/v1/account/devices/{device_id}"
+            if device_id
+            else "/v1/account/devices"
+        )
+
+
 def _adapter_with_two_users(tmp_path, *, quotas_enabled=False):
     adapter = APIServerAdapter(
         PlatformConfig(
@@ -220,6 +232,144 @@ def test_product_quota_and_run_status_are_isolated(tmp_path) -> None:
     assert adapter._authorize_product_run(first, "run_private") is None
     hidden = adapter._authorize_product_run(second, "run_private")
     assert hidden is not None and hidden.status == 404
+
+
+def test_product_device_list_and_revoke_close_device_activity(
+    tmp_path, monkeypatch
+) -> None:
+    from gateway.platforms.phone_bridge import product_bridge
+    from tools.approval import _ApprovalEntry, _gateway_queues
+
+    adapter, first_token, second_token = _adapter_with_two_users(tmp_path)
+    registry = adapter._access_registry
+    first_request = _Request(first_token)
+    second_request = _Request(second_token)
+    assert adapter._check_auth(first_request) is None
+    assert adapter._check_auth(second_request) is None
+    first = first_request["troika_product_principal"]
+    second = second_request["troika_product_principal"]
+    extra_device = registry.create_device(
+        first.user_id, name="First laptop", platform="windows"
+    )
+    extra_token = registry.issue_device_token(extra_device)
+    extra_second_token = registry.issue_device_token(extra_device)
+    stale_extra_request = _Request(extra_token)
+    assert adapter._check_auth(stale_extra_request) is None
+
+    disconnected: list[set[str]] = []
+
+    async def fake_disconnect(device_ids: set[str]) -> None:
+        disconnected.append(device_ids)
+
+    monkeypatch.setattr(product_bridge, "disconnect_devices", fake_disconnect)
+
+    listed = asyncio.run(adapter._handle_account_devices(_DeviceRequest(first_token)))
+    listed_payload = json.loads(listed.body)
+    assert listed.status == 200
+    assert listed.headers["Cache-Control"] == "private, no-store"
+    assert {item["id"] for item in listed_payload["devices"]} == {
+        first.device_id,
+        extra_device,
+    }
+    assert all(
+        set(item) == {
+            "id",
+            "name",
+            "platform",
+            "status",
+            "created_at",
+            "current",
+        }
+        for item in listed_payload["devices"]
+    )
+    assert next(
+        item for item in listed_payload["devices"] if item["id"] == first.device_id
+    )["current"]
+
+    denied = asyncio.run(
+        adapter._handle_revoke_account_device(
+            _DeviceRequest(first_token, second.device_id, method="DELETE")
+        )
+    )
+    assert denied.status == 404
+    assert registry.authenticate(second_token) == second
+    denied_event = registry.list_audit_events(first.user_id)[0]
+    assert denied_event.event_type == "device.revoke_denied"
+    assert second.device_id not in json.dumps(denied_event.details)
+    assert first_token not in json.dumps(denied_event.details)
+
+    class FakeAgent:
+        def __init__(self) -> None:
+            self.interrupt_reason = ""
+
+        def interrupt(self, reason: str) -> None:
+            self.interrupt_reason = reason
+
+    async def revoke_extra_device() -> tuple[object, asyncio.Task, asyncio.Queue]:
+        run_id = "run_extra_device"
+        approval_key = "approval_extra_device"
+        agent = FakeAgent()
+        queue: asyncio.Queue = asyncio.Queue()
+        queue.put_nowait({"event": "message.delta", "delta": "private"})
+
+        async def wait_forever() -> None:
+            await asyncio.Event().wait()
+
+        task = asyncio.create_task(wait_forever())
+        await asyncio.sleep(0)
+        adapter._run_owners[run_id] = (first.user_id, extra_device)
+        adapter._run_statuses[run_id] = {"run_id": run_id, "status": "running"}
+        adapter._run_streams[run_id] = queue
+        adapter._run_streams_created[run_id] = 1.0
+        adapter._active_run_agents[run_id] = agent
+        adapter._active_run_tasks[run_id] = task
+        adapter._run_approval_sessions[run_id] = approval_key
+        _gateway_queues[approval_key] = [_ApprovalEntry({"choices": ["once"]})]
+
+        response = await adapter._handle_revoke_account_device(
+            _DeviceRequest(first_token, extra_device, method="DELETE")
+        )
+        assert agent.interrupt_reason == "Device access revoked"
+        assert task.cancelled()
+        assert approval_key not in _gateway_queues
+        assert adapter._run_statuses[run_id]["status"] == "cancelled"
+        assert adapter._run_statuses[run_id]["cancellation_reason"] == "device_revoked"
+        assert queue.get_nowait() is None
+        return response, task, queue
+
+    revoked, _, _ = asyncio.run(revoke_extra_device())
+    revoked_payload = json.loads(revoked.body)
+    assert revoked.status == 200
+    assert revoked_payload == {
+        "status": "revoked",
+        "device_id": extra_device,
+        "current": False,
+        "reauthentication_required": False,
+    }
+    assert disconnected == [{extra_device}]
+    assert registry.authenticate(extra_token) is None
+    assert registry.authenticate(extra_second_token) is None
+    assert adapter._authorize_product_run(
+        stale_extra_request, "run_extra_device"
+    ).status == 404
+    revoked_event = next(
+        event
+        for event in registry.list_audit_events(first.user_id)
+        if event.event_type == "device.revoked"
+    )
+    assert revoked_event.event_type == "device.revoked"
+    assert revoked_event.details == {"current": False}
+
+    revoked_current = asyncio.run(
+        adapter._handle_revoke_account_device(
+            _DeviceRequest(first_token, first.device_id, method="DELETE")
+        )
+    )
+    assert revoked_current.status == 200
+    assert json.loads(revoked_current.body)["current"] is True
+    assert json.loads(revoked_current.body)["reauthentication_required"] is True
+    assert registry.authenticate(first_token) is None
+    assert adapter._check_auth(_Request(first_token)).status == 401
 
 
 def test_product_requests_are_unmetered_while_quota_enforcement_is_disabled(

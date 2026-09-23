@@ -70,7 +70,9 @@ class _HermesAppState extends State<HermesApp> {
                 onAuthenticated: () => setState(() => _authenticated = true),
               )
             : _onboarded
-                ? const HomeScreen()
+                ? HomeScreen(
+                    onSignedOut: () => setState(() => _authenticated = false),
+                  )
                 : OnboardingScreen(
                     onDone: () => setState(() => _onboarded = true),
                   ),

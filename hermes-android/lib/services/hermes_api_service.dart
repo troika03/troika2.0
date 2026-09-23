@@ -37,6 +37,52 @@ class RunApprovalRequest {
   });
 }
 
+/// One owner-visible device. Credential material never reaches the client.
+class AccountDevice {
+  final String id;
+  final String name;
+  final String platform;
+  final String status;
+  final DateTime createdAt;
+  final bool current;
+
+  const AccountDevice({
+    required this.id,
+    required this.name,
+    required this.platform,
+    required this.status,
+    required this.createdAt,
+    required this.current,
+  });
+
+  bool get active => status == 'active';
+
+  factory AccountDevice.fromJson(Map<String, dynamic> json) {
+    final createdSeconds = (json['created_at'] as num?)?.toDouble() ?? 0;
+    return AccountDevice(
+      id: (json['id'] ?? '').toString(),
+      name: (json['name'] ?? '').toString(),
+      platform: (json['platform'] ?? '').toString(),
+      status: (json['status'] ?? '').toString(),
+      createdAt: DateTime.fromMillisecondsSinceEpoch(
+        (createdSeconds * 1000).round(),
+        isUtc: true,
+      ),
+      current: json['current'] == true,
+    );
+  }
+}
+
+class DeviceRevocationResult {
+  final bool current;
+  final bool reauthenticationRequired;
+
+  const DeviceRevocationResult({
+    required this.current,
+    required this.reauthenticationRequired,
+  });
+}
+
 /// Одно сообщение в чате (общая модель для голоса и текста).
 /// Может нести текст и/или вложенные картинки (base64 data-url).
 class ChatMessage {
@@ -178,6 +224,96 @@ class HermesApiService {
     } on TimeoutException {
       throw HermesApiException(
           'Сервер не подтвердил удаление. Попробуй ещё раз.');
+    }
+  }
+
+  /// List devices owned by the authenticated account.
+  Future<List<AccountDevice>> listAccountDevices() async {
+    if (!HermesConfig.apiKey.startsWith('trk_live_')) {
+      throw HermesApiException(
+        'Устройства доступны после входа в аккаунт.',
+      );
+    }
+    try {
+      final response = await http
+          .get(
+            Uri.parse(HermesConfig.accountDevicesUrl),
+            headers: HermesConfig.headers,
+          )
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode == 401) {
+        throw HermesApiException(
+          'Доступ этого устройства отозван. Войди снова.',
+          statusCode: 401,
+        );
+      }
+      if (response.statusCode != 200) {
+        throw HermesApiException(
+          'Список устройств недоступен (${response.statusCode}).',
+          statusCode: response.statusCode,
+        );
+      }
+      final payload =
+          json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      return ((payload['devices'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(AccountDevice.fromJson)
+          .where((device) => device.id.isNotEmpty)
+          .toList();
+    } on SocketException {
+      throw HermesApiException('Нет соединения с сервером устройств.');
+    } on TimeoutException {
+      throw HermesApiException('Сервер устройств не ответил вовремя.');
+    } on FormatException {
+      throw HermesApiException('Сервер вернул некорректный список устройств.');
+    }
+  }
+
+  /// Revoke every token for one device owned by the current account.
+  Future<DeviceRevocationResult> revokeAccountDevice(String deviceId) async {
+    final cleanId = deviceId.trim();
+    if (cleanId.isEmpty) {
+      throw HermesApiException('Устройство не найдено.');
+    }
+    try {
+      final response = await http
+          .delete(
+            Uri.parse(
+              '${HermesConfig.accountDevicesUrl}/${Uri.encodeComponent(cleanId)}',
+            ),
+            headers: HermesConfig.headers,
+          )
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode == 401) {
+        throw HermesApiException(
+          'Доступ этого устройства уже отозван. Войди снова.',
+          statusCode: 401,
+        );
+      }
+      if (response.statusCode == 404) {
+        throw HermesApiException(
+          'Устройство не найдено или доступ уже отозван.',
+          statusCode: 404,
+        );
+      }
+      if (response.statusCode != 200) {
+        throw HermesApiException(
+          'Не удалось отозвать устройство (${response.statusCode}).',
+          statusCode: response.statusCode,
+        );
+      }
+      final payload =
+          json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      return DeviceRevocationResult(
+        current: payload['current'] == true,
+        reauthenticationRequired: payload['reauthentication_required'] == true,
+      );
+    } on SocketException {
+      throw HermesApiException('Нет соединения с сервером устройств.');
+    } on TimeoutException {
+      throw HermesApiException('Сервер не подтвердил отзыв устройства.');
+    } on FormatException {
+      throw HermesApiException('Сервер вернул некорректный ответ.');
     }
   }
 
@@ -970,7 +1106,8 @@ class SessionMessage {
 
 class HermesApiException implements Exception {
   final String message;
-  HermesApiException(this.message);
+  final int? statusCode;
+  HermesApiException(this.message, {this.statusCode});
 
   @override
   String toString() => message;
