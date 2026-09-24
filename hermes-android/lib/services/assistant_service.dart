@@ -39,6 +39,7 @@ class AssistantService extends ChangeNotifier {
   String _errorMessage = '';
   String _debugHeard = '';
   bool _wakeWordEnabled = false;
+  bool _actionInProgress = false;
   RunApprovalRequest? _pendingApproval;
   Completer<String>? _approvalCompleter;
   String? _pendingUiAction;
@@ -60,6 +61,7 @@ class AssistantService extends ChangeNotifier {
   String get errorMessage => _errorMessage;
   String get debugHeard => _debugHeard;
   bool get wakeWordEnabled => _wakeWordEnabled;
+  bool get isActing => _actionInProgress;
   RunApprovalRequest? get pendingApproval => _pendingApproval;
   List<ChatMessage> get messages => List.unmodifiable(_messages);
   bool get historyLoaded => _historyLoaded;
@@ -459,6 +461,7 @@ class AssistantService extends ChangeNotifier {
           notifyListeners();
         },
         onToolStart: (tool) {
+          _actionInProgress = true;
           pending.thoughts.add(ThoughtStep(ThoughtKind.toolStart, tool));
           notifyListeners();
         },
@@ -500,6 +503,8 @@ class AssistantService extends ChangeNotifier {
       _messages.remove(pending);
       _setError(e.toString());
     } finally {
+      _actionInProgress = false;
+      notifyListeners();
       if (_wakeWordEnabled) await _startWakeWordListening();
     }
   }

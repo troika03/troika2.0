@@ -22,6 +22,7 @@ from gateway.config import PlatformConfig
 from gateway.platforms.api_server import (
     APIServerAdapter,
     _safe_product_action_result,
+    _safe_product_approval_event,
     cors_middleware,
     security_headers_middleware,
 )
@@ -51,11 +52,27 @@ def test_product_result_sanitizer_distinguishes_saved_task():
     }
 
 
+def test_product_approval_sanitizer_hides_internal_routing_fields():
+    assert _safe_product_approval_event({
+        "command": "send_message",
+        "pattern_key": "product:send_message",
+        "pattern_keys": ["product:send_message"],
+        "description": "  Отправить сообщение контакту  ",
+        "choices": ["once", "session", "always", "deny"],
+        "product_action": True,
+    }) == {
+        "description": "Отправить сообщение контакту",
+        "choices": ["once", "deny"],
+    }
+
+
 @pytest.mark.asyncio
 async def test_run_callback_streams_safe_result_but_not_generic_tool_output():
     adapter = _make_adapter()
     adapter._run_streams["run-safe"] = asyncio.Queue()
-    callback = adapter._make_run_event_callback("run-safe", asyncio.get_running_loop())
+    callback = adapter._make_run_event_callback(
+        "run-safe", asyncio.get_running_loop(), product_mode=True
+    )
     raw = json.dumps({
         "ok": True,
         "artifact": {"id": "art_1", "filename": "plan.docx", "kind": "docx"},
@@ -64,12 +81,19 @@ async def test_run_callback_streams_safe_result_but_not_generic_tool_output():
     callback("tool.completed", "troika_create_docx", result=raw)
     await asyncio.sleep(0)
     safe_event = await adapter._run_streams["run-safe"].get()
+    assert safe_event["tool"] == "action"
+    assert "preview" not in safe_event
     assert safe_event["result"]["title"] == "plan.docx"
 
     callback("tool.completed", "terminal", result="private terminal output")
     await asyncio.sleep(0)
     generic_event = await adapter._run_streams["run-safe"].get()
+    assert generic_event["tool"] == "action"
     assert "result" not in generic_event
+
+    callback("reasoning.available", "_thinking", preview="private reasoning")
+    await asyncio.sleep(0)
+    assert adapter._run_streams["run-safe"].empty()
 
 
 # ---------------------------------------------------------------------------

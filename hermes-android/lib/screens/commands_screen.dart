@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../services/custom_command_store.dart';
-import '../services/local_command_service.dart';
 import '../theme/troika_theme.dart';
 
 class CommandsScreen extends StatefulWidget {
@@ -20,13 +19,9 @@ class _CommandsScreenState extends State<CommandsScreen> {
     'Выключить фонарик': 'выключи фонарик',
     'Назвать время': 'который час',
     'Показать заряд': 'какой заряд',
-    'Режим «Протокол»': 'режим протокол',
-    'Режим «Отдых»': 'режим отдых',
-    'Обычный режим': 'обычный режим',
   };
 
   List<CustomCommand> _custom = const [];
-  String _mode = 'normal';
 
   @override
   void initState() {
@@ -36,22 +31,8 @@ class _CommandsScreenState extends State<CommandsScreen> {
 
   Future<void> _load() async {
     final custom = await CustomCommandStore.load();
-    final mode = await LocalCommandService.currentMode();
     if (mounted) {
-      setState(() {
-        _custom = custom;
-        _mode = mode;
-      });
-    }
-  }
-
-  Future<void> _setMode(String command) async {
-    final result = await LocalCommandService().execute(command);
-    await _load();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.response)),
-      );
+      setState(() => _custom = custom);
     }
   }
 
@@ -143,18 +124,6 @@ class _CommandsScreenState extends State<CommandsScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
         children: [
-          const Text('Режимы', style: _sectionStyle),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _modeChip('normal', 'Обычный', 'обычный режим'),
-              _modeChip('protocol', 'Протокол', 'режим протокол'),
-              _modeChip('rest', 'Отдых', 'режим отдых'),
-            ],
-          ),
-          const SizedBox(height: 28),
           const Text('Команды без интернета', style: _sectionStyle),
           const SizedBox(height: 10),
           const _CommandGroup(
@@ -209,14 +178,6 @@ class _CommandsScreenState extends State<CommandsScreen> {
                 )),
         ],
       ),
-    );
-  }
-
-  Widget _modeChip(String value, String label, String command) {
-    return ChoiceChip(
-      label: Text(label),
-      selected: _mode == value,
-      onSelected: (_) => _setMode(command),
     );
   }
 }

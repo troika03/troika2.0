@@ -6,6 +6,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// Настройки подключения к Troika API Server.
 class TroikaConfig {
+  /// Internal diagnostics remain available for explicit developer builds, but
+  /// are never part of the normal Troika product UI.
+  static const bool developerDiagnosticsEnabled = bool.fromEnvironment(
+    'TROIKA_DEVELOPER_DIAGNOSTICS',
+    defaultValue: false,
+  );
+
   static const String _keyServerUrl = 'troika_server_url';
   static const String _legacyKeyServerUrl = 'hermes_server_url';
   static const String _keyApiKey = 'troika_api_key';

@@ -119,7 +119,7 @@ class _LocalDocumentsScreenState extends State<LocalDocumentsScreen> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Без модели и сервера. Файл создаётся на устройстве.',
+                  'Работает локально: файл создаётся на устройстве.',
                   style: TextStyle(color: TroikaColors.textMuted),
                 ),
                 const SizedBox(height: 24),

@@ -129,6 +129,25 @@ def _safe_product_action_result(tool_name: str, raw_result: Any) -> Optional[Dic
     }
 
 
+def _safe_product_approval_event(approval_data: Any) -> Dict[str, Any]:
+    """Expose only the user-facing text and one-time choice to product clients."""
+    data = approval_data if isinstance(approval_data, dict) else {}
+    description = " ".join(str(data.get("description") or "").split())[:600]
+    if not description:
+        description = "Подтвердить чувствительное действие?"
+    requested = data.get("choices")
+    choices = []
+    if isinstance(requested, list):
+        choices = [
+            str(choice).strip().lower()
+            for choice in requested
+            if str(choice).strip().lower() in {"once", "deny"}
+        ]
+    if "once" not in choices or "deny" not in choices:
+        choices = ["once", "deny"]
+    return {"description": description, "choices": choices}
+
+
 def _coerce_port(value: Any, default: int = DEFAULT_PORT) -> int:
     """Parse a listen port without letting malformed env/config values crash startup."""
     try:
@@ -5046,7 +5065,13 @@ class APIServerAdapter(BasePlatformAdapter):
         self._run_statuses[run_id] = current
         return current
 
-    def _make_run_event_callback(self, run_id: str, loop: "asyncio.AbstractEventLoop"):
+    def _make_run_event_callback(
+        self,
+        run_id: str,
+        loop: "asyncio.AbstractEventLoop",
+        *,
+        product_mode: bool = False,
+    ):
         """Return a tool_progress_callback that pushes structured events to the run's SSE queue."""
         def _push(event: Dict[str, Any]) -> None:
             self._set_run_status(
@@ -5065,19 +5090,21 @@ class APIServerAdapter(BasePlatformAdapter):
         def _callback(event_type: str, tool_name: str = None, preview: str = None, args=None, **kwargs):
             ts = time.time()
             if event_type == "tool.started":
-                _push({
+                event = {
                     "event": "tool.started",
                     "run_id": run_id,
                     "timestamp": ts,
-                    "tool": tool_name,
-                    "preview": preview,
-                })
+                    "tool": "action" if product_mode else tool_name,
+                }
+                if not product_mode:
+                    event["preview"] = preview
+                _push(event)
             elif event_type == "tool.completed":
                 completed = {
                     "event": "tool.completed",
                     "run_id": run_id,
                     "timestamp": ts,
-                    "tool": tool_name,
+                    "tool": "action" if product_mode else tool_name,
                     "duration": round(kwargs.get("duration", 0), 3),
                     "error": kwargs.get("is_error", False),
                 }
@@ -5087,7 +5114,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 if safe_result is not None:
                     completed["result"] = safe_result
                 _push(completed)
-            elif event_type == "reasoning.available":
+            elif event_type == "reasoning.available" and not product_mode:
                 _push({
                     "event": "reasoning.available",
                     "run_id": run_id,
@@ -5210,6 +5237,18 @@ class APIServerAdapter(BasePlatformAdapter):
             ephemeral_system_prompt = (
                 (str(ephemeral_system_prompt) + "\n\n") if ephemeral_system_prompt else ""
             ) + private_project_context
+        if principal is not None:
+            product_ux_rule = (
+                "Ты — Тройка, единый ассистент пользователя. Не называй модели, "
+                "провайдеры, инструменты, подагентов, research/worker-процессы и "
+                "внутреннюю маршрутизацию. Не раскрывай скрытые рассуждения. "
+                "Сообщай только короткий правдивый статус и конкретный результат."
+            )
+            ephemeral_system_prompt = (
+                (str(ephemeral_system_prompt) + "\n\n")
+                if ephemeral_system_prompt
+                else ""
+            ) + product_ux_rule
         loop = asyncio.get_running_loop()
         q: "asyncio.Queue[Optional[Dict]]" = asyncio.Queue()
         created_at = time.time()
@@ -5222,7 +5261,9 @@ class APIServerAdapter(BasePlatformAdapter):
             request, "run.started", session_id=str(session_id), run_id=run_id
         )
 
-        event_cb = self._make_run_event_callback(run_id, loop)
+        event_cb = self._make_run_event_callback(
+            run_id, loop, product_mode=principal is not None
+        )
 
         # Also wire stream_delta_callback so message.delta events flow through.
         def _text_cb(delta: Optional[str]) -> None:
@@ -5238,20 +5279,24 @@ class APIServerAdapter(BasePlatformAdapter):
             except Exception:
                 pass
 
-        self._set_run_status(
-            run_id,
-            "queued",
-            created_at=created_at,
-            session_id=session_id,
-            model=body.get("model", self._model_name),
-        )
+        queued_fields: Dict[str, Any] = {
+            "created_at": created_at,
+            "session_id": session_id,
+        }
+        if principal is None:
+            queued_fields["model"] = body.get("model", self._model_name)
+        self._set_run_status(run_id, "queued", **queued_fields)
 
         async def _run_and_close():
             try:
                 self._set_run_status(run_id, "running")
 
                 def _approval_notify(approval_data: Dict[str, Any]) -> None:
-                    event = dict(approval_data or {})
+                    event = (
+                        _safe_product_approval_event(approval_data)
+                        if principal is not None
+                        else dict(approval_data or {})
+                    )
                     choices = event.get("choices")
                     if not isinstance(choices, list) or not choices:
                         choices = ["once", "session", "always", "deny"]
@@ -5400,7 +5445,12 @@ class APIServerAdapter(BasePlatformAdapter):
                 # 401/400 return failed=True instead of raising, so the except
                 # block below never fires — issue #15561).
                 if isinstance(result, dict) and result.get("failed"):
-                    error_msg = result.get("error") or "agent run failed"
+                    internal_error = result.get("error") or "agent run failed"
+                    error_msg = (
+                        "Тройка не смогла выполнить задачу. Попробуй ещё раз."
+                        if principal is not None
+                        else internal_error
+                    )
                     q.put_nowait({
                         "event": "run.failed",
                         "run_id": run_id,
@@ -5446,10 +5496,15 @@ class APIServerAdapter(BasePlatformAdapter):
                 raise
             except Exception as exc:
                 logger.exception("[api_server] run %s failed", run_id)
+                public_error = (
+                    "Тройка не смогла выполнить задачу. Попробуй ещё раз."
+                    if principal is not None
+                    else str(exc)
+                )
                 self._set_run_status(
                     run_id,
                     "failed",
-                    error=str(exc),
+                    error=public_error,
                     last_event="run.failed",
                 )
                 try:
@@ -5457,7 +5512,7 @@ class APIServerAdapter(BasePlatformAdapter):
                         "event": "run.failed",
                         "run_id": run_id,
                         "timestamp": time.time(),
-                        "error": str(exc),
+                        "error": public_error,
                     })
                 except Exception:
                     pass

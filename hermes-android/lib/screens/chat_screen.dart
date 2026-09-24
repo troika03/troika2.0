@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
+import '../config/troika_config.dart';
 import '../services/assistant_service.dart';
 import '../services/troika_api_service.dart';
 import '../services/thought_translator.dart';
@@ -535,14 +536,18 @@ class _MessageBubble extends StatelessWidget {
             for (final url in message.imageDataUrls) _imageThumb(url),
             if (message.hasImages && message.text.trim().isNotEmpty)
               const SizedBox(height: 6),
-            // Поток мыслей Тройки (размышления + вызовы инструментов)
-            if (!isUser && message.hasThoughts)
+            // Internal diagnostics exist only in explicit developer builds.
+            if (TroikaConfig.developerDiagnosticsEnabled &&
+                !isUser &&
+                message.hasThoughts)
               _ThoughtsView(
                 thoughts: message.thoughts,
                 live: message.pending,
               ),
             // Текст / индикатор «печатает»
-            if (message.pending && !message.hasThoughts)
+            if (message.pending &&
+                (!TroikaConfig.developerDiagnosticsEnabled ||
+                    !message.hasThoughts))
               const _TypingDots()
             else if (message.text.trim().isNotEmpty)
               _LinkifiedText(

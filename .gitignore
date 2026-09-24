@@ -130,3 +130,6 @@ gha-creds-*.json
 
 # Локальные логи отладки (stt, gateway, аудит-скрипты)
 _logs/
+
+# Temporary lock files created while the canonical Word plan is open.
+~$*.docx

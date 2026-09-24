@@ -500,7 +500,7 @@ class TroikaApiService {
                 ? rawChoices.map((choice) => choice.toString()).toList()
                 : const <String>['once', 'deny'];
             final request = RunApprovalRequest(
-              action: (ev['command'] ?? '').toString(),
+              action: (ev['action'] ?? 'Подтвердить действие').toString(),
               description:
                   (ev['description'] ?? 'Подтвердить действие?').toString(),
               choices: choices,
@@ -579,16 +579,14 @@ class TroikaApiService {
       final data = json.decode(body) as Map<String, dynamic>;
       final err = (data['error'] ?? '').toString();
       if (err.contains('402') || err.toLowerCase().contains('credits')) {
-        return 'У Тройки закончились кредиты OpenRouter — нужно пополнить баланс, '
-            'чтобы она снова могла думать и отвечать.';
+        return 'Лимит сервиса исчерпан. Проверь подписку или попробуй позже.';
       }
       if (err.contains('429')) {
-        return 'Модель временно перегружена (лимит запросов). Попробуй через минуту.';
+        return 'Тройка временно перегружена. Попробуй через минуту.';
       }
-      if (err.isNotEmpty) return 'Тройка не смогла ответить: ${_short(err)}';
-      return 'Тройка не смогла ответить (run завершился неудачно).';
+      return 'Тройка не смогла выполнить задачу. Попробуй ещё раз.';
     } catch (_) {
-      return 'Тройка не смогла ответить (run завершился неудачно).';
+      return 'Тройка не смогла выполнить задачу. Попробуй ещё раз.';
     }
   }
 

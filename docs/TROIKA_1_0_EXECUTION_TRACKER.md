@@ -4,10 +4,14 @@ Primary authority: `Troika_1.0_Launch_Plan_Final_Updated.docx`.
 
 ## Execution rule
 
-Work through the Word plan from top to bottom. Complete and verify each item
-before starting the next one. Existing code can satisfy an item only after its
-behavior and Definition of Done are checked. The final P0/P1 backlog in section
-20 is a release summary, not a replacement for sections 1–19.
+Work through the Word plan from top to bottom by complete section blocks, not
+isolated lines. Read the whole section and its tables first; treat its bullets
+as one coherent acceptance set. Preserve existing capabilities internally,
+hide out-of-scope features behind flags or Advanced UI, and delete only when a
+later plan section explicitly requires migration. Existing code satisfies an
+item only after behavior and Definition of Done are checked. The final P0/P1
+backlog in section 20 is a release summary, not a replacement for sections
+1–19.
 
 Status: `[ ]` not reached, `[-]` active/partial, `[x]` verified.
 
@@ -23,16 +27,24 @@ Status: `[ ]` not reached, `[-]` active/partial, `[x]` verified.
   file/task/reminder metadata to the client. Home prioritizes a short completed
   result card, opens the relevant files/tasks surface, and restores the last
   concrete result after restart. Raw output from other tools is never streamed.
-- [-] One assistant: model, tool, research, and worker routing stay hidden from
-  the normal user.
-- [ ] Minimum settings: move rare technical controls to Advanced/Developer.
-- [ ] Short truthful statuses: listening, understanding, acting, ready. Do not
-  expose private chain-of-thought.
-- [ ] User-controlled memory: inspect, edit, and delete saved memory.
+- [x] One assistant: modes, model, provider, tool, research, worker routing and
+  private reasoning stay hidden from the normal UI and product stream. Existing
+  diagnostics remain available only in an explicit developer build.
+- [x] Minimum settings: normal UI contains Voice, Memory, Permissions, Account
+  and Advanced. Permissions and Account open focused views; technical server,
+  BYOK and diagnostic controls remain preserved in Advanced.
+- [x] Short truthful statuses: listening, understanding, acting, speaking and
+  ready. Product streams suppress reasoning, tool names, previews and raw
+  backend errors.
+- [x] User-controlled memory: normal settings links directly to the existing
+  owner-scoped list, edit and delete screen.
+- [x] Safe actions: product approvals expose only a clear description and
+  one-time allow/deny choices. Internal command/pattern fields stay server-side;
+  unavailable approval channels fail closed.
 
 ### 2. What we sell and to whom
 
-- [ ] Validate product promise and primary scenarios for students, beginning
+- [-] Validate product promise and primary scenarios for students, beginning
   specialists, developers/power users, and ordinary users.
 
 ### 3. Boundaries of the first version

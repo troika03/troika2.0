@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../config/troika_config.dart';
 import '../services/assistant_service.dart';
 import '../services/assistant_result.dart';
-import '../services/local_command_service.dart';
 import '../services/troika_api_service.dart';
 import '../theme/troika_theme.dart';
 import '../widgets/status_orb.dart';
@@ -13,7 +12,7 @@ import 'commands_screen.dart';
 import 'assistant_hub_screen.dart';
 import 'files_screen.dart';
 import 'local_documents_screen.dart';
-import 'settings_screen.dart';
+import 'settings_overview_screen.dart';
 import 'voice_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -26,7 +25,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String _mode = 'normal';
   AssistantService? _assistant;
   bool _openingCommandScreen = false;
   RunApprovalRequest? _shownApproval;
@@ -34,7 +32,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _loadMode();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (TroikaConfig.serverUrl.trim().isEmpty && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -72,14 +69,8 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  Future<void> _loadMode() async {
-    final value = await LocalCommandService.currentMode();
-    if (mounted) setState(() => _mode = value);
-  }
-
   Future<void> _open(Widget screen) async {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
-    _loadMode();
   }
 
   Future<void> _openChat() => _open(
@@ -178,7 +169,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           state: assistant.state,
                           connected: connected,
                           onSettings: () => _open(
-                            SettingsScreen(onSignedOut: widget.onSignedOut),
+                            SettingsOverviewScreen(
+                              onSignedOut: widget.onSignedOut,
+                            ),
                           ),
                         ),
                         Expanded(child: voiceHome),
@@ -188,7 +181,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const VerticalDivider(width: 1, color: Colors.white10),
                   SizedBox(
                     width: 270,
-                    child: _RightRail(open: _open, mode: _mode),
+                    child: _RightRail(open: _open),
                   ),
                 ],
               )
@@ -198,7 +191,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     state: assistant.state,
                     connected: connected,
                     onSettings: () => _open(
-                      SettingsScreen(onSignedOut: widget.onSignedOut),
+                      SettingsOverviewScreen(onSignedOut: widget.onSignedOut),
                     ),
                   ),
                   Expanded(child: voiceHome),
@@ -216,7 +209,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (index == 1) _open(const CommandsScreen());
                 if (index == 2) _open(const LocalDocumentsScreen());
                 if (index == 3) {
-                  _open(SettingsScreen(onSignedOut: widget.onSignedOut));
+                  _open(
+                    SettingsOverviewScreen(onSignedOut: widget.onSignedOut),
+                  );
                 }
               },
               destinations: const [
@@ -422,7 +417,7 @@ Future<void> _handleOrbTap(AssistantService assistant) async {
 
 String _voiceStateLabel(AssistantService assistant) {
   return switch (assistant.state) {
-    AssistantState.idle => 'Готова',
+    AssistantState.idle => 'Готово',
     AssistantState.wakeDetected => 'Слушаю',
     AssistantState.recording => 'Слушаю',
     AssistantState.processing =>
@@ -447,12 +442,7 @@ String _voiceStateHint(AssistantService assistant) {
 }
 
 bool _isActing(AssistantService assistant) {
-  for (final message in assistant.messages.reversed) {
-    for (final thought in message.thoughts.reversed) {
-      return thought.kind != ThoughtKind.thinking;
-    }
-  }
-  return false;
+  return assistant.isActing;
 }
 
 class _CurrentCards extends StatelessWidget {
@@ -552,20 +542,20 @@ class _ApprovalCard extends StatelessWidget {
       body: approval.description.trim().isEmpty
           ? approval.action
           : approval.description,
-      footer: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
+      footer: Wrap(
+        alignment: WrapAlignment.end,
+        spacing: 8,
+        runSpacing: 4,
         children: [
           TextButton(
             onPressed: () => assistant.resolvePendingApproval('deny'),
             child: const Text('Отмена'),
           ),
-          if (approval.choices.contains('once')) ...[
-            const SizedBox(width: 8),
+          if (approval.choices.contains('once'))
             FilledButton(
               onPressed: () => assistant.resolvePendingApproval('once'),
-              child: const Text('Разрешить'),
+              child: const Text('Разрешить один раз'),
             ),
-          ],
         ],
       ),
     );
@@ -710,7 +700,9 @@ class _DesktopSidebar extends StatelessWidget {
           _NavItem(
             icon: Icons.settings_outlined,
             label: 'Настройки',
-            onTap: () => open(SettingsScreen(onSignedOut: onSignedOut)),
+            onTap: () => open(
+              SettingsOverviewScreen(onSignedOut: onSignedOut),
+            ),
           ),
         ],
       ),
@@ -752,9 +744,8 @@ class _NavItem extends StatelessWidget {
 
 class _RightRail extends StatelessWidget {
   final Future<void> Function(Widget screen) open;
-  final String mode;
 
-  const _RightRail({required this.open, required this.mode});
+  const _RightRail({required this.open});
 
   @override
   Widget build(BuildContext context) {
@@ -777,25 +768,6 @@ class _RightRail extends StatelessWidget {
           icon: Icons.grid_view_outlined,
           title: 'Все команды',
           onTap: () => open(const CommandsScreen()),
-        ),
-        const SizedBox(height: 24),
-        const Text('Текущий режим', style: _railTitle),
-        const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: TroikaColors.surface,
-            borderRadius: BorderRadius.circular(13),
-            border: Border.all(color: Colors.white10),
-          ),
-          child: Text(
-            mode == 'rest'
-                ? 'Отдых · без голосовых ответов'
-                : mode == 'protocol'
-                    ? 'Протокол · короткие ответы'
-                    : 'Обычный · команды и голос',
-            style: const TextStyle(color: TroikaColors.textMuted),
-          ),
         ),
       ],
     );

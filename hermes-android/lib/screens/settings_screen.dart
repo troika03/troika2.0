@@ -7,10 +7,17 @@ import '../services/assistant_service.dart';
 import '../services/troika_api_service.dart';
 import '../services/voice_presets.dart';
 
+enum SettingsSection { advanced, permissions, account }
+
 class SettingsScreen extends StatefulWidget {
   final VoidCallback? onSignedOut;
+  final SettingsSection section;
 
-  const SettingsScreen({super.key, this.onSignedOut});
+  const SettingsScreen({
+    super.key,
+    this.onSignedOut,
+    this.section = SettingsSection.advanced,
+  });
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -852,471 +859,500 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final assistant = context.watch<AssistantService>();
+    final title = switch (widget.section) {
+      SettingsSection.advanced => 'Дополнительно',
+      SettingsSection.permissions => 'Разрешения',
+      SettingsSection.account => 'Аккаунт и данные',
+    };
 
     return Scaffold(
       backgroundColor: const Color(0xFF0C0B0A),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
-        title: const Text('Настройки', style: TextStyle(color: Colors.white70)),
+        title: Text(
+          title,
+          style: const TextStyle(color: Colors.white70),
+        ),
         iconTheme: const IconThemeData(color: Colors.white38),
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          _sectionHeader('Подключение к серверу'),
-          const Text(
-            'IP-адрес или домен твоего сервера (вид: http://1.2.3.4:8642)',
-            style: TextStyle(color: Colors.white38, fontSize: 12),
-          ),
-          const SizedBox(height: 8),
-          _inputField(
-            controller: _urlController,
-            label: 'URL сервера',
-            hint: 'http://1.2.3.4:8642',
-          ),
-          const SizedBox(height: 12),
-          _inputField(
-            controller: _apiKeyController,
-            label: 'API ключ',
-            hint: 'Ключ, созданный для твоего сервера',
-            obscure: true,
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Создай на сервере: openssl rand -hex 32 (API_SERVER_KEY)',
-            style: TextStyle(color: Colors.white38, fontSize: 11),
-          ),
-          const SizedBox(height: 16),
-          OutlinedButton.icon(
-            onPressed: _testing ? null : _testConnection,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFFF5A623),
-              side: const BorderSide(color: Color(0xFFF5A623)),
+          if (widget.section == SettingsSection.advanced) ...[
+            _sectionHeader('Подключение к серверу'),
+            const Text(
+              'IP-адрес или домен твоего сервера (вид: http://1.2.3.4:8642)',
+              style: TextStyle(color: Colors.white38, fontSize: 12),
             ),
-            icon: _testing
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.wifi_tethering, size: 16),
-            label: Text(_testing ? 'Проверяю...' : 'Проверить соединение'),
-          ),
-          if (_testResult != null) ...[
             const SizedBox(height: 8),
-            Text(
-              _testResult!,
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            _inputField(
+              controller: _urlController,
+              label: 'URL сервера',
+              hint: 'http://1.2.3.4:8642',
             ),
-          ],
-          const SizedBox(height: 24),
-          const Divider(color: Colors.white10),
-          const SizedBox(height: 16),
-          _sectionHeader('Wake-word'),
-          SwitchListTile(
-            title: const Text(
-              'Слушать "Тройка" в фоне',
-              style: TextStyle(color: Colors.white70),
+            const SizedBox(height: 12),
+            _inputField(
+              controller: _apiKeyController,
+              label: 'API ключ',
+              hint: 'Ключ, созданный для твоего сервера',
+              obscure: true,
             ),
-            subtitle: const Text(
-              'Работает в фоне, расходует заряд',
-              style: TextStyle(color: Colors.white30, fontSize: 12),
+            const SizedBox(height: 4),
+            const Text(
+              'Создай на сервере: openssl rand -hex 32 (API_SERVER_KEY)',
+              style: TextStyle(color: Colors.white38, fontSize: 11),
             ),
-            value: assistant.wakeWordEnabled,
-            onChanged: (v) => assistant.setWakeWordEnabled(v),
-            activeThumbColor: const Color(0xFFF5A623),
-          ),
-          const SizedBox(height: 24),
-          const Divider(color: Colors.white10),
-          const SizedBox(height: 16),
-          _sectionHeader('Пресеты голоса'),
-          if (_presets.isNotEmpty)
-            Container(
-              height: 90,
-              margin: const EdgeInsets.only(bottom: 12),
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: _presets.length,
-                itemBuilder: (ctx, i) {
-                  final p = _presets[i];
-                  final isActive = _activePresetName == p.name;
-                  return GestureDetector(
-                    onTap: () => _applyPreset(p),
-                    onLongPress: () => _deletePreset(p.name),
-                    child: Container(
-                      width: 140,
-                      margin: const EdgeInsets.only(right: 12, bottom: 4),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: isActive
-                            ? const Color(0xFF2A2012)
-                            : const Color(0xFF17150F),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: _testing ? null : _testConnection,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFF5A623),
+                side: const BorderSide(color: Color(0xFFF5A623)),
+              ),
+              icon: _testing
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.wifi_tethering, size: 16),
+              label: Text(_testing ? 'Проверяю...' : 'Проверить соединение'),
+            ),
+            if (_testResult != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _testResult!,
+                style: const TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+            ],
+            const SizedBox(height: 24),
+            const Divider(color: Colors.white10),
+            const SizedBox(height: 16),
+            _sectionHeader('Wake-word'),
+            SwitchListTile(
+              title: const Text(
+                'Слушать "Тройка" в фоне',
+                style: TextStyle(color: Colors.white70),
+              ),
+              subtitle: const Text(
+                'Работает в фоне, расходует заряд',
+                style: TextStyle(color: Colors.white30, fontSize: 12),
+              ),
+              value: assistant.wakeWordEnabled,
+              onChanged: (v) => assistant.setWakeWordEnabled(v),
+              activeThumbColor: const Color(0xFFF5A623),
+            ),
+            const SizedBox(height: 24),
+            const Divider(color: Colors.white10),
+            const SizedBox(height: 16),
+            _sectionHeader('Пресеты голоса'),
+            if (_presets.isNotEmpty)
+              Container(
+                height: 90,
+                margin: const EdgeInsets.only(bottom: 12),
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _presets.length,
+                  itemBuilder: (ctx, i) {
+                    final p = _presets[i];
+                    final isActive = _activePresetName == p.name;
+                    return GestureDetector(
+                      onTap: () => _applyPreset(p),
+                      onLongPress: () => _deletePreset(p.name),
+                      child: Container(
+                        width: 140,
+                        margin: const EdgeInsets.only(right: 12, bottom: 4),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
                           color: isActive
-                              ? const Color(0xFFF5A623)
-                              : Colors.white10,
-                          width: 1.5,
+                              ? const Color(0xFF2A2012)
+                              : const Color(0xFF17150F),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isActive
+                                ? const Color(0xFFF5A623)
+                                : Colors.white10,
+                            width: 1.5,
+                          ),
                         ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  p.name,
-                                  style: TextStyle(
-                                    color: isActive
-                                        ? Colors.white
-                                        : Colors.white70,
-                                    fontSize: 14,
-                                    fontWeight: isActive
-                                        ? FontWeight.w600
-                                        : FontWeight.normal,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    p.name,
+                                    style: TextStyle(
+                                      color: isActive
+                                          ? Colors.white
+                                          : Colors.white70,
+                                      fontSize: 14,
+                                      fontWeight: isActive
+                                          ? FontWeight.w600
+                                          : FontWeight.normal,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ),
-                              if (isActive)
-                                const Icon(
-                                  Icons.check_circle,
-                                  color: Color(0xFFF5A623),
-                                  size: 14,
-                                ),
-                            ],
-                          ),
-                          const Spacer(),
-                          Text(
-                            '${p.rate}x / ${p.pitch}Hz',
-                            style: const TextStyle(
-                              color: Colors.white30,
-                              fontSize: 10,
+                                if (isActive)
+                                  const Icon(
+                                    Icons.check_circle,
+                                    color: Color(0xFFF5A623),
+                                    size: 14,
+                                  ),
+                              ],
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          OutlinedButton.icon(
-            onPressed: _saveCurrentAsPreset,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.white70,
-              side: const BorderSide(color: Colors.white10),
-              minimumSize: const Size(double.infinity, 45),
-            ),
-            icon: const Icon(Icons.add_circle_outline, size: 18),
-            label: const Text('Сохранить текущие настройки как пресет'),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Тап — применить, долгий тап — удалить.',
-            style: TextStyle(color: Colors.white38, fontSize: 11),
-          ),
-          const SizedBox(height: 24),
-          const Divider(color: Colors.white10),
-          const SizedBox(height: 16),
-          _sectionHeader('Голос Тройки'),
-          const Text(
-            'Слушай образец и выбирай. Edge TTS на PC, играет на телефоне.',
-            style: TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
-          ),
-          const SizedBox(height: 12),
-          ..._voices.map((v) {
-            final isSelected = v['id'] == _currentVoice;
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? const Color(0xFF2A2012)
-                    : const Color(0xFF17150F),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color:
-                      isSelected ? const Color(0xFFF5A623) : Colors.transparent,
-                  width: 1.5,
-                ),
-              ),
-              child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 4,
-                ),
-                title: Text(
-                  v['name']!,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight:
-                        isSelected ? FontWeight.w600 : FontWeight.normal,
-                  ),
-                ),
-                subtitle: Text(
-                  v['desc']!,
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(
-                        Icons.play_circle_outline,
-                        color: Colors.white70,
-                      ),
-                      tooltip: 'Прослушать',
-                      onPressed: () => _previewVoice(v['id']!),
-                    ),
-                    if (isSelected)
-                      const Padding(
-                        padding: EdgeInsets.only(left: 4),
-                        child: Icon(
-                          Icons.check_circle,
-                          color: Color(0xFFF5A623),
+                            const Spacer(),
+                            Text(
+                              '${p.rate}x / ${p.pitch}Hz',
+                              style: const TextStyle(
+                                color: Colors.white30,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                  ],
-                ),
-                onTap: () => _selectVoice(v['id']!),
-              ),
-            );
-          }),
-          const SizedBox(height: 16),
-          _sectionHeader('Настройки звучания'),
-          const Text(
-            'Жми "Прослушать" чтобы услышать как звучит с этими настройками. '
-            'Чтобы голос звучал более женственно — увеличий тон.',
-            style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
-          ),
-          const SizedBox(height: 8),
-          _sliderRow(
-            label: 'Скорость',
-            value: _rate,
-            min: 0.5,
-            max: 1.5,
-            divisions: 20,
-            display: '${_rate.toStringAsFixed(2)}x',
-            onChanged: (v) =>
-                setState(() => _rate = double.parse(v.toStringAsFixed(2))),
-          ),
-          _sliderRow(
-            label: 'Тон (питч)',
-            value: _pitch.toDouble(),
-            min: -50,
-            max: 50,
-            divisions: 20,
-            display: '${_pitch >= 0 ? "+" : ""}$_pitch Гц',
-            onChanged: (v) => setState(() => _pitch = v.toInt()),
-          ),
-          _sliderRow(
-            label: 'Громкость',
-            value: _volume.toDouble(),
-            min: -50,
-            max: 50,
-            divisions: 20,
-            display: '${_volume >= 0 ? "+" : ""}$_volume%',
-            onChanged: (v) => setState(() => _volume = v.toInt()),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _previewCurrentSettings,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFFF5A623),
-                    side: const BorderSide(color: Color(0xFFF5A623)),
-                  ),
-                  icon: const Icon(Icons.play_arrow, size: 16),
-                  label: const Text('Прослушать'),
+                    );
+                  },
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _applyVoiceSettings,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFF5A623),
+            OutlinedButton.icon(
+              onPressed: _saveCurrentAsPreset,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white70,
+                side: const BorderSide(color: Colors.white10),
+                minimumSize: const Size(double.infinity, 45),
+              ),
+              icon: const Icon(Icons.add_circle_outline, size: 18),
+              label: const Text('Сохранить текущие настройки как пресет'),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Тап — применить, долгий тап — удалить.',
+              style: TextStyle(color: Colors.white38, fontSize: 11),
+            ),
+            const SizedBox(height: 24),
+            const Divider(color: Colors.white10),
+            const SizedBox(height: 16),
+            _sectionHeader('Голос Тройки'),
+            const Text(
+              'Слушай образец и выбирай. Edge TTS на PC, играет на телефоне.',
+              style:
+                  TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
+            ),
+            const SizedBox(height: 12),
+            ..._voices.map((v) {
+              final isSelected = v['id'] == _currentVoice;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? const Color(0xFF2A2012)
+                      : const Color(0xFF17150F),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isSelected
+                        ? const Color(0xFFF5A623)
+                        : Colors.transparent,
+                    width: 1.5,
                   ),
-                  icon: const Icon(Icons.check, size: 16),
-                  label: const Text('Применить'),
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 4,
+                  ),
+                  title: Text(
+                    v['name']!,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                  ),
+                  subtitle: Text(
+                    v['desc']!,
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.play_circle_outline,
+                          color: Colors.white70,
+                        ),
+                        tooltip: 'Прослушать',
+                        onPressed: () => _previewVoice(v['id']!),
+                      ),
+                      if (isSelected)
+                        const Padding(
+                          padding: EdgeInsets.only(left: 4),
+                          child: Icon(
+                            Icons.check_circle,
+                            color: Color(0xFFF5A623),
+                          ),
+                        ),
+                    ],
+                  ),
+                  onTap: () => _selectVoice(v['id']!),
+                ),
+              );
+            }),
+            const SizedBox(height: 16),
+            _sectionHeader('Настройки звучания'),
+            const Text(
+              'Жми "Прослушать" чтобы услышать как звучит с этими настройками. '
+              'Чтобы голос звучал более женственно — увеличий тон.',
+              style:
+                  TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
+            ),
+            const SizedBox(height: 8),
+            _sliderRow(
+              label: 'Скорость',
+              value: _rate,
+              min: 0.5,
+              max: 1.5,
+              divisions: 20,
+              display: '${_rate.toStringAsFixed(2)}x',
+              onChanged: (v) =>
+                  setState(() => _rate = double.parse(v.toStringAsFixed(2))),
+            ),
+            _sliderRow(
+              label: 'Тон (питч)',
+              value: _pitch.toDouble(),
+              min: -50,
+              max: 50,
+              divisions: 20,
+              display: '${_pitch >= 0 ? "+" : ""}$_pitch Гц',
+              onChanged: (v) => setState(() => _pitch = v.toInt()),
+            ),
+            _sliderRow(
+              label: 'Громкость',
+              value: _volume.toDouble(),
+              min: -50,
+              max: 50,
+              divisions: 20,
+              display: '${_volume >= 0 ? "+" : ""}$_volume%',
+              onChanged: (v) => setState(() => _volume = v.toInt()),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _previewCurrentSettings,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFF5A623),
+                      side: const BorderSide(color: Color(0xFFF5A623)),
+                    ),
+                    icon: const Icon(Icons.play_arrow, size: 16),
+                    label: const Text('Прослушать'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _applyVoiceSettings,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFF5A623),
+                    ),
+                    icon: const Icon(Icons.check, size: 16),
+                    label: const Text('Применить'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: _resetVoiceSettings,
+              style: TextButton.styleFrom(foregroundColor: Colors.white54),
+              icon: const Icon(Icons.refresh, size: 14),
+              label: const Text(
+                'Сбросить к дефолтам',
+                style: TextStyle(fontSize: 12),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Divider(color: Colors.white10),
+            const SizedBox(height: 16),
+            _sectionHeader('Прерывание речи (barge-in)'),
+            SwitchListTile(
+              title: const Text(
+                'Замолкать когда я говорю',
+                style: TextStyle(color: Colors.white70),
+              ),
+              subtitle: const Text(
+                'Тройка обрывает свой ответ как только слышит твой голос',
+                style: TextStyle(color: Colors.white30, fontSize: 12),
+              ),
+              value: _bargeInEnabled,
+              onChanged: _saveBargeInEnabled,
+              activeThumbColor: const Color(0xFFF5A623),
+              contentPadding: EdgeInsets.zero,
+            ),
+            if (_bargeInEnabled) ...[
+              const SizedBox(height: 4),
+              _sliderRow(
+                label: 'Чувствительность',
+                value: _bargeInThreshold.toDouble(),
+                min: 600,
+                max: 2400,
+                divisions: 18,
+                display: _bargeInThreshold <= 900
+                    ? '$_bargeInThreshold (высокая)'
+                    : _bargeInThreshold >= 1800
+                        ? '$_bargeInThreshold (низкая)'
+                        : '$_bargeInThreshold (средняя)',
+                onChanged: (v) => _saveBargeInThreshold(v.toInt()),
+              ),
+              const Text(
+                'Меньше = срабатывает на любой шорох (включая шум). '
+                'Больше = только когда говоришь явно.',
+                style: TextStyle(
+                  color: Colors.white38,
+                  fontSize: 11,
+                  height: 1.4,
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 8),
-          TextButton.icon(
-            onPressed: _resetVoiceSettings,
-            style: TextButton.styleFrom(foregroundColor: Colors.white54),
-            icon: const Icon(Icons.refresh, size: 14),
-            label: const Text(
-              'Сбросить к дефолтам',
-              style: TextStyle(fontSize: 12),
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Divider(color: Colors.white10),
-          const SizedBox(height: 16),
-          _sectionHeader('Прерывание речи (barge-in)'),
-          SwitchListTile(
-            title: const Text(
-              'Замолкать когда я говорю',
-              style: TextStyle(color: Colors.white70),
-            ),
-            subtitle: const Text(
-              'Тройка обрывает свой ответ как только слышит твой голос',
-              style: TextStyle(color: Colors.white30, fontSize: 12),
-            ),
-            value: _bargeInEnabled,
-            onChanged: _saveBargeInEnabled,
-            activeThumbColor: const Color(0xFFF5A623),
-            contentPadding: EdgeInsets.zero,
-          ),
-          if (_bargeInEnabled) ...[
-            const SizedBox(height: 4),
-            _sliderRow(
-              label: 'Чувствительность',
-              value: _bargeInThreshold.toDouble(),
-              min: 600,
-              max: 2400,
-              divisions: 18,
-              display: _bargeInThreshold <= 900
-                  ? '$_bargeInThreshold (высокая)'
-                  : _bargeInThreshold >= 1800
-                      ? '$_bargeInThreshold (низкая)'
-                      : '$_bargeInThreshold (средняя)',
-              onChanged: (v) => _saveBargeInThreshold(v.toInt()),
-            ),
+            const SizedBox(height: 16),
+            const Divider(color: Colors.white10),
+            const SizedBox(height: 16),
+          ],
+          if (widget.section != SettingsSection.account) ...[
+            _sectionHeader('Управление телефоном'),
             const Text(
-              'Меньше = срабатывает на любой шорох (включая шум). '
-              'Больше = только когда говоришь явно.',
-              style: TextStyle(
-                color: Colors.white38,
-                fontSize: 11,
-                height: 1.4,
+              'Разреши Тройке принимать команды только от твоего '
+              'авторизованного сервера. Можно отключить в любой момент.',
+              style:
+                  TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
+            ),
+            SwitchListTile(
+              title: const Text(
+                'Разрешить управление телефоном',
+                style: TextStyle(color: Colors.white70),
               ),
+              subtitle: const Text(
+                'По умолчанию выключено. Опасные действия всё равно требуют '
+                'отдельного подтверждения.',
+                style: TextStyle(color: Colors.white38, fontSize: 12),
+              ),
+              value: _phoneControlEnabled,
+              onChanged: _setPhoneControlEnabled,
+              activeThumbColor: const Color(0xFFF5A623),
+              contentPadding: EdgeInsets.zero,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Для нажатий, свайпов и ввода текста дополнительно включи '
+              'Тройку в Спец. возможностях Android.',
+              style:
+                  TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _openAccessibilitySettings,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFF5A623),
+                side: const BorderSide(color: Color(0xFFF5A623)),
+              ),
+              icon: const Icon(Icons.accessibility_new, size: 18),
+              label: const Text('Открыть спец. возможности'),
+            ),
+            const SizedBox(height: 24),
+            const Divider(color: Colors.white10),
+            const SizedBox(height: 16),
+            _sectionHeader('Файловая система'),
+            const Text(
+              'По умолчанию Тройка видит общедоступные папки: Downloads, '
+              'Documents, Pictures, Music, Movies, DCIM. '
+              'Если нужен доступ ко ВСЕМ файлам телефона (включая файлы '
+              'других приложений) — дай разрешение "All files access".',
+              style:
+                  TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _requestAllFilesAccess,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFF5A623),
+                side: const BorderSide(color: Color(0xFFF5A623)),
+              ),
+              icon: const Icon(Icons.folder_open, size: 18),
+              label: const Text('Открыть доступ ко всем файлам'),
+            ),
+            const SizedBox(height: 24),
+            const Divider(color: Colors.white10),
+            const SizedBox(height: 16),
+            _sectionHeader('Календарь'),
+            const Text(
+              'Чтобы Тройка мог ставить встречи и читать события из '
+              'системного календаря (Google / Samsung / Outlook), '
+              'разреши доступ.',
+              style:
+                  TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _requestCalendarPermission,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFF5A623),
+                side: const BorderSide(color: Color(0xFFF5A623)),
+              ),
+              icon: const Icon(Icons.event_available, size: 18),
+              label: const Text('Разрешить доступ к календарю'),
+            ),
+            const SizedBox(height: 16),
+            const Divider(color: Colors.white10),
+            const SizedBox(height: 16),
+            _sectionHeader('Местоположение'),
+            const Text(
+              'Только после включения Тройка получает GPS, Wi-Fi и Bluetooth '
+              'контекст вместе с запросами. Разрешение Android само ничего не отправляет.',
+              style:
+                  TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
+            ),
+            const SizedBox(height: 12),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text(
+                'Передавать контекст местоположения',
+                style: TextStyle(color: Colors.white70),
+              ),
+              subtitle: const Text(
+                'Выключение останавливает передачу и очищает временный контекст на сервере.',
+                style: TextStyle(color: Colors.white38, fontSize: 12),
+              ),
+              value: _locationContextEnabled,
+              activeThumbColor: const Color(0xFFF5A623),
+              onChanged: _setLocationContextEnabled,
+            ),
+            OutlinedButton.icon(
+              onPressed: _requestLocationPermission,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFF5A623),
+                side: const BorderSide(color: Color(0xFFF5A623)),
+              ),
+              icon: const Icon(Icons.my_location, size: 18),
+              label: const Text('Разрешить местоположение'),
             ),
           ],
-          const SizedBox(height: 16),
-          const Divider(color: Colors.white10),
-          const SizedBox(height: 16),
-          _sectionHeader('Управление телефоном'),
-          const Text(
-            'Разреши Тройке принимать команды только от твоего '
-            'авторизованного сервера. Можно отключить в любой момент.',
-            style: TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
-          ),
-          SwitchListTile(
-            title: const Text(
-              'Разрешить управление телефоном',
-              style: TextStyle(color: Colors.white70),
+          if (widget.section == SettingsSection.account &&
+              !TroikaConfig.apiKey.startsWith('trk_live_'))
+            const Text(
+              'Аккаунт не подключён. Войди в Тройку, чтобы управлять '
+              'устройствами, экспортом и удалением данных.',
+              style:
+                  TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
             ),
-            subtitle: const Text(
-              'По умолчанию выключено. Опасные действия всё равно требуют '
-              'отдельного подтверждения.',
-              style: TextStyle(color: Colors.white38, fontSize: 12),
-            ),
-            value: _phoneControlEnabled,
-            onChanged: _setPhoneControlEnabled,
-            activeThumbColor: const Color(0xFFF5A623),
-            contentPadding: EdgeInsets.zero,
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Для нажатий, свайпов и ввода текста дополнительно включи '
-            'Тройку в Спец. возможностях Android.',
-            style: TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _openAccessibilitySettings,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFFF5A623),
-              side: const BorderSide(color: Color(0xFFF5A623)),
-            ),
-            icon: const Icon(Icons.accessibility_new, size: 18),
-            label: const Text('Открыть спец. возможности'),
-          ),
-          const SizedBox(height: 24),
-          const Divider(color: Colors.white10),
-          const SizedBox(height: 16),
-          _sectionHeader('Файловая система'),
-          const Text(
-            'По умолчанию Тройка видит общедоступные папки: Downloads, '
-            'Documents, Pictures, Music, Movies, DCIM. '
-            'Если нужен доступ ко ВСЕМ файлам телефона (включая файлы '
-            'других приложений) — дай разрешение "All files access".',
-            style: TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _requestAllFilesAccess,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFFF5A623),
-              side: const BorderSide(color: Color(0xFFF5A623)),
-            ),
-            icon: const Icon(Icons.folder_open, size: 18),
-            label: const Text('Открыть доступ ко всем файлам'),
-          ),
-          const SizedBox(height: 24),
-          const Divider(color: Colors.white10),
-          const SizedBox(height: 16),
-          _sectionHeader('Календарь'),
-          const Text(
-            'Чтобы Тройка мог ставить встречи и читать события из '
-            'системного календаря (Google / Samsung / Outlook), '
-            'разреши доступ.',
-            style: TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _requestCalendarPermission,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFFF5A623),
-              side: const BorderSide(color: Color(0xFFF5A623)),
-            ),
-            icon: const Icon(Icons.event_available, size: 18),
-            label: const Text('Разрешить доступ к календарю'),
-          ),
-          const SizedBox(height: 16),
-          const Divider(color: Colors.white10),
-          const SizedBox(height: 16),
-          _sectionHeader('Местоположение'),
-          const Text(
-            'Только после включения Тройка получает GPS, Wi-Fi и Bluetooth '
-            'контекст вместе с запросами. Разрешение Android само ничего не отправляет.',
-            style: TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
-          ),
-          const SizedBox(height: 12),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text(
-              'Передавать контекст местоположения',
-              style: TextStyle(color: Colors.white70),
-            ),
-            subtitle: const Text(
-              'Выключение останавливает передачу и очищает временный контекст на сервере.',
-              style: TextStyle(color: Colors.white38, fontSize: 12),
-            ),
-            value: _locationContextEnabled,
-            activeThumbColor: const Color(0xFFF5A623),
-            onChanged: _setLocationContextEnabled,
-          ),
-          OutlinedButton.icon(
-            onPressed: _requestLocationPermission,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFFF5A623),
-              side: const BorderSide(color: Color(0xFFF5A623)),
-            ),
-            icon: const Icon(Icons.my_location, size: 18),
-            label: const Text('Разрешить местоположение'),
-          ),
-          if (TroikaConfig.apiKey.startsWith('trk_live_')) ...[
+          if (widget.section != SettingsSection.permissions &&
+              TroikaConfig.apiKey.startsWith('trk_live_')) ...[
             const SizedBox(height: 24),
             const Divider(color: Colors.white10),
             const SizedBox(height: 16),
@@ -1389,21 +1425,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ],
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: _save,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFF5A623),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+          if (widget.section != SettingsSection.account) ...[
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _save,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFF5A623),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                'Сохранить',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
               ),
             ),
-            child: const Text(
-              'Сохранить',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-            ),
-          ),
+          ],
         ],
       ),
     );
