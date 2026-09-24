@@ -23,6 +23,14 @@ enum AssistantState {
   error,
 }
 
+enum BackgroundVoiceState {
+  off,
+  working,
+  permissionRequired,
+  systemDisabled,
+  unavailable,
+}
+
 class AssistantService extends ChangeNotifier {
   static const _lastResultKey = 'troika_last_action_result';
   final AudioRecorderService _recorder = AudioRecorderService();
@@ -40,6 +48,7 @@ class AssistantService extends ChangeNotifier {
   String _debugHeard = '';
   String _activityStatus = '';
   bool _wakeWordEnabled = false;
+  BackgroundVoiceState _backgroundVoiceState = BackgroundVoiceState.off;
   bool _actionInProgress = false;
   RunApprovalRequest? _pendingApproval;
   Completer<String>? _approvalCompleter;
@@ -75,6 +84,14 @@ class AssistantService extends ChangeNotifier {
   String get activityStatus =>
       _activityStatus.isEmpty ? 'Выполняю задачу' : _activityStatus;
   bool get wakeWordEnabled => _wakeWordEnabled;
+  BackgroundVoiceState get backgroundVoiceState => _backgroundVoiceState;
+  String get backgroundVoiceStatus => switch (_backgroundVoiceState) {
+        BackgroundVoiceState.working => 'Работает',
+        BackgroundVoiceState.permissionRequired => 'Требуется разрешение',
+        BackgroundVoiceState.systemDisabled => 'Отключено системой',
+        BackgroundVoiceState.unavailable => 'Недоступно на устройстве',
+        BackgroundVoiceState.off => 'Выключено',
+      };
   bool get isActing => _actionInProgress;
   RunApprovalRequest? get pendingApproval => _pendingApproval;
   List<ChatMessage> get messages => List.unmodifiable(_messages);
@@ -119,6 +136,7 @@ class AssistantService extends ChangeNotifier {
     if (_wakeWordEnabled) {
       await _startWakeWordListening();
     }
+    await refreshBackgroundVoiceStatus();
 
     // Подтянуть историю общей сессии с сервера, чтобы чат открылся не пустым.
     unawaited(loadHistory());
@@ -144,12 +162,12 @@ class AssistantService extends ChangeNotifier {
 
   Future<void> setWakeWordEnabled(bool enabled) async {
     _wakeWordEnabled = enabled;
-    TroikaConfig.wakeWordEnabled = enabled;
+    await TroikaConfig.saveWakeWordEnabled(enabled);
     if (enabled) {
       final micStatus = await Permission.microphone.request();
       if (!micStatus.isGranted) {
         _wakeWordEnabled = false;
-        TroikaConfig.wakeWordEnabled = false;
+        await TroikaConfig.saveWakeWordEnabled(false);
         _setError('Нет доступа к микрофону.');
         return;
       }
@@ -161,11 +179,6 @@ class AssistantService extends ChangeNotifier {
         if (!ignored) {
           await _platform.invokeMethod('requestBatteryOptimizationDisable');
         }
-        final hasOverlay =
-            await _platform.invokeMethod<bool>('hasOverlayPermission') ?? false;
-        if (!hasOverlay) {
-          await _platform.invokeMethod('requestOverlayPermission');
-        }
         if (await Permission.notification.isDenied) {
           await Permission.notification.request();
         }
@@ -176,7 +189,43 @@ class AssistantService extends ChangeNotifier {
     } else {
       await _wakeWord.stopListening();
     }
+    await refreshBackgroundVoiceStatus();
     notifyListeners();
+  }
+
+  Future<void> refreshBackgroundVoiceStatus() async {
+    if (!_wakeWordEnabled) {
+      _backgroundVoiceState = BackgroundVoiceState.off;
+      notifyListeners();
+      return;
+    }
+    if (!Platform.isAndroid) {
+      _backgroundVoiceState = BackgroundVoiceState.unavailable;
+      notifyListeners();
+      return;
+    }
+    try {
+      final value = await _platform.invokeMethod<String>(
+            'getBackgroundVoiceStatus',
+          ) ??
+          'system_disabled';
+      _backgroundVoiceState = switch (value) {
+        'working' => BackgroundVoiceState.working,
+        'permission_required' => BackgroundVoiceState.permissionRequired,
+        'unavailable' => BackgroundVoiceState.unavailable,
+        'off' => BackgroundVoiceState.off,
+        _ => BackgroundVoiceState.systemDisabled,
+      };
+    } catch (_) {
+      _backgroundVoiceState = BackgroundVoiceState.systemDisabled;
+    }
+    notifyListeners();
+  }
+
+  Future<void> openBackgroundVoiceRecovery() async {
+    if (!Platform.isAndroid) return;
+    await _platform.invokeMethod('requestBatteryOptimizationDisable');
+    await refreshBackgroundVoiceStatus();
   }
 
   Future<void> _startWakeWordListening() async {

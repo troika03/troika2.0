@@ -41,9 +41,10 @@ void main() {
     expect(_orb(tester).state, VoiceOrbState.idle);
     expect(find.text('Текст'), findsOneWidget);
     expect(find.byType(ChatScreen), findsNothing);
-    expect(find.text('Команды'), findsOneWidget);
-    expect(find.text('Документы'), findsOneWidget);
-    expect(find.text('Настройки'), findsOneWidget);
+    expect(find.text('Главная'), findsOneWidget);
+    expect(find.text('Дела'), findsOneWidget);
+    expect(find.text('Файлы'), findsOneWidget);
+    expect(find.text('Профиль'), findsOneWidget);
 
     await tester.tap(find.text('Текст'));
     await tester.pump();
@@ -171,19 +172,22 @@ void main() {
     final assistant = AssistantService();
 
     await tester.pumpWidget(_app(assistant));
-    await tester.tap(find.text('Настройки'));
+    await tester.tap(find.text('Профиль'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
 
     expect(find.byType(SettingsOverviewScreen), findsOneWidget);
     expect(find.text('Голос'), findsOneWidget);
-    expect(find.text('Память'), findsOneWidget);
-    expect(find.text('Разрешения'), findsOneWidget);
+    expect(find.text('Аккаунт'), findsOneWidget);
+    expect(find.text('Устройства'), findsOneWidget);
+    expect(find.text('Память и приватность'), findsOneWidget);
+    expect(find.text('Фоновое пробуждение'), findsOneWidget);
+    expect(find.text('Выключено'), findsOneWidget);
     expect(find.text('Что помнит Тройка'), findsOneWidget);
     expect(find.text('URL сервера'), findsNothing);
     expect(find.text('API ключ'), findsNothing);
 
-    await tester.tap(find.text('Доступы устройства'));
+    await tester.tap(find.text('Этот телефон и разрешения'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.text('Управление телефоном'), findsOneWidget);
@@ -193,18 +197,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
 
     await tester.scrollUntilVisible(
-      find.text('Дополнительно'),
-      300,
+      find.text('Интерфейс'),
+      250,
       scrollable: find.byType(Scrollable).last,
     );
-    expect(find.text('Аккаунт и данные'), findsOneWidget);
-    expect(find.text('Дополнительно'), findsOneWidget);
-
-    await tester.tap(find.text('Локальный профиль'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 250));
-    expect(find.textContaining('Аккаунт не подключён'), findsOneWidget);
-    expect(find.text('URL сервера'), findsNothing);
+    expect(find.text('Интерфейс'), findsOneWidget);
+    expect(find.text('Дополнительно'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     assistant.dispose();

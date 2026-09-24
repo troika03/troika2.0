@@ -8,8 +8,15 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Build
+import android.os.BatteryManager
+import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.SystemClock
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Base64
@@ -42,6 +49,7 @@ import kotlin.concurrent.thread
 class HermesListenerService : Service() {
 
     companion object {
+        @Volatile var serviceActive: Boolean = false
         const val CHANNEL_ID = "hermes_listener"
         const val NOTIF_ID = 1001
         const val FLUTTER_CHANNEL = "com.troika.hermes/background"
@@ -143,6 +151,11 @@ class HermesListenerService : Service() {
     private val listenerPaused = AtomicBoolean(false)
     private var wakeLock: PowerManager.WakeLock? = null
     private var listenerThread: Thread? = null
+    private var localWakeRecognizer: SpeechRecognizer? = null
+    private val localWakeActive = AtomicBoolean(false)
+    private var usingOnDeviceWake = false
+    private var serviceStartedAt = 0L
+    private var serviceStartedBattery = -1
     private var tts: TextToSpeech? = null
     private var ttsReady = false
     private var phoneBridge: PhoneBridgeClient? = null
@@ -348,6 +361,13 @@ class HermesListenerService : Service() {
         // тоже может не успеть.
         try {
             startForeground(NOTIF_ID, buildNotification())
+            serviceActive = true
+            if (serviceStartedAt == 0L) {
+                serviceStartedAt = SystemClock.elapsedRealtime()
+                serviceStartedBattery =
+                    (getSystemService(Context.BATTERY_SERVICE) as BatteryManager)
+                        .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            }
         } catch (e: Exception) {
             android.util.Log.e("HermesListener", "startForeground failed: ${e.message}")
         }
@@ -357,6 +377,10 @@ class HermesListenerService : Service() {
             ACTION_TRIGGER_DIALOG -> {
                 if (wakeWordEnabled()) startListening() else startEdgeTts()
                 if (isInDialog.compareAndSet(false, true)) {
+                    if (usingOnDeviceWake) {
+                        try { localWakeRecognizer?.cancel() } catch (_: Exception) {}
+                        localWakeActive.set(false)
+                    }
                     manualDialogActive.set(true)
                     thread(name = "HermesDialogManual") { runDialog(manual = true) }
                 }
@@ -399,10 +423,13 @@ class HermesListenerService : Service() {
             }
         }
 
-        if (isRunning.compareAndSet(false, true)) {
-            listenerThread = thread(start = true, name = "HermesListener") {
-                runListenerLoop()
-            }
+        usingOnDeviceWake = startOnDeviceWakeListener()
+        if (!usingOnDeviceWake) {
+            android.util.Log.e(
+                "HermesListener",
+                "On-device recognition unavailable; ambient audio stays local"
+            )
+            return
         }
 
         // Подключаемся к PC через WebSocket чтобы Hermes-LLM мог управлять телефоном
@@ -442,6 +469,15 @@ class HermesListenerService : Service() {
 
     private fun selfCheck() {
         val now = System.currentTimeMillis()
+        sampleBatteryDrain()
+
+        if (usingOnDeviceWake) {
+            if (!isInDialog.get() && !listenerPaused.get() && !localWakeActive.get()) {
+                logWatchdog("on-device wake inactive → restart")
+                startLocalWakeCycle(250)
+            }
+            return
+        }
 
         // 1) Поток слушателя вообще жив?
         if (listenerThread?.isAlive != true && !listenerPaused.get()) {
@@ -691,6 +727,90 @@ class HermesListenerService : Service() {
         } else {
             android.util.Log.i("HermesListener", "PhoneBridge stopped by user")
         }
+    }
+
+    /** Always-on wake detection. Audio remains inside Android's on-device recognizer. */
+    private fun startOnDeviceWakeListener(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            !SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
+        ) return false
+        isRunning.set(true)
+        startLocalWakeCycle(0)
+        return true
+    }
+
+    private fun startLocalWakeCycle(delayMs: Long) {
+        Handler(mainLooper).postDelayed({
+            if (!wakeWordEnabled() || isInDialog.get() || listenerPaused.get()) return@postDelayed
+            try {
+                if (localWakeRecognizer == null) {
+                    localWakeRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
+                    localWakeRecognizer?.setRecognitionListener(object : RecognitionListener {
+                        override fun onReadyForSpeech(params: Bundle?) { localWakeActive.set(true) }
+                        override fun onBeginningOfSpeech() = Unit
+                        override fun onRmsChanged(rmsdB: Float) = Unit
+                        override fun onBufferReceived(buffer: ByteArray?) = Unit
+                        override fun onEndOfSpeech() = Unit
+                        override fun onEvent(eventType: Int, params: Bundle?) = Unit
+                        override fun onPartialResults(results: Bundle?) { inspectLocalWakeResults(results) }
+                        override fun onResults(results: Bundle?) {
+                            localWakeActive.set(false)
+                            if (!inspectLocalWakeResults(results)) startLocalWakeCycle(250)
+                        }
+                        override fun onError(error: Int) {
+                            localWakeActive.set(false)
+                            if (!isInDialog.get() && wakeWordEnabled()) startLocalWakeCycle(700)
+                        }
+                    })
+                }
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                    putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+                }
+                localWakeActive.set(true)
+                localWakeRecognizer?.startListening(intent)
+            } catch (e: Exception) {
+                localWakeActive.set(false)
+                android.util.Log.e("HermesListener", "On-device wake failed: ${e.message}")
+            }
+        }, delayMs)
+    }
+
+    private fun inspectLocalWakeResults(bundle: Bundle?): Boolean {
+        val variants = bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+            ?: return false
+        val matched = variants.any { phrase ->
+            val normalized = russianLowercase(phrase)
+            WAKE_WORDS.any { normalized.contains(it) }
+        }
+        if (!matched) return false
+        val metrics = getSharedPreferences(PREFS, MODE_PRIVATE)
+        metrics.edit().putLong(
+            "troika_wake_matches",
+            metrics.getLong("troika_wake_matches", 0) + 1
+        ).apply()
+        localWakeActive.set(false)
+        try { localWakeRecognizer?.cancel() } catch (_: Exception) {}
+        if (isInDialog.compareAndSet(false, true)) {
+            thread(name = "TroikaDialog") { runDialog() }
+        }
+        return true
+    }
+
+    private fun sampleBatteryDrain() {
+        if (serviceStartedAt == 0L || serviceStartedBattery < 0) return
+        val hours = (SystemClock.elapsedRealtime() - serviceStartedAt) / 3_600_000.0
+        if (hours < 0.25) return
+        val current = (getSystemService(Context.BATTERY_SERVICE) as BatteryManager)
+            .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        val drainPerHour = (serviceStartedBattery - current).coerceAtLeast(0) / hours
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+            .putFloat("troika_wake_battery_drain_per_hour", drainPerHour.toFloat())
+            .apply()
+        android.util.Log.i("HermesListener", "wake battery drain=${"%.2f".format(drainPerHour)}%/h")
     }
 
     private fun runListenerLoop() {
@@ -983,6 +1103,13 @@ class HermesListenerService : Service() {
                 val maxMs = if (firstTurn) 9000L else 8000L
                 val questionWav = recordUtterance(maxMs)
                 if (questionWav == null) {
+                    if (firstTurn && !manual) {
+                        val metrics = getSharedPreferences(PREFS, MODE_PRIVATE)
+                        metrics.edit().putLong(
+                            "troika_wake_false_or_abandoned",
+                            metrics.getLong("troika_wake_false_or_abandoned", 0) + 1
+                        ).apply()
+                    }
                     // Тишина — выходим из диалога
                     if (!firstTurn) {
                         HermesOverlay.get(this).updateStatus("До связи")
@@ -1126,6 +1253,7 @@ class HermesListenerService : Service() {
             manualDialogActive.set(false)
             listenerPaused.set(false)
             dialogStartMs.set(0)
+            if (usingOnDeviceWake && wakeWordEnabled()) startLocalWakeCycle(600)
             if (manual && !wakeWordEnabled() && !phoneControlEnabled()) stopSelf()
         }
     }
@@ -1506,9 +1634,15 @@ class HermesListenerService : Service() {
     }
 
     override fun onDestroy() {
+        serviceActive = false
         isRunning.set(false)
         manualDialogActive.set(false)
         listenerThread?.interrupt()
+        Handler(mainLooper).post {
+            try { localWakeRecognizer?.destroy() } catch (_: Exception) {}
+            localWakeRecognizer = null
+            localWakeActive.set(false)
+        }
         watchdogThread?.interrupt()
         watchdogThread = null
         wakeLock?.let { if (it.isHeld) it.release() }

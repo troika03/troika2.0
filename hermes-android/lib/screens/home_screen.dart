@@ -11,14 +11,16 @@ import 'chat_screen.dart';
 import 'commands_screen.dart';
 import 'assistant_hub_screen.dart';
 import 'files_screen.dart';
+import 'files_hub_screen.dart';
 import 'local_documents_screen.dart';
 import 'settings_overview_screen.dart';
 import 'voice_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback? onSignedOut;
+  final VoidCallback? onAppearanceChanged;
 
-  const HomeScreen({super.key, this.onSignedOut});
+  const HomeScreen({super.key, this.onSignedOut, this.onAppearanceChanged});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -129,6 +131,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           onSettings: () => _open(
                             SettingsOverviewScreen(
                               onSignedOut: widget.onSignedOut,
+                              onAppearanceChanged: widget.onAppearanceChanged,
                             ),
                           ),
                         ),
@@ -164,11 +167,14 @@ class _HomeScreenState extends State<HomeScreen> {
               backgroundColor: TroikaColors.surface,
               indicatorColor: TroikaColors.brand.withValues(alpha: 0.16),
               onDestinationSelected: (index) {
-                if (index == 1) _open(const CommandsScreen());
-                if (index == 2) _open(const LocalDocumentsScreen());
+                if (index == 1) _open(const AssistantHubScreen());
+                if (index == 2) _open(const FilesHubScreen());
                 if (index == 3) {
                   _open(
-                    SettingsOverviewScreen(onSignedOut: widget.onSignedOut),
+                    SettingsOverviewScreen(
+                      onSignedOut: widget.onSignedOut,
+                      onAppearanceChanged: widget.onAppearanceChanged,
+                    ),
                   );
                 }
               },
@@ -176,19 +182,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 NavigationDestination(
                   icon: Icon(Icons.home_outlined),
                   selectedIcon: Icon(Icons.home),
-                  label: 'Сегодня',
+                  label: 'Главная',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.grid_view_outlined),
-                  label: 'Команды',
+                  icon: Icon(Icons.checklist_rounded),
+                  label: 'Дела',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.description_outlined),
-                  label: 'Документы',
+                  icon: Icon(Icons.folder_outlined),
+                  label: 'Файлы',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.settings_outlined),
-                  label: 'Настройки',
+                  icon: Icon(Icons.person_outline),
+                  label: 'Профиль',
                 ),
               ],
             ),

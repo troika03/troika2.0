@@ -693,11 +693,35 @@ AI-ассистент для Android и Windows, где чат остаётся 
   пропуск Python prebuild без `python3` сохранились. Телефон через ADB не
   подключён, поэтому установка и физическая проверка этого UI не выполнялись.
 
+## Завершено: раздел 5 Word-плана целым блоком (2026-09-24)
+
+- Нижняя Android-навигация приведена к плану: `Главная`, `Дела`, `Файлы`,
+  `Профиль`. Дела открывают проекты/задачи/напоминания; новый файловый hub —
+  документы, презентации, личные файлы и сохранение/экспорт.
+- Профиль упрощён до аккаунта, голоса, устройств, памяти/приватности и
+  интерфейса. Технические server/BYOK/debug-поля остаются только в developer
+  diagnostics. Добавлены сохраняемые тема и размер текста.
+- Фоновое пробуждение показывает честный статус разрешений и системных
+  ограничений. Boot receiver запускает микрофонный сервис только после явного
+  opt-in. Постоянная wake-фаза переведена на Android on-device recognition:
+  фоновый аудиопоток не отправляется на сервер, а STT получает только команду
+  после слова «Тройка».
+- Сохранены foreground notification, lock-screen TTS, barge-in и возврат в
+  ожидание. Android выбирает активный системный Bluetooth input/output route.
+  Локально считаются wake matches, silent/abandoned activations и расход
+  батареи в процентах в час для release gate.
+- Проверено: Flutter `34 passed`; analyze без errors (только прежние info);
+  product/security Python `129 passed, 34 deselected`; website typecheck и
+  production build обеих локалей; web dashboard production build; debug APK
+  собрана с Kotlin-кодом. Подключённого ADB-телефона не было, поэтому
+  locked-screen/Bluetooth/endurance проверка остаётся обязательным физическим
+  release gate перед разделом 6.
+
 ## Ближайший порядок работы
 
-1. Раздел 5 Word-плана читать и реализовывать единым блоком: Android
-   information architecture, главный экран, упрощённые настройки и background
-   voice P0.
+1. Раздел 5 реализован единым блоком. Перед переходом к разделу 6 при первом
+   доступном Android-телефоне выполнить физический locked-screen wake/TTS/
+   barge-in/Bluetooth smoke и длительный battery/false-wake release gate.
 2. Статус каждого блока вести в `docs/TROIKA_1_0_EXECUTION_TRACKER.md`.
 
 ## Проверенный рабочий срез и бесплатная модель (2026-09-10)

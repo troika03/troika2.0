@@ -15,10 +15,19 @@ class BootReceiver : BroadcastReceiver() {
             action == Intent.ACTION_LOCKED_BOOT_COMPLETED ||
             action == "android.intent.action.QUICKBOOT_POWERON"
         ) {
-            // Не стартуем без сохранённого URL — иначе сервис будет крутиться вхолостую
+            // После reboot восстанавливаем только явно включённое пользователем
+            // фоновое пробуждение. Другие старые настройки не должны сами
+            // активировать микрофонный foreground service.
             val prefs = context.getSharedPreferences(
                 HermesListenerService.PREFS, Context.MODE_PRIVATE
             )
+            val wakeEnabled = prefs.getBoolean(
+                HermesListenerService.PREF_WAKE_WORD_ENABLED, false
+            )
+            if (!wakeEnabled) {
+                android.util.Log.i("BootReceiver", "Skipping start — background wake is off")
+                return
+            }
             val url = prefs.getString(HermesListenerService.PREF_URL, null)
             if (url.isNullOrBlank()) {
                 android.util.Log.w("BootReceiver", "Skipping start — no server URL yet")

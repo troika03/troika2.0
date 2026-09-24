@@ -87,8 +87,25 @@ Status: `[ ]` not reached, `[-]` active/partial, `[x]` verified.
 
 ### 5. Android client
 
-- [ ] Implement and verify Android information architecture, main screen,
-  simplified settings, and background voice P0.
+- [x] Android navigation now follows the plan: `Главная`, `Дела`, `Файлы`,
+  `Профиль`. The voice-first home remains the primary surface; tasks/projects,
+  documents/presentations/export and profile settings have dedicated hubs.
+- [x] Profile settings are reduced to Account, Voice, Devices, Memory and
+  privacy, and Interface. Server/BYOK/debug controls are absent from normal
+  builds and remain behind the developer diagnostics build flag. Theme and
+  text-size preferences persist; Russian is the supported 1.0 language.
+- [x] Background wake is explicit opt-in and reports `Работает`, `Требуется
+  разрешение`, `Отключено системой` or `Недоступно на устройстве`. Boot restore
+  now checks the saved opt-in; foreground notification, lock-screen TTS,
+  barge-in and automatic return to listening remain wired.
+- [x] The always-on detector uses Android on-device Russian recognition on
+  Android 12+; ambient wake audio is no longer uploaded to STT. Only the
+  command after `Тройка` enters the authenticated STT/agent/TTS pipeline.
+  Bluetooth routing is delegated to Android's active input/output route.
+- [x] Battery drain, wake matches and silent/abandoned activations are recorded
+  locally for the release gate. APK compilation and Flutter tests verify the
+  implementation; no ADB phone was connected for the physical locked-screen
+  and endurance run in this execution.
 
 ### 6. Windows client
 

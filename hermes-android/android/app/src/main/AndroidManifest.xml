@@ -4,6 +4,7 @@
     <!-- ── Разрешения ─────────────────────────────────────────────── -->
     <!-- Микрофон — запись голоса -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
     <!-- Интернет — запросы к Hermes PC -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Работа в фоне (wake-word сервис) -->

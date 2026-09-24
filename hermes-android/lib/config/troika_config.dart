@@ -32,6 +32,9 @@ class TroikaConfig {
   static const String _legacyKeyVoiceEnabled = 'hermes_voice_enabled';
   static const String _keyWakeWordEnabled = 'troika_wake_word_enabled';
   static const String _legacyKeyWakeWordEnabled = 'hermes_wake_word_enabled';
+  static const String _keyThemeMode = 'troika_theme_mode';
+  static const String _keyTextScale = 'troika_text_scale';
+  static const String _keyLanguage = 'troika_language';
   static const String _keyOnboardingDone = 'troika_onboarding_done';
   static const String _legacyKeyOnboardingDone = 'hermes_onboarding_done';
   static const String _keySessionKey = 'troika_session_key';
@@ -208,6 +211,32 @@ class TroikaConfig {
 
   static set wakeWordEnabled(bool v) =>
       _setBoolCompat(_keyWakeWordEnabled, _legacyKeyWakeWordEnabled, v);
+
+  static Future<void> saveWakeWordEnabled(bool value) async {
+    await _setBoolCompat(
+      _keyWakeWordEnabled,
+      _legacyKeyWakeWordEnabled,
+      value,
+    );
+  }
+
+  static String get themeMode => _prefs.getString(_keyThemeMode) ?? 'system';
+
+  static Future<void> setThemeMode(String value) async {
+    await _prefs.setString(_keyThemeMode, value);
+  }
+
+  static double get textScale => _prefs.getDouble(_keyTextScale) ?? 1.0;
+
+  static Future<void> setTextScale(double value) async {
+    await _prefs.setDouble(_keyTextScale, value.clamp(0.9, 1.25));
+  }
+
+  static String get language => _prefs.getString(_keyLanguage) ?? 'ru';
+
+  static Future<void> setLanguage(String value) async {
+    await _prefs.setString(_keyLanguage, value);
+  }
 
   /// Пройден ли экран первичной настройки (онбординг разрешений).
   static bool get onboardingDone => _prefs.getBool(_keyOnboardingDone) ?? false;

@@ -49,6 +49,12 @@ class _TroikaAppState extends State<TroikaApp> {
   // на экране с неактивной кнопкой. Онбординг остаётся только для Android.
   bool _onboarded = TroikaConfig.onboardingDone || !Platform.isAndroid;
 
+  ThemeMode get _themeMode => switch (TroikaConfig.themeMode) {
+        'light' => ThemeMode.light,
+        'dark' => ThemeMode.dark,
+        _ => ThemeMode.system,
+      };
+
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
@@ -64,7 +70,15 @@ class _TroikaAppState extends State<TroikaApp> {
       child: MaterialApp(
         title: 'Тройка',
         debugShowCheckedModeBanner: false,
-        theme: buildTroikaTheme(),
+        theme: buildTroikaLightTheme(),
+        darkTheme: buildTroikaTheme(),
+        themeMode: _themeMode,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(TroikaConfig.textScale),
+          ),
+          child: child!,
+        ),
         home: !_authenticated
             ? AuthScreen(
                 onAuthenticated: () => setState(() => _authenticated = true),
@@ -72,6 +86,7 @@ class _TroikaAppState extends State<TroikaApp> {
             : _onboarded
                 ? HomeScreen(
                     onSignedOut: () => setState(() => _authenticated = false),
+                    onAppearanceChanged: () => setState(() {}),
                   )
                 : OnboardingScreen(
                     onDone: () => setState(() => _onboarded = true),

@@ -7,11 +7,17 @@ import '../theme/troika_theme.dart';
 import 'memory_screen.dart';
 import 'settings_screen.dart';
 import 'voice_screen.dart';
+import 'interface_settings_screen.dart';
 
 class SettingsOverviewScreen extends StatelessWidget {
   final VoidCallback? onSignedOut;
+  final VoidCallback? onAppearanceChanged;
 
-  const SettingsOverviewScreen({super.key, this.onSignedOut});
+  const SettingsOverviewScreen({
+    super.key,
+    this.onSignedOut,
+    this.onAppearanceChanged,
+  });
 
   Future<void> _open(BuildContext context, Widget screen) {
     return Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
@@ -25,7 +31,7 @@ class SettingsOverviewScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: TroikaColors.bg,
       appBar: AppBar(
-        title: const Text('Настройки'),
+        title: const Text('Профиль'),
         backgroundColor: TroikaColors.bg,
         surfaceTintColor: Colors.transparent,
       ),
@@ -33,44 +39,60 @@ class SettingsOverviewScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
         children: [
           _SettingsCard(
+            title: 'Аккаунт',
+            children: [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.account_circle_outlined),
+                title: Text(account.isEmpty ? 'Локальный профиль' : account),
+                subtitle: const Text('Тариф, устройства и данные'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _open(
+                  context,
+                  SettingsScreen(
+                    onSignedOut: onSignedOut,
+                    section: SettingsSection.account,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          _SettingsCard(
             title: 'Голос',
             children: [
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Слушать «Тройка» в фоне'),
-                subtitle: const Text('Можно отключить в любой момент'),
+                title: const Text('Фоновое пробуждение'),
+                subtitle: Text(assistant.backgroundVoiceStatus),
                 value: assistant.wakeWordEnabled,
                 onChanged: assistant.setWakeWordEnabled,
               ),
+              if (assistant.backgroundVoiceState ==
+                  BackgroundVoiceState.systemDisabled)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: assistant.openBackgroundVoiceRecovery,
+                    icon: const Icon(Icons.battery_alert_outlined),
+                    label: const Text('Разрешить работу в фоне'),
+                  ),
+                ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.record_voice_over_outlined),
-                title: const Text('Выбрать голос'),
+                title: const Text('Голос и озвучка'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _open(context, const VoiceScreen()),
               ),
             ],
           ),
           _SettingsCard(
-            title: 'Память',
-            children: [
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.memory_outlined),
-                title: const Text('Что помнит Тройка'),
-                subtitle: const Text('Посмотреть, изменить или удалить'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _open(context, const MemoryScreen()),
-              ),
-            ],
-          ),
-          _SettingsCard(
-            title: 'Разрешения',
+            title: 'Устройства',
             children: [
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.shield_outlined),
-                title: const Text('Доступы устройства'),
+                title: const Text('Этот телефон и разрешения'),
                 subtitle: Text(
                   'Телефон: ${TroikaConfig.phoneControlEnabled ? "включён" : "выключен"} · '
                   'местоположение: ${TroikaConfig.locationContextEnabled ? "включено" : "выключено"}',
@@ -87,40 +109,50 @@ class SettingsOverviewScreen extends StatelessWidget {
             ],
           ),
           _SettingsCard(
-            title: 'Аккаунт и данные',
+            title: 'Память и приватность',
             children: [
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.account_circle_outlined),
-                title: Text(account.isEmpty ? 'Локальный профиль' : account),
-                subtitle: const Text('Устройства, экспорт и удаление данных'),
+                leading: const Icon(Icons.memory_outlined),
+                title: const Text('Что помнит Тройка'),
+                subtitle: const Text('Посмотреть, изменить или удалить'),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => _open(
-                  context,
-                  SettingsScreen(
-                    onSignedOut: onSignedOut,
-                    section: SettingsSection.account,
-                  ),
-                ),
+                onTap: () => _open(context, const MemoryScreen()),
               ),
             ],
           ),
           _SettingsCard(
-            title: 'Дополнительно',
+            title: 'Интерфейс',
             children: [
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.tune_outlined),
-                title: const Text('Расширенные настройки'),
-                subtitle: const Text('Подключение, тонкая настройка и доступы'),
+                leading: const Icon(Icons.palette_outlined),
+                title: const Text('Тема, язык и размер текста'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _open(
                   context,
-                  SettingsScreen(onSignedOut: onSignedOut),
+                  InterfaceSettingsScreen(onChanged: onAppearanceChanged),
                 ),
               ),
             ],
           ),
+          if (TroikaConfig.developerDiagnosticsEnabled)
+            _SettingsCard(
+              title: 'Дополнительно',
+              children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.tune_outlined),
+                  title: const Text('Расширенные настройки'),
+                  subtitle: const Text('Подключение и диагностика'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _open(
+                    context,
+                    SettingsScreen(onSignedOut: onSignedOut),
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );

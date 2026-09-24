@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.view.WindowManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -78,6 +79,9 @@ class MainActivity : FlutterActivity() {
                 }
                 "isBatteryOptimizationIgnored" -> {
                     result.success(isBatteryOptimizationIgnored())
+                }
+                "getBackgroundVoiceStatus" -> {
+                    result.success(backgroundVoiceStatus())
                 }
                 "requestOverlayPermission" -> {
                     requestOverlayPermission()
@@ -503,6 +507,25 @@ class MainActivity : FlutterActivity() {
             REQ_LOCATION_BG ->
                 methodChannel?.invokeMethod("background_location_result", hasBackgroundLocation())
         }
+    }
+
+    private fun backgroundVoiceStatus(): String {
+        val prefs = getSharedPreferences(
+            HermesListenerService.PREFS, Context.MODE_PRIVATE
+        )
+        if (!prefs.getBoolean(HermesListenerService.PREF_WAKE_WORD_ENABLED, false)) {
+            return "off"
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return "permission_required"
+        }
+        if (!isBatteryOptimizationIgnored()) return "system_disabled"
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            !SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
+        ) return "unavailable"
+        return if (HermesListenerService.serviceActive) "working" else "system_disabled"
     }
 
     @Suppress("DEPRECATION")
