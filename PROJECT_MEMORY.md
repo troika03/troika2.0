@@ -637,11 +637,38 @@ AI-ассистент для Android и Windows, где чат остаётся 
   обеих локалей успешны. Старые битые ссылки/anchors в импортированной Hermes
   документации остаются предупреждениями и не относятся к продуктовой главной.
 
+## Завершено: раздел 3 Word-плана целым блоком (2026-09-24)
+
+- Доказательный статус всех десяти обязательных областей записан в
+  `docs/TROIKA_1_0_SECTION_3_AUDIT.md`. Memory, web, documents и tasks имеют
+  рабочий MVP; account, voice, devices, subscription и production остаются
+  честно частичными до их подробных разделов. AI работает в текущем MVP через
+  принудительный безопасный product toolset.
+- `troika_product/feature_policy.py` стал единым контрактом default-off для
+  GROUND, старого DAEMON, live screen/WebRTC, live CameraX, полного
+  Accessibility control, Kali, production self-improvement, video generation,
+  экзотических мессенджеров, редких Hermes tools и автономного PC control.
+  Даже включённый диагностический флаг сам по себе не расширяет hosted toolset.
+- Обычный product API по-прежнему принудительно использует только
+  `troika-product`. Отдельный snapshot toolset появляется только при двух
+  серверных флагах. Android-кнопка snapshot теперь отсутствует в обычной
+  сборке и требует `TROIKA_SCREEN_SNAPSHOT_BETA=true`.
+- Старый код возможностей не удалён. Нормальный UI и product routing его не
+  показывают и не вызывают.
+- Добавлен owner-scoped `GET /v1/subscription`: он возвращает тариф и дневное
+  использование без платёжных данных. Android показывает тариф и остаток в
+  аккаунте; при выключенном enforcement честно отмечает справочный лимит.
+  Checkout, webhooks и отмена не имитируются и остаются в разделе 8.
+- Проверено: полный product/security CI-срез `129 passed, 34 deselected`; Ruff и compileall;
+  Flutter `30 passed`; analyze без errors с 29 прежними info; website
+  typecheck и production build обеих локалей; web dashboard production build;
+  debug APK собрана. Телефон через ADB не подключён, поэтому установка и
+  physical tap check не выполнялись.
+
 ## Ближайший порядок работы
 
-1. Раздел 3 Word-плана читать и реализовывать единым блоком: обязательный
-   scope 1.0 и изоляция экспериментов
-   feature flags без удаления сохранённых возможностей.
+1. Раздел 4 Word-плана читать и реализовывать единым блоком: visual direction,
+   главный voice-first flow и все состояния voice orb.
 2. Статус каждого блока вести в `docs/TROIKA_1_0_EXECUTION_TRACKER.md`.
 
 ## Проверенный рабочий срез и бесплатная модель (2026-09-10)

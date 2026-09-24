@@ -408,8 +408,10 @@ def test_product_capabilities_do_not_advertise_global_responses_api(tmp_path) ->
     assert payload["features"]["product_quota_enforcement"] is False
     assert payload["features"]["screen_snapshot"] is False
     assert payload["features"]["screen_snapshot_external_vision"] is False
+    assert not any(payload["features"]["experimental"].values())
     assert payload["features"]["account_export"] is True
     assert payload["features"]["account_deletion"] is True
+    assert payload["features"]["subscription_status"] is True
     assert "artifacts" in payload["endpoints"]
     assert payload["endpoints"]["account"] == {
         "method": "DELETE",
@@ -419,6 +421,42 @@ def test_product_capabilities_do_not_advertise_global_responses_api(tmp_path) ->
         "method": "GET",
         "path": "/v1/account/export",
     }
+    assert payload["endpoints"]["subscription"] == {
+        "method": "GET",
+        "path": "/v1/subscription",
+    }
+
+
+def test_product_subscription_status_is_private_and_reports_enforcement(
+    tmp_path,
+) -> None:
+    adapter, first_token, second_token = _adapter_with_two_users(
+        tmp_path, quotas_enabled=True
+    )
+    first_request = _Request(first_token)
+    second_request = _Request(second_token)
+    assert adapter._check_auth(first_request) is None
+    assert adapter._check_auth(second_request) is None
+    first = first_request["troika_product_principal"]
+    second = second_request["troika_product_principal"]
+    adapter._access_registry.set_entitlement(
+        first.user_id, plan="plus", daily_request_limit=10
+    )
+    adapter._access_registry.set_entitlement(
+        second.user_id, plan="pro", daily_request_limit=20
+    )
+    adapter._access_registry.consume_chat_request(first)
+
+    response = asyncio.run(adapter._handle_subscription(_Request(first_token)))
+    payload = json.loads(response.body)["subscription"]
+
+    assert response.status == 200
+    assert payload["plan"] == "plus"
+    assert payload["daily_limit"] == 10
+    assert payload["used"] == 1
+    assert payload["remaining"] == 9
+    assert payload["quota_enforced"] is True
+    assert second.user_id not in response.text
 
 
 def test_product_artifact_api_is_owner_scoped(tmp_path) -> None:

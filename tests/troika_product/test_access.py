@@ -152,6 +152,34 @@ def test_operator_can_change_user_plan_and_limit(tmp_path) -> None:
     assert (decision.limit, decision.remaining) == (200, 199)
 
 
+def test_subscription_summary_is_owner_scoped_and_reports_current_usage(
+    tmp_path,
+) -> None:
+    registry = AccessRegistry(tmp_path / "access.db")
+    user_id = registry.create_user(
+        "one@example.com", plan="plus", daily_request_limit=5
+    )
+    token = registry.issue_device_token(
+        registry.create_device(user_id, name="Pixel", platform="android")
+    )
+    principal = registry.authenticate(token)
+    assert principal is not None
+    now = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
+
+    registry.consume_chat_request(principal, now=now)
+    summary = registry.subscription_summary(principal, now=now)
+
+    assert summary == {
+        "plan": "plus",
+        "status": "active",
+        "usage_date": "2026-09-24",
+        "daily_limit": 5,
+        "used": 1,
+        "remaining": 4,
+        "updated_at": summary["updated_at"],
+    }
+
+
 def test_audit_log_has_no_raw_session_or_prompt_content(tmp_path) -> None:
     registry = AccessRegistry(tmp_path / "access.db")
     user_id = registry.create_user("one@example.com")

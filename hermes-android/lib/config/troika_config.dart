@@ -13,6 +13,12 @@ class TroikaConfig {
     defaultValue: false,
   );
 
+  /// Closed-beta screen snapshot stays absent from normal product builds.
+  static const bool screenSnapshotBetaEnabled = bool.fromEnvironment(
+    'TROIKA_SCREEN_SNAPSHOT_BETA',
+    defaultValue: false,
+  );
+
   static const String _keyServerUrl = 'troika_server_url';
   static const String _legacyKeyServerUrl = 'hermes_server_url';
   static const String _keyApiKey = 'troika_api_key';
@@ -279,6 +285,9 @@ class TroikaConfig {
 
   /// Устройства текущего product-аккаунта.
   static String get accountDevicesUrl => '$serverUrl/v1/account/devices';
+
+  /// Текущий тариф и доступный дневной лимит владельца.
+  static String get subscriptionUrl => '$serverUrl/v1/subscription';
 
   /// Remove credentials after this installation revokes its own device.
   /// Keep non-sensitive local preferences, clear account-bound consents, and

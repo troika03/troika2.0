@@ -438,6 +438,42 @@ class AccessRegistry:
             ).fetchone()
         return int(row["requests"]) if row is not None else 0
 
+    def subscription_summary(
+        self, principal: AccessPrincipal, *, now: datetime | None = None
+    ) -> dict[str, str | int | float]:
+        """Return the current owner's plan and daily usage without billing data."""
+        timestamp = now or datetime.now(timezone.utc)
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+        usage_date = timestamp.astimezone(timezone.utc).date().isoformat()
+        with self._connect() as connection:
+            self._require_active_principal(connection, principal)
+            entitlement = connection.execute(
+                "SELECT plan, daily_request_limit, updated_at "
+                "FROM troika_entitlements WHERE user_id = ?",
+                (principal.user_id,),
+            ).fetchone()
+            if entitlement is None:
+                raise ValueError("user has no active entitlement")
+            usage = connection.execute(
+                "SELECT requests FROM troika_usage_daily "
+                "WHERE user_id = ? AND usage_date = ?",
+                (principal.user_id, usage_date),
+            ).fetchone()
+        limit = self._validate_daily_request_limit(
+            entitlement["daily_request_limit"]
+        )
+        used = int(usage["requests"]) if usage is not None else 0
+        return {
+            "plan": str(entitlement["plan"]),
+            "status": "active",
+            "usage_date": usage_date,
+            "daily_limit": limit,
+            "used": used,
+            "remaining": max(0, limit - used),
+            "updated_at": float(entitlement["updated_at"]),
+        }
+
     @staticmethod
     def _normalize_audit_details(
         details: dict[str, str | int | float | bool | None] | None,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../config/troika_config.dart';
 import '../services/troika_api_service.dart';
 import '../theme/troika_theme.dart';
 import 'memory_screen.dart';
@@ -430,56 +431,60 @@ class _AssistantHubScreenState extends State<AssistantHubScreen> {
                             }
                           }),
                     ])),
-                    _section('Показ экрана', null),
-                    _Panel(
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                          Row(children: [
-                            Icon(
-                                _screenReady
-                                    ? Icons.visibility
-                                    : Icons.visibility_off_outlined,
-                                color: _screenReady
-                                    ? TroikaColors.brand
-                                    : TroikaColors.textMuted),
-                            const SizedBox(width: 10),
-                            Expanded(
-                                child: Text(
-                                    _screenReady
-                                        ? 'Разрешён один снимок'
-                                        : 'Снимок запрещён',
-                                    style: const TextStyle(
-                                        color: TroikaColors.text,
-                                        fontWeight: FontWeight.w600))),
-                          ]),
-                          const SizedBox(height: 8),
-                          const Text(
-                              'Android покажет системное окно. Разрешение действует 2 минуты и исчезает после одного кадра. Перед отправкой сервер запросит отдельное подтверждение.',
-                              style: TextStyle(color: TroikaColors.textMuted)),
-                          const SizedBox(height: 12),
-                          Row(children: [
-                            Expanded(
-                                child: FilledButton.icon(
-                                    onPressed: _screenReady || _screenBusy
-                                        ? null
-                                        : _requestScreenConsent,
-                                    icon: _screenBusy
-                                        ? const SizedBox(
-                                            width: 16,
-                                            height: 16,
-                                            child: CircularProgressIndicator(
-                                                strokeWidth: 2))
-                                        : const Icon(Icons.screenshot_monitor),
-                                    label: const Text('Разрешить снимок'))),
-                            if (_screenReady) ...[
+                    if (TroikaConfig.screenSnapshotBetaEnabled) ...[
+                      _section('Показ экрана', null),
+                      _Panel(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                            Row(children: [
+                              Icon(
+                                  _screenReady
+                                      ? Icons.visibility
+                                      : Icons.visibility_off_outlined,
+                                  color: _screenReady
+                                      ? TroikaColors.brand
+                                      : TroikaColors.textMuted),
                               const SizedBox(width: 10),
-                              OutlinedButton(
-                                  onPressed: _stopScreenConsent,
-                                  child: const Text('Остановить')),
-                            ]
-                          ])
-                        ])),
+                              Expanded(
+                                  child: Text(
+                                      _screenReady
+                                          ? 'Разрешён один снимок'
+                                          : 'Снимок запрещён',
+                                      style: const TextStyle(
+                                          color: TroikaColors.text,
+                                          fontWeight: FontWeight.w600))),
+                            ]),
+                            const SizedBox(height: 8),
+                            const Text(
+                                'Android покажет системное окно. Разрешение действует 2 минуты и исчезает после одного кадра. Перед отправкой сервер запросит отдельное подтверждение.',
+                                style:
+                                    TextStyle(color: TroikaColors.textMuted)),
+                            const SizedBox(height: 12),
+                            Row(children: [
+                              Expanded(
+                                  child: FilledButton.icon(
+                                      onPressed: _screenReady || _screenBusy
+                                          ? null
+                                          : _requestScreenConsent,
+                                      icon: _screenBusy
+                                          ? const SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child: CircularProgressIndicator(
+                                                  strokeWidth: 2))
+                                          : const Icon(
+                                              Icons.screenshot_monitor),
+                                      label: const Text('Разрешить снимок'))),
+                              if (_screenReady) ...[
+                                const SizedBox(width: 10),
+                                OutlinedButton(
+                                    onPressed: _stopScreenConsent,
+                                    child: const Text('Остановить')),
+                              ]
+                            ])
+                          ])),
+                    ],
                   ])),
     );
   }

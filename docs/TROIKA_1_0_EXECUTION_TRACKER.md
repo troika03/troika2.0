@@ -56,10 +56,20 @@ Status: `[ ]` not reached, `[-]` active/partial, `[x]` verified.
 
 ### 3. Boundaries of the first version
 
-- [-] Verify every mandatory Troika 1.0 area: account, voice, AI, memory, web,
-  documents, tasks, devices, subscription, and production.
-- [ ] Put non-blocking experimental capabilities behind feature flags and
-  remove them from normal UI and marketing.
+- [x] Audited every mandatory Troika 1.0 area against code and tests. Account,
+  voice, devices, subscription and production remain honestly partial; their
+  missing acceptance criteria stay assigned to later detailed sections. The
+  evidence matrix is `docs/TROIKA_1_0_SECTION_3_AUDIT.md`.
+- [x] Added one default-off product feature policy for GROUND, legacy DAEMON,
+  live screen/CameraX, full Accessibility control, Kali, self-improvement,
+  video generation, exotic messengers, rare Hermes tools and autonomous PC.
+  Normal hosted tool routing cannot inherit them. Closed-beta screen snapshot
+  also disappeared from ordinary Android builds and requires explicit server
+  and build flags. Existing implementation code remains preserved.
+- [x] Added the connected subscription-status baseline: authenticated owners
+  can read their plan and daily usage without billing data, and Android shows
+  the current plan and limit state. Checkout, webhooks and cancellation remain
+  explicitly in section 8.
 
 ### 4. New voice-first design
 

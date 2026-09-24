@@ -944,6 +944,9 @@ class APIServerAdapter(BasePlatformAdapter):
                 os.getenv("TROIKA_PRODUCT_SCREEN_EXTERNAL_VISION_ENABLED", "false"),
             )
         )
+        from troika_product.feature_policy import experimental_feature_flags
+
+        self._product_experimental_features = experimental_feature_flags(extra)
         self._product_stt_url = str(
             extra.get(
                 "product_stt_url",
@@ -1623,12 +1626,12 @@ class APIServerAdapter(BasePlatformAdapter):
             # Product API must never inherit a local operator's broad toolset.
             # Device/PC/server actions need a separately paired companion and
             # explicit product approval model before product exposure.
-            enabled_toolsets = ["troika-product"]
-            if (
-                self._product_screen_snapshot_enabled
-                and self._product_screen_external_vision_enabled
-            ):
-                enabled_toolsets.append("troika-screen-snapshot")
+            from troika_product.feature_policy import product_toolsets
+
+            enabled_toolsets = product_toolsets(
+                screen_snapshot_enabled=self._product_screen_snapshot_enabled,
+                external_vision_enabled=self._product_screen_external_vision_enabled,
+            )
 
         max_iterations = int(os.getenv("HERMES_MAX_ITERATIONS", "90"))
 
@@ -1884,6 +1887,37 @@ class APIServerAdapter(BasePlatformAdapter):
             {"devices": devices}, headers={"Cache-Control": "private, no-store"}
         )
 
+    async def _handle_subscription(self, request: "web.Request") -> "web.Response":
+        """GET /v1/subscription — owner-visible plan and current limit usage."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        principal = self._product_principal(request)
+        if principal is None or self._access_registry is None:
+            return web.json_response(
+                _openai_error("Subscription status is available only in product mode"),
+                status=404,
+            )
+        try:
+            subscription = self._access_registry.subscription_summary(principal)
+        except PermissionError:
+            return web.json_response(
+                _openai_error("Product authentication is required"), status=401
+            )
+        except ValueError:
+            return web.json_response(
+                _openai_error("Subscription status is unavailable"), status=503
+            )
+        return web.json_response(
+            {
+                "subscription": {
+                    **subscription,
+                    "quota_enforced": self._product_quotas_enabled,
+                }
+            },
+            headers={"Cache-Control": "private, no-store"},
+        )
+
     async def _handle_revoke_account_device(
         self, request: "web.Request"
     ) -> "web.Response":
@@ -2131,6 +2165,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 "self_registration": self._access_registry is not None,
                 "account_export": self._access_registry is not None,
                 "account_deletion": self._access_registry is not None,
+                "subscription_status": self._access_registry is not None,
                 "automatic_retention": self._retention_enabled,
                 "retention_dry_run": self._retention_dry_run,
                 "screen_snapshot": bool(
@@ -2143,6 +2178,7 @@ class APIServerAdapter(BasePlatformAdapter):
                     and self._product_screen_external_vision_enabled
                 ),
                 "product_quota_enforcement": self._product_quotas_enabled,
+                "experimental": dict(self._product_experimental_features),
                 "session_continuity_header": "X-Hermes-Session-Id",
                 "session_key_header": "X-Hermes-Session-Key",
                 "cors": bool(self._cors_origins),
@@ -2204,6 +2240,9 @@ class APIServerAdapter(BasePlatformAdapter):
                         },
                         "account_export": {
                             "method": "GET", "path": "/v1/account/export",
+                        },
+                        "subscription": {
+                            "method": "GET", "path": "/v1/subscription",
                         },
                     }
                     if self._access_registry is not None
@@ -5914,6 +5953,9 @@ class APIServerAdapter(BasePlatformAdapter):
                 )
                 self._app.router.add_get(
                     "/v1/account/devices", self._handle_account_devices
+                )
+                self._app.router.add_get(
+                    "/v1/subscription", self._handle_subscription
                 )
                 self._app.router.add_delete(
                     "/v1/account/devices/{device_id}",

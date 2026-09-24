@@ -12,6 +12,8 @@ void main() {
   test('does not ship a shared API key', () {
     expect(TroikaConfig.defaultApiKey, isEmpty);
     expect(TroikaConfig.wakeWordEnabled, isFalse);
+    expect(TroikaConfig.developerDiagnosticsEnabled, isFalse);
+    expect(TroikaConfig.screenSnapshotBetaEnabled, isFalse);
   });
 
   test('migrates legacy preferences without losing account or consent',
@@ -64,6 +66,26 @@ void main() {
         'https://example.test:9443/troika/v1/account/export');
     expect(TroikaConfig.accountDevicesUrl,
         'https://example.test:9443/troika/v1/account/devices');
+    expect(TroikaConfig.subscriptionUrl,
+        'https://example.test:9443/troika/v1/subscription');
+  });
+
+  test('parses owner-visible subscription status', () {
+    final subscription = AccountSubscription.fromJson({
+      'plan': 'plus',
+      'status': 'active',
+      'daily_limit': 100,
+      'used': 12,
+      'remaining': 88,
+      'quota_enforced': true,
+    });
+
+    expect(subscription.plan, 'plus');
+    expect(subscription.status, 'active');
+    expect(subscription.dailyLimit, 100);
+    expect(subscription.used, 12);
+    expect(subscription.remaining, 88);
+    expect(subscription.quotaEnforced, isTrue);
   });
 
   test('parses owner-visible device metadata without credentials', () {

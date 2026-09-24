@@ -103,6 +103,35 @@ class DeviceRevocationResult {
   });
 }
 
+class AccountSubscription {
+  final String plan;
+  final String status;
+  final int dailyLimit;
+  final int used;
+  final int remaining;
+  final bool quotaEnforced;
+
+  const AccountSubscription({
+    required this.plan,
+    required this.status,
+    required this.dailyLimit,
+    required this.used,
+    required this.remaining,
+    required this.quotaEnforced,
+  });
+
+  factory AccountSubscription.fromJson(Map<String, dynamic> json) {
+    return AccountSubscription(
+      plan: (json['plan'] ?? 'free').toString(),
+      status: (json['status'] ?? 'active').toString(),
+      dailyLimit: (json['daily_limit'] as num?)?.toInt() ?? 0,
+      used: (json['used'] as num?)?.toInt() ?? 0,
+      remaining: (json['remaining'] as num?)?.toInt() ?? 0,
+      quotaEnforced: json['quota_enforced'] == true,
+    );
+  }
+}
+
 /// Одно сообщение в чате (общая модель для голоса и текста).
 /// Может нести текст и/или вложенные картинки (base64 data-url).
 class ChatMessage {
@@ -286,6 +315,43 @@ class TroikaApiService {
       throw TroikaApiException('Сервер устройств не ответил вовремя.');
     } on FormatException {
       throw TroikaApiException('Сервер вернул некорректный список устройств.');
+    }
+  }
+
+  Future<AccountSubscription> getSubscription() async {
+    if (!TroikaConfig.apiKey.startsWith('trk_live_')) {
+      throw TroikaApiException('Подписка доступна после входа в аккаунт.');
+    }
+    try {
+      final response = await http
+          .get(
+            Uri.parse(TroikaConfig.subscriptionUrl),
+            headers: TroikaConfig.headers,
+          )
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode == 401) {
+        throw TroikaApiException(
+          'Доступ этого устройства отозван. Войди снова.',
+          statusCode: 401,
+        );
+      }
+      if (response.statusCode != 200) {
+        throw TroikaApiException(
+          'Статус подписки недоступен (${response.statusCode}).',
+          statusCode: response.statusCode,
+        );
+      }
+      final payload =
+          json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      return AccountSubscription.fromJson(
+        payload['subscription'] as Map<String, dynamic>,
+      );
+    } on SocketException {
+      throw TroikaApiException('Нет соединения с сервером подписки.');
+    } on TimeoutException {
+      throw TroikaApiException('Сервер подписки не ответил вовремя.');
+    } on FormatException {
+      throw TroikaApiException('Сервер вернул некорректный статус подписки.');
     }
   }
 
