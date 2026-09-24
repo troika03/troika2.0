@@ -102,8 +102,14 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Локальные команды телефона и ПК работают бесплатно. '
-                      'Облачный ИИ подключается отдельным тарифом.',
+                      'Скажи, что нужно сделать. Тройка выполнит задачу, '
+                      'сохранит результат и запомнит полезный контекст.',
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Например: разобрать задание, подготовить отчёт, '
+                      'помочь с кодом или напомнить о деле.',
+                      style: TextStyle(color: Colors.white60),
                     ),
                     const SizedBox(height: 24),
                     TextField(
@@ -130,13 +136,14 @@ class _AuthScreenState extends State<AuthScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    TextButton.icon(
-                      onPressed: _busy
-                          ? null
-                          : () => setState(() => _showServer = !_showServer),
-                      icon: const Icon(Icons.settings_outlined),
-                      label: const Text('Адрес тестового сервера'),
-                    ),
+                    if (TroikaConfig.developerDiagnosticsEnabled)
+                      TextButton.icon(
+                        onPressed: _busy
+                            ? null
+                            : () => setState(() => _showServer = !_showServer),
+                        icon: const Icon(Icons.settings_outlined),
+                        label: const Text('Адрес тестового сервера'),
+                      ),
                     if (_showServer)
                       TextField(
                         controller: _server,

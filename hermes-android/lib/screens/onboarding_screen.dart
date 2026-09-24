@@ -8,7 +8,7 @@ import '../config/troika_config.dart';
 /// Сервер и ключ уже вшиты в дефолты ([TroikaConfig.defaultServerUrl]).
 /// Здесь пользователя проводят через системные разрешения, которые Android
 /// нельзя выдать из кода: микрофон, спец-возможности (управление телефоном),
-/// поверх других окон, отключение оптимизации батареи (для работы 24/7).
+/// поверх других окон и отключение оптимизации батареи для фонового wake word.
 ///
 /// Каждый шаг показывает живой статус (✓/○): нажал «Выдать» → открылась нужная
 /// системная страница → вернулся в приложение → статус сам перепроверяется
@@ -121,9 +121,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               ),
               const SizedBox(height: 8),
               Text(
-                'Сначала выдай микрофон. Подключение к своему серверу и '
-                'дополнительные возможности можно настроить позже в разделе '
-                '«Настройки».',
+                'Микрофон нужен, чтобы сразу сказать задачу и получить '
+                'готовый результат. Остальные разрешения включаются позже '
+                'только по необходимости в разделе «Разрешения».',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: Colors.white70,
                 ),
@@ -140,57 +140,53 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       required_: true,
                       onTap: _grantMic,
                     ),
-                    _Step(
-                      icon: Icons.accessibility_new,
-                      title: 'Спец-возможности',
-                      subtitle:
-                          'Необязательно. Разрешает нажатия, свайпы, ввод и '
-                          'скриншоты. Включай только если действительно нужен '
-                          'контроль телефона.',
-                      done: _accessibility,
-                      required_: false,
-                      onTap: () => _invoke('openAccessibilitySettings'),
-                    ),
-                    _Step(
-                      icon: Icons.layers,
-                      title: 'Поверх других окон',
-                      subtitle:
-                          'Чтобы всплывать поверх приложений во время диалога.',
-                      done: _overlay,
-                      required_: false,
-                      onTap: () => _invoke('requestOverlayPermission'),
-                    ),
-                    _Step(
-                      icon: Icons.battery_charging_full,
-                      title: 'Работа в фоне 24/7',
-                      subtitle:
-                          'Отключить оптимизацию батареи, чтобы система не '
-                          'усыпляла Тройку.',
-                      done: _battery,
-                      required_: false,
-                      onTap: () => _invoke('requestBatteryOptimizationDisable'),
-                    ),
-                    _Step(
-                      icon: Icons.my_location,
-                      title: 'Местоположение',
-                      subtitle:
-                          'Чтобы Тройка знала где ты — погода рядом, места, '
-                          'маршруты, «где я».',
-                      done: _location,
-                      required_: false,
-                      onTap: () => _invoke('requestLocationPermission'),
-                    ),
-                    _Step(
-                      icon: Icons.location_searching,
-                      title: 'Местоположение в фоне',
-                      subtitle:
-                          'Видеть твоё место даже когда приложение свёрнуто. '
-                          'В настройках выбери «Разрешать всегда». Сначала выдай '
-                          'обычное местоположение выше.',
-                      done: _locationBg,
-                      required_: false,
-                      onTap: () => _invoke('requestBackgroundLocation'),
-                    ),
+                    if (TroikaConfig.developerDiagnosticsEnabled) ...[
+                      _Step(
+                        icon: Icons.accessibility_new,
+                        title: 'Спец-возможности',
+                        subtitle:
+                            'Необязательно. Разрешает нажатия, свайпы, ввод и '
+                            'скриншоты.',
+                        done: _accessibility,
+                        required_: false,
+                        onTap: () => _invoke('openAccessibilitySettings'),
+                      ),
+                      _Step(
+                        icon: Icons.layers,
+                        title: 'Поверх других окон',
+                        subtitle: 'Необязательное developer-разрешение.',
+                        done: _overlay,
+                        required_: false,
+                        onTap: () => _invoke('requestOverlayPermission'),
+                      ),
+                      _Step(
+                        icon: Icons.battery_charging_full,
+                        title: 'Фоновое пробуждение',
+                        subtitle: 'Помогает локальному wake word работать при '
+                            'выключенном экране.',
+                        done: _battery,
+                        required_: false,
+                        onTap: () =>
+                            _invoke('requestBatteryOptimizationDisable'),
+                      ),
+                      _Step(
+                        icon: Icons.my_location,
+                        title: 'Местоположение',
+                        subtitle: 'Необязательный контекст по явному согласию.',
+                        done: _location,
+                        required_: false,
+                        onTap: () => _invoke('requestLocationPermission'),
+                      ),
+                      _Step(
+                        icon: Icons.location_searching,
+                        title: 'Местоположение в фоне',
+                        subtitle:
+                            'Developer-настройка. Требует отдельного согласия.',
+                        done: _locationBg,
+                        required_: false,
+                        onTap: () => _invoke('requestBackgroundLocation'),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -207,7 +203,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   ),
                 ),
               ),
-              if (_requiredDone && !(_overlay && _battery))
+              if (_requiredDone &&
+                  TroikaConfig.developerDiagnosticsEnabled &&
+                  !(_overlay && _battery))
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Center(

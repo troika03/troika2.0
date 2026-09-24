@@ -36,7 +36,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (TroikaConfig.serverUrl.trim().isEmpty && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Локальный режим: команды работают без сервера'),
+            content: Text('Тройка готова к локальным командам'),
             duration: Duration(seconds: 3),
           ),
         );

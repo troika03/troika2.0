@@ -31,6 +31,7 @@ const websiteDir = resolve(scriptDir, "..");
 const extractScript = join(scriptDir, "extract-skills.py");
 const llmsScript = join(scriptDir, "generate-llms-txt.py");
 const outputFile = join(websiteDir, "src", "data", "skills.json");
+const metaOutputFile = join(websiteDir, "src", "data", "skills-meta.json");
 const unifiedIndexFile = join(websiteDir, "static", "api", "skills-index.json");
 const UNIFIED_INDEX_URL =
   "https://hermes-agent.nousresearch.com/docs/api/skills-index.json";
@@ -39,6 +40,7 @@ const UNIFIED_INDEX_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
 function writeEmptyFallback(reason) {
   mkdirSync(dirname(outputFile), { recursive: true });
   writeFileSync(outputFile, "[]\n");
+  writeFileSync(metaOutputFile, "{}\n");
   console.warn(
     `[prebuild] extract-skills.py skipped (${reason}); wrote empty skills.json. ` +
       `Install python3 + pyyaml locally for a populated Skills Hub page.`,

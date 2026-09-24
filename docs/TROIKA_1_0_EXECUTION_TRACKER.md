@@ -44,12 +44,19 @@ Status: `[ ]` not reached, `[-]` active/partial, `[x]` verified.
 
 ### 2. What we sell and to whom
 
-- [-] Validate product promise and primary scenarios for students, beginning
-  specialists, developers/power users, and ordinary users.
+- [x] Public product entry points now use the canonical promise: tell Troika
+  what to do; it understands, chooses tools, completes the work, saves the
+  result, and remembers context. README, Android entry/onboarding, banner and
+  runtime docs describe concrete scenarios for students, beginning
+  specialists, developers/power users and ordinary users.
+- [x] Normal product copy no longer sells tool counts, an agent fork, internal
+  reasoning, DAEMON/GROUND, Kali, self-improvement or 24/7 availability.
+  Contributor/runtime documentation is explicitly separated from the product
+  promise and upstream attribution is preserved.
 
 ### 3. Boundaries of the first version
 
-- [ ] Verify every mandatory Troika 1.0 area: account, voice, AI, memory, web,
+- [-] Verify every mandatory Troika 1.0 area: account, voice, AI, memory, web,
   documents, tasks, devices, subscription, and production.
 - [ ] Put non-blocking experimental capabilities behind feature flags and
   remove them from normal UI and marketing.
