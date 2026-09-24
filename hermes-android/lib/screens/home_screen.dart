@@ -27,7 +27,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   AssistantService? _assistant;
   bool _openingCommandScreen = false;
-  RunApprovalRequest? _shownApproval;
 
   @override
   void initState() {
@@ -88,46 +87,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
 
-  void _watchApproval(AssistantService assistant) {
-    final approval = assistant.pendingApproval;
-    if (approval == null) {
-      _shownApproval = null;
-      return;
-    }
-    if (identical(_shownApproval, approval)) return;
-    _shownApproval = approval;
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted || ModalRoute.of(context)?.isCurrent != true) {
-        _shownApproval = null;
-        return;
-      }
-      final choice = await showDialog<String>(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Нужно разрешение'),
-          content: Text(
-            approval.description.trim().isEmpty
-                ? approval.action
-                : approval.description,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, 'deny'),
-              child: const Text('Отмена'),
-            ),
-            if (approval.choices.contains('once'))
-              FilledButton(
-                onPressed: () => Navigator.pop(dialogContext, 'once'),
-                child: const Text('Разрешить один раз'),
-              ),
-          ],
-        ),
-      );
-      assistant.resolvePendingApproval(choice ?? 'deny');
-    });
-  }
-
   @override
   void dispose() {
     _assistant?.removeListener(_handleUiAction);
@@ -137,7 +96,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final assistant = context.watch<AssistantService>();
-    _watchApproval(assistant);
     final wide = MediaQuery.sizeOf(context).width >= 900;
     final connected = TroikaConfig.serverUrl.trim().isNotEmpty;
     final voiceHome = _VoiceHome(
@@ -204,7 +162,7 @@ class _HomeScreenState extends State<HomeScreen> {
               height: 64,
               selectedIndex: 0,
               backgroundColor: TroikaColors.surface,
-              indicatorColor: TroikaColors.brand.withOpacity(0.16),
+              indicatorColor: TroikaColors.brand.withValues(alpha: 0.16),
               onDestinationSelected: (index) {
                 if (index == 1) _open(const CommandsScreen());
                 if (index == 2) _open(const LocalDocumentsScreen());
@@ -311,90 +269,110 @@ class _VoiceHome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = _voiceStateLabel(assistant);
-    final hint = _voiceStateHint(assistant);
+    final orbState = _voiceOrbState(assistant);
+    final label = _voiceStateLabel(assistant, orbState);
+    final hint = _voiceStateHint(assistant, orbState);
     return LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: 720,
-              minHeight: (constraints.maxHeight - 56)
-                  .clamp(0, double.infinity)
-                  .toDouble(),
-            ),
-            child: Column(
-              children: [
-                const Text(
-                  'Что сделать?',
-                  style: TextStyle(
-                    fontSize: 28,
-                    height: 1.1,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.5,
+      builder: (context, constraints) {
+        final orbSize = constraints.maxHeight < 650 ? 200.0 : 230.0;
+        return SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: 720,
+                minHeight: (constraints.maxHeight - 56)
+                    .clamp(0, double.infinity)
+                    .toDouble(),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    'Что сделать?',
+                    style: Theme.of(context).textTheme.displaySmall,
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: TroikaColors.forState(assistant.state),
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
+                  const SizedBox(height: 12),
+                  Text(
+                    label,
+                    key: const ValueKey('voice-state-label'),
+                    style: TextStyle(
+                      color: _voiceAccent(orbState),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  hint,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: TroikaColors.textMuted,
-                    fontSize: 14,
+                  const SizedBox(height: 4),
+                  Text(
+                    hint,
+                    key: ValueKey(
+                      assistant.liveTranscript.isEmpty
+                          ? 'voice-state-hint'
+                          : 'voice-live-transcript',
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: TroikaColors.textMuted,
+                      fontSize: 14,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                _OrbButton(assistant: assistant),
-                TextButton.icon(
-                  onPressed: onOpenText,
-                  icon: const Icon(Icons.keyboard_outlined, size: 18),
-                  label: const Text('Текст'),
-                ),
-                const SizedBox(height: 16),
-                _CurrentCards(
-                  assistant: assistant,
-                  onOpenText: onOpenText,
-                  onOpenFiles: onOpenFiles,
-                  onOpenSaved: onOpenSaved,
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  _OrbButton(
+                    assistant: assistant,
+                    orbState: orbState,
+                    size: orbSize,
+                  ),
+                  TextButton.icon(
+                    onPressed: onOpenText,
+                    icon: const Icon(Icons.keyboard_outlined, size: 18),
+                    label: const Text('Текст'),
+                  ),
+                  const SizedBox(height: 16),
+                  _CurrentCards(
+                    assistant: assistant,
+                    onOpenText: onOpenText,
+                    onOpenFiles: onOpenFiles,
+                    onOpenSaved: onOpenSaved,
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
 
 class _OrbButton extends StatelessWidget {
   final AssistantService assistant;
+  final VoiceOrbState orbState;
+  final double size;
 
-  const _OrbButton({required this.assistant});
+  const _OrbButton({
+    required this.assistant,
+    required this.orbState,
+    required this.size,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
+      enabled: assistant.pendingApproval == null,
       label: 'Говорить с Тройкой',
-      hint: _voiceStateHint(assistant),
+      hint: _voiceStateHint(assistant, orbState),
       child: Tooltip(
-        message: _voiceStateHint(assistant),
+        message: _voiceStateHint(assistant, orbState),
         child: InkResponse(
           radius: 116,
           containedInkWell: true,
           highlightShape: BoxShape.circle,
-          onTap: () => _handleOrbTap(assistant),
-          child: StatusOrb(state: assistant.state),
+          onTap: assistant.pendingApproval == null
+              ? () => _handleOrbTap(assistant)
+              : null,
+          child: StatusOrb(state: orbState, size: size),
         ),
       ),
     );
@@ -415,34 +393,61 @@ Future<void> _handleOrbTap(AssistantService assistant) async {
   }
 }
 
-String _voiceStateLabel(AssistantService assistant) {
+VoiceOrbState _voiceOrbState(AssistantService assistant) {
+  if (assistant.pendingApproval != null) return VoiceOrbState.approval;
   return switch (assistant.state) {
-    AssistantState.idle => 'Готово',
-    AssistantState.wakeDetected => 'Слушаю',
-    AssistantState.recording => 'Слушаю',
+    AssistantState.idle =>
+      assistant.lastResult == null ? VoiceOrbState.idle : VoiceOrbState.done,
+    AssistantState.wakeDetected ||
+    AssistantState.recording =>
+      VoiceOrbState.listening,
     AssistantState.processing =>
-      _isActing(assistant) ? 'Выполняю' : 'Разбираюсь',
-    AssistantState.speaking => 'Говорю',
-    AssistantState.error => 'Ошибка',
+      assistant.isActing ? VoiceOrbState.acting : VoiceOrbState.thinking,
+    AssistantState.speaking => VoiceOrbState.speaking,
+    AssistantState.error => VoiceOrbState.error,
   };
 }
 
-String _voiceStateHint(AssistantService assistant) {
-  return switch (assistant.state) {
-    AssistantState.idle => 'Нажми и скажи, что сделать',
-    AssistantState.wakeDetected => 'Да, слушаю',
-    AssistantState.recording => 'Говори. Нажми ещё раз, чтобы отправить',
-    AssistantState.processing =>
-      _isActing(assistant) ? 'Выполняю задачу' : 'Понимаю задачу',
-    AssistantState.speaking => 'Нажми, чтобы прервать ответ',
-    AssistantState.error => assistant.errorMessage.isEmpty
+String _voiceStateLabel(AssistantService assistant, VoiceOrbState state) {
+  return switch (state) {
+    VoiceOrbState.idle => 'Готова',
+    VoiceOrbState.listening => 'Слушаю',
+    VoiceOrbState.thinking => 'Разбираюсь…',
+    VoiceOrbState.acting => assistant.activityStatus,
+    VoiceOrbState.approval => 'Нужно разрешение',
+    VoiceOrbState.speaking => 'Отвечаю',
+    VoiceOrbState.done => 'Готово',
+    VoiceOrbState.error => 'Ошибка',
+  };
+}
+
+String _voiceStateHint(AssistantService assistant, VoiceOrbState state) {
+  if (state == VoiceOrbState.listening && assistant.liveTranscript.isNotEmpty) {
+    return '“${_summary(assistant.liveTranscript)}”';
+  }
+  return switch (state) {
+    VoiceOrbState.idle => 'Нажми и скажи, что сделать',
+    VoiceOrbState.listening => 'Говори. Нажми ещё раз, чтобы отправить',
+    VoiceOrbState.thinking => 'Понимаю задачу',
+    VoiceOrbState.acting => 'Можно остановить одним нажатием',
+    VoiceOrbState.approval => 'Проверь действие ниже',
+    VoiceOrbState.speaking => 'Нажми, чтобы прервать ответ',
+    VoiceOrbState.done => 'Результат сохранён ниже',
+    VoiceOrbState.error => assistant.errorMessage.isEmpty
         ? 'Нажми, чтобы попробовать снова'
         : assistant.errorMessage,
   };
 }
 
-bool _isActing(AssistantService assistant) {
-  return assistant.isActing;
+Color _voiceAccent(VoiceOrbState state) {
+  return switch (state) {
+    VoiceOrbState.error => TroikaColors.error,
+    VoiceOrbState.listening ||
+    VoiceOrbState.speaking ||
+    VoiceOrbState.done =>
+      TroikaColors.brandSoft,
+    _ => TroikaColors.brand,
+  };
 }
 
 class _CurrentCards extends StatelessWidget {
@@ -462,17 +467,20 @@ class _CurrentCards extends StatelessWidget {
   Widget build(BuildContext context) {
     final cards = <Widget>[];
     final approval = assistant.pendingApproval;
+    final orbState = _voiceOrbState(assistant);
     if (approval != null) {
       cards.add(_ApprovalCard(assistant: assistant, approval: approval));
     }
-    if (assistant.state != AssistantState.idle && approval == null) {
+    if ((assistant.state == AssistantState.processing ||
+            assistant.state == AssistantState.error) &&
+        approval == null) {
       cards.add(
         _HomeCard(
           icon: assistant.state == AssistantState.error
               ? Icons.error_outline
               : Icons.bolt_outlined,
-          title: _voiceStateLabel(assistant),
-          body: _voiceStateHint(assistant),
+          title: _voiceStateLabel(assistant, orbState),
+          body: _voiceStateHint(assistant, orbState),
           accent: assistant.state == AssistantState.error
               ? TroikaColors.error
               : TroikaColors.brand,
@@ -624,9 +632,10 @@ class _HomeCard extends StatelessWidget {
                 if (actionLabel != null && onAction != null)
                   Align(
                     alignment: Alignment.centerRight,
-                    child: TextButton(
+                    child: FilledButton.icon(
                       onPressed: onAction,
-                      child: Text(actionLabel!),
+                      icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                      label: Text(actionLabel!),
                     ),
                   ),
                 if (footer != null) ...[
@@ -730,7 +739,7 @@ class _NavItem extends StatelessWidget {
       child: ListTile(
         dense: true,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
-        tileColor: active ? TroikaColors.brand.withOpacity(0.11) : null,
+        tileColor: active ? TroikaColors.brand.withValues(alpha: 0.11) : null,
         leading: Icon(
           icon,
           color: active ? TroikaColors.brand : TroikaColors.textMuted,

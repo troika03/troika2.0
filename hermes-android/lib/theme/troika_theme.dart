@@ -65,6 +65,18 @@ class TroikaColors {
   }
 }
 
+/// Светлая альтернатива той же палитры. Подключение пользовательского выбора
+/// относится к настройкам клиента; токены готовы и не создают второй бренд.
+class TroikaLightColors {
+  TroikaLightColors._();
+
+  static const Color bg = Color(0xFFFFFBF4);
+  static const Color surface = Color(0xFFFFFFFF);
+  static const Color surfaceHi = Color(0xFFFFF2DC);
+  static const Color text = Color(0xFF211A11);
+  static const Color textMuted = Color(0xFF70675C);
+}
+
 /// Тема приложения.
 ThemeData buildTroikaTheme() {
   const accent = TroikaColors.brand;
@@ -79,9 +91,43 @@ ThemeData buildTroikaTheme() {
       onPrimary: Color(0xFF1A1206),
     ),
     useMaterial3: true,
-    textTheme: const TextTheme().apply(
-      bodyColor: TroikaColors.text,
-      displayColor: TroikaColors.text,
+    textTheme: _troikaTextTheme(TroikaColors.text),
+  );
+}
+
+/// Светлая тема использует тот же янтарный акцент и ту же типографику.
+ThemeData buildTroikaLightTheme() {
+  return ThemeData(
+    brightness: Brightness.light,
+    scaffoldBackgroundColor: TroikaLightColors.bg,
+    colorScheme: const ColorScheme.light(
+      primary: TroikaColors.brandDeep,
+      secondary: TroikaColors.brandDeep,
+      surface: TroikaLightColors.surface,
+      error: TroikaColors.error,
+      onPrimary: Color(0xFFFFFFFF),
     ),
+    useMaterial3: true,
+    textTheme: _troikaTextTheme(TroikaLightColors.text),
+  );
+}
+
+TextTheme _troikaTextTheme(Color color) {
+  return TextTheme(
+    displaySmall: TextStyle(
+      color: color,
+      fontSize: 32,
+      height: 1.1,
+      fontWeight: FontWeight.w600,
+      letterSpacing: -0.6,
+    ),
+    titleLarge: TextStyle(
+      color: color,
+      fontSize: 20,
+      height: 1.2,
+      fontWeight: FontWeight.w600,
+    ),
+    bodyLarge: TextStyle(color: color, fontSize: 16, height: 1.4),
+    bodyMedium: TextStyle(color: color, fontSize: 14, height: 1.4),
   );
 }

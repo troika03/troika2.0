@@ -73,8 +73,17 @@ Status: `[ ]` not reached, `[-]` active/partial, `[x]` verified.
 
 ### 4. New voice-first design
 
-- [ ] Apply the visual direction, main UX flow, and every voice-orb state from
-  the Word plan.
+- [x] Applied the shared visual direction: graphite base, one amber accent,
+  restrained typography, outline icons, generous spacing, and a matching light
+  palette ready for later client theme selection.
+- [x] The main flow stays voice-first: central orb, one changing prompt, text
+  as secondary input, at most three current cards, and one primary action on a
+  completed result.
+- [x] Implemented and tested distinct idle, listening, thinking, acting,
+  approval, speaking, and done orb states. Listening accepts a one-line live
+  transcript; acting converts internal tool names into safe concrete statuses;
+  speaking remains one-tap interruptible. Approval now uses one clear inline
+  card instead of a duplicate modal plus card.
 
 ### 5. Android client
 

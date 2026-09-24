@@ -38,6 +38,7 @@ class AssistantService extends ChangeNotifier {
   AssistantResult? _lastResult;
   String _errorMessage = '';
   String _debugHeard = '';
+  String _activityStatus = '';
   bool _wakeWordEnabled = false;
   bool _actionInProgress = false;
   RunApprovalRequest? _pendingApproval;
@@ -60,6 +61,19 @@ class AssistantService extends ChangeNotifier {
   AssistantResult? get lastResult => _lastResult;
   String get errorMessage => _errorMessage;
   String get debugHeard => _debugHeard;
+  String get liveTranscript {
+    if (_state == AssistantState.recording && _debugHeard.trim().isNotEmpty) {
+      return _debugHeard.trim();
+    }
+    if (_state == AssistantState.processing &&
+        _lastUserText.trim().isNotEmpty) {
+      return _lastUserText.trim();
+    }
+    return '';
+  }
+
+  String get activityStatus =>
+      _activityStatus.isEmpty ? 'Выполняю задачу' : _activityStatus;
   bool get wakeWordEnabled => _wakeWordEnabled;
   bool get isActing => _actionInProgress;
   RunApprovalRequest? get pendingApproval => _pendingApproval;
@@ -218,6 +232,7 @@ class AssistantService extends ChangeNotifier {
         _state == AssistantState.speaking) {
       return;
     }
+    _debugHeard = '';
 
     // permission_handler не поддерживает микрофон на десктопе (Windows) —
     // там доступ к устройству проверяет сам record (в AudioRecorderService).
@@ -397,6 +412,7 @@ class AssistantService extends ChangeNotifier {
     if (text.trim().isEmpty && imageDataUrls.isEmpty) return;
 
     _lastUserText = text;
+    _activityStatus = '';
     final userMsg = ChatMessage(
       role: 'user',
       text: text,
@@ -462,6 +478,7 @@ class AssistantService extends ChangeNotifier {
         },
         onToolStart: (tool) {
           _actionInProgress = true;
+          _activityStatus = safeActivityStatusForTool(tool);
           pending.thoughts.add(ThoughtStep(ThoughtKind.toolStart, tool));
           notifyListeners();
         },
@@ -504,9 +521,35 @@ class AssistantService extends ChangeNotifier {
       _setError(e.toString());
     } finally {
       _actionInProgress = false;
+      _activityStatus = '';
       notifyListeners();
       if (_wakeWordEnabled) await _startWakeWordListening();
     }
+  }
+
+  static String safeActivityStatusForTool(String tool) {
+    final value = tool.toLowerCase();
+    if (value.contains('research') ||
+        value.contains('search') ||
+        value.contains('web_')) {
+      return 'Ищу источники';
+    }
+    if (value.contains('ppt') || value.contains('presentation')) {
+      return 'Создаю презентацию';
+    }
+    if (value.contains('doc') || value.contains('pdf')) {
+      return 'Создаю документ';
+    }
+    if (value.contains('task') || value.contains('reminder')) {
+      return 'Сохраняю задачу';
+    }
+    if (value.contains('memory')) return 'Обновляю память';
+    if (value.contains('android') ||
+        value.contains('open_app') ||
+        value.contains('open_file')) {
+      return 'Открываю приложение';
+    }
+    return 'Выполняю задачу';
   }
 
   /// Стереть локальную ленту (визуально). Серверную сессию не трогает.

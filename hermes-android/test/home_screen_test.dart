@@ -36,8 +36,9 @@ void main() {
 
     expect(find.byType(StatusOrb), findsOneWidget);
     expect(find.text('Что сделать?'), findsOneWidget);
-    expect(find.text('Готово'), findsOneWidget);
+    expect(find.text('Готова'), findsOneWidget);
     expect(find.text('Нажми и скажи, что сделать'), findsOneWidget);
+    expect(_orb(tester).state, VoiceOrbState.idle);
     expect(find.text('Текст'), findsOneWidget);
     expect(find.byType(ChatScreen), findsNothing);
     expect(find.text('Команды'), findsOneWidget);
@@ -96,6 +97,13 @@ void main() {
     expect(find.text('Отчёт.pdf'), findsOneWidget);
     expect(find.text('Файл готов и сохранён.'), findsOneWidget);
     expect(find.text('Открыть файлы'), findsOneWidget);
+    expect(_orb(tester).state, VoiceOrbState.done);
+    expect(
+      tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Открыть файлы'),
+      ),
+      isNotNull,
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
     assistant.dispose();
@@ -138,7 +146,8 @@ void main() {
     await tester.pumpWidget(_app(assistant));
     await tester.pump();
 
-    expect(find.text('Выполняю'), findsWidgets);
+    expect(find.text('Ищу источники'), findsWidgets);
+    expect(_orb(tester).state, VoiceOrbState.acting);
     expect(find.textContaining('Ход мыслей'), findsNothing);
     expect(find.textContaining('инструмент'), findsNothing);
     expect(find.textContaining('модель'), findsNothing);
@@ -215,6 +224,7 @@ void main() {
     expect(find.text('Нужно разрешение'), findsWidgets);
     expect(find.text('Отправить сообщение контакту'), findsWidgets);
     expect(find.text('Разрешить один раз'), findsWidgets);
+    expect(_orb(tester).state, VoiceOrbState.approval);
 
     await tester.tap(find.text('Разрешить один раз').last);
     await tester.pump();
@@ -223,6 +233,87 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     assistant.dispose();
   });
+
+  testWidgets('listening shows animated orb and one-line transcript',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final assistant = _ListeningAssistant();
+
+    await tester.pumpWidget(_app(assistant));
+    await tester.pump();
+
+    expect(_orb(tester).state, VoiceOrbState.listening);
+    expect(find.text('Слушаю'), findsWidgets);
+    expect(find.text('“Создай отчёт к пятнице”'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('voice-live-transcript')),
+      findsOneWidget,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    assistant.dispose();
+  });
+
+  testWidgets('thinking and speaking have distinct orb states', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final thinking = _ThinkingAssistant();
+    await tester.pumpWidget(_app(thinking));
+    await tester.pump();
+    expect(_orb(tester).state, VoiceOrbState.thinking);
+    expect(find.text('Разбираюсь…'), findsWidgets);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    thinking.dispose();
+
+    final speaking = _SpeakingAssistant();
+    await tester.pumpWidget(_app(speaking));
+    await tester.pump();
+    expect(_orb(tester).state, VoiceOrbState.speaking);
+    expect(find.text('Отвечаю'), findsWidgets);
+    expect(find.text('Нажми, чтобы прервать ответ'), findsWidgets);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    speaking.dispose();
+  });
+
+  test('light alternative keeps Troika accent and readable contrast', () {
+    final theme = buildTroikaLightTheme();
+
+    expect(theme.brightness, Brightness.light);
+    expect(theme.colorScheme.primary, TroikaColors.brandDeep);
+    expect(theme.scaffoldBackgroundColor, TroikaLightColors.bg);
+    expect(theme.textTheme.bodyLarge?.color, TroikaLightColors.text);
+  });
+
+  test('tool names become concrete user-safe activity statuses', () {
+    expect(
+      AssistantService.safeActivityStatusForTool('web_research'),
+      'Ищу источники',
+    );
+    expect(
+      AssistantService.safeActivityStatusForTool('troika_create_docx'),
+      'Создаю документ',
+    );
+    expect(
+      AssistantService.safeActivityStatusForTool('android_open_app'),
+      'Открываю приложение',
+    );
+    expect(
+      AssistantService.safeActivityStatusForTool('secret_internal_tool'),
+      'Выполняю задачу',
+    );
+  });
+}
+
+StatusOrb _orb(WidgetTester tester) {
+  return tester.widget<StatusOrb>(find.byType(StatusOrb));
 }
 
 class _ResultAssistant extends AssistantService {
@@ -250,7 +341,28 @@ class _WorkingAssistant extends AssistantService {
   bool get isActing => true;
 
   @override
+  String get activityStatus => 'Ищу источники';
+
+  @override
   List<ChatMessage> get messages => _workingMessages;
+}
+
+class _ListeningAssistant extends AssistantService {
+  @override
+  AssistantState get state => AssistantState.recording;
+
+  @override
+  String get liveTranscript => 'Создай отчёт к пятнице';
+}
+
+class _ThinkingAssistant extends AssistantService {
+  @override
+  AssistantState get state => AssistantState.processing;
+}
+
+class _SpeakingAssistant extends AssistantService {
+  @override
+  AssistantState get state => AssistantState.speaking;
 }
 
 class _ApprovalAssistant extends AssistantService {
