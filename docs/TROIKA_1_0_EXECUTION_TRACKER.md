@@ -104,10 +104,11 @@ Status: `[ ]` not reached, `[-]` active/partial, `[x]` verified.
   the local command matcher. Hosted mode retains the authenticated
   STT/agent/TTS path. Bluetooth routing uses Android's active route.
 - [x] Battery drain, wake matches and silent/abandoned activations are recorded
-  locally for the release gate. Latest APK is installed on Samsung Galaxy A22;
-  home/navigation/profile and screen-off wake-word acceptance are physically
-  verified. Exact-token matching, a 12-second cooldown and accepted-wake-only
-  metrics reduce false positives.
+  locally for the release gate. The section APK was installed on Samsung Galaxy
+  A22; home/navigation/profile and screen-off wake-word acceptance are
+  physically verified. Exact-token matching, a 12-second cooldown and
+  accepted-wake-only metrics reduce false positives. A final first-wake-after-
+  boot guard rebuild passed, but the phone disconnected before reinstall.
 - [-] A synthetic PC-audio command did not reliably complete the on-device
   command match, so one live-voice wake → local command → TTS/barge-in smoke is
   still required. Bluetooth and an unplugged endurance/false-wake run also
