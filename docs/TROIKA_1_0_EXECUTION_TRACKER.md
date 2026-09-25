@@ -99,13 +99,19 @@ Status: `[ ]` not reached, `[-]` active/partial, `[x]` verified.
   now checks the saved opt-in; foreground notification, lock-screen TTS,
   barge-in and automatic return to listening remain wired.
 - [x] The always-on detector uses Android on-device Russian recognition on
-  Android 12+; ambient wake audio is no longer uploaded to STT. Only the
-  command after `Тройка` enters the authenticated STT/agent/TTS pipeline.
-  Bluetooth routing is delegated to Android's active input/output route.
+  Android 12+; ambient wake audio is no longer uploaded to STT. Without a
+  configured backend, the command after `Тройка` also uses on-device STT and
+  the local command matcher. Hosted mode retains the authenticated
+  STT/agent/TTS path. Bluetooth routing uses Android's active route.
 - [x] Battery drain, wake matches and silent/abandoned activations are recorded
-  locally for the release gate. APK compilation and Flutter tests verify the
-  implementation; no ADB phone was connected for the physical locked-screen
-  and endurance run in this execution.
+  locally for the release gate. Latest APK is installed on Samsung Galaxy A22;
+  home/navigation/profile and screen-off wake-word acceptance are physically
+  verified. Exact-token matching, a 12-second cooldown and accepted-wake-only
+  metrics reduce false positives.
+- [-] A synthetic PC-audio command did not reliably complete the on-device
+  command match, so one live-voice wake → local command → TTS/barge-in smoke is
+  still required. Bluetooth and an unplugged endurance/false-wake run also
+  remain open; the phone was charging at about 10% during this check.
 
 ### 6. Windows client
 

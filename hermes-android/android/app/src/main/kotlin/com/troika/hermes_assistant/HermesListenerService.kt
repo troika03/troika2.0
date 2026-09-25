@@ -35,8 +35,11 @@ import java.security.SecureRandom
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 
 /**
@@ -128,20 +131,9 @@ class HermesListenerService : Service() {
         // фразы посреди — поднять до 1000. Ниже 700 не опускать.
         const val END_OF_SPEECH_MS = 850L
 
-        // Покрываем основные ошибки распознавания Whisper'ом слова "Тройка".
-        // Список расширен — лучше иметь немного ложных срабатываний (юзер
-        // сразу скажет "стоп"), чем пропустить настоящее обращение.
-        val WAKE_WORDS = listOf(
-            // основное слово и его очевидные варианты
-            "тройка", "троика", "троечка", "тройку", "троикa",
-            "тройк", "троик", "троеч",
-            // латиница (Whisper иногда переключается)
-            "troika", "troyka", "troica", "troyca", "troike",
-            // частые ошибки распознавания на тихом микрофоне
-            "трой", "трои", "трое", "тройкa",
-            // редкие соседние варианты
-            "стройка", "тройки", "тройке"
-        )
+        // Только точные варианты wake word. Короткие и соседние слова дают
+        // слишком много ложных срабатываний при постоянном фоне.
+        val WAKE_WORDS = setOf("тройка", "троика", "troika", "troyka")
     }
 
     private val isRunning = AtomicBoolean(false)
@@ -169,6 +161,7 @@ class HermesListenerService : Service() {
     private val dialogStartMs = AtomicLong(0)
     private val lastServerPingMs = AtomicLong(0)
     private val lastListenerRestartMs = AtomicLong(0)
+    private val lastWakeAcceptedMs = AtomicLong(0)
     private var watchdogThread: Thread? = null
 
     // Rolling buffer: BUFFER_SECONDS секунд PCM
@@ -783,21 +776,84 @@ class HermesListenerService : Service() {
         val variants = bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
             ?: return false
         val matched = variants.any { phrase ->
-            val normalized = russianLowercase(phrase)
-            WAKE_WORDS.any { normalized.contains(it) }
+            val tokens = russianLowercase(phrase)
+                .split(Regex("[^a-zа-яё]+"))
+                .filter { it.isNotBlank() }
+            tokens.any { it in WAKE_WORDS }
         }
         if (!matched) return false
-        val metrics = getSharedPreferences(PREFS, MODE_PRIVATE)
-        metrics.edit().putLong(
-            "troika_wake_matches",
-            metrics.getLong("troika_wake_matches", 0) + 1
-        ).apply()
+        val now = SystemClock.elapsedRealtime()
+        val lastWake = lastWakeAcceptedMs.get()
+        if (lastWake != 0L && now - lastWake < 12_000) return true
         localWakeActive.set(false)
         try { localWakeRecognizer?.cancel() } catch (_: Exception) {}
         if (isInDialog.compareAndSet(false, true)) {
+            lastWakeAcceptedMs.set(now)
+            val metrics = getSharedPreferences(PREFS, MODE_PRIVATE)
+            metrics.edit().putLong(
+                "troika_wake_matches",
+                metrics.getLong("troika_wake_matches", 0) + 1
+            ).apply()
+            android.util.Log.i("HermesListener", "LOCAL WAKE_WORD accepted")
+            Handler(mainLooper).post {
+                try { localWakeRecognizer?.destroy() } catch (_: Exception) {}
+                localWakeRecognizer = null
+            }
             thread(name = "TroikaDialog") { runDialog() }
         }
         return true
+    }
+
+    private fun recognizeCommandOnDevice(timeoutMs: Long): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            !SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
+        ) return null
+        val done = CountDownLatch(1)
+        val answer = AtomicReference<String?>(null)
+        val recognizerRef = AtomicReference<SpeechRecognizer?>(null)
+        Handler(mainLooper).post {
+            try {
+                val recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
+                recognizerRef.set(recognizer)
+                recognizer.setRecognitionListener(object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) = Unit
+                    override fun onBeginningOfSpeech() = Unit
+                    override fun onRmsChanged(rmsdB: Float) = Unit
+                    override fun onBufferReceived(buffer: ByteArray?) = Unit
+                    override fun onEndOfSpeech() = Unit
+                    override fun onEvent(eventType: Int, params: Bundle?) = Unit
+                    override fun onPartialResults(results: Bundle?) = Unit
+                    override fun onResults(results: Bundle?) {
+                        answer.set(
+                            results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                                ?.firstOrNull()?.trim()
+                        )
+                        try { recognizer.destroy() } catch (_: Exception) {}
+                        done.countDown()
+                    }
+                    override fun onError(error: Int) {
+                        try { recognizer.destroy() } catch (_: Exception) {}
+                        done.countDown()
+                    }
+                })
+                recognizer.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+                    putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                })
+            } catch (_: Exception) {
+                done.countDown()
+            }
+        }
+        done.await(timeoutMs + 2_000, TimeUnit.MILLISECONDS)
+        if (answer.get().isNullOrBlank()) {
+            Handler(mainLooper).post {
+                try { recognizerRef.get()?.destroy() } catch (_: Exception) {}
+            }
+        }
+        return answer.get()
     }
 
     private fun sampleBatteryDrain() {
@@ -1069,6 +1125,7 @@ class HermesListenerService : Service() {
 
         val history = mutableListOf<JSONObject>()
         var firstTurn = true
+        val localOnly = resolvedUrl(getSharedPreferences(PREFS, MODE_PRIVATE)).isBlank()
 
         try {
             HermesOverlay.get(this).show("✨ Слушаю...")
@@ -1089,7 +1146,7 @@ class HermesListenerService : Service() {
             // асинхронно, а запись стартует уже через короткую паузу (только чтобы
             // схлынуло эхо динамика). Если юзер заговорил сразу — recordUtterance
             // (свой AudioRecord с долгим окном тишины в начале) его поймает.
-            speak(greeting)
+            if (!localOnly) speak(greeting)
             // 550мс → 250мс: greeting играет асинхронно, реально нужно только
             // чтобы схлынул щелчок старта плеера. Дальше warm-up внутри
             // recordUtterance (~350мс) прикрывает эхо. Экономия ~300мс до старта записи.
@@ -1101,8 +1158,16 @@ class HermesListenerService : Service() {
                     if (firstTurn) "🎙 Говори..." else "🎙 Продолжай..."
                 )
                 val maxMs = if (firstTurn) 9000L else 8000L
-                val questionWav = recordUtterance(maxMs)
-                if (questionWav == null) {
+                val rawQuestion = if (localOnly) {
+                    recognizeCommandOnDevice(maxMs)?.trim() ?: ""
+                } else {
+                    val questionWav = recordUtterance(maxMs)
+                    if (questionWav == null) "" else {
+                        HermesOverlay.get(this).updateStatus("⏳ Распознаю...")
+                        transcribeSync(questionWav)?.trim() ?: ""
+                    }
+                }
+                if (rawQuestion.isEmpty()) {
                     if (firstTurn && !manual) {
                         val metrics = getSharedPreferences(PREFS, MODE_PRIVATE)
                         metrics.edit().putLong(
@@ -1121,10 +1186,8 @@ class HermesListenerService : Service() {
                     break
                 }
 
-                HermesOverlay.get(this).updateStatus("⏳ Распознаю...")
-                val rawQuestion = transcribeSync(questionWav)?.trim() ?: ""
                 val question = russianLowercase(rawQuestion)
-                if (rawQuestion.isEmpty() || isWhisperHallucination(question)) {
+                if (isWhisperHallucination(question)) {
                     if (!firstTurn) {
                         // Молчание во время follow-up — завершаем
                         break
@@ -1170,6 +1233,7 @@ class HermesListenerService : Service() {
                 // Локальный матчер команд телефона — пробуем выполнить ДО вызова LLM
                 val localResult = PhoneCommands.tryExecute(this, question, rawQuestion)
                 if (localResult != null) {
+                    android.util.Log.i("HermesListener", "LOCAL COMMAND handled")
                     HermesOverlay.get(this).updateStatus(localResult)
                     speakBlocking(localResult, timeoutMs = 20000)
                     // Добавляем в историю чтобы LLM знал о выполненной команде
