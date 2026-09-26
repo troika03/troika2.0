@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 
 class LocalDocumentService {
+  String? lastSavedPath;
+
   Future<bool> createDocument({
     required String title,
     required String content,
@@ -37,6 +39,7 @@ class LocalDocumentService {
     );
     if (target == null) return false;
     if (!mobile) await File(target).writeAsBytes(bytes, flush: true);
+    lastSavedPath = mobile ? null : File(target).absolute.path;
     return true;
   }
 

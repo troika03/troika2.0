@@ -1,10 +1,16 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../config/troika_config.dart';
 import '../services/assistant_service.dart';
 import '../services/assistant_result.dart';
 import '../services/troika_api_service.dart';
+import '../services/windows_shell_service.dart';
 import '../theme/troika_theme.dart';
 import '../widgets/status_orb.dart';
 import 'chat_screen.dart';
@@ -12,15 +18,23 @@ import 'commands_screen.dart';
 import 'assistant_hub_screen.dart';
 import 'files_screen.dart';
 import 'files_hub_screen.dart';
+import 'history_screen.dart';
 import 'local_documents_screen.dart';
+import 'memory_screen.dart';
 import 'settings_overview_screen.dart';
 import 'voice_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback? onSignedOut;
   final VoidCallback? onAppearanceChanged;
+  final bool? windowsShellOverride;
 
-  const HomeScreen({super.key, this.onSignedOut, this.onAppearanceChanged});
+  const HomeScreen({
+    super.key,
+    this.onSignedOut,
+    this.onAppearanceChanged,
+    this.windowsShellOverride,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -29,6 +43,11 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   AssistantService? _assistant;
   bool _openingCommandScreen = false;
+  bool _windowsShellInitialized = false;
+  bool _windowsCompact = false;
+  bool _windowsPinned = TroikaConfig.windowsAlwaysOnTop;
+
+  bool get _isWindows => widget.windowsShellOverride ?? Platform.isWindows;
 
   @override
   void initState() {
@@ -52,6 +71,10 @@ class _HomeScreenState extends State<HomeScreen> {
     if (identical(_assistant, assistant)) return;
     _assistant?.removeListener(_handleUiAction);
     _assistant = assistant..addListener(_handleUiAction);
+    if (_isWindows && !_windowsShellInitialized) {
+      _windowsShellInitialized = true;
+      unawaited(WindowsShellService.initialize(_handleWindowsHotkey));
+    }
   }
 
   void _handleUiAction() {
@@ -60,14 +83,105 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       _openingCommandScreen = true;
-      await _open(
-        LocalDocumentsScreen(
-          initialPresentation: request.action == 'create_presentation',
-          initialPrompt: request.prompt,
-        ),
-      );
+      if (request.action == 'capture_screen_for_vision') {
+        await _captureScreenForVision();
+      } else {
+        await _open(
+          LocalDocumentsScreen(
+            initialPresentation: request.action == 'create_presentation',
+            initialPrompt: request.prompt,
+          ),
+        );
+      }
       _openingCommandScreen = false;
     });
+  }
+
+  Future<void> _handleWindowsHotkey() async {
+    final assistant = _assistant;
+    if (!mounted || assistant == null) return;
+    if (_windowsCompact && assistant.state == AssistantState.recording) {
+      await assistant.stopRecordingAndProcess();
+      return;
+    }
+    if (_windowsCompact && assistant.state != AssistantState.idle) {
+      await assistant.interrupt();
+      return;
+    }
+    if (!_windowsCompact) {
+      setState(() => _windowsCompact = true);
+      await WindowsShellService.showCompact(alwaysOnTop: _windowsPinned);
+    }
+    await assistant.startManualRecording();
+  }
+
+  Future<void> _showCompact() async {
+    setState(() => _windowsCompact = true);
+    await WindowsShellService.showCompact(alwaysOnTop: _windowsPinned);
+  }
+
+  Future<void> _showCommandCenter() async {
+    setState(() => _windowsCompact = false);
+    await WindowsShellService.showCommandCenter();
+  }
+
+  Future<void> _hideCompact() => WindowsShellService.hide();
+
+  Future<void> _togglePinned() async {
+    final value = !_windowsPinned;
+    await TroikaConfig.setWindowsAlwaysOnTop(value);
+    if (!mounted) return;
+    setState(() => _windowsPinned = value);
+    await WindowsShellService.setAlwaysOnTop(value);
+  }
+
+  Future<void> _openFromCompact(Widget screen) async {
+    await _showCommandCenter();
+    if (mounted) await _open(screen);
+  }
+
+  Future<void> _captureScreenForVision() async {
+    if (!_isWindows) return;
+    if (TroikaConfig.serverUrl.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Для анализа снимка нужен AI-подключение')),
+      );
+      return;
+    }
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Передать снимок в AI?'),
+        content: const Text(
+          'Тройка сделает один снимок всех экранов и отправит его для анализа. '
+          'Защищённые окна Windows могут отображаться чёрным.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Разрешить один раз'),
+          ),
+        ],
+      ),
+    );
+    if (approved != true || !mounted) return;
+    final bytes = await WindowsShellService.captureScreen();
+    if (!mounted) return;
+    if (bytes == null || bytes.isEmpty || bytes.length > 10 * 1024 * 1024) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось подготовить снимок экрана')),
+      );
+      return;
+    }
+    await _assistant?.sendTextQuery(
+      'Проанализируй этот снимок экрана.',
+      imageDataUrls: ['data:image/png;base64,${base64Encode(bytes)}'],
+    );
   }
 
   Future<void> _open(Widget screen) async {
@@ -98,6 +212,28 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final assistant = context.watch<AssistantService>();
+    if (_isWindows && _windowsCompact) {
+      return _CompactAssistant(
+        assistant: assistant,
+        pinned: _windowsPinned,
+        hotkeyLabel: _windowsHotkeyLabel(TroikaConfig.windowsHotkey),
+        onPin: _togglePinned,
+        onExpand: _showCommandCenter,
+        onClose: _hideCompact,
+        onOpenText: () => _openFromCompact(
+          Scaffold(
+            backgroundColor: TroikaColors.bg,
+            appBar: AppBar(title: const Text('Текст')),
+            body: ChatScreen(
+              onOpenCommands: () => _open(const CommandsScreen()),
+              onOpenDocuments: () => _open(const LocalDocumentsScreen()),
+            ),
+          ),
+        ),
+        onOpenFiles: () => _openFromCompact(const FilesHubScreen()),
+        onOpenSaved: () => _openFromCompact(const AssistantHubScreen()),
+      );
+    }
     final wide = MediaQuery.sizeOf(context).width >= 900;
     final connected = TroikaConfig.serverUrl.trim().isNotEmpty;
     final voiceHome = _VoiceHome(
@@ -128,6 +264,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         _Header(
                           state: assistant.state,
                           connected: connected,
+                          onCompact: _isWindows ? _showCompact : null,
                           onSettings: () => _open(
                             SettingsOverviewScreen(
                               onSignedOut: widget.onSignedOut,
@@ -142,7 +279,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   const VerticalDivider(width: 1, color: Colors.white10),
                   SizedBox(
                     width: 270,
-                    child: _RightRail(open: _open),
+                    child: _RightRail(
+                      open: _open,
+                      onCaptureScreen:
+                          _isWindows ? _captureScreenForVision : null,
+                    ),
                   ),
                 ],
               )
@@ -206,11 +347,13 @@ class _Header extends StatelessWidget {
   final AssistantState state;
   final bool connected;
   final VoidCallback onSettings;
+  final VoidCallback? onCompact;
 
   const _Header({
     required this.state,
     required this.connected,
     required this.onSettings,
+    this.onCompact,
   });
 
   @override
@@ -241,6 +384,12 @@ class _Header extends StatelessWidget {
             ],
           ),
           const Spacer(),
+          if (onCompact != null)
+            TextButton.icon(
+              onPressed: onCompact,
+              icon: const Icon(Icons.picture_in_picture_alt_outlined, size: 18),
+              label: const Text('Compact'),
+            ),
           Text(
             connected ? 'На связи' : 'Локально',
             style: const TextStyle(
@@ -693,18 +842,28 @@ class _DesktopSidebar extends StatelessWidget {
           ),
           const _NavItem(
             icon: Icons.home_outlined,
-            label: 'Сегодня',
+            label: 'Главная',
             active: true,
           ),
           _NavItem(
-            icon: Icons.grid_view_outlined,
-            label: 'Команды',
-            onTap: () => open(const CommandsScreen()),
+            icon: Icons.checklist_rounded,
+            label: 'Дела',
+            onTap: () => open(const AssistantHubScreen()),
           ),
           _NavItem(
-            icon: Icons.description_outlined,
-            label: 'Документы',
-            onTap: () => open(const LocalDocumentsScreen()),
+            icon: Icons.folder_outlined,
+            label: 'Файлы',
+            onTap: () => open(const FilesHubScreen()),
+          ),
+          _NavItem(
+            icon: Icons.history_rounded,
+            label: 'История',
+            onTap: () => open(const HistoryScreen()),
+          ),
+          _NavItem(
+            icon: Icons.memory_outlined,
+            label: 'Память',
+            onTap: () => open(const MemoryScreen()),
           ),
           const Spacer(),
           _NavItem(
@@ -759,8 +918,9 @@ class _NavItem extends StatelessWidget {
 
 class _RightRail extends StatelessWidget {
   final Future<void> Function(Widget screen) open;
+  final VoidCallback? onCaptureScreen;
 
-  const _RightRail({required this.open});
+  const _RightRail({required this.open, this.onCaptureScreen});
 
   @override
   Widget build(BuildContext context) {
@@ -784,10 +944,158 @@ class _RightRail extends StatelessWidget {
           title: 'Все команды',
           onTap: () => open(const CommandsScreen()),
         ),
+        if (onCaptureScreen != null)
+          _ActionTile(
+            icon: Icons.screenshot_monitor_outlined,
+            title: 'Снимок для анализа',
+            onTap: onCaptureScreen!,
+          ),
       ],
     );
   }
 }
+
+class _CompactAssistant extends StatelessWidget {
+  final AssistantService assistant;
+  final bool pinned;
+  final String hotkeyLabel;
+  final VoidCallback onPin;
+  final VoidCallback onExpand;
+  final VoidCallback onClose;
+  final VoidCallback onOpenText;
+  final VoidCallback onOpenFiles;
+  final VoidCallback onOpenSaved;
+
+  const _CompactAssistant({
+    required this.assistant,
+    required this.pinned,
+    required this.hotkeyLabel,
+    required this.onPin,
+    required this.onExpand,
+    required this.onClose,
+    required this.onOpenText,
+    required this.onOpenFiles,
+    required this.onOpenSaved,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final orbState = _voiceOrbState(assistant);
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): onClose,
+      },
+      child: Focus(
+        autofocus: true,
+        child: Scaffold(
+          backgroundColor: TroikaColors.bg,
+          body: SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 8, 4),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: TroikaColors.forState(assistant.state),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Text(
+                        'Тройка',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        tooltip: pinned ? 'Открепить' : 'Поверх окон',
+                        onPressed: onPin,
+                        icon: Icon(
+                          pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Command Center',
+                        onPressed: onExpand,
+                        icon: const Icon(Icons.open_in_full_rounded),
+                      ),
+                      IconButton(
+                        tooltip: 'Закрыть · Esc',
+                        onPressed: onClose,
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+                    child: Column(
+                      children: [
+                        Text(
+                          _voiceStateLabel(assistant, orbState),
+                          style: TextStyle(
+                            color: _voiceAccent(orbState),
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _voiceStateHint(assistant, orbState),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: TroikaColors.textMuted),
+                        ),
+                        const SizedBox(height: 6),
+                        _OrbButton(
+                          assistant: assistant,
+                          orbState: orbState,
+                          size: 150,
+                        ),
+                        _CurrentCards(
+                          assistant: assistant,
+                          onOpenText: onOpenText,
+                          onOpenFiles: onOpenFiles,
+                          onOpenSaved: onOpenSaved,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+                  child: Text(
+                    '$hotkeyLabel · повторно — остановить · Esc — скрыть',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: TroikaColors.textMuted,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _windowsHotkeyLabel(String preset) => switch (preset) {
+      'ctrlShiftSpace' => 'Ctrl + Shift + Space',
+      'ctrlAltT' => 'Ctrl + Alt + T',
+      _ => 'Ctrl + Alt + Space',
+    };
 
 const _railTitle = TextStyle(fontSize: 16, fontWeight: FontWeight.w600);
 

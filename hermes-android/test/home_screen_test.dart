@@ -77,6 +77,39 @@ void main() {
     assistant.dispose();
   });
 
+  testWidgets('Windows switches between Command Center and Compact Assistant',
+      (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final assistant = AssistantService();
+
+    await tester.pumpWidget(_app(assistant, windowsShell: true));
+    await tester.pump();
+
+    expect(find.text('Главная'), findsOneWidget);
+    expect(find.text('Дела'), findsOneWidget);
+    expect(find.text('История'), findsOneWidget);
+    expect(find.text('Память'), findsOneWidget);
+    expect(find.text('Compact'), findsOneWidget);
+
+    await tester.tap(find.text('Compact'));
+    await tester.pump();
+
+    expect(find.textContaining('Ctrl + Alt + Space'), findsOneWidget);
+    expect(find.byTooltip('Command Center'), findsOneWidget);
+    expect(find.byTooltip('Закрыть · Esc'), findsOneWidget);
+    expect(find.byType(StatusOrb), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Command Center'));
+    await tester.pump();
+    expect(find.text('Compact'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    assistant.dispose();
+  });
+
   testWidgets('home prioritizes a completed file over the long answer',
       (tester) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -382,12 +415,12 @@ class _ApprovalAssistant extends AssistantService {
   }
 }
 
-Widget _app(AssistantService assistant) {
+Widget _app(AssistantService assistant, {bool windowsShell = false}) {
   return ChangeNotifierProvider.value(
     value: assistant,
     child: MaterialApp(
       theme: buildTroikaTheme(),
-      home: const HomeScreen(),
+      home: HomeScreen(windowsShellOverride: windowsShell),
     ),
   );
 }

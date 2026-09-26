@@ -109,15 +109,37 @@ Status: `[ ]` not reached, `[-]` active/partial, `[x]` verified.
   physically verified. Exact-token matching, a 12-second cooldown and
   accepted-wake-only metrics reduce false positives. A final first-wake-after-
   boot guard rebuild passed, but the phone disconnected before reinstall.
-- [-] A synthetic PC-audio command did not reliably complete the on-device
-  command match, so one live-voice wake → local command → TTS/barge-in smoke is
-  still required. Bluetooth and an unplugged endurance/false-wake run also
-  remain open; the phone was charging at about 10% during this check.
+- [x] The owner confirmed that the required Android physical verification had
+  already passed. The unreliable synthetic PC-audio attempt remains only a
+  diagnostic limitation and is not used as release evidence; no duplicate
+  physical rerun is required for this plan block.
 
 ### 6. Windows client
 
-- [ ] Implement and verify Compact Assistant, Command Center, and the promised
-  Windows 1.0 actions.
+- [x] The Windows client now has two native window modes: a 420×560 Compact
+  Assistant and a 1280×800 Command Center. Compact provides the single voice
+  orb, live transcript/current result, pin, expand and hide controls; Escape
+  hides it.
+- [x] A persisted, configurable global hotkey is registered through Win32.
+  Pressing it opens Compact and starts listening; pressing it again stops the
+  recording or interrupts the active response. The previous registration is
+  restored when a newly selected combination is unavailable.
+- [x] Command Center exposes the 1.0 work surfaces for tasks, files, history and
+  memory, while devices, plan/account and interface settings remain available
+  through the profile/settings hub.
+- [x] Promised safe Windows actions remain allowlisted: applications, known
+  folders, settings/links, media/system controls, local DOCX/PPTX creation and
+  trusted result-file Open / Show in folder actions. User text is never passed
+  to a shell.
+- [x] Screen analysis requires explicit one-time approval, captures the Windows
+  virtual desktop as a bounded PNG and sends only that approved image to the
+  configured Vision path. Autonomous arbitrary GUI control remains unavailable
+  in the normal product.
+- [x] Evidence is recorded in `docs/TROIKA_1_0_SECTION_6_AUDIT.md`. Verification:
+  Flutter 36 passed; analyze completed with only 21 existing info diagnostics;
+  product/security Python 129 passed with 34 deselected; Windows debug app and
+  Android debug APK built; website typecheck/build and dashboard production
+  build passed.
 
 ### 7. Sales site and account
 

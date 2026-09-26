@@ -34,6 +34,10 @@ class LocalCommandResult {
 /// Android delegates to the existing native [PhoneCommands] implementation.
 /// Windows uses a strict allowlist. User text is never passed to a shell.
 class LocalCommandService {
+  final bool? windowsForTesting;
+
+  LocalCommandService({this.windowsForTesting});
+
   static const _platform = MethodChannel('com.troika.hermes/background');
   static const _modeKey = 'troika_local_mode';
 
@@ -96,7 +100,9 @@ class LocalCommandService {
       }
     }
 
-    if (Platform.isWindows) return _executeWindows(command);
+    if (windowsForTesting ?? Platform.isWindows) {
+      return _executeWindows(command);
+    }
     return const LocalCommandResult(handled: false);
   }
 
@@ -266,13 +272,10 @@ class LocalCommandService {
     }
 
     if (norm.contains('сделай скриншот') || norm.contains('снимок экрана')) {
-      await launchUrl(
-        Uri.parse('ms-screenclip:'),
-        mode: LaunchMode.externalApplication,
-      );
       return const LocalCommandResult(
         handled: true,
-        response: 'Открываю создание снимка экрана',
+        response: 'Нужно подтвердить снимок экрана.',
+        uiAction: 'capture_screen_for_vision',
       );
     }
 

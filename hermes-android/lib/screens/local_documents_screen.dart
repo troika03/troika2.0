@@ -1,6 +1,9 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 
 import '../services/local_document_service.dart';
+import '../services/windows_shell_service.dart';
 import '../theme/troika_theme.dart';
 
 class LocalDocumentsScreen extends StatefulWidget {
@@ -23,6 +26,7 @@ class _LocalDocumentsScreenState extends State<LocalDocumentsScreen> {
   final _documents = LocalDocumentService();
   late bool _presentation;
   bool _saving = false;
+  String? _savedPath;
 
   @override
   void initState() {
@@ -81,6 +85,7 @@ class _LocalDocumentsScreenState extends State<LocalDocumentsScreen> {
               content: _content.text,
             );
       if (!mounted || !saved) return;
+      setState(() => _savedPath = _documents.lastSavedPath);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -184,6 +189,30 @@ class _LocalDocumentsScreenState extends State<LocalDocumentsScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
                 ),
+                if (Platform.isWindows && _savedPath != null) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () =>
+                              WindowsShellService.openPath(_savedPath!),
+                          icon: const Icon(Icons.open_in_new_rounded),
+                          label: const Text('Открыть'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () =>
+                              WindowsShellService.showInFolder(_savedPath!),
+                          icon: const Icon(Icons.folder_open_outlined),
+                          label: const Text('Показать в папке'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

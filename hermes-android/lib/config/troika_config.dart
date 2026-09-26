@@ -35,6 +35,8 @@ class TroikaConfig {
   static const String _keyThemeMode = 'troika_theme_mode';
   static const String _keyTextScale = 'troika_text_scale';
   static const String _keyLanguage = 'troika_language';
+  static const String _keyWindowsHotkey = 'troika_windows_hotkey';
+  static const String _keyWindowsAlwaysOnTop = 'troika_windows_always_on_top';
   static const String _keyOnboardingDone = 'troika_onboarding_done';
   static const String _legacyKeyOnboardingDone = 'hermes_onboarding_done';
   static const String _keySessionKey = 'troika_session_key';
@@ -236,6 +238,20 @@ class TroikaConfig {
 
   static Future<void> setLanguage(String value) async {
     await _prefs.setString(_keyLanguage, value);
+  }
+
+  static String get windowsHotkey =>
+      _prefs.getString(_keyWindowsHotkey) ?? 'ctrlAltSpace';
+
+  static Future<void> setWindowsHotkey(String value) async {
+    await _prefs.setString(_keyWindowsHotkey, value);
+  }
+
+  static bool get windowsAlwaysOnTop =>
+      _prefs.getBool(_keyWindowsAlwaysOnTop) ?? false;
+
+  static Future<void> setWindowsAlwaysOnTop(bool value) async {
+    await _prefs.setBool(_keyWindowsAlwaysOnTop, value);
   }
 
   /// Пройден ли экран первичной настройки (онбординг разрешений).

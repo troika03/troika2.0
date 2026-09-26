@@ -31,4 +31,14 @@ void main() {
     expect(result.handled, isTrue);
     expect(result.uiAction, 'create_document');
   });
+
+  test('Windows screenshot requires the one-time Vision UI action', () async {
+    final result = await LocalCommandService(windowsForTesting: true).execute(
+      'Сделай снимок экрана',
+    );
+
+    expect(result.handled, isTrue);
+    expect(result.uiAction, 'capture_screen_for_vision');
+    expect(result.response, contains('подтвердить'));
+  });
 }
