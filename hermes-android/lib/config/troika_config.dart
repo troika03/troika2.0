@@ -325,6 +325,8 @@ class TroikaConfig {
 
   static String get loginUrl => '$serverUrl/v1/auth/login';
 
+  static String get logoutAllUrl => '$serverUrl/v1/auth/logout-all';
+
   /// Архив всех переносимых данных текущего product-аккаунта.
   static String get accountExportUrl => '$serverUrl/v1/account/export';
 

@@ -720,6 +720,34 @@ class AccessRegistry:
             )
         return True
 
+    def revoke_all_devices(self, principal: AccessPrincipal) -> tuple[str, ...]:
+        """Revoke every device and bearer token owned by this account."""
+        now = time.time()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._require_active_principal(connection, principal)
+            device_ids = tuple(
+                str(row["id"])
+                for row in connection.execute(
+                    "SELECT id FROM troika_devices "
+                    "WHERE user_id = ? AND status = 'active' ORDER BY id",
+                    (principal.user_id,),
+                ).fetchall()
+            )
+            connection.execute(
+                "UPDATE troika_devices SET status = 'revoked', "
+                "revoked_at = COALESCE(revoked_at, ?) "
+                "WHERE user_id = ? AND status = 'active'",
+                (now, principal.user_id),
+            )
+            connection.execute(
+                "UPDATE troika_api_tokens SET revoked_at = COALESCE(revoked_at, ?) "
+                "WHERE device_id IN "
+                "(SELECT id FROM troika_devices WHERE user_id = ?)",
+                (now, principal.user_id),
+            )
+        return device_ids
+
     @staticmethod
     def _require_active_principal(
         connection: sqlite3.Connection,

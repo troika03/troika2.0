@@ -176,6 +176,26 @@ def test_product_registration_rejects_duplicate_and_bad_password(tmp_path) -> No
     assert bad_login.status == 401
 
 
+def test_product_logout_all_revokes_every_owned_token(tmp_path) -> None:
+    adapter, first_token, second_token = _adapter_with_two_users(tmp_path)
+    registry = adapter._access_registry
+    request = _Request(first_token)
+    assert adapter._check_auth(request) is None
+    principal = request["troika_product_principal"]
+    extra_device = registry.create_device(
+        principal.user_id, name="Laptop", platform="windows"
+    )
+    extra_token = registry.issue_device_token(extra_device)
+
+    response = asyncio.run(adapter._handle_product_logout_all(request))
+
+    assert response.status == 200
+    assert json.loads(response.body)["reauthentication_required"] is True
+    assert registry.authenticate(first_token) is None
+    assert registry.authenticate(extra_token) is None
+    assert registry.authenticate(second_token) is not None
+
+
 def test_product_auth_ignores_legacy_server_key_and_derives_memory_scope(
     tmp_path,
 ) -> None:

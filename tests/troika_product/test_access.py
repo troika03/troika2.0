@@ -94,6 +94,32 @@ def test_device_management_is_owner_scoped_and_revokes_all_device_tokens(
     ).status == "revoked"
 
 
+def test_logout_all_revokes_every_owned_device_but_not_foreign_account(
+    tmp_path,
+) -> None:
+    registry = AccessRegistry(tmp_path / "access.db")
+    owner = registry.create_user("owner@example.com")
+    foreign = registry.create_user("foreign@example.com")
+    first_device = registry.create_device(owner, name="Pixel", platform="android")
+    second_device = registry.create_device(owner, name="PC", platform="windows")
+    foreign_device = registry.create_device(
+        foreign, name="iPhone", platform="ios"
+    )
+    first_token = registry.issue_device_token(first_device)
+    second_token = registry.issue_device_token(second_device)
+    foreign_token = registry.issue_device_token(foreign_device)
+    principal = registry.authenticate(first_token)
+    assert principal is not None
+
+    assert set(registry.revoke_all_devices(principal)) == {
+        first_device,
+        second_device,
+    }
+    assert registry.authenticate(first_token) is None
+    assert registry.authenticate(second_token) is None
+    assert registry.authenticate(foreign_token) is not None
+
+
 def test_session_claims_are_isolated_between_users(tmp_path) -> None:
     registry = AccessRegistry(tmp_path / "access.db")
     first_user = registry.create_user("one@example.com")

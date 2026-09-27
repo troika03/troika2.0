@@ -403,6 +403,37 @@ class TroikaApiService {
     }
   }
 
+  /// Revoke every device token owned by the current account.
+  Future<void> logoutAllDevices() async {
+    if (!TroikaConfig.apiKey.startsWith('trk_live_')) {
+      throw TroikaApiException('Аккаунт не подключён.');
+    }
+    try {
+      final response = await http
+          .post(
+            Uri.parse(TroikaConfig.logoutAllUrl),
+            headers: TroikaConfig.headers,
+          )
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode == 401) {
+        throw TroikaApiException(
+          'Сеанс уже завершён. Войди снова.',
+          statusCode: 401,
+        );
+      }
+      if (response.statusCode != 200) {
+        throw TroikaApiException(
+          'Не удалось выйти на всех устройствах (${response.statusCode}).',
+          statusCode: response.statusCode,
+        );
+      }
+    } on SocketException {
+      throw TroikaApiException('Нет соединения с сервером аккаунта.');
+    } on TimeoutException {
+      throw TroikaApiException('Сервер не подтвердил выход.');
+    }
+  }
+
   /// Отправить сообщение (текст + опционально картинки) в общую сессию.
   ///
   /// История на сервере (state.db) ведётся по session-id, поэтому мы НЕ

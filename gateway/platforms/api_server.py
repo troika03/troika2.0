@@ -1962,6 +1962,41 @@ class APIServerAdapter(BasePlatformAdapter):
             headers={"Cache-Control": "private, no-store"},
         )
 
+    async def _handle_product_logout_all(
+        self, request: "web.Request"
+    ) -> "web.Response":
+        """POST /v1/auth/logout-all — revoke every session for this account."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        principal = self._product_principal(request)
+        if principal is None or self._access_registry is None:
+            return web.json_response(
+                _openai_error("Account logout is available only in product mode"),
+                status=404,
+            )
+        try:
+            device_ids = self._access_registry.revoke_all_devices(principal)
+        except PermissionError:
+            return web.json_response(
+                _openai_error("Product authentication is required"), status=401
+            )
+        self._record_product_audit(
+            request,
+            "account.logout_all",
+            details={"revoked_devices": len(device_ids)},
+        )
+        for device_id in device_ids:
+            await self._revoke_device_activity(principal.user_id, device_id)
+        return web.json_response(
+            {
+                "status": "revoked",
+                "revoked_devices": len(device_ids),
+                "reauthentication_required": True,
+            },
+            headers={"Cache-Control": "private, no-store"},
+        )
+
     async def _handle_delete_account(self, request: "web.Request") -> "web.Response":
         """DELETE /v1/account — explicit, authenticated full local deletion."""
         auth_err = self._check_auth(request)
@@ -5947,6 +5982,9 @@ class APIServerAdapter(BasePlatformAdapter):
                 )
                 self._app.router.add_post(
                     "/v1/auth/login", self._handle_product_login
+                )
+                self._app.router.add_post(
+                    "/v1/auth/logout-all", self._handle_product_logout_all
                 )
                 self._app.router.add_get(
                     "/v1/account/export", self._handle_export_account

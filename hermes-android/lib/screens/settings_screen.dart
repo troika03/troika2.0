@@ -43,6 +43,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _exportingAccount = false;
   bool _deletingAccount = false;
   bool _loadingDevices = false;
+  bool _loggingOutAll = false;
   String? _devicesError;
   String? _revokingDeviceId;
   List<AccountDevice> _accountDevices = const [];
@@ -634,6 +635,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     } finally {
       if (mounted) setState(() => _revokingDeviceId = null);
+    }
+  }
+
+  Future<void> _logoutAllDevices(AssistantService assistant) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF17150F),
+        title: const Text(
+          'Выйти на всех устройствах?',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'Все телефоны и компьютеры сразу потеряют доступ. Войти потребуется заново.',
+          style: TextStyle(color: Colors.white70, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text(
+              'Выйти везде',
+              style: TextStyle(color: Color(0xFFE57373)),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _loggingOutAll = true);
+    try {
+      await TroikaApiService().logoutAllDevices();
+      await _finishRevokedSession(assistant);
+    } on TroikaApiException catch (error) {
+      if (error.statusCode == 401) {
+        await _finishRevokedSession(assistant);
+        return;
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } finally {
+      if (mounted) setState(() => _loggingOutAll = false);
     }
   }
 
@@ -1431,6 +1479,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 8),
             _deviceManagementSection(assistant),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed:
+                  _loggingOutAll ? null : () => _logoutAllDevices(assistant),
+              icon: _loggingOutAll
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.logout),
+              label: Text(
+                _loggingOutAll
+                    ? 'Завершаю сеансы…'
+                    : 'Выйти на всех устройствах',
+              ),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFFE57373),
+              ),
+            ),
             const SizedBox(height: 20),
             const Text(
               'Сначала можно сохранить ZIP со всеми переносимыми данными и '

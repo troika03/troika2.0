@@ -1,0 +1,89 @@
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/production/Dockerfile
+    image: troika-production:${TROIKA_IMAGE_TAG:-local}
+    restart: unless-stopped
+    user: "1000:1000"
+    env_file:
+      - /srv/troika/data/.env
+    environment:
+      HOME: /opt/troika
+      HERMES_HOME: /opt/troika
+      API_SERVER_ENABLED: "true"
+      API_SERVER_HOST: 0.0.0.0
+      API_SERVER_PORT: "8765"
+      TROIKA_PRODUCT_AUTH_ENABLED: "true"
+      TROIKA_PRODUCT_AUTH_DB: /opt/troika/troika_access.db
+      TROIKA_PRODUCT_ARTIFACT_ROOT: /opt/troika/artifacts
+      TROIKA_PRODUCT_QUOTAS_ENABLED: "false"
+      TROIKA_PRODUCT_STT_URL: http://stt:8766
+    volumes:
+      - /srv/troika/data:/opt/troika
+      - ./config.yaml:/opt/troika/config.yaml:ro
+    ports:
+      - "127.0.0.1:8765:8765"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=5)"
+      interval: 20s
+      timeout: 8s
+      retries: 6
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  stt:
+    image: troika-production:${TROIKA_IMAGE_TAG:-local}
+    restart: unless-stopped
+    user: "1000:1000"
+    env_file:
+      - /srv/troika/data/.env
+    environment:
+      HOME: /opt/troika
+      HERMES_HOME: /opt/troika
+      TROIKA_PRODUCT_AUTH_ENABLED: "true"
+      TROIKA_PRODUCT_AUTH_DB: /opt/troika/troika_access.db
+    command:
+      - python
+      - -m
+      - troika_product.voice_proxy
+      - --hermes-home
+      - /opt/troika
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8766"
+      - --backend
+      - groq
+    volumes:
+      - /srv/troika/data:/opt/troika
+    expose:
+      - "8766"
+    depends_on:
+      api:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+networks:
+  default:
+    name: troika-private

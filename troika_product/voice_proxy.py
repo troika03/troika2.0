@@ -9,6 +9,7 @@ import runpy
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--hermes-home", type=Path, required=True)
+    parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8766)
     parser.add_argument("--model", default="base")
     parser.add_argument("--backend", choices=("local", "groq", "auto"), default="local")
@@ -21,7 +22,7 @@ def main():
         "HERMES_HOME": str(runtime),
         "TROIKA_PRODUCT_AUTH_ENABLED": "true",
         "TROIKA_PRODUCT_AUTH_DB": str(database),
-        "STT_PROXY_HOST": "127.0.0.1",
+        "STT_PROXY_HOST": args.host,
         "STT_PROXY_PORT": str(args.port),
         "STT_BACKEND": args.backend,
         "WHISPER_MODEL_SIZE": args.model,

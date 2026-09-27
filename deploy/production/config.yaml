@@ -1,0 +1,36 @@
+model:
+  default: openrouter/free
+  provider: openrouter
+  base_url: https://openrouter.ai/api/v1
+
+toolsets:
+  - troika-product
+
+platform_toolsets:
+  api_server:
+    - troika-product
+
+platforms:
+  api_server:
+    enabled: true
+    extra:
+      product_voice_enabled: true
+      product_screen_snapshot_enabled: false
+      product_screen_external_vision_enabled: false
+      product_retention_enabled: true
+      product_retention_dry_run: false
+      product_retention_interval_seconds: 21600
+      product_stt_url: http://stt:8766
+
+agent:
+  max_turns: 90
+  tool_use_enforcement: true
+  api_max_retries: 3
+
+stt:
+  enabled: true
+  provider: groq
+
+openrouter:
+  response_cache: true
+  response_cache_ttl: 300
