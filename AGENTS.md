@@ -1,75 +1,59 @@
 # Troika — lean agent guide
 
-This file is the only mandatory repository guide for a new coding session.
-Keep it short. Do not turn it back into a Hermes handbook.
+This is the only mandatory repository guide for a new coding session. Keep it short.
 
 ## 1. Session startup
 
-1. Work only in `D:\troika-product` for Troika product changes.
-   `D:\troikahermes` is read-only legacy/reference material.
+1. Work only in `D:\troika-product` for Troika product changes. `D:\troikahermes` is read-only legacy/reference material.
 2. Read `docs/CURRENT.md`.
 3. Read other documents only when the task needs them; use the map below.
-4. Inspect the actual code/tests before trusting an old plan or old status note.
+4. Inspect actual code/tests before trusting old status text.
 
-Do **not** automatically load `PROJECT_MEMORY.md`, the launch DOCX, every plan,
-or the old Hermes development guide on every session. They are reference
-material, not startup context.
+Do **not** preload the launch DOCX, all plans, `PROJECT_MEMORY.md`, or the inherited Hermes handbook on every session.
 
 Repository: `https://github.com/troika03/troika2.0.git`.
 
 ## 2. Authority order
 
-When documents disagree, use this order:
+When documents disagree:
 
 1. Explicit new decision from the product owner.
-2. `docs/Troika_1.0_Launch_Plan_Final_Updated.docx` — canonical Troika 1.0
-   scope, UX, pricing, release order and Definition of Done.
+2. `docs/Troika_1.0_Launch_Plan_Final_Updated.docx` — canonical 1.0 scope, UX, pricing, release order and Definition of Done.
 3. `docs/TROIKA_1_0_EXECUTION_TRACKER.md` — ordered progress against the DOCX.
 4. `docs/CURRENT.md` — compact current implementation truth and next step.
 5. `docs/ARCHITECTURE.md` — stable component/boundary map.
-6. Task-specific plans/specs/runbooks.
-7. `PROJECT_MEMORY.md` and older plans — historical evidence only.
+6. Task-specific policies, audits, migrations and runbooks.
+7. Git history / removed drafts — historical evidence only.
 
-Never let a draft or historical plan silently override a higher source.
+Never let historical material silently override a higher source.
 
 ## 3. Product invariants
 
-- Troika 1.0 is a Russian voice-first personal AI assistant for Android and
-  Windows; chat is secondary.
+- Troika 1.0 is a Russian voice-first personal AI assistant for Android and Windows; chat is secondary.
 - Normal users see one Troika, not model/provider/tool/worker choices.
 - Hosted subscription is the canonical 1.0 direction. BYOK stays Advanced.
-- Canonical target plans are Free, Plus 790 RUB/month and Pro 1,490 RUB/month;
-  local commands do not consume AI credits. Do not replace these with prices
-  from older monetization/offline-beta drafts unless the owner changes them.
-- One owner-scoped Run may use up to three specialist workers internally. Do
-  not expose separate product runtimes for delegate/MoA/Kanban/job_runner.
+- Canonical target plans are Free, Plus 790 RUB/month and Pro 1,490 RUB/month; local commands do not consume AI credits.
+- One owner-scoped Run may use up to three specialist workers internally. Do not expose separate product runtimes for delegate/MoA/Kanban/job_runner.
 - Actions with external effects require clear one-time approval and audit.
-- Multi-tenancy/privacy are P0: no shared secrets, shared personal memory,
-  `phone-misha` product identity, or public plaintext HTTP in production.
+- Multi-tenancy/privacy are P0: no shared secrets, shared personal memory, personal hard-coded product identities or public plaintext HTTP in production.
 - PC control is a local Troika Companion capability, not a default cloud tool.
-- User history, memory, tasks, settings and artifact index are local encrypted
-  account data; cross-device continuation is E2EE and the server should only
-  keep opaque ciphertext plus minimal routing metadata.
+- User history, memory, tasks, settings and artifact index are local encrypted account data; cross-device continuation is E2EE and the server should keep only opaque ciphertext plus minimal routing metadata.
 - Do not invent production hosts, credentials or infrastructure facts.
 - Never commit secrets, access tokens, passwords or private user content.
 
 ## 4. Execution rule
 
-The 1.0 plan is executed top-to-bottom by complete sections. Continue from the
-first incomplete canonical section unless the owner explicitly asks for a
-side task. A later backlog summary does not replace earlier sections.
+The 1.0 plan is executed top-to-bottom by complete sections. Continue from the first incomplete canonical section unless the owner explicitly asks for a side task.
 
 Before marking an item complete:
 
 - read the relevant DOCX/tracker acceptance block;
-- inspect the implementation rather than assuming it exists;
+- inspect the implementation;
 - run the narrowest meaningful tests/builds;
-- record what was actually verified, not what is merely intended;
-- update `docs/CURRENT.md` and, when canonical progress changes,
-  `docs/TROIKA_1_0_EXECUTION_TRACKER.md`.
+- record only what was actually verified;
+- update `docs/CURRENT.md` and, when canonical progress changes, `docs/TROIKA_1_0_EXECUTION_TRACKER.md`.
 
-`docs/CURRENT.md` is a snapshot, not a diary. Replace stale facts instead of
-appending endless history. Git already stores history.
+`docs/CURRENT.md` is a snapshot, not a diary. Replace stale facts instead of appending history.
 
 ## 5. Read-on-demand map
 
@@ -77,20 +61,16 @@ appending endless history. Git already stores history.
 |---|---|
 | Current task / handoff | `docs/CURRENT.md` |
 | Component boundaries / data flow | `docs/ARCHITECTURE.md` |
-| Decide 1.0 scope, UX, price or release acceptance | `docs/Troika_1.0_Launch_Plan_Final_Updated.docx` + relevant tracker section |
+| Decide 1.0 scope, UX, price or release acceptance | launch DOCX + relevant tracker section |
 | Check ordered 1.0 progress | `docs/TROIKA_1_0_EXECUTION_TRACKER.md` |
-| Productization/security implementation detail | `PRODUCTIZATION_PLAN.md` |
-| Restore voice, device control, vision, proactive behavior | `docs/TROIKA_CAPABILITY_RESTORATION_PLAN.md` |
+| Product/security implementation detail | `PRODUCTIZATION_PLAN.md` |
+| Restore voice/device/vision/proactive capabilities | `docs/TROIKA_CAPABILITY_RESTORATION_PLAN.md` |
 | Closed-beta provisioning/deployment | `docs/TROIKA_CLOSED_BETA_SETUP.md` |
 | Retention/deletion | `docs/DATA_RETENTION_AND_DELETION_POLICY.md` |
 | Screen snapshot security | `docs/SCREEN_SNAPSHOT_THREAT_MODEL.md` |
-| Why another plan exists / whether it is authoritative | `docs/PLAN_INDEX.md` |
+| Document authority / cleanup history | `docs/PLAN_INDEX.md` |
 
-Old drafts such as `TROIKA_MONETIZATION_PLAN.md`,
-`TROIKA_OFFLINE_BETA_LAUNCH_PLAN.md`, `TROIKA_PC_AGENT_PLAN.md`,
-`TROIKA_IMPROVEMENT_PLAN.md`, `TROIKA_KALI_WORKSPACE_PLAN.md` and
-`docs/plans/*` are **not** automatic authority for Troika 1.0. Consult
-`docs/PLAN_INDEX.md` before using them.
+Removed historical plans stay in Git history and are not startup context.
 
 ## 6. Main code areas
 
@@ -100,9 +80,6 @@ Old drafts such as `TROIKA_MONETIZATION_PLAN.md`,
 - `hermes-android/` — shared Flutter Android/Windows client; legacy directory name.
 - `docs/` — canonical plan, tracker, policies, audits and task-specific references.
 - `run_agent.py`, `model_tools.py`, `toolsets.py` — inherited Hermes runtime internals.
-
-For deeper structure, read `docs/ARCHITECTURE.md`; do not preload a giant generic
-Hermes guide.
 
 ## 7. Useful checks
 
@@ -123,18 +100,16 @@ flutter analyze --no-fatal-infos
 flutter build apk --debug
 ```
 
-Python: run focused pytest/ruff/compile checks for the touched area first; only
-run broad suites when the change warrants them.
+Run focused Python pytest/ruff/compile checks for the touched area first; broaden only when warranted.
 
 ## 8. End-of-task handoff
 
 Keep `docs/CURRENT.md` small and sufficient for the next session:
 
-- canonical section currently being worked;
+- current canonical section;
 - what changed;
 - what was verified;
 - blockers/known failures;
 - exact next safe step.
 
-Do not copy long logs, full plans, large code excerpts or generic Hermes docs
-into startup context.
+Do not copy long logs, full plans, large code excerpts or generic Hermes docs into startup context.
