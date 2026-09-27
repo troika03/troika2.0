@@ -1,15 +1,10 @@
-# PROJECT_MEMORY.md — historical compatibility stub
+# Troika project memory — historical pointer
 
-This file is **not** startup context anymore.
+This file is **not** startup context and must not be read automatically by a new coding session.
 
-The old large project-memory document became stale, duplicated plans/status, referenced old branches and caused unnecessary context loading. Its full previous contents remain available in Git history.
+Current project state: `docs/CURRENT.md`.
+Canonical product scope/order: `docs/Troika_1.0_Launch_Plan_Final_Updated.docx` and `docs/TROIKA_1_0_EXECUTION_TRACKER.md`.
+Architecture map: `docs/ARCHITECTURE.md`.
+Plan authority / historical-document rules: `docs/PLAN_INDEX.md`.
 
-Use instead:
-
-1. `AGENTS.md` — short repository rules and authority order.
-2. `docs/CURRENT.md` — verified current state and exact next step.
-3. `docs/ARCHITECTURE.md` — stable architecture and trust boundaries.
-4. `docs/TROIKA_1_0_EXECUTION_TRACKER.md` + the canonical launch DOCX when a task needs product-plan detail.
-5. `docs/PLAN_INDEX.md` before relying on any older plan.
-
-Do not expand this file back into a running diary. Git stores history; `docs/CURRENT.md` stores the small current snapshot.
+The previous long-form project memory remains available in Git history. Do not append status logs here; Git history already preserves them.
