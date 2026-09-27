@@ -27,38 +27,34 @@ A lower item never overrides a higher one unless the product owner explicitly ch
 - `TROIKA_NATIVE_REBRAND_MIGRATION.md` — compatibility-safe rebrand migration.
 - `TROIKA_1_0_SECTION_*_AUDIT.md` — evidence for completed/checked canonical sections. These are evidence, not new product plans.
 
-## Historical / inherited plan locations
-
-These locations are not startup context and are not authoritative for Troika 1.0 unless a current task explicitly references them:
-
-- `../.plans/` — inherited Hermes plans for the OpenAI-compatible API server and legacy streaming architecture.
-- `../plans/` — inherited provider-specific Hermes plans such as Gemini OAuth.
-- `plans/` — older dated Hermes feature plans (Telegram topics, s6 per-profile gateways, ACP/Zed approval diffs).
-- `../PROJECT_MEMORY.md` — historical project-memory file. Current state belongs in `CURRENT.md`; old content remains available in Git history.
-- Any old monetization, offline-beta, PC-agent, Kali, self-improvement or similar draft discovered in the repository.
-
-### Audited inherited files
+## Audited inherited plan folders
 
 The following six files were inspected during the 2026-09-27 context cleanup and are classified as historical Hermes implementation material, not Troika 1.0 requirements:
 
 - `../.plans/openai-api-server.md` — legacy Hermes API-server proposal; current Troika gateway/product API is the source of truth.
 - `../.plans/streaming-support.md` — legacy Hermes streaming proposal with old config/provider assumptions.
-- `../plans/gemini-oauth-provider.md` — provider-specific Hermes OAuth implementation plan, unrelated to current ordered Troika 1.0 work.
+- `../plans/gemini-oauth-provider.md` — provider-specific Hermes OAuth plan, unrelated to current ordered Troika 1.0 work.
 - `plans/2026-05-02-telegram-dm-user-managed-multisession-topics.md` — Telegram/Hermes feature plan outside Troika 1.0 startup scope.
 - `plans/2026-05-07-s6-overlay-dynamic-subagent-gateways.md` — already shipped upstream Hermes work retained only as implementation history.
 - `plans/2026-05-15-acp-zed-edit-approval-diffs.md` — editor/ACP Hermes plan outside current Troika product scope.
 
-Do not load these six files in a normal Codex session. If a future task genuinely needs one of those subsystems, inspect the current implementation and tests first; use the old plan only as historical context.
+Do not load these files in a normal Codex session. A future task that genuinely touches one of these subsystems must inspect current code/tests first and use the old plan only as historical context.
+
+## Historical product drafts
+
+Old monetization, offline-beta, PC-agent, Kali, self-improvement or similar drafts do not override the canonical plan. If unique current requirements are found in one, move those requirements into a current spec or tracker entry and delete the duplicate draft in a dedicated cleanup change.
+
+`../PROJECT_MEMORY.md` is historical only. Current state belongs in `CURRENT.md`; the old long-form content remains in Git history.
 
 ## Rule for reusing an old plan
 
-Before implementing from a historical plan:
+Before implementing from historical material:
 
 1. Check the canonical 1.0 DOCX and execution tracker first.
 2. Verify the relevant code/tests because old status text can be stale.
 3. Copy only still-valid requirements/decisions into the current task-specific spec or tracker.
 4. Do not restore obsolete pricing, architecture, unsafe tool access, personal identifiers or old release assumptions.
-5. If nothing unique remains, delete the duplicate plan in a dedicated cleanup change; Git history is the archive.
+5. If nothing unique remains and nothing current references the file, delete it; Git history is the archive.
 
 ## Startup rule
 
