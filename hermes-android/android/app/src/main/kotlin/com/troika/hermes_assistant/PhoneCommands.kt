@@ -9,11 +9,13 @@ import android.provider.AlarmClock
 import android.provider.MediaStore
 import android.provider.Settings
 import android.os.Build
+import java.math.BigDecimal
+import java.util.Calendar
 
 /**
  * Локальный матчер голосовых команд телефона.
  * Возвращает текст-результат для озвучки или null, если команда не распознана.
- * Тогда дальше идёт обычный вызов Hermes LLM.
+ * Тогда дальше идёт обычный вызов сетевого агента.
  */
 object PhoneCommands {
 
@@ -75,6 +77,8 @@ object PhoneCommands {
      * Возвращает результат или null, если не распознали.
      */
     fun tryExecute(ctx: Context, norm: String, raw: String): String? {
+        commonReply(norm)?.let { return it }
+
         // Открыть приложение
         OPEN_VERBS.firstOrNull { norm.contains(it) }?.let { verb ->
             val rest = norm.substringAfter(verb).trim().trim('.', '!', '?', ',', ' ')
@@ -275,6 +279,109 @@ object PhoneCommands {
         }
 
         return null
+    }
+
+    /**
+     * Короткие ответы, которые должны работать без сервера и из фонового
+     * voice-сервиса. Набор намеренно совпадает с Flutter local matcher.
+     */
+    private fun commonReply(input: String): String? {
+        val normalized = withoutAssistantAddress(normalizeCommon(input))
+
+        if (normalized in setOf(
+                "привет", "приветик", "здравствуй", "здравствуйте",
+                "доброе утро", "добрый день", "добрый вечер",
+            )) {
+            return "Привет! Я рядом. Что сделать?"
+        }
+        if (normalized in setOf(
+                "пока", "до свидания", "до встречи", "увидимся", "спокойной ночи",
+            )) {
+            return "Пока! Позови, когда понадоблюсь."
+        }
+        if (normalized in setOf(
+                "спасибо", "благодарю", "спасибо большое", "большое спасибо",
+            )) {
+            return "Пожалуйста."
+        }
+        if (normalized in setOf(
+                "как дела", "как ты", "ты тут", "ты здесь", "ты работаешь",
+            )) {
+            return "Я на связи и готова помочь."
+        }
+        if (normalized in setOf("кто ты", "как тебя зовут", "представься")) {
+            return "Я Тройка, твой локальный голосовой помощник."
+        }
+        if (normalized in setOf(
+                "помощь", "помоги", "команды", "список команд", "покажи команды",
+                "что ты умеешь", "что я могу сказать",
+            )) {
+            return "Без интернета умею отвечать на простые фразы, считать, " +
+                "называть время и дату, открывать приложения, искать в браузере, " +
+                "строить маршрут, ставить таймер и будильник, управлять фонариком, " +
+                "звуком, яркостью и музыкой. Например: включи фонарик."
+        }
+        if (normalized.contains("день недели") ||
+            normalized == "какой сегодня день" ||
+            normalized == "сегодня какой день") {
+            val weekdays = listOf(
+                "воскресенье", "понедельник", "вторник", "среда",
+                "четверг", "пятница", "суббота",
+            )
+            val day = Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1
+            return "Сегодня ${weekdays[day]}"
+        }
+
+        return calculateReply(normalized)
+    }
+
+    private fun calculateReply(normalized: String): String? {
+        val match = Regex(
+            "^(?:сколько будет|посчитай|вычисли|рассчитай)\\s+" +
+                "(-?\\d+(?:\\.\\d+)?)\\s*" +
+                "(плюс|минус|умножить на|умножь на|делить на|разделить на|[+\\-*/xх])\\s*" +
+                "(-?\\d+(?:\\.\\d+)?)$",
+        ).find(normalized) ?: return null
+        val left = match.groupValues[1].toDouble()
+        val operator = match.groupValues[2]
+        val right = match.groupValues[3].toDouble()
+        if (operator in setOf("/", "делить на", "разделить на") && right == 0.0) {
+            return "На ноль делить нельзя."
+        }
+        val value = when (operator) {
+            "плюс", "+" -> left + right
+            "минус", "-" -> left - right
+            "умножить на", "умножь на", "*", "x", "х" -> left * right
+            else -> left / right
+        }
+        val answer = BigDecimal.valueOf(value).stripTrailingZeros().toPlainString()
+        return "Ответ: $answer"
+    }
+
+    private fun normalizeCommon(input: String): String {
+        return input
+            .lowercase()
+            .replace('ё', 'е')
+            .replace(Regex("(\\d),(\\d)")) { match ->
+                "${match.groupValues[1]}.${match.groupValues[2]}"
+            }
+            .replace(Regex("[^a-zа-я0-9:+*/\\-.\\s]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
+    private fun withoutAssistantAddress(input: String): String {
+        var value = input
+        for (prefix in listOf("эй тройка ", "слушай тройка ", "тройка ")) {
+            if (value.startsWith(prefix)) {
+                value = value.removePrefix(prefix).trim()
+                break
+            }
+        }
+        if (value.endsWith(" тройка")) {
+            value = value.removeSuffix(" тройка").trim()
+        }
+        return value
     }
 
     private fun dispatchMediaKey(ctx: Context, keyCode: Int) {

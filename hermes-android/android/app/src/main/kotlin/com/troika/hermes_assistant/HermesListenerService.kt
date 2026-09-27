@@ -1264,7 +1264,7 @@ class HermesListenerService : Service() {
                 sendChatToFlutter("user", rawQuestion)
                 val answer = chatWithHermesHistory(history)
                 if (answer.isEmpty()) {
-                    HermesOverlay.get(this).updateStatus("Тройка не ответил")
+                    HermesOverlay.get(this).updateStatus("Тройка не ответила")
                     Thread.sleep(1500)
                     break
                 }
