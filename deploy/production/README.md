@@ -4,9 +4,10 @@ This stack runs the authenticated Troika API and private STT worker. The API
 binds only to the host loopback interface. Nginx is the sole public entry point
 after a domain and TLS certificate are configured.
 
-Runtime secrets live only in `/srv/troika/data/.env`. At minimum it contains
-`OPENROUTER_API_KEY` and `GROQ_API_KEY`. Do not commit or copy that file into an
-image.
+Runtime secrets live only in `/srv/troika/data/.env`. For the current stack the
+file contains only `OPENROUTER_API_KEY` and `GROQ_API_KEY`. Do not copy a local
+development `.env`: it may contain workstation paths and runtime overrides.
+Do not commit this file or copy it into an image.
 
 Deploy from a clean source tree copied to `/srv/troika/releases/<revision>`:
 

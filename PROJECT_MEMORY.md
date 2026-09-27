@@ -793,10 +793,11 @@ AI-ассистент для Android и Windows, где чат остаётся 
 1. Разделы 1–6 завершены целыми блоками. Следующий блок Word-плана — раздел 7;
    не выполнять отдельные строки раздела изолированно.
 2. Статус каждого блока вести в `docs/TROIKA_1_0_EXECUTION_TRACKER.md`.
-3. Базовый production VPS подготовлен вне очереди по прямому запросу владельца;
-   это не меняет следующий продуктовый блок и не означает готовый deployment.
+3. Базовый production VPS и приватный application runtime подготовлены вне
+   очереди по прямому запросу владельца. Это не меняет следующий продуктовый
+   блок и не означает публичный production launch.
 
-## Выполнено: базовая подготовка production VPS (2026-09-27)
+## Выполнено: production VPS и приватный runtime (2026-09-28)
 
 - На чистом Ubuntu 22.04 LTS настроены отдельный `troika-admin`, key-only SSH,
   запрет root/password login, UFW для 22/80/443 и Fail2ban.
@@ -810,9 +811,17 @@ AI-ассистент для Android и Windows, где чат остаётся 
   на статическую конфигурацию.
 - Актуальный безопасный runbook: `docs/TROIKA_PRODUCTION_SERVER.md`. Секреты,
   IP-адрес и приватные ключи в репозиторий не добавлялись.
-- Приложение ещё не развёрнуто: нужны домен/DNS, TLS, production manifest,
-  секреты, Postgres, object storage, queue, backup/restore, monitoring и
-  rollback/cost controls.
+- На VPS развёрнут production Compose runtime текущей product-ревизии:
+  authenticated API и отдельный STT worker. API опубликован только на
+  `127.0.0.1:8765`; STT доступен только внутри Docker network. Публично по-прежнему
+  доступны только SSH и HTTP-заглушка Nginx.
+- Серверный `.env` содержит только provider secrets OpenRouter и Groq. Модель —
+  `openrouter/free`; квоты временно отключены для разработки продукта.
+- Реальный server smoke-test пройден: self-service регистрация, bearer-token,
+  `/v1/chat/completions`, ответ модели «работает» и logout-all. Health обоих
+  контейнеров и отсутствие публичных портов приложения проверены.
+- Для публичного запуска ещё нужны домен/DNS, TLS, Postgres, object storage,
+  queue, backup/restore, monitoring, rollback и cost controls.
 
 ## Проверенный рабочий срез и бесплатная модель (2026-09-10)
 
@@ -858,8 +867,8 @@ AI-ассистент для Android и Windows, где чат остаётся 
 ### Что ещё не является готовым продуктом
 
 - Self-service регистрация, вход, список устройств и их отзыв есть. Пока нет
-  подтверждения почты, восстановления пароля, refresh-token rotation и
-  отдельной команды logout-all.
+  подтверждения почты, восстановления пароля и refresh-token rotation.
+  Logout-all реализован в API и Android.
 - Нет подписок, платежей, webhook-биллинга, отмен и возвратов.
 - Проактивность работает через связанный с проектами/задачами in-app inbox и
   безопасный фоновый event engine. Push ещё не реализован до завершения retention
@@ -879,10 +888,11 @@ AI-ассистент для Android и Windows, где чат остаётся 
   отдельного включения Тройки в Спец. возможностях Android.
 - SMS, звонки, clipboard, экран, файлы телефона и календарь намеренно не
   включены в подписочный toolset до отдельного privacy/security review.
-- Базовый production VPS с защищённым SSH, firewall, Docker и Nginx готов, но
-  нет deployment приложения, домена, HTTPS, private storage/queue, мониторинга,
-  резервных копий и процедуры восстановления. Удаление из backup/object storage
-  не реализовано и не проверено.
+- Базовый production VPS и приватный Compose runtime готовы. API работает только
+  на loopback, STT — только во внутренней Docker network. Пока нет домена, HTTPS,
+  private Postgres/object storage/queue, мониторинга, резервных копий и процедуры
+  восстановления. Удаление из backup/object storage не реализовано и не
+  проверено.
 - TUI clean install, type-check, tests и build восстановлены и вынесены в
   отдельный CI workflow. Общий hermetic baseline репозитория ещё не зелёный на
   native Windows из-за несвязанных platform-specific upstream failures.

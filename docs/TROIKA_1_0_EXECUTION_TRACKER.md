@@ -175,9 +175,12 @@ Status: `[ ]` not reached, `[-]` active/partial, `[x]` verified.
 
 - [-] Production VPS operating-system baseline is verified: key-only SSH,
   firewall, Fail2ban, unattended security updates, Docker/Compose, Nginx, log
-  rotation, persistent journal, swap, and reboot recovery. The Troika app is
-  not deployed; domain/TLS, private Postgres/object storage/queue, secrets,
-  backups/restore, monitoring, rate limits, and dashboards remain open.
+  rotation, persistent journal, swap, and reboot recovery. The authenticated
+  product API and private STT worker are deployed with `openrouter/free`; API
+  health, registration, model completion, and logout-all passed on the VPS.
+  The API remains loopback-only. Domain/TLS, private Postgres/object
+  storage/queue, backups/restore, monitoring, rate limits, dashboards, and
+  production inference SLA remain open.
 
 ### 14. Analytics and metrics
 

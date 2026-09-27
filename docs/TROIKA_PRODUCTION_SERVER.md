@@ -62,17 +62,25 @@ proxy approved HTTP and WebSocket routes over an internal Docker network.
 
 ## Deployment status
 
-The operating-system baseline is configured. No Troika application is public
-yet. The legacy `docker-compose.troika.yml` is not a production deployment
-manifest because it publishes ports 8642, 8643, and 7800-7900 and uses the old
-single-volume runtime. Do not run it on this host.
+The operating-system baseline and private application runtime are configured.
+The current product revision runs the authenticated API and a separate STT
+worker from `deploy/production/compose.yaml`. The API binds only to host
+loopback on port 8765. STT has no host port. Registration, bearer-token chat
+through `openrouter/free`, logout-all, and container health passed on
+2026-09-28. No Troika application is public yet.
 
-Production deployment remains blocked until all of the following exist:
+Runtime secrets are limited to provider credentials in
+`/srv/troika/data/.env`. Local development configuration and paths must never
+be copied into this file. The legacy `docker-compose.troika.yml` is not a
+production deployment manifest because it publishes ports 8642, 8643, and
+7800-7900 and uses the old single-volume runtime. Do not run it on this host.
+
+Public production deployment remains blocked until all of the following exist:
 
 1. a production domain whose DNS points to the VPS;
 2. TLS certificate issuance and HTTPS/WSS-only routing;
-3. a reviewed product-mode image built from the current repository revision;
-4. externalized secrets with no values in Git, images, or client builds;
+3. an HTTPS reverse-proxy policy for the authenticated product routes;
+4. a production inference provider or accepted free-router availability risk;
 5. private Postgres, object storage, and queue choices;
 6. encrypted backup, restore, and deletion-rehearsal procedures;
 7. health, readiness, metrics, alerting, rollback, and cost limits.
@@ -94,6 +102,17 @@ sudo docker compose version
 sudo nginx -t
 ```
 
-Expected public listeners are SSH, HTTP, and HTTPS only. Before an application
-is deployed, HTTPS may have no listener. Any unexpected public port is a
+Expected public listeners are SSH, HTTP, and HTTPS only. Before TLS is
+configured, HTTPS may have no listener. Any unexpected public port is a
 release blocker.
+
+For the private runtime, also verify:
+
+```bash
+cd /srv/troika/current
+sudo docker compose -f deploy/production/compose.yaml ps
+curl --fail http://127.0.0.1:8765/health
+```
+
+Port 8765 must bind only to `127.0.0.1`. Port 8766 must not appear as a host
+listener.
