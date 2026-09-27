@@ -78,6 +78,14 @@ Command Center modes, configurable global hotkey, safe allowlisted Windows
 operations, local document creation/opening and one-time approved screen
 analysis. Arbitrary autonomous GUI control is not part of normal product mode.
 
+## Context cleanup status
+
+- `AGENTS.md` is now a short startup guide instead of the inherited Hermes handbook.
+- `PROJECT_MEMORY.md` is historical only; normal sessions do not load it.
+- `PLAN_INDEX.md` classifies current Troika docs separately from inherited Hermes plans.
+- `.plans/`, `plans/` and `docs/plans/` contain inherited Hermes implementation plans and are not normal startup context.
+- Do not delete an inherited plan solely because it is old; first check whether any current build, doc or workflow still references it. Git history remains the archive after deletion.
+
 ## Immediate next work — section 7
 
 Build and verify the canonical sales/account surface from the launch plan:
