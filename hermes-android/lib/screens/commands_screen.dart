@@ -19,6 +19,13 @@ class _CommandsScreenState extends State<CommandsScreen> {
     'Выключить фонарик': 'выключи фонарик',
     'Назвать время': 'который час',
     'Показать заряд': 'какой заряд',
+    'Открыть камеру': 'открой камеру',
+    'Открыть календарь': 'открой календарь',
+    'Поставить паузу': 'пауза',
+    'Следующий трек': 'следующий трек',
+    'Показать команды': 'покажи команды',
+    'Создать документ': 'создай документ',
+    'Создать презентацию': 'создай презентацию',
   };
 
   List<CustomCommand> _custom = const [];
@@ -60,7 +67,7 @@ class _CommandsScreenState extends State<CommandsScreen> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: action,
+                  initialValue: action,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Действие'),
                   items: _actions.entries
@@ -127,12 +134,20 @@ class _CommandsScreenState extends State<CommandsScreen> {
           const Text('Команды без интернета', style: _sectionStyle),
           const SizedBox(height: 10),
           const _CommandGroup(
+            title: 'Общение и помощь',
+            commands: [
+              'Привет · Пока · Спасибо · Как дела',
+              'Кто ты · Что ты умеешь · Покажи команды',
+              'Какой сегодня день · Посчитай 12 умножить на 4',
+            ],
+          ),
+          const _CommandGroup(
             title: 'Телефон и приложения',
             commands: [
               'Открой YouTube / Telegram / браузер / настройки',
               'Включи фонарик · Выключи фонарик',
-              'Позвони контакту · Открой камеру',
-              'Сделай фото · Сделай скриншот',
+              'Позвони · Напиши SMS · Открой камеру · Сделай фото',
+              'Поставь таймер / будильник · Проложи маршрут',
             ],
           ),
           const _CommandGroup(
@@ -149,7 +164,8 @@ class _CommandsScreenState extends State<CommandsScreen> {
             commands: [
               'Открой блокнот / калькулятор / проводник',
               'Открой Word / Excel / PowerPoint',
-              'Покажи рабочий стол · Закрой окно',
+              'Покажи рабочий стол · Переключи окно · Закрой окно',
+              'Обнови страницу · Полный экран',
               'Найди … · Сделай скриншот · Заблокируй компьютер',
             ],
           ),

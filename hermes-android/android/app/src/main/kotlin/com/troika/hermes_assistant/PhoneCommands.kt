@@ -6,6 +6,7 @@ import android.media.AudioManager
 import android.view.KeyEvent
 import android.net.Uri
 import android.provider.AlarmClock
+import android.provider.MediaStore
 import android.provider.Settings
 import android.os.Build
 
@@ -78,7 +79,7 @@ object PhoneCommands {
         OPEN_VERBS.firstOrNull { norm.contains(it) }?.let { verb ->
             val rest = norm.substringAfter(verb).trim().trim('.', '!', '?', ',', ' ')
             if (rest.isNotEmpty()) {
-                val pkg = findAppPackage(rest)
+                val pkg = findAppPackage(ctx, rest)
                 if (pkg != null) {
                     return openApp(ctx, pkg, rest)
                 }
@@ -88,6 +89,17 @@ object PhoneCommands {
                     if (opened != null) return opened
                 }
             }
+        }
+
+        // Камера открывается без автоматического снимка: кнопку нажимает пользователь.
+        if (norm.contains("сделай фото") || norm.contains("сфотографируй")) {
+            return openCamera(ctx)
+        }
+
+        // Открываем редактор SMS. Отправка остаётся действием пользователя.
+        if (norm.contains("напиши смс") || norm.contains("создай сообщение") ||
+            norm.contains("новое сообщение")) {
+            return openMessageComposer(ctx)
         }
 
         // Позвонить (открывает dialer с номером/именем)
@@ -132,12 +144,15 @@ object PhoneCommands {
         }
 
         // Громкость
-        if (norm.contains("громкость") || norm.contains("звук")) {
+        if (norm.contains("громкость") || norm.contains("звук") ||
+            norm.contains("громче") || norm.contains("тише") ||
+            norm.contains("прибавь") || norm.contains("убавь")) {
             return adjustVolume(ctx, norm)
         }
 
         // Яркость
-        if (norm.contains("яркость")) {
+        if (norm.contains("яркость") || norm.contains("ярче") ||
+            norm.contains("тусклее")) {
             return adjustBrightness(ctx, norm)
         }
 
@@ -147,6 +162,13 @@ object PhoneCommands {
         }
         if (norm.contains("блютуз") || norm.contains("bluetooth")) {
             return openSettings(ctx, Settings.ACTION_BLUETOOTH_SETTINGS, "настройки Bluetooth")
+        }
+        if (norm.contains("режим полета") || norm.contains("режим самолета") ||
+            norm.contains("авиарежим")) {
+            return openSettings(ctx, Settings.ACTION_AIRPLANE_MODE_SETTINGS, "режим полёта")
+        }
+        if (norm.contains("мобильная сеть") || norm.contains("мобильные данные")) {
+            return openSettings(ctx, Settings.ACTION_DATA_ROAMING_SETTINGS, "мобильную сеть")
         }
 
         // Фонарик
@@ -200,7 +222,8 @@ object PhoneCommands {
 
         // Управление медиаплеером через стандартные media keys.
         if (norm.contains("пауза") || norm.contains("продолжи музыку") ||
-            norm.contains("включи музыку")) {
+            norm.contains("возобнови музыку") || norm.contains("включи музыку") ||
+            norm.contains("останови музыку")) {
             dispatchMediaKey(ctx, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
             return "Готово"
         }
@@ -270,15 +293,40 @@ object PhoneCommands {
         else "Не удалось выполнить действие"
     }
 
-    private fun findAppPackage(query: String): String? {
+    private fun findAppPackage(ctx: Context, query: String): String? {
         val q = query.lowercase()
-        // Точное и подстрочное совпадение по алиасам
+        val matches = mutableListOf<String>()
         for ((pkg, aliases) in APP_ALIASES) {
             if (aliases.any { alias -> q == alias || q.contains(alias) || alias.contains(q) }) {
-                return pkg
+                matches.add(pkg)
             }
         }
-        return null
+        return matches.firstOrNull { ctx.packageManager.getLaunchIntentForPackage(it) != null }
+            ?: matches.firstOrNull()
+    }
+
+    private fun openCamera(ctx: Context): String {
+        val intent = Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return if (intent.resolveActivity(ctx.packageManager) != null) {
+            ctx.startActivity(intent)
+            "Открываю камеру. Снимок сделаешь ты."
+        } else {
+            "Камера недоступна"
+        }
+    }
+
+    private fun openMessageComposer(ctx: Context): String {
+        val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:")).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return if (intent.resolveActivity(ctx.packageManager) != null) {
+            ctx.startActivity(intent)
+            "Открываю новое сообщение. Отправка только вручную."
+        } else {
+            "Приложение сообщений недоступно"
+        }
     }
 
     private fun openApp(ctx: Context, pkg: String, name: String): String {
@@ -401,7 +449,9 @@ object PhoneCommands {
         val current = am.getStreamVolume(AudioManager.STREAM_MUSIC)
         val newVol = when {
             phrase.contains("макс") || phrase.contains("полная") -> max
-            phrase.contains("тишина") || phrase.contains("выключи") || phrase.contains("ноль") -> 0
+            phrase.contains("тишина") || phrase.contains("выключи") ||
+                phrase.contains("без звука") || phrase.contains("убери звук") ||
+                phrase.contains("ноль") -> 0
             phrase.contains("тише") || phrase.contains("убавь") || phrase.contains("уменьши") -> (current - max / 5).coerceAtLeast(0)
             phrase.contains("громче") || phrase.contains("прибавь") || phrase.contains("увеличь") -> (current + max / 5).coerceAtMost(max)
             else -> {

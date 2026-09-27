@@ -35,8 +35,14 @@ class LocalCommandResult {
 /// Windows uses a strict allowlist. User text is never passed to a shell.
 class LocalCommandService {
   final bool? windowsForTesting;
+  final DateTime Function()? nowForTesting;
+  final Future<void> Function(String key)? windowsKeySenderForTesting;
 
-  LocalCommandService({this.windowsForTesting});
+  LocalCommandService({
+    this.windowsForTesting,
+    this.nowForTesting,
+    this.windowsKeySenderForTesting,
+  });
 
   static const _platform = MethodChannel('com.troika.hermes/background');
   static const _modeKey = 'troika_local_mode';
@@ -72,6 +78,10 @@ class LocalCommandService {
     'youtube': 'https://www.youtube.com/',
     'почту': 'https://mail.google.com/',
     'gmail': 'https://mail.google.com/',
+    'камера': 'microsoft.windows.camera:',
+    'camera': 'microsoft.windows.camera:',
+    'карты': 'https://www.google.com/maps',
+    'google maps': 'https://www.google.com/maps',
   };
 
   Future<LocalCommandResult> execute(String text) async {
@@ -83,6 +93,8 @@ class LocalCommandService {
     final command = custom ?? clean;
     final mappedMode = await _modeCommand(command);
     if (mappedMode != null) return mappedMode;
+    final common = _commonCommand(command);
+    if (common != null) return common;
     final workspace = _workspaceCommand(command);
     if (workspace != null) return workspace;
 
@@ -174,6 +186,185 @@ class LocalCommandService {
     return prefs.getString(_modeKey) ?? 'normal';
   }
 
+  LocalCommandResult? _commonCommand(String text) {
+    final normalized = _withoutAssistantAddress(_normalize(text));
+    final now = nowForTesting?.call() ?? DateTime.now();
+
+    if (const {
+      'привет',
+      'приветик',
+      'здравствуй',
+      'здравствуйте',
+      'доброе утро',
+      'добрый день',
+      'добрый вечер',
+    }.contains(normalized)) {
+      return const LocalCommandResult(
+        handled: true,
+        response: 'Привет! Я рядом. Что сделать?',
+      );
+    }
+    if (const {
+      'пока',
+      'до свидания',
+      'до встречи',
+      'увидимся',
+      'спокойной ночи',
+    }.contains(normalized)) {
+      return const LocalCommandResult(
+        handled: true,
+        response: 'Пока! Позови, когда понадоблюсь.',
+      );
+    }
+    if (const {
+      'спасибо',
+      'благодарю',
+      'спасибо большое',
+      'большое спасибо',
+    }.contains(normalized)) {
+      return const LocalCommandResult(
+        handled: true,
+        response: 'Пожалуйста.',
+      );
+    }
+    if (const {
+      'как дела',
+      'как ты',
+      'ты тут',
+      'ты здесь',
+      'ты работаешь',
+    }.contains(normalized)) {
+      return const LocalCommandResult(
+        handled: true,
+        response: 'Я на связи и готова помочь.',
+      );
+    }
+    if (const {
+      'кто ты',
+      'как тебя зовут',
+      'представься',
+    }.contains(normalized)) {
+      return const LocalCommandResult(
+        handled: true,
+        response: 'Я Тройка, твой локальный голосовой помощник.',
+      );
+    }
+    if (const {
+      'помощь',
+      'помоги',
+      'команды',
+      'список команд',
+      'покажи команды',
+      'что ты умеешь',
+      'что я могу сказать',
+    }.contains(normalized)) {
+      return LocalCommandResult(
+        handled: true,
+        response: _helpText(),
+      );
+    }
+
+    if (normalized.contains('который час') ||
+        normalized.contains('каторый час') ||
+        normalized == 'время' ||
+        normalized.contains('сколько времени')) {
+      final hh = now.hour.toString().padLeft(2, '0');
+      final mm = now.minute.toString().padLeft(2, '0');
+      return LocalCommandResult(handled: true, response: 'Сейчас $hh:$mm');
+    }
+    if (normalized.contains('какая дата') ||
+        normalized == 'дата' ||
+        normalized.contains('какое сегодня число')) {
+      return LocalCommandResult(
+        handled: true,
+        response: 'Сегодня ${now.day.toString().padLeft(2, '0')}.'
+            '${now.month.toString().padLeft(2, '0')}.${now.year}',
+      );
+    }
+    if (normalized.contains('день недели') ||
+        normalized == 'какой сегодня день' ||
+        normalized == 'сегодня какой день') {
+      const weekdays = [
+        'понедельник',
+        'вторник',
+        'среда',
+        'четверг',
+        'пятница',
+        'суббота',
+        'воскресенье',
+      ];
+      return LocalCommandResult(
+        handled: true,
+        response: 'Сегодня ${weekdays[now.weekday - 1]}',
+      );
+    }
+
+    return _calculationCommand(normalized);
+  }
+
+  String _helpText() {
+    if (windowsForTesting ?? Platform.isWindows) {
+      return 'Без интернета умею отвечать на простые фразы, считать, '
+          'называть время и дату, открывать приложения и папки, искать в '
+          'браузере, управлять окнами, звуком и музыкой, открывать настройки, '
+          'создавать документы и презентации. Например: «открой калькулятор».';
+    }
+    if (Platform.isAndroid) {
+      return 'Без интернета умею отвечать на простые фразы, считать, '
+          'называть время и дату, открывать приложения, искать в браузере, '
+          'строить маршрут, ставить таймер и будильник, управлять фонариком, '
+          'звуком, яркостью и музыкой. Например: «включи фонарик».';
+    }
+    return 'Без интернета умею отвечать на простые фразы, считать, называть '
+        'время и дату, открывать приложения, управлять устройством и создавать '
+        'документы и презентации.';
+  }
+
+  static LocalCommandResult? _calculationCommand(String normalized) {
+    final match = RegExp(
+      r'^(?:сколько будет|посчитай|вычисли|рассчитай)\s+'
+      r'(-?\d+(?:[\.,]\d+)?)\s*'
+      r'(плюс|минус|умножить на|умножь на|делить на|разделить на|[+\-*/xх])\s*'
+      r'(-?\d+(?:[\.,]\d+)?)$',
+    ).firstMatch(normalized);
+    if (match == null) return null;
+    final left = double.parse(match.group(1)!.replaceAll(',', '.'));
+    final operator = match.group(2)!;
+    final right = double.parse(match.group(3)!.replaceAll(',', '.'));
+    if ((operator == '/' ||
+            operator == 'делить на' ||
+            operator == 'разделить на') &&
+        right == 0) {
+      return const LocalCommandResult(
+        handled: true,
+        response: 'На ноль делить нельзя.',
+      );
+    }
+    final value = switch (operator) {
+      'плюс' || '+' => left + right,
+      'минус' || '-' => left - right,
+      'умножить на' || 'умножь на' || '*' || 'x' || 'х' => left * right,
+      _ => left / right,
+    };
+    var answer = value.toStringAsFixed(6);
+    answer = answer.replaceFirst(RegExp(r'\.?0+$'), '');
+    return LocalCommandResult(handled: true, response: 'Ответ: $answer');
+  }
+
+  static String _withoutAssistantAddress(String normalized) {
+    var value = normalized;
+    for (final prefix in ['эй тройка ', 'слушай тройка ', 'тройка ']) {
+      if (value.startsWith(prefix)) {
+        value = value.substring(prefix.length).trim();
+        break;
+      }
+    }
+    if (value.endsWith(' тройка')) {
+      value = value.substring(0, value.length - ' тройка'.length).trim();
+    }
+    return value;
+  }
+
   static LocalCommandResult? _workspaceCommand(String text) {
     final normalized = _normalize(text);
     final create = normalized.contains('создай') ||
@@ -207,25 +398,6 @@ class LocalCommandService {
 
   Future<LocalCommandResult> _executeWindows(String text) async {
     final norm = _normalize(text);
-    final now = DateTime.now();
-
-    if (norm.contains('который час') ||
-        norm.contains('каторый час') ||
-        norm == 'время' ||
-        norm.contains('сколько времени')) {
-      final hh = now.hour.toString().padLeft(2, '0');
-      final mm = now.minute.toString().padLeft(2, '0');
-      return LocalCommandResult(handled: true, response: 'Сейчас $hh:$mm');
-    }
-    if (norm.contains('какая дата') ||
-        norm == 'дата' ||
-        norm.contains('какое сегодня число')) {
-      return LocalCommandResult(
-        handled: true,
-        response: 'Сегодня ${now.day.toString().padLeft(2, '0')}.'
-            '${now.month.toString().padLeft(2, '0')}.${now.year}',
-      );
-    }
 
     if (norm.contains('покажи рабочий стол') ||
         norm.contains('сверни все окна') ||
@@ -242,6 +414,37 @@ class LocalCommandService {
       return const LocalCommandResult(
         handled: true,
         response: 'Показываю рабочий стол',
+      );
+    }
+
+    if (norm.contains('следующее окно') ||
+        norm.contains('переключи окно') ||
+        norm.contains('переключись на другое окно')) {
+      await _sendWindowsKey('%{TAB}');
+      return const LocalCommandResult(
+        handled: true,
+        response: 'Переключаю окно',
+      );
+    }
+    if (norm.contains('предыдущее окно')) {
+      await _sendWindowsKey('+%{TAB}');
+      return const LocalCommandResult(
+        handled: true,
+        response: 'Переключаю на предыдущее окно',
+      );
+    }
+    if (norm.contains('обнови страницу') || norm == 'обновить страницу') {
+      await _sendWindowsKey('{F5}');
+      return const LocalCommandResult(
+        handled: true,
+        response: 'Обновляю страницу',
+      );
+    }
+    if (norm.contains('полный экран') || norm.contains('во весь экран')) {
+      await _sendWindowsKey('{F11}');
+      return const LocalCommandResult(
+        handled: true,
+        response: 'Переключаю полноэкранный режим',
       );
     }
 
@@ -327,7 +530,9 @@ class LocalCommandService {
 
     final app = _requestedApp(norm);
     if (app != null) {
-      if (app.startsWith('http') || app.startsWith('ms-settings:')) {
+      if (app.startsWith('http') ||
+          app.startsWith('ms-settings:') ||
+          app.startsWith('microsoft.windows.camera:')) {
         await launchUrl(Uri.parse(app), mode: LaunchMode.externalApplication);
       } else {
         await _runAllowed(app, const []);
@@ -344,7 +549,11 @@ class LocalCommandService {
   static String _normalize(String text) => text
       .toLowerCase()
       .replaceAll('ё', 'е')
-      .replaceAll(RegExp(r'[^a-zа-я0-9:\-\.\s]'), ' ')
+      .replaceAllMapped(
+        RegExp(r'(\d),(\d)'),
+        (match) => '${match.group(1)}.${match.group(2)}',
+      )
+      .replaceAll(RegExp(r'[^a-zа-я0-9:+*/\-\.\s]'), ' ')
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
 
@@ -440,7 +649,12 @@ class LocalCommandService {
     return ('ms-settings:', 'Открываю настройки');
   }
 
-  static Future<void> _sendWindowsKey(String key) async {
+  Future<void> _sendWindowsKey(String key) async {
+    final sender = windowsKeySenderForTesting;
+    if (sender != null) {
+      await sender(key);
+      return;
+    }
     await Process.run(
       'powershell.exe',
       [
