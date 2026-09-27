@@ -58,7 +58,8 @@ UFW denies inbound traffic by default and allows only:
 
 Fail2ban protects SSH. Product containers must not publish API, STT, preview,
 database, object-storage, queue, metrics, or debug ports directly. Nginx must
-proxy approved HTTP and WebSocket routes over an internal Docker network.
+proxy approved HTTP and WebSocket routes through a loopback or internal Docker
+listener.
 
 ## Deployment status
 
@@ -67,7 +68,12 @@ The current product revision runs the authenticated API and a separate STT
 worker from `deploy/production/compose.yaml`. The API binds only to host
 loopback on port 8765. STT has no host port. Registration, bearer-token chat
 through `openrouter/free`, logout-all, and container health passed on
-2026-09-28. No Troika application is public yet.
+2026-09-28.
+
+Nginx exposes the API at the temporary hostname
+`api.zhulebino-teahouse.ru`. HTTP redirects to HTTPS. Let's Encrypt issued the
+certificate, Certbot manages renewal, and Nginx applies coarse API and stricter
+authentication rate limits. Replace this hostname before public launch.
 
 Runtime secrets are limited to provider credentials in
 `/srv/troika/data/.env`. Local development configuration and paths must never
@@ -75,11 +81,11 @@ be copied into this file. The legacy `docker-compose.troika.yml` is not a
 production deployment manifest because it publishes ports 8642, 8643, and
 7800-7900 and uses the old single-volume runtime. Do not run it on this host.
 
-Public production deployment remains blocked until all of the following exist:
+Full production launch remains blocked until all of the following exist:
 
-1. a production domain whose DNS points to the VPS;
-2. TLS certificate issuance and HTTPS/WSS-only routing;
-3. an HTTPS reverse-proxy policy for the authenticated product routes;
+1. a permanent product domain whose DNS points to the VPS;
+2. migration from the temporary hostname without client lockout;
+3. a reviewed public route and abuse-protection policy;
 4. a production inference provider or accepted free-router availability risk;
 5. private Postgres, object storage, and queue choices;
 6. encrypted backup, restore, and deletion-rehearsal procedures;

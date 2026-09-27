@@ -812,16 +812,22 @@ AI-ассистент для Android и Windows, где чат остаётся 
 - Актуальный безопасный runbook: `docs/TROIKA_PRODUCTION_SERVER.md`. Секреты,
   IP-адрес и приватные ключи в репозиторий не добавлялись.
 - На VPS развёрнут production Compose runtime текущей product-ревизии:
-  authenticated API и отдельный STT worker. API опубликован только на
-  `127.0.0.1:8765`; STT доступен только внутри Docker network. Публично по-прежнему
-  доступны только SSH и HTTP-заглушка Nginx.
+  authenticated API и отдельный STT worker. Контейнерный API опубликован только
+  на `127.0.0.1:8765`; STT доступен только внутри Docker network. Nginx безопасно
+  публикует API по HTTPS на временном `api.zhulebino-teahouse.ru`.
 - Серверный `.env` содержит только provider secrets OpenRouter и Groq. Модель —
   `openrouter/free`; квоты временно отключены для разработки продукта.
 - Реальный server smoke-test пройден: self-service регистрация, bearer-token,
   `/v1/chat/completions`, ответ модели «работает» и logout-all. Health обоих
   контейнеров и отсутствие публичных портов приложения проверены.
-- Для публичного запуска ещё нужны домен/DNS, TLS, Postgres, object storage,
-  queue, backup/restore, monitoring, rollback и cost controls.
+- DNS, Let's Encrypt TLS, HTTP-to-HTTPS redirect и Nginx rate limits для API и
+  auth routes настроены. Сертификат обновляется через системный Certbot timer.
+- Публичный HTTPS smoke-test обнаружил безопасно отклонённую коллизию одинаковых
+  первых сообщений разных аккаунтов. Derived session ID теперь включает opaque
+  owner scope; 173 API/auth теста проходят.
+- Для полноценного production launch ещё нужны постоянный продуктовый домен,
+  Postgres, object storage, queue, backup/restore, monitoring, rollback и cost
+  controls.
 
 ## Проверенный рабочий срез и бесплатная модель (2026-09-10)
 
@@ -888,9 +894,10 @@ AI-ассистент для Android и Windows, где чат остаётся 
   отдельного включения Тройки в Спец. возможностях Android.
 - SMS, звонки, clipboard, экран, файлы телефона и календарь намеренно не
   включены в подписочный toolset до отдельного privacy/security review.
-- Базовый production VPS и приватный Compose runtime готовы. API работает только
-  на loopback, STT — только во внутренней Docker network. Пока нет домена, HTTPS,
-  private Postgres/object storage/queue, мониторинга, резервных копий и процедуры
+- Базовый production VPS, Compose runtime и временный публичный HTTPS endpoint
+  готовы. Контейнерный API работает только на loopback, STT — только во
+  внутренней Docker network. Пока нет постоянного продуктового домена, private
+  Postgres/object storage/queue, мониторинга, резервных копий и процедуры
   восстановления. Удаление из backup/object storage не реализовано и не
   проверено.
 - TUI clean install, type-check, tests и build восстановлены и вынесены в

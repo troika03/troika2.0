@@ -19,4 +19,8 @@ curl --fail http://127.0.0.1:8765/health
 ```
 
 Do not proxy the API publicly over plain HTTP. Add the Nginx HTTPS virtual host
-only after DNS points the production domain to the server.
+only after DNS points the production domain to the server. Render
+`nginx-api.conf.template` by replacing `__TROIKA_API_DOMAIN__` with the API
+hostname, install it in `/etc/nginx/sites-available/`, then test Nginx before
+reload. The template keeps the container port private and rate-limits public
+authentication routes.

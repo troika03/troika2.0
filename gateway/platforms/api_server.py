@@ -853,6 +853,7 @@ def _make_request_fingerprint(body: Dict[str, Any], keys: List[str]) -> str:
 def _derive_chat_session_id(
     system_prompt: Optional[str],
     first_user_message: str,
+    owner_scope: Optional[str] = None,
 ) -> str:
     """Derive a stable session ID from the conversation's first user message.
 
@@ -863,7 +864,12 @@ def _derive_chat_session_id(
     the same Hermes session (and therefore the same Docker container sandbox
     directory) across turns.
     """
+    # Product users can send identical first messages. Include the opaque
+    # account ID so those conversations never collide, while legacy
+    # single-user callers retain deterministic IDs.
     seed = f"{system_prompt or ''}\n{first_user_message}"
+    if owner_scope:
+        seed = f"{owner_scope}\n{seed}"
     digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]
     return f"api-{digest}"
 
@@ -3345,7 +3351,15 @@ class APIServerAdapter(BasePlatformAdapter):
                 if cm.get("role") == "user":
                     first_user = cm.get("content", "")
                     break
-            session_id = _derive_chat_session_id(system_prompt, first_user)
+            session_id = _derive_chat_session_id(
+                system_prompt,
+                first_user,
+                owner_scope=(
+                    product_principal.user_id
+                    if product_principal is not None
+                    else None
+                ),
+            )
             # history already set from request body above
 
         session_auth_err = self._authorize_product_session(

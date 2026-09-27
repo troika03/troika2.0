@@ -1373,6 +1373,16 @@ class TestDeriveChatSessionId:
         b = _derive_chat_session_id(None, "Goodbye")
         assert a != b
 
+    def test_product_owner_scope_prevents_cross_account_collision(self):
+        first = _derive_chat_session_id(None, "Hello", owner_scope="user-a")
+        second = _derive_chat_session_id(None, "Hello", owner_scope="user-b")
+        assert first != second
+
+    def test_same_product_owner_scope_remains_stable(self):
+        first = _derive_chat_session_id(None, "Hello", owner_scope="user-a")
+        second = _derive_chat_session_id(None, "Hello", owner_scope="user-a")
+        assert first == second
+
     def test_none_system_prompt(self):
         """None system prompt doesn't crash."""
         sid = _derive_chat_session_id(None, "test")

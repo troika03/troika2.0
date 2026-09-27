@@ -178,9 +178,10 @@ Status: `[ ]` not reached, `[-]` active/partial, `[x]` verified.
   rotation, persistent journal, swap, and reboot recovery. The authenticated
   product API and private STT worker are deployed with `openrouter/free`; API
   health, registration, model completion, and logout-all passed on the VPS.
-  The API remains loopback-only. Domain/TLS, private Postgres/object
-  storage/queue, backups/restore, monitoring, rate limits, dashboards, and
-  production inference SLA remain open.
+  Nginx exposes the loopback-only container API through a temporary HTTPS
+  hostname with Let's Encrypt TLS and rate limits. A permanent product domain,
+  private Postgres/object storage/queue, backups/restore, monitoring,
+  dashboards, and production inference SLA remain open.
 
 ### 14. Analytics and metrics
 
