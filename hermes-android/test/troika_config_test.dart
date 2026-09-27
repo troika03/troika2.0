@@ -51,6 +51,37 @@ void main() {
     expect(prefs.getInt('troika_brand_migration_version'), 1);
   });
 
+  test(
+    'hosted build migrates local beta account without clearing local data',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'troika_server_url': '',
+        'troika_api_key': 'trk_live_old_beta',
+        'troika_account_email': 'phone@beta.troika.local',
+        'troika_phone_control_enabled': true,
+        'troika_location_context_enabled': true,
+        'troika_wake_word_enabled': true,
+        'troika_onboarding_done': true,
+        'troika_theme_mode': 'dark',
+      });
+
+      await TroikaConfig.init();
+
+      const hostedEndpoint = String.fromEnvironment('TROIKA_SERVER_URL');
+      expect(TroikaConfig.serverUrl, hostedEndpoint);
+      expect(TroikaConfig.signedIn, isFalse);
+      expect(TroikaConfig.phoneControlEnabled, isFalse);
+      expect(TroikaConfig.locationContextEnabled, isFalse);
+      expect(TroikaConfig.wakeWordEnabled, isFalse);
+      expect(TroikaConfig.onboardingDone, isTrue);
+      expect(TroikaConfig.themeMode, 'dark');
+      expect(TroikaConfig.sessionId, startsWith('mobile-'));
+    },
+    skip: const String.fromEnvironment('TROIKA_SERVER_URL').isEmpty
+        ? 'requires TROIKA_SERVER_URL build define'
+        : false,
+  );
+
   test('product STT preserves HTTPS origin, prefix and port', () {
     TroikaConfig.apiKey = 'trk_live_test';
     TroikaConfig.serverUrl = 'https://example.test:9443/troika/';

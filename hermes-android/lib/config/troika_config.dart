@@ -53,6 +53,9 @@ class TroikaConfig {
   static const String _keyBrandMigrationVersion =
       'troika_brand_migration_version';
   static const int _brandMigrationVersion = 1;
+  static const String _keyHostedEndpointMigrationVersion =
+      'troika_hosted_endpoint_migration_version';
+  static const int _hostedEndpointMigrationVersion = 1;
 
   // Дефолтные значения.
   // Мобильный клиент не содержит адрес общего production-сервера. Его задаёт
@@ -80,6 +83,7 @@ class TroikaConfig {
   static Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
     await _migrateLegacyPreferences();
+    await _migrateHostedEndpoint();
     _sessionKey = _prefs.getString(_keySessionKey)?.trim() ?? '';
     if (_sessionKey.isEmpty) {
       _sessionKey = 'mobile-${_newOpaqueId()}';
@@ -118,6 +122,49 @@ class TroikaConfig {
     );
     await _copyBool(_keyPhoneControlEnabled, _legacyKeyPhoneControlEnabled);
     await _prefs.setInt(_keyBrandMigrationVersion, _brandMigrationVersion);
+  }
+
+  static Future<void> _migrateHostedEndpoint() async {
+    final endpoint = _mobileServerUrl.trim();
+    if (endpoint.isEmpty ||
+        (_prefs.getInt(_keyHostedEndpointMigrationVersion) ?? 0) >=
+            _hostedEndpointMigrationVersion) {
+      return;
+    }
+
+    final currentUrl = _prefs.getString(_keyServerUrl)?.trim() ?? '';
+    final accountEmail =
+        _prefs.getString(_keyAccountEmail)?.trim().toLowerCase() ?? '';
+    final legacyBetaAccount = accountEmail.endsWith('@beta.troika.local');
+
+    if (currentUrl.isEmpty || legacyBetaAccount) {
+      await _setStringCompat(_keyServerUrl, _legacyKeyServerUrl, endpoint);
+    }
+    if (legacyBetaAccount) {
+      await _prefs.remove(_keyAccountEmail);
+      await _removeCompat(_keyApiKey, _legacyKeyApiKey);
+      await _setBoolCompat(
+        _keyPhoneControlEnabled,
+        _legacyKeyPhoneControlEnabled,
+        false,
+      );
+      await _setBoolCompat(
+        _keyLocationContextEnabled,
+        _legacyKeyLocationContextEnabled,
+        false,
+      );
+      await _setBoolCompat(
+        _keyWakeWordEnabled,
+        _legacyKeyWakeWordEnabled,
+        false,
+      );
+      await _removeCompat(_keySessionKey, _legacyKeySessionKey);
+      await _removeCompat(_keySessionId, _legacyKeySessionId);
+    }
+    await _prefs.setInt(
+      _keyHostedEndpointMigrationVersion,
+      _hostedEndpointMigrationVersion,
+    );
   }
 
   static Future<void> _copyString(String key, String legacyKey) async {

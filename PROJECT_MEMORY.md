@@ -827,8 +827,14 @@ AI-ассистент для Android и Windows, где чат остаётся 
   owner scope; 173 API/auth теста проходят.
 - Android release APK собран с временным HTTPS endpoint через
   `--dart-define=TROIKA_SERVER_URL=...`; ручной ввод адреса для этой сборки не
-  нужен. APK пока подписан debug key текущего проекта и не является Play Store
-  release. Подключённого ADB-устройства для установки в этой сессии нет.
+  нужен. Hosted endpoint migration сохраняет локальные данные и настройки, но
+  удаляет недействующий legacy `@beta.troika.local` token, сбрасывает server-bound
+  consents и создаёт новую session identity. APK установлен и открыт на Samsung
+  SM-A225F; приложение дошло до регистрации нового product-аккаунта. APK пока
+  подписан debug key текущего проекта и не является Play Store release.
+- Проверено: полный Flutter-набор — 40 passed и 1 define-only test skipped;
+  config-набор с production `TROIKA_SERVER_URL` — 12 passed, включая migration
+  старого beta-аккаунта без очистки локальных пользовательских настроек.
 - Для полноценного production launch ещё нужны постоянный продуктовый домен,
   Postgres, object storage, queue, backup/restore, monitoring, rollback и cost
   controls.
