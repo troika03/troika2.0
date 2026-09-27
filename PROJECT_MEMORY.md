@@ -825,6 +825,10 @@ AI-ассистент для Android и Windows, где чат остаётся 
 - Публичный HTTPS smoke-test обнаружил безопасно отклонённую коллизию одинаковых
   первых сообщений разных аккаунтов. Derived session ID теперь включает opaque
   owner scope; 173 API/auth теста проходят.
+- Android release APK собран с временным HTTPS endpoint через
+  `--dart-define=TROIKA_SERVER_URL=...`; ручной ввод адреса для этой сборки не
+  нужен. APK пока подписан debug key текущего проекта и не является Play Store
+  release. Подключённого ADB-устройства для установки в этой сессии нет.
 - Для полноценного production launch ещё нужны постоянный продуктовый домен,
   Postgres, object storage, queue, backup/restore, monitoring, rollback и cost
   controls.
