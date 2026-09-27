@@ -65,8 +65,10 @@ AI-ассистент для Android и Windows, где чат остаётся 
    `phone-misha`, единой памяти или публичного HTTP в production.
 10. В текущем dev runtime тарифные квоты временно выключены. До продаж они
     заменяются credits/cost caps из главного плана; «безлимит» не обещаем.
-11. Владелец позже предоставит параметры арендованного production-сервера. До
-    этого нельзя выдумывать host, credentials или характеристики deployment.
+11. Production VPS предоставлен и 2026-09-27 получил проверенный базовый
+    OS/security/Docker/Nginx слой. Адрес, credentials и приватные ключи не
+    хранятся в Git. Приложение не развёрнуто до появления домена, TLS и
+    остальных production-компонентов.
 12. История чатов и голоса, память, задачи, состояние Run, настройки и индекс
     artifacts — канонические локальные зашифрованные данные аккаунта. Backend не
     хранит их plaintext-копии.
@@ -791,6 +793,26 @@ AI-ассистент для Android и Windows, где чат остаётся 
 1. Разделы 1–6 завершены целыми блоками. Следующий блок Word-плана — раздел 7;
    не выполнять отдельные строки раздела изолированно.
 2. Статус каждого блока вести в `docs/TROIKA_1_0_EXECUTION_TRACKER.md`.
+3. Базовый production VPS подготовлен вне очереди по прямому запросу владельца;
+   это не меняет следующий продуктовый блок и не означает готовый deployment.
+
+## Выполнено: базовая подготовка production VPS (2026-09-27)
+
+- На чистом Ubuntu 22.04 LTS настроены отдельный `troika-admin`, key-only SSH,
+  запрет root/password login, UFW для 22/80/443 и Fail2ban.
+- Установлены Docker Engine 29.8.1, Docker Compose 5.5.1, Nginx и Certbot;
+  Docker smoke-test пройден. До приложения публично слушают только SSH и HTTP,
+  а Nginx отклоняет обычные запросы и оставляет путь для ACME.
+- Включены unattended security updates, ограничение Docker/journald logs,
+  persistent journal, swap и filesystem trim. После перезагрузки проверены SSH,
+  firewall, Docker и отсутствие failed units. Для медленного DHCP провайдера
+  timeout ожидания сети увеличен до 120 секунд без опасного удалённого перехода
+  на статическую конфигурацию.
+- Актуальный безопасный runbook: `docs/TROIKA_PRODUCTION_SERVER.md`. Секреты,
+  IP-адрес и приватные ключи в репозиторий не добавлялись.
+- Приложение ещё не развёрнуто: нужны домен/DNS, TLS, production manifest,
+  секреты, Postgres, object storage, queue, backup/restore, monitoring и
+  rollback/cost controls.
 
 ## Проверенный рабочий срез и бесплатная модель (2026-09-10)
 
@@ -857,9 +879,10 @@ AI-ассистент для Android и Windows, где чат остаётся 
   отдельного включения Тройки в Спец. возможностях Android.
 - SMS, звонки, clipboard, экран, файлы телефона и календарь намеренно не
   включены в подписочный toolset до отдельного privacy/security review.
-- Нет production deployment с доменом, HTTPS, мониторингом, резервными копиями
-  и процедурой восстановления. Удаление из backup/object storage не
-  реализовано и не проверено.
+- Базовый production VPS с защищённым SSH, firewall, Docker и Nginx готов, но
+  нет deployment приложения, домена, HTTPS, private storage/queue, мониторинга,
+  резервных копий и процедуры восстановления. Удаление из backup/object storage
+  не реализовано и не проверено.
 - TUI clean install, type-check, tests и build восстановлены и вынесены в
   отдельный CI workflow. Общий hermetic baseline репозитория ещё не зелёный на
   native Windows из-за несвязанных platform-specific upstream failures.

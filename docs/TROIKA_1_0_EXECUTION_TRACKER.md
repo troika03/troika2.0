@@ -173,8 +173,11 @@ Status: `[ ]` not reached, `[-]` active/partial, `[x]` verified.
 
 ### 13. Infrastructure and production
 
-- [ ] Build production deployment, storage, backups/restore, monitoring,
-  secrets, rate limits, and required dashboards.
+- [-] Production VPS operating-system baseline is verified: key-only SSH,
+  firewall, Fail2ban, unattended security updates, Docker/Compose, Nginx, log
+  rotation, persistent journal, swap, and reboot recovery. The Troika app is
+  not deployed; domain/TLS, private Postgres/object storage/queue, secrets,
+  backups/restore, monitoring, rate limits, and dashboards remain open.
 
 ### 14. Analytics and metrics
 
