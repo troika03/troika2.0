@@ -31,6 +31,7 @@ Requires:
 """
 
 import asyncio
+from datetime import datetime, timezone
 import hashlib
 import hmac
 import json
@@ -44,6 +45,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from hermes_constants import get_hermes_home
 
@@ -1239,11 +1241,11 @@ class APIServerAdapter(BasePlatformAdapter):
             )
 
     def _assistant_context(self, request: "web.Request") -> str:
-        """Load bounded project and memory context for this user only."""
+        """Load bounded private and local-time context for this user only."""
         principal = self._product_principal(request)
         if principal is None:
             return ""
-        contexts: list[str] = []
+        contexts: list[str] = [self._assistant_temporal_context(request)]
         for label, store in (
             ("project", self._proactive_store),
             ("memory", self._memory_store),
@@ -1260,6 +1262,60 @@ class APIServerAdapter(BasePlatformAdapter):
             if context:
                 contexts.append(context)
         return "\n\n".join(contexts)
+
+    def _assistant_temporal_context(
+        self,
+        request: "web.Request",
+        *,
+        now: Optional[datetime] = None,
+    ) -> str:
+        """Give the model an authenticated user's current local clock."""
+        principal = self._product_principal(request)
+        if principal is None:
+            return ""
+
+        timezone_name = request.headers.get("X-Troika-Time-Zone", "").strip()
+        candidates = [timezone_name]
+        if self._access_registry is not None:
+            try:
+                candidates.append(
+                    self._access_registry.notification_preferences(principal).timezone
+                )
+            except Exception:
+                logger.exception("Product notification time zone unavailable")
+        candidates.append("UTC")
+
+        zone = ZoneInfo("UTC")
+        timezone_name = "UTC"
+        for candidate in candidates:
+            if not candidate or len(candidate) > 100:
+                continue
+            try:
+                zone = ZoneInfo(candidate)
+                timezone_name = candidate
+                break
+            except (ZoneInfoNotFoundError, ValueError):
+                continue
+
+        instant = now or datetime.now(timezone.utc)
+        if instant.tzinfo is None or instant.utcoffset() is None:
+            instant = instant.replace(tzinfo=timezone.utc)
+        local_now = instant.astimezone(zone)
+        weekdays = (
+            "понедельник", "вторник", "среда", "четверг",
+            "пятница", "суббота", "воскресенье",
+        )
+        offset = local_now.strftime("%z")
+        formatted_offset = f"UTC{offset[:3]}:{offset[3:]}" if offset else "UTC"
+        return (
+            "Текущие локальные дата и время пользователя: "
+            f"{local_now:%Y-%m-%d %H:%M:%S}, "
+            f"{weekdays[local_now.weekday()]} ({timezone_name}, {formatted_offset}). "
+            "Считай слова «сегодня», «завтра», «послезавтра» и интервалы "
+            "«через ...» от этого момента. Для напоминания преобразуй время в "
+            "точный RFC 3339 timestamp с часовым смещением. Если пользователь не "
+            "указал необходимое время суток, коротко уточни его, не выдумывай."
+        )
 
     def _authorize_product_session(
         self, request: "web.Request", session_id: str, *, claim: bool

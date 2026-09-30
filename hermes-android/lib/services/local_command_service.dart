@@ -273,8 +273,11 @@ class LocalCommandService {
       return LocalCommandResult(handled: true, response: 'Сейчас $hh:$mm');
     }
     if (normalized.contains('какая дата') ||
+        normalized.contains('какая сегодня дата') ||
+        normalized.contains('сегодняшняя дата') ||
         normalized == 'дата' ||
-        normalized.contains('какое сегодня число')) {
+        normalized.contains('какое сегодня число') ||
+        normalized.contains('сегодня какое число')) {
       return LocalCommandResult(
         handled: true,
         response: 'Сегодня ${now.day.toString().padLeft(2, '0')}.'
@@ -283,7 +286,10 @@ class LocalCommandService {
     }
     if (normalized.contains('день недели') ||
         normalized == 'какой сегодня день' ||
-        normalized == 'сегодня какой день') {
+        normalized == 'сегодня какой день' ||
+        normalized == 'какой день сегодня' ||
+        normalized == 'какой сейчас день' ||
+        normalized == 'что сегодня за день') {
       const weekdays = [
         'понедельник',
         'вторник',

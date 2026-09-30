@@ -930,6 +930,24 @@ class TroikaApiService {
     _checkAssistantResponse(response, 'Настройки уведомлений не сохранены');
   }
 
+  /// Keep account reminder calculations aligned with the phone's time zone.
+  /// This is best-effort: a temporary network failure must not block login.
+  Future<bool> syncDeviceTimeZone() async {
+    if (!TroikaConfig.signedIn) return false;
+    try {
+      final timezone = await TroikaConfig.deviceTimeZone();
+      if (timezone == null) return false;
+      final preferences = await getNotificationPreferences();
+      if (preferences.timezone == timezone) return true;
+      await setNotificationPreferences(
+        preferences.copyWith(timezone: timezone),
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<List<TroikaMemory>> listMemories() async {
     final response = await http
         .get(Uri.parse('${TroikaConfig.serverUrl}/v1/memories'),

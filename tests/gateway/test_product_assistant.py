@@ -165,3 +165,27 @@ def test_product_context_is_added_to_prompt_and_isolated(tmp_path, monkeypatch):
     assert "Отвечай на русском языке" in captured["ephemeral_system_prompt"]
     assert "SECOND USER PRIVATE MEMORY" not in captured["ephemeral_system_prompt"]
     assert "SECOND USER SECRET CONTEXT" not in captured["ephemeral_system_prompt"]
+
+
+def test_product_context_includes_authenticated_local_clock(tmp_path):
+    adapter = _adapter(tmp_path)
+    registry = adapter._access_registry
+    user_id = registry.create_user("clock@example.com")
+    token = registry.issue_device_token(
+        registry.create_device(user_id, name="Phone", platform="android")
+    )
+    from tests.gateway.test_product_auth import _Request
+
+    request = _Request(token)
+    request.headers["X-Troika-Time-Zone"] = "Europe/Moscow"
+    assert adapter._check_auth(request) is None
+
+    context = adapter._assistant_temporal_context(
+        request,
+        now=datetime(2026, 9, 30, 9, 15, tzinfo=timezone.utc),
+    )
+
+    assert "2026-09-30 12:15:00" in context
+    assert "среда" in context
+    assert "Europe/Moscow, UTC+03:00" in context
+    assert "RFC 3339" in context

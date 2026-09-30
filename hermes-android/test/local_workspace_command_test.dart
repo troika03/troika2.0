@@ -76,12 +76,16 @@ void main() {
     final time = await service.execute('Который час');
     final date = await service.execute('Какая дата');
     final weekday = await service.execute('Какой сегодня день');
+    final naturalDate = await service.execute('Сегодня какое число?');
+    final naturalWeekday = await service.execute('Что сегодня за день?');
     final calculation = await service.execute('Посчитай 12,5 умножить на 4');
     final zeroDivision = await service.execute('Сколько будет 7 делить на 0');
 
     expect(time.response, 'Сейчас 08:05');
     expect(date.response, 'Сегодня 27.09.2026');
     expect(weekday.response, 'Сегодня воскресенье');
+    expect(naturalDate.response, 'Сегодня 27.09.2026');
+    expect(naturalWeekday.response, 'Сегодня воскресенье');
     expect(calculation.response, 'Ответ: 50');
     expect(zeroDivision.response, 'На ноль делить нельзя.');
   });

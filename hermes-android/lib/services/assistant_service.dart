@@ -132,6 +132,9 @@ class AssistantService extends ChangeNotifier {
     // (нативный сервис их читает оттуда). Forсируем запись текущих значений.
     TroikaConfig.serverUrl = TroikaConfig.serverUrl;
     TroikaConfig.apiKey = TroikaConfig.apiKey;
+    if (TroikaConfig.signedIn) {
+      unawaited(_troika.syncDeviceTimeZone());
+    }
 
     if (_wakeWordEnabled) {
       await _startWakeWordListening();

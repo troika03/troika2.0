@@ -567,7 +567,10 @@ def test_product_chat_never_receives_operator_active_project_context(
     response = asyncio.run(adapter._handle_chat_completions(request))
 
     assert response.status == 200
-    assert captured["ephemeral_system_prompt"] == "Product system"
+    assert captured["ephemeral_system_prompt"].startswith("Product system\n\n")
+    assert "Текущие локальные дата и время пользователя" in captured[
+        "ephemeral_system_prompt"
+    ]
 
 
 def test_product_toolset_only_exposes_paired_phone_safe_slice() -> None:

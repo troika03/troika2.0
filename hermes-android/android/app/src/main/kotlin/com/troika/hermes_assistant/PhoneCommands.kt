@@ -215,7 +215,9 @@ object PhoneCommands {
                 now.get(java.util.Calendar.MINUTE)
             )}"
         }
-        if (norm.contains("какая дата") || norm.contains("какое сегодня число")) {
+        if (norm.contains("какая дата") || norm.contains("какая сегодня дата") ||
+            norm.contains("сегодняшняя дата") || norm.contains("какое сегодня число") ||
+            norm.contains("сегодня какое число")) {
             val now = java.util.Calendar.getInstance()
             return "Сегодня ${"%02d.%02d.%04d".format(
                 now.get(java.util.Calendar.DAY_OF_MONTH),
@@ -323,7 +325,10 @@ object PhoneCommands {
         }
         if (normalized.contains("день недели") ||
             normalized == "какой сегодня день" ||
-            normalized == "сегодня какой день") {
+            normalized == "сегодня какой день" ||
+            normalized == "какой день сегодня" ||
+            normalized == "какой сейчас день" ||
+            normalized == "что сегодня за день") {
             val weekdays = listOf(
                 "воскресенье", "понедельник", "вторник", "среда",
                 "четверг", "пятница", "суббота",

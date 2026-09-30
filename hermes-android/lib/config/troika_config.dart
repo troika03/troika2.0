@@ -460,6 +460,21 @@ class TroikaConfig {
     };
   }
 
+  /// IANA time zone reported by Android, for example Europe/Moscow.
+  static Future<String?> deviceTimeZone() async {
+    if (!Platform.isAndroid) return null;
+    try {
+      const platform = MethodChannel('com.troika.hermes/background');
+      final value =
+          (await platform.invokeMethod<String>('getTimeZoneId'))?.trim();
+      if (value == null || value.isEmpty || value.length > 100) return null;
+      if (value != 'UTC' && !value.contains('/')) return null;
+      return value;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Полные headers для chat-запросов, включая контекст устройства, если он
   /// доступен и разрешён на стороне Android.
   ///
@@ -467,6 +482,8 @@ class TroikaConfig {
   static Future<Map<String, String>> chatHeadersAsync() async {
     final base = chatHeaders;
     if (!Platform.isAndroid) return base;
+    final timezone = await deviceTimeZone();
+    if (timezone != null) base['X-Troika-Time-Zone'] = timezone;
     if (!locationContextEnabled) {
       // Server removes its transient cache on this signal in product mode.
       base['X-Troika-Device-Context-Consent'] = 'revoked';

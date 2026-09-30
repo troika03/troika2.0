@@ -176,6 +176,9 @@ SCHEMA = {
         "memory_delete only for an explicit change to an existing memory. Never store passwords, "
         "access tokens, payment credentials, or authentication secrets. "
         "Use reminder_schedule only for a reminder explicitly requested by the user. Use "
+        "the current local date, time, and time zone from the system context to resolve "
+        "relative phrases such as today, tomorrow, or in two hours, then pass due_at as "
+        "an exact RFC 3339 timestamp with an offset. "
         "follow_up_schedule only for a concrete project follow-up allowed by proactive opt-in. "
         "If reminder_schedule returns delivery_enabled=false, tell the user to enable reminders. "
         "Never schedule greetings or generic check-ins. Future external actions are proposals only; "
@@ -212,7 +215,10 @@ SCHEMA = {
             },
             "due_at": {
                 "type": "string",
-                "description": "RFC 3339 timestamp with time zone.",
+                "description": (
+                    "Exact RFC 3339 timestamp with UTC offset, resolved from the current "
+                    "local clock in the system context."
+                ),
             },
             "action_mode": {"type": "string", "enum": ["remind", "propose_action"]},
             "action_summary": {
