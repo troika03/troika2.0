@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from gateway.session_context import clear_session_override, set_session_override
 from tools import troika_documents_tool
 from troika_product.access import AccessRegistry
@@ -29,7 +31,13 @@ def test_document_tool_fails_closed_when_private_storage_is_unavailable() -> Non
     assert payload == {"ok": False, "error": "artifact_storage_unavailable"}
 
 
-def test_document_tool_confirms_stores_and_audits_for_owner(tmp_path, monkeypatch) -> None:
+def test_document_tool_stores_and_audits_without_confirmation(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        "tools.approval.request_gateway_approval",
+        lambda *args, **kwargs: pytest.fail("document creation requested approval"),
+    )
     database = tmp_path / "access.db"
     root = tmp_path / "artifacts"
     access = AccessRegistry(database)
@@ -39,11 +47,6 @@ def test_document_tool_confirms_stores_and_audits_for_owner(tmp_path, monkeypatc
     )
     principal = access.authenticate(token)
     assert principal is not None
-    monkeypatch.setattr(
-        "tools.approval.request_gateway_approval",
-        lambda *args, **kwargs: {"approved": True, "choice": "once"},
-    )
-
     overrides = {
         "TROIKA_PRODUCT_MODE": "1",
         "TROIKA_PRODUCT_USER_ID": principal.user_id,
@@ -57,8 +60,13 @@ def test_document_tool_confirms_stores_and_audits_for_owner(tmp_path, monkeypatc
         for name, value in overrides.items():
             set_session_override(name, value)
         payload = json.loads(
-            troika_documents_tool._handle_docx(
-                {"title": "Отчёт", "content": "Личные данные"},
+            troika_documents_tool._handle_pptx(
+                {
+                    "title": "Презентация",
+                    "slides": [
+                        {"title": "Слайд", "bullets": ["Личные данные"]}
+                    ],
+                },
                 task_id="run_private",
             )
         )

@@ -252,12 +252,13 @@ void main() {
     await tester.pumpWidget(_app(assistant));
     await tester.pump();
 
-    expect(find.text('Нужно разрешение'), findsWidgets);
-    expect(find.text('Отправить сообщение контакту'), findsWidgets);
-    expect(find.text('Разрешить один раз'), findsWidgets);
+    expect(find.text('Подтвердить важное действие'), findsOneWidget);
+    expect(find.text('Нужно разрешение'), findsOneWidget);
+    expect(find.text('Отправить сообщение контакту'), findsOneWidget);
+    expect(find.text('Разрешить один раз'), findsOneWidget);
     expect(_orb(tester).state, VoiceOrbState.approval);
 
-    await tester.tap(find.text('Разрешить один раз').last);
+    await tester.tap(find.text('Разрешить один раз'));
     await tester.pump();
     expect(assistant.resolvedChoice, 'once');
 

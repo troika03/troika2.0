@@ -38,9 +38,11 @@ Status: `[ ]` not reached, `[-]` active/partial, `[x]` verified.
   backend errors.
 - [x] User-controlled memory: normal settings links directly to the existing
   owner-scoped list, edit and delete screen.
-- [x] Safe actions: product approvals expose only a clear description and
-  one-time allow/deny choices. Internal command/pattern fields stay server-side;
-  unavailable approval channels fail closed.
+- [x] Safe actions use risk-based confirmation. Requested private file creation
+  and reversible phone actions run directly; screen capture, destructive
+  changes, external sends/publication, payments and access changes require a
+  clear one-time allow/deny choice. Internal command/pattern fields stay
+  server-side; unavailable approval channels fail closed.
 
 ### 2. What we sell and to whom
 
@@ -82,8 +84,9 @@ Status: `[ ]` not reached, `[-]` active/partial, `[x]` verified.
 - [x] Implemented and tested distinct idle, listening, thinking, acting,
   approval, speaking, and done orb states. Listening accepts a one-line live
   transcript; acting converts internal tool names into safe concrete statuses;
-  speaking remains one-tap interruptible. Approval now uses one clear inline
-  card instead of a duplicate modal plus card.
+  speaking remains one-tap interruptible. Important approvals use one modal
+  dialog above the current screen, so the decision cannot remain hidden below
+  the fold or behind another route.
 
 ### 5. Android client
 

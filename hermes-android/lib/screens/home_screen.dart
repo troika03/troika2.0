@@ -46,6 +46,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _windowsShellInitialized = false;
   bool _windowsCompact = false;
   bool _windowsPinned = TroikaConfig.windowsAlwaysOnTop;
+  RunApprovalRequest? _shownApproval;
+  bool _approvalDialogOpen = false;
 
   bool get _isWindows => widget.windowsShellOverride ?? Platform.isWindows;
 
@@ -71,6 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (identical(_assistant, assistant)) return;
     _assistant?.removeListener(_handleUiAction);
     _assistant = assistant..addListener(_handleUiAction);
+    _showPendingApproval();
     if (_isWindows && !_windowsShellInitialized) {
       _windowsShellInitialized = true;
       unawaited(WindowsShellService.initialize(_handleWindowsHotkey));
@@ -78,6 +81,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _handleUiAction() {
+    _showPendingApproval();
     final request = _assistant?.takePendingUiAction();
     if (request == null || !mounted || _openingCommandScreen) return;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -94,6 +98,53 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
       _openingCommandScreen = false;
+    });
+  }
+
+  void _showPendingApproval() {
+    final assistant = _assistant;
+    final approval = assistant?.pendingApproval;
+    if (approval == null) {
+      _shownApproval = null;
+      return;
+    }
+    if (!mounted ||
+        _approvalDialogOpen ||
+        identical(_shownApproval, approval)) {
+      return;
+    }
+    _shownApproval = approval;
+    _approvalDialogOpen = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) {
+        _approvalDialogOpen = false;
+        return;
+      }
+      final choice = await showDialog<String>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Подтвердить важное действие'),
+          content: Text(
+            approval.description.trim().isEmpty
+                ? approval.action
+                : approval.description,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, 'deny'),
+              child: const Text('Отмена'),
+            ),
+            if (approval.choices.contains('once'))
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, 'once'),
+                child: const Text('Разрешить один раз'),
+              ),
+          ],
+        ),
+      );
+      _approvalDialogOpen = false;
+      assistant?.resolvePendingApproval(choice ?? 'deny');
     });
   }
 
@@ -623,9 +674,6 @@ class _CurrentCards extends StatelessWidget {
     final cards = <Widget>[];
     final approval = assistant.pendingApproval;
     final orbState = _voiceOrbState(assistant);
-    if (approval != null) {
-      cards.add(_ApprovalCard(assistant: assistant, approval: approval));
-    }
     if ((assistant.state == AssistantState.processing ||
             assistant.state == AssistantState.error) &&
         approval == null) {
@@ -691,40 +739,6 @@ class _CurrentCards extends StatelessWidget {
   }
 }
 
-class _ApprovalCard extends StatelessWidget {
-  final AssistantService assistant;
-  final RunApprovalRequest approval;
-
-  const _ApprovalCard({required this.assistant, required this.approval});
-
-  @override
-  Widget build(BuildContext context) {
-    return _HomeCard(
-      icon: Icons.shield_outlined,
-      title: 'Нужно разрешение',
-      body: approval.description.trim().isEmpty
-          ? approval.action
-          : approval.description,
-      footer: Wrap(
-        alignment: WrapAlignment.end,
-        spacing: 8,
-        runSpacing: 4,
-        children: [
-          TextButton(
-            onPressed: () => assistant.resolvePendingApproval('deny'),
-            child: const Text('Отмена'),
-          ),
-          if (approval.choices.contains('once'))
-            FilledButton(
-              onPressed: () => assistant.resolvePendingApproval('once'),
-              child: const Text('Разрешить один раз'),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
 class _HomeCard extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -732,7 +746,6 @@ class _HomeCard extends StatelessWidget {
   final Color accent;
   final String? actionLabel;
   final VoidCallback? onAction;
-  final Widget? footer;
 
   const _HomeCard({
     required this.icon,
@@ -741,7 +754,6 @@ class _HomeCard extends StatelessWidget {
     this.accent = TroikaColors.brand,
     this.actionLabel,
     this.onAction,
-    this.footer,
   });
 
   @override
@@ -793,10 +805,6 @@ class _HomeCard extends StatelessWidget {
                       label: Text(actionLabel!),
                     ),
                   ),
-                if (footer != null) ...[
-                  const SizedBox(height: 8),
-                  footer!,
-                ],
               ],
             ),
           ),

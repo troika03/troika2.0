@@ -64,9 +64,11 @@ def test_product_bridge_rejects_unlisted_or_unbound_commands() -> None:
     asyncio.run(scenario())
 
 
-def test_product_bridge_marks_only_state_queries_as_read_only() -> None:
+def test_product_bridge_confirms_only_privacy_sensitive_capture() -> None:
     assert not ProductPhoneBridge.requires_confirmation("battery")
-    assert ProductPhoneBridge.requires_confirmation("open_app")
+    assert not ProductPhoneBridge.requires_confirmation("open_app")
+    assert not ProductPhoneBridge.requires_confirmation("set_alarm")
+    assert not ProductPhoneBridge.requires_confirmation("navigate")
     assert not ProductPhoneBridge.requires_confirmation("send_sms")
     assert ProductPhoneBridge.requires_confirmation("screen_snapshot")
 

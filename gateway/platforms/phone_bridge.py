@@ -160,7 +160,7 @@ class ProductPhoneBridge:
             "screen_snapshot",
         }
     )
-    READ_ONLY_ACTIONS = frozenset({"status", "battery", "network"})
+    CONFIRMATION_ACTIONS = frozenset({"screen_snapshot"})
 
     def __init__(self) -> None:
         self._connections: Dict[str, web.WebSocketResponse] = {}
@@ -177,7 +177,7 @@ class ProductPhoneBridge:
 
     @classmethod
     def requires_confirmation(cls, action: str) -> bool:
-        return action in cls.ALLOWED_ACTIONS and action not in cls.READ_ONLY_ACTIONS
+        return action in cls.CONFIRMATION_ACTIONS
 
     async def send_command(
         self,

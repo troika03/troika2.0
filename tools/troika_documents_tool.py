@@ -106,18 +106,6 @@ def _create_artifact(
             ensure_ascii=False,
         )
 
-    from tools.approval import request_gateway_approval
-
-    approval = request_gateway_approval(
-        "artifact.create",
-        f"Сохранить файл «{filename}» в личных файлах Тройки.",
-    )
-    if not approval.get("approved"):
-        return json.dumps(
-            {"ok": False, "error": "artifact_creation_not_confirmed"},
-            ensure_ascii=False,
-        )
-
     try:
         artifact = _artifact_store().create(
             user_id=user_id,
