@@ -146,8 +146,16 @@ Status: `[ ]` not reached, `[-]` active/partial, `[x]` verified.
 
 ### 7. Sales site and account
 
-- [ ] Build and verify landing, features, pricing, download, account, help,
-  status, privacy, terms, and refunds pages plus the activation funnel.
+- [-] Created and privately published the Troika sales site in `troika-site/`:
+  landing, features, pricing, download, account, help, status, privacy, terms,
+  refunds, cookie, acceptable-use, and security pages. The revised visual
+  direction is editorial and restrained rather than glowing/card-heavy. Mobile
+  and desktop layouts, cookie preference controls, page routes, and the static
+  script were checked. Search indexing is disabled while the site is private.
+  The account form is explicitly a non-submitting demonstration; downloads,
+  public registration, live support/status, and the activation funnel are not
+  ready. Legal pages are drafts pending operator identity, contacts, and legal
+  review. Do not mark this block complete or open sales yet.
 
 ### 8. Plans, billing, and credits
 
