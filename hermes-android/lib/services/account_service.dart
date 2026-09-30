@@ -65,13 +65,77 @@ class AccountService {
       if (!token.startsWith('trk_live_')) {
         throw const AccountException('Сервер не вернул токен аккаунта.');
       }
-      await TroikaConfig.saveAccount(email: email, token: token);
+      final refreshToken = payload['refresh_token']?.toString().trim() ?? '';
+      if (!refreshToken.startsWith('trk_refresh_')) {
+        throw const AccountException(
+          'Сервер не вернул защищённый токен обновления.',
+        );
+      }
+      final accessExpiresAt =
+          (payload['access_expires_at'] as num?)?.toDouble() ?? 0;
+      await TroikaConfig.saveAccount(
+        email: email,
+        token: token,
+        refreshToken: refreshToken,
+        accessExpiresAt: accessExpiresAt,
+      );
     } on SocketException {
       throw const AccountException('Нет соединения с сервером регистрации.');
     } on TimeoutException {
       throw const AccountException('Сервер регистрации не ответил вовремя.');
     } on FormatException {
       throw const AccountException('Сервер вернул некорректный ответ.');
+    }
+  }
+
+  /// Refresh a short-lived access token, or migrate one legacy installation.
+  Future<bool> ensureFreshSession({bool force = false}) async {
+    if (!TroikaConfig.signedIn) return false;
+    final expiry = TroikaConfig.accessTokenExpiresAt;
+    final refreshToken = await TroikaConfig.getRefreshToken();
+    if (!force &&
+        refreshToken.isNotEmpty &&
+        expiry != null &&
+        expiry
+            .isAfter(DateTime.now().toUtc().add(const Duration(minutes: 5)))) {
+      return true;
+    }
+    final legacyUpgrade = refreshToken.isEmpty;
+    final uri = Uri.parse(
+      legacyUpgrade ? TroikaConfig.upgradeTokenUrl : TroikaConfig.refreshUrl,
+    );
+    try {
+      final response = await http
+          .post(
+            uri,
+            headers: legacyUpgrade
+                ? TroikaConfig.headers
+                : const {'Content-Type': 'application/json'},
+            body: jsonEncode(
+              legacyUpgrade ? const {} : {'refresh_token': refreshToken},
+            ),
+          )
+          .timeout(_timeout);
+      if (response.statusCode != 200) return false;
+      final payload =
+          jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final access = (payload['access_token'] ?? payload['token']).toString();
+      final nextRefresh = (payload['refresh_token'] ?? '').toString();
+      final expiresAt = (payload['access_expires_at'] as num?)?.toDouble() ?? 0;
+      if (!access.startsWith('trk_live_') ||
+          !nextRefresh.startsWith('trk_refresh_') ||
+          expiresAt <= 0) {
+        return false;
+      }
+      await TroikaConfig.saveAccount(
+        email: TroikaConfig.accountEmail,
+        token: access,
+        refreshToken: nextRefresh,
+        accessExpiresAt: expiresAt,
+      );
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 

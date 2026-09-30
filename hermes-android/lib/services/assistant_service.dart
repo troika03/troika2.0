@@ -13,6 +13,7 @@ import 'troika_api_service.dart';
 import 'wake_word_service.dart';
 import 'local_command_service.dart';
 import '../config/troika_config.dart';
+import 'account_service.dart';
 
 enum AssistantState {
   idle,
@@ -133,6 +134,7 @@ class AssistantService extends ChangeNotifier {
     TroikaConfig.serverUrl = TroikaConfig.serverUrl;
     TroikaConfig.apiKey = TroikaConfig.apiKey;
     if (TroikaConfig.signedIn) {
+      await AccountService().ensureFreshSession();
       unawaited(_troika.syncDeviceTimeZone());
     }
 

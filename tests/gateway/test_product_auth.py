@@ -123,6 +123,8 @@ def test_product_registration_and_login_issue_device_tokens(tmp_path) -> None:
     registered = json.loads(registration.body)
     assert registration.status == 201
     assert registered["account"]["plan"] == "free"
+    assert registered["refresh_token"].startswith("trk_refresh_")
+    assert 0 < registered["expires_in"] <= 86_400
     assert adapter._access_registry.authenticate(registered["token"]) is not None
 
     login = asyncio.run(
@@ -140,7 +142,24 @@ def test_product_registration_and_login_issue_device_tokens(tmp_path) -> None:
     )
     logged_in = json.loads(login.body)
     assert login.status == 200
+    assert logged_in["refresh_token"].startswith("trk_refresh_")
     assert adapter._access_registry.authenticate(logged_in["token"]) is not None
+
+    refreshed = asyncio.run(
+        adapter._handle_product_refresh(
+            _ChatRequest("", {"refresh_token": logged_in["refresh_token"]})
+        )
+    )
+    refreshed_body = json.loads(refreshed.body)
+    assert refreshed.status == 200
+    assert refreshed_body["token"] != logged_in["token"]
+    assert refreshed_body["refresh_token"] != logged_in["refresh_token"]
+    replay = asyncio.run(
+        adapter._handle_product_refresh(
+            _ChatRequest("", {"refresh_token": logged_in["refresh_token"]})
+        )
+    )
+    assert replay.status == 401
 
 
 def test_product_registration_rejects_duplicate_and_bad_password(tmp_path) -> None:

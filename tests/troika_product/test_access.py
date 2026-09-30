@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 import json
+import time
 
 from troika_product.access import AccessRegistry
 from troika_product.__main__ import main
@@ -54,6 +55,40 @@ def test_token_authentication_and_revocation(tmp_path) -> None:
     assert principal.device_id == device_id
     assert registry.revoke_token(token)
     assert registry.authenticate(token) is None
+
+
+def test_refresh_token_rotates_once_and_access_token_expires(tmp_path) -> None:
+    registry = AccessRegistry(tmp_path / "access.db")
+    user_id = registry.create_user("rotate@example.com")
+    device_id = registry.create_device(user_id, name="Pixel", platform="android")
+    pair = registry.issue_device_token_pair(
+        device_id, access_ttl_seconds=60, refresh_ttl_seconds=120
+    )
+
+    assert registry.authenticate(pair.access_token) is not None
+    rotated = registry.rotate_refresh_token(
+        pair.refresh_token, access_ttl_seconds=60, refresh_ttl_seconds=120
+    )
+    assert rotated is not None
+    assert rotated.access_token != pair.access_token
+    assert rotated.refresh_token != pair.refresh_token
+    assert registry.rotate_refresh_token(pair.refresh_token) is None
+    assert rotated.access_expires_at > time.time()
+
+
+def test_legacy_access_token_can_upgrade_without_logging_out_device(tmp_path) -> None:
+    registry = AccessRegistry(tmp_path / "access.db")
+    user_id = registry.create_user("upgrade@example.com")
+    device_id = registry.create_device(user_id, name="Pixel", platform="android")
+    legacy = registry.issue_device_token(device_id)
+    principal = registry.authenticate(legacy)
+    assert principal is not None
+
+    pair = registry.upgrade_access_token(principal)
+
+    assert registry.authenticate(legacy) is None
+    assert registry.authenticate(pair.access_token) is not None
+    assert registry.rotate_refresh_token(pair.refresh_token) is not None
 
 
 def test_device_management_is_owner_scoped_and_revokes_all_device_tokens(

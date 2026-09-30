@@ -38,6 +38,20 @@ class AccessPrincipal:
 
 
 @dataclass(frozen=True)
+class TokenPair:
+    """One short-lived access token and one rotating refresh token."""
+
+    access_token: str
+    refresh_token: str
+    access_expires_at: float
+    refresh_expires_at: float
+
+    @property
+    def expires_in(self) -> int:
+        return max(0, int(self.access_expires_at - time.time()))
+
+
+@dataclass(frozen=True)
 class UsageDecision:
     """The result of atomically reserving one request from a daily quota."""
 
@@ -140,6 +154,16 @@ class AccessRegistry:
                     created_at REAL NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS troika_refresh_tokens (
+                    id TEXT PRIMARY KEY,
+                    device_id TEXT NOT NULL REFERENCES troika_devices(id),
+                    token_digest TEXT NOT NULL UNIQUE,
+                    expires_at REAL NOT NULL,
+                    revoked_at REAL,
+                    replaced_by_id TEXT,
+                    created_at REAL NOT NULL
+                );
+
                 CREATE TABLE IF NOT EXISTS troika_sessions (
                     session_id TEXT PRIMARY KEY,
                     user_id TEXT NOT NULL REFERENCES troika_users(id),
@@ -183,6 +207,8 @@ class AccessRegistry:
                     ON troika_devices(user_id);
                 CREATE INDEX IF NOT EXISTS idx_troika_tokens_device
                     ON troika_api_tokens(device_id);
+                CREATE INDEX IF NOT EXISTS idx_troika_refresh_tokens_device
+                    ON troika_refresh_tokens(device_id);
                 CREATE INDEX IF NOT EXISTS idx_troika_sessions_user
                     ON troika_sessions(user_id);
                 CREATE INDEX IF NOT EXISTS idx_troika_usage_daily_date
@@ -622,6 +648,145 @@ class AccessRegistry:
             )
         return token
 
+    @staticmethod
+    def _validate_token_ttl(value: object, name: str, *, maximum: int) -> int:
+        if isinstance(value, bool):
+            raise ValueError(f"{name} must be an integer")
+        try:
+            ttl = int(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{name} must be an integer") from exc
+        if not 60 <= ttl <= maximum:
+            raise ValueError(f"{name} is outside the allowed range")
+        return ttl
+
+    def issue_device_token_pair(
+        self,
+        device_id: str,
+        *,
+        access_ttl_seconds: int = 86_400,
+        refresh_ttl_seconds: int = 60 * 60 * 24 * 90,
+    ) -> TokenPair:
+        """Issue a digest-only access/refresh pair for one active device."""
+        access_ttl = self._validate_token_ttl(
+            access_ttl_seconds, "access token lifetime", maximum=60 * 60 * 24 * 7
+        )
+        refresh_ttl = self._validate_token_ttl(
+            refresh_ttl_seconds,
+            "refresh token lifetime",
+            maximum=60 * 60 * 24 * 365,
+        )
+        now = time.time()
+        access_token = f"trk_live_{secrets.token_urlsafe(32)}"
+        refresh_token = f"trk_refresh_{secrets.token_urlsafe(48)}"
+        access_expires_at = now + access_ttl
+        refresh_expires_at = now + refresh_ttl
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            device = connection.execute(
+                "SELECT status FROM troika_devices WHERE id = ?", (device_id,)
+            ).fetchone()
+            if device is None or device["status"] != "active":
+                raise ValueError("device is not active")
+            connection.execute(
+                "INSERT INTO troika_api_tokens "
+                "(id, device_id, token_digest, expires_at, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    self._new_id("tok"), device_id,
+                    self._token_digest(access_token), access_expires_at, now,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO troika_refresh_tokens "
+                "(id, device_id, token_digest, expires_at, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    self._new_id("rft"), device_id,
+                    self._token_digest(refresh_token), refresh_expires_at, now,
+                ),
+            )
+        return TokenPair(
+            access_token, refresh_token, access_expires_at, refresh_expires_at
+        )
+
+    def rotate_refresh_token(
+        self,
+        refresh_token: str,
+        *,
+        access_ttl_seconds: int = 86_400,
+        refresh_ttl_seconds: int = 60 * 60 * 24 * 90,
+    ) -> TokenPair | None:
+        """Consume one refresh token and atomically rotate both credentials."""
+        if not isinstance(refresh_token, str) or not refresh_token.startswith(
+            "trk_refresh_"
+        ):
+            return None
+        access_ttl = self._validate_token_ttl(
+            access_ttl_seconds, "access token lifetime", maximum=60 * 60 * 24 * 7
+        )
+        refresh_ttl = self._validate_token_ttl(
+            refresh_ttl_seconds,
+            "refresh token lifetime",
+            maximum=60 * 60 * 24 * 365,
+        )
+        now = time.time()
+        new_access = f"trk_live_{secrets.token_urlsafe(32)}"
+        new_refresh = f"trk_refresh_{secrets.token_urlsafe(48)}"
+        access_expires_at = now + access_ttl
+        refresh_expires_at = now + refresh_ttl
+        new_refresh_id = self._new_id("rft")
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT refresh.id, refresh.device_id FROM troika_refresh_tokens AS refresh "
+                "JOIN troika_devices AS devices ON devices.id = refresh.device_id "
+                "JOIN troika_users AS users ON users.id = devices.user_id "
+                "WHERE refresh.token_digest = ? AND refresh.revoked_at IS NULL "
+                "AND refresh.expires_at > ? AND devices.status = 'active' "
+                "AND users.status = 'active'",
+                (self._token_digest(refresh_token), now),
+            ).fetchone()
+            if row is None:
+                return None
+            connection.execute(
+                "INSERT INTO troika_api_tokens "
+                "(id, device_id, token_digest, expires_at, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    self._new_id("tok"), row["device_id"],
+                    self._token_digest(new_access), access_expires_at, now,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO troika_refresh_tokens "
+                "(id, device_id, token_digest, expires_at, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    new_refresh_id, row["device_id"],
+                    self._token_digest(new_refresh), refresh_expires_at, now,
+                ),
+            )
+            connection.execute(
+                "UPDATE troika_refresh_tokens SET revoked_at = ?, replaced_by_id = ? "
+                "WHERE id = ? AND revoked_at IS NULL",
+                (now, new_refresh_id, row["id"]),
+            )
+        return TokenPair(
+            new_access, new_refresh, access_expires_at, refresh_expires_at
+        )
+
+    def upgrade_access_token(self, principal: AccessPrincipal) -> TokenPair:
+        """Migrate a valid legacy device token to the rotating-token contract."""
+        pair = self.issue_device_token_pair(principal.device_id)
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE troika_api_tokens SET revoked_at = COALESCE(revoked_at, ?) "
+                "WHERE id = ?",
+                (time.time(), principal.token_id),
+            )
+        return pair
+
     def authenticate(self, token: str) -> Optional[AccessPrincipal]:
         """Return the active principal for a bearer token, if any."""
         if not isinstance(token, str) or not token.startswith("trk_live_"):
@@ -647,13 +812,24 @@ class AccessRegistry:
         )
 
     def revoke_token(self, token: str) -> bool:
-        """Revoke a token without retaining its clear-text form."""
+        """Revoke an access token and every refresh token for its device."""
         with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT device_id FROM troika_api_tokens WHERE token_digest = ?",
+                (self._token_digest(token),),
+            ).fetchone()
             cursor = connection.execute(
                 "UPDATE troika_api_tokens SET revoked_at = ? "
                 "WHERE token_digest = ? AND revoked_at IS NULL",
                 (time.time(), self._token_digest(token)),
             )
+            if row is not None and cursor.rowcount == 1:
+                connection.execute(
+                    "UPDATE troika_refresh_tokens "
+                    "SET revoked_at = COALESCE(revoked_at, ?) WHERE device_id = ?",
+                    (time.time(), row["device_id"]),
+                )
         return cursor.rowcount == 1
 
     def principal_is_active(self, principal: AccessPrincipal) -> bool:
@@ -718,6 +894,11 @@ class AccessRegistry:
                 "WHERE device_id = ?",
                 (now, clean_device_id),
             )
+            connection.execute(
+                "UPDATE troika_refresh_tokens SET revoked_at = COALESCE(revoked_at, ?) "
+                "WHERE device_id = ?",
+                (now, clean_device_id),
+            )
         return True
 
     def revoke_all_devices(self, principal: AccessPrincipal) -> tuple[str, ...]:
@@ -742,6 +923,12 @@ class AccessRegistry:
             )
             connection.execute(
                 "UPDATE troika_api_tokens SET revoked_at = COALESCE(revoked_at, ?) "
+                "WHERE device_id IN "
+                "(SELECT id FROM troika_devices WHERE user_id = ?)",
+                (now, principal.user_id),
+            )
+            connection.execute(
+                "UPDATE troika_refresh_tokens SET revoked_at = COALESCE(revoked_at, ?) "
                 "WHERE device_id IN "
                 "(SELECT id FROM troika_devices WHERE user_id = ?)",
                 (now, principal.user_id),
@@ -1048,6 +1235,11 @@ class AccessRegistry:
                 "WHERE device_id IN (SELECT id FROM troika_devices WHERE user_id = ?)",
                 (now, principal.user_id),
             )
+            connection.execute(
+                "UPDATE troika_refresh_tokens SET revoked_at = COALESCE(revoked_at, ?) "
+                "WHERE device_id IN (SELECT id FROM troika_devices WHERE user_id = ?)",
+                (now, principal.user_id),
+            )
             return self._account_deletion_manifest(connection, principal.user_id)
 
     def account_deletion_manifest(self, user_id: str) -> AccountDeletionManifest:
@@ -1137,6 +1329,11 @@ class AccessRegistry:
                     connection.execute(
                         f"DELETE FROM {table} WHERE user_id = ?", (user_id,)
                     )
+            connection.execute(
+                "DELETE FROM troika_refresh_tokens WHERE device_id IN "
+                "(SELECT id FROM troika_devices WHERE user_id = ?)",
+                (user_id,),
+            )
             connection.execute(
                 "DELETE FROM troika_api_tokens WHERE device_id IN "
                 "(SELECT id FROM troika_devices WHERE user_id = ?)",

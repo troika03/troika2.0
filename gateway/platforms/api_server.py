@@ -1491,7 +1491,7 @@ class APIServerAdapter(BasePlatformAdapter):
             device_id = self._access_registry.create_device(
                 user_id, name=device_name, platform=platform
             )
-            token = self._access_registry.issue_device_token(device_id)
+            pair = self._access_registry.issue_device_token_pair(device_id)
         except ValueError as exc:
             message = str(exc)
             status = 409 if "already exists" in message else 400
@@ -1500,7 +1500,12 @@ class APIServerAdapter(BasePlatformAdapter):
             )
         return web.json_response(
             {
-                "token": token,
+                "token": pair.access_token,
+                "access_token": pair.access_token,
+                "refresh_token": pair.refresh_token,
+                "expires_in": pair.expires_in,
+                "access_expires_at": pair.access_expires_at,
+                "refresh_expires_at": pair.refresh_expires_at,
                 "token_type": "bearer",
                 "account": {"email": email.lower(), "plan": "free"},
             },
@@ -1542,16 +1547,80 @@ class APIServerAdapter(BasePlatformAdapter):
             device_id = self._access_registry.create_device(
                 user_id, name=device_name, platform=platform
             )
-            token = self._access_registry.issue_device_token(device_id)
+            pair = self._access_registry.issue_device_token_pair(device_id)
         except ValueError:
             return web.json_response(
                 _openai_error("Account login failed", code="login_failed"), status=400
             )
         return web.json_response(
             {
-                "token": token,
+                "token": pair.access_token,
+                "access_token": pair.access_token,
+                "refresh_token": pair.refresh_token,
+                "expires_in": pair.expires_in,
+                "access_expires_at": pair.access_expires_at,
+                "refresh_expires_at": pair.refresh_expires_at,
                 "token_type": "bearer",
                 "account": {"email": email.lower()},
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
+    async def _handle_product_refresh(
+        self, request: "web.Request"
+    ) -> "web.Response":
+        """Rotate one device refresh token and return a new token pair."""
+        if self._access_registry is None:
+            return web.json_response(_openai_error("Refresh is unavailable"), status=404)
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response(_openai_error("Invalid JSON body"), status=400)
+        refresh_token = body.get("refresh_token") if isinstance(body, dict) else None
+        pair = self._access_registry.rotate_refresh_token(refresh_token)
+        if pair is None:
+            return web.json_response(
+                _openai_error(
+                    "Invalid or expired refresh token",
+                    code="invalid_refresh_token",
+                ),
+                status=401,
+            )
+        return web.json_response(
+            {
+                "token": pair.access_token,
+                "access_token": pair.access_token,
+                "refresh_token": pair.refresh_token,
+                "expires_in": pair.expires_in,
+                "access_expires_at": pair.access_expires_at,
+                "refresh_expires_at": pair.refresh_expires_at,
+                "token_type": "bearer",
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
+    async def _handle_product_upgrade_token(
+        self, request: "web.Request"
+    ) -> "web.Response":
+        """Migrate one valid legacy access token without forcing a logout."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        principal = self._product_principal(request)
+        if principal is None or self._access_registry is None:
+            return web.json_response(
+                _openai_error("Token upgrade is unavailable"), status=404
+            )
+        pair = self._access_registry.upgrade_access_token(principal)
+        return web.json_response(
+            {
+                "token": pair.access_token,
+                "access_token": pair.access_token,
+                "refresh_token": pair.refresh_token,
+                "expires_in": pair.expires_in,
+                "access_expires_at": pair.access_expires_at,
+                "refresh_expires_at": pair.refresh_expires_at,
+                "token_type": "bearer",
             },
             headers={"Cache-Control": "no-store"},
         )
@@ -6052,6 +6121,12 @@ class APIServerAdapter(BasePlatformAdapter):
                 )
                 self._app.router.add_post(
                     "/v1/auth/login", self._handle_product_login
+                )
+                self._app.router.add_post(
+                    "/v1/auth/refresh", self._handle_product_refresh
+                )
+                self._app.router.add_post(
+                    "/v1/auth/upgrade-token", self._handle_product_upgrade_token
                 )
                 self._app.router.add_post(
                     "/v1/auth/logout-all", self._handle_product_logout_all

@@ -151,6 +151,17 @@ class MainActivity : FlutterActivity() {
                 "getTimeZoneId" -> {
                     result.success(TimeZone.getDefault().id)
                 }
+                "storeRefreshToken" -> {
+                    val token = call.argument<String>("token").orEmpty()
+                    result.success(SecureTokenStore.put(applicationContext, token))
+                }
+                "getRefreshToken" -> {
+                    result.success(SecureTokenStore.get(applicationContext))
+                }
+                "clearRefreshToken" -> {
+                    SecureTokenStore.clear(applicationContext)
+                    result.success(null)
+                }
                 "executeLocalCommand" -> {
                     val raw = call.argument<String>("text")?.trim().orEmpty()
                     val response = if (raw.isEmpty()) null else

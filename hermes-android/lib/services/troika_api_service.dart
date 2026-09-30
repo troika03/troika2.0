@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import '../config/troika_config.dart';
+import 'account_service.dart';
 
 /// Тип шага в «потоке мыслей» Тройки (что она делает перед ответом).
 enum ThoughtKind {
@@ -455,6 +456,7 @@ class TroikaApiService {
     }
 
     try {
+      await AccountService().ensureFreshSession();
       final uri = Uri.parse(TroikaConfig.chatCompletionsUrl);
       // Async headers: legacy X-Hermes-Device-Context (GPS/wifi/bt) уходит с каждым
       // запросом. Иначе Тройка не знает координат Миши пока не пройдёт
@@ -517,6 +519,7 @@ class TroikaApiService {
 
     final client = http.Client();
     try {
+      await AccountService().ensureFreshSession();
       // Async headers — с device_context (GPS) для streaming-пути тоже.
       final chatHdrs = await TroikaConfig.chatHeadersAsync();
       final startReq = http.Request('POST', Uri.parse(TroikaConfig.runsUrl))

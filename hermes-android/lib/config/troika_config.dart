@@ -22,6 +22,8 @@ class TroikaConfig {
   static const String _keyServerUrl = 'troika_server_url';
   static const String _legacyKeyServerUrl = 'hermes_server_url';
   static const String _keyApiKey = 'troika_api_key';
+  static const String _keyAccessTokenExpiresAt =
+      'troika_access_token_expires_at';
   static const String _legacyKeyApiKey = 'hermes_api_key';
   static const String _keyAccountEmail = 'troika_account_email';
   static const String _keyGroqKey = 'troika_groq_key';
@@ -230,13 +232,63 @@ class TroikaConfig {
   static Future<void> saveAccount({
     required String email,
     required String token,
+    String refreshToken = '',
+    double accessExpiresAt = 0,
   }) async {
     await _prefs.setString(_keyAccountEmail, email.trim().toLowerCase());
     await _setStringCompat(_keyApiKey, _legacyKeyApiKey, token.trim());
+    if (accessExpiresAt > 0) {
+      await _prefs.setInt(
+        _keyAccessTokenExpiresAt,
+        (accessExpiresAt * 1000).round(),
+      );
+    }
+    if (refreshToken.isNotEmpty) await storeRefreshToken(refreshToken);
+  }
+
+  static DateTime? get accessTokenExpiresAt {
+    final milliseconds = _prefs.getInt(_keyAccessTokenExpiresAt);
+    return milliseconds == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(milliseconds, isUtc: true);
+  }
+
+  static Future<bool> storeRefreshToken(String token) async {
+    if (!Platform.isAndroid || token.isEmpty) return false;
+    try {
+      const platform = MethodChannel('com.troika.hermes/background');
+      return await platform.invokeMethod<bool>(
+            'storeRefreshToken',
+            {'token': token},
+          ) ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<String> getRefreshToken() async {
+    if (!Platform.isAndroid) return '';
+    try {
+      const platform = MethodChannel('com.troika.hermes/background');
+      return (await platform.invokeMethod<String>('getRefreshToken')) ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  static Future<void> clearRefreshToken() async {
+    await _prefs.remove(_keyAccessTokenExpiresAt);
+    if (!Platform.isAndroid) return;
+    try {
+      const platform = MethodChannel('com.troika.hermes/background');
+      await platform.invokeMethod<void>('clearRefreshToken');
+    } catch (_) {}
   }
 
   static Future<void> signOut() async {
     await setPhoneControlEnabled(false);
+    await clearRefreshToken();
     await _prefs.remove(_keyAccountEmail);
     await _removeCompat(_keyApiKey, _legacyKeyApiKey);
   }
@@ -372,6 +424,10 @@ class TroikaConfig {
 
   static String get loginUrl => '$serverUrl/v1/auth/login';
 
+  static String get refreshUrl => '$serverUrl/v1/auth/refresh';
+
+  static String get upgradeTokenUrl => '$serverUrl/v1/auth/upgrade-token';
+
   static String get logoutAllUrl => '$serverUrl/v1/auth/logout-all';
 
   /// Архив всех переносимых данных текущего product-аккаунта.
@@ -389,6 +445,7 @@ class TroikaConfig {
   /// revoked device's server-linked session.
   static Future<void> clearRevokedDevice() async {
     await setPhoneControlEnabled(false);
+    await clearRefreshToken();
     await _setBoolCompat(
       _keyWakeWordEnabled,
       _legacyKeyWakeWordEnabled,
@@ -410,6 +467,7 @@ class TroikaConfig {
   /// Remove credentials and server-linked state after deletion was accepted.
   static Future<void> clearDeletedAccount() async {
     await setPhoneControlEnabled(false);
+    await clearRefreshToken();
     await _setBoolCompat(
       _keyWakeWordEnabled,
       _legacyKeyWakeWordEnabled,
