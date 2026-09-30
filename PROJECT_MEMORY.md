@@ -864,6 +864,10 @@ AI-ассистент для Android и Windows, где чат остаётся 
   40 passed/1 skipped и targeted Flutter analyze без замечаний. Release APK с
   временным HTTPS endpoint собран, установлен поверх текущей версии на Samsung
   SM-A225F и успешно запущен без очистки данных.
+- Production runtime обновлён до image/release `f9cf794`; API и STT поднялись,
+  внутренний и публичный HTTPS health прошли. Публичный `/v1/runs` E2E создал
+  PPTX и завершился без `approval.request`; временный smoke-аккаунт, сессия и
+  artifact после проверки удалены.
 
 ## Проверенный рабочий срез и бесплатная модель (2026-09-10)
 
