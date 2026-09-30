@@ -939,8 +939,16 @@ AI-ассистент для Android и Windows, где чат остаётся 
 
 - Self-service регистрация, вход, список устройств и их отзыв есть. Пока нет
   подтверждения почты, восстановления пароля и refresh-token rotation.
-  Logout-all реализован в API и Android.
-- Нет подписок, платежей, webhook-биллинга, отмен и возвратов.
+  Logout-all реализован в API и Android. Текущий `trk_live_…` device token
+  хранится на сервере только как SHA-256 digest и корректно отзывается, но
+  выдаётся без TTL, а Android пока хранит его в обычных private
+  SharedPreferences, не в Keystore. До публичного запуска нужны короткий access
+  token, ротируемый refresh token в Keystore и миграция существующей сессии.
+- Subscription-status baseline работает: entitlement, дневной request ledger,
+  owner-scoped API и Android-отображение тарифа. На production enforcement
+  временно выключен, поэтому лимит справочный. Нет credits/token-cost ledger,
+  checkout, платежного провайдера, идемпотентных webhooks, paid lifecycle,
+  отмен, grace/past_due, возвратов и billing account UI.
 - Проактивность работает через связанный с проектами/задачами in-app inbox и
   безопасный фоновый event engine. Push ещё не реализован до завершения retention
   и push token lifecycle.
