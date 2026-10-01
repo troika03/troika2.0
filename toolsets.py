@@ -556,7 +556,17 @@ TOOLSETS = {
     "troika-product": {
         "description": "Hosted Troika toolkit with private files and paired-phone controls.",
         "tools": ["troika_assistant"],
-        "includes": ["safe", "troika-phone", "troika-documents"],
+        "includes": ["safe", "troika-phone", "troika-documents", "troika-workspace"],
+    },
+
+    "troika-workspace": {
+        "description": "Private user-owned files, search, and bounded terminal commands.",
+        "tools": [
+            "troika_files",
+            "troika_file_search",
+            "troika_terminal",
+        ],
+        "includes": [],
     },
 
     "troika-documents": {

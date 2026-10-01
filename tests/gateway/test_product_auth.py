@@ -79,6 +79,7 @@ def _adapter_with_two_users(tmp_path, *, quotas_enabled=False):
                 "product_auth_enabled": True,
                 "product_auth_db": str(tmp_path / "access.db"),
                 "product_artifact_root": str(tmp_path / "artifacts"),
+                "product_workspace_root": str(tmp_path / "workspaces"),
                 "product_quotas_enabled": quotas_enabled,
                 "key": "legacy-bootstrap-key",
             },
@@ -447,6 +448,7 @@ def test_product_capabilities_do_not_advertise_global_responses_api(tmp_path) ->
     assert payload["features"]["responses_api"] is False
     assert "responses" not in payload["endpoints"]
     assert payload["features"]["private_artifacts"] is True
+    assert payload["features"]["private_workspace"] is True
     assert payload["features"]["product_quota_enforcement"] is False
     assert payload["features"]["screen_snapshot"] is False
     assert payload["features"]["screen_snapshot_external_vision"] is False
@@ -752,6 +754,12 @@ def test_confirmed_account_deletion_purges_all_local_user_data(
         kind="pdf",
         data=b"%PDF-second-private",
     )
+    adapter._workspace_store.write_text(
+        first.user_id, "private/first.txt", "FIRST WORKSPACE PRIVATE"
+    )
+    adapter._workspace_store.write_text(
+        second.user_id, "private/second.txt", "SECOND WORKSPACE PRIVATE"
+    )
     VisionSessionStore(registry.database_path).create(first)
 
     session_db = SessionDB(db_path=tmp_path / "state.db")
@@ -807,6 +815,10 @@ def test_confirmed_account_deletion_purges_all_local_user_data(
         adapter._artifact_store.read_for_user(second.user_id, second_artifact.id)
         is not None
     )
+    assert adapter._workspace_store.export_files(first.user_id) == []
+    assert adapter._workspace_store.read_text(
+        second.user_id, "private/second.txt"
+    ) == "SECOND WORKSPACE PRIVATE"
     assert [item.id for item in adapter._memory_store.list_memories(second)] == [
         second_memory.id
     ]
@@ -918,6 +930,12 @@ def test_account_export_contains_only_authenticated_users_data(
         kind="pdf",
         data=b"%PDF-SECOND-USER-PRIVATE-CONTENT",
     )
+    adapter._workspace_store.write_text(
+        first.user_id, "notes/first.txt", "FIRST WORKSPACE EXPORT CONTENT"
+    )
+    adapter._workspace_store.write_text(
+        second.user_id, "notes/second.txt", "SECOND WORKSPACE PRIVATE CONTENT"
+    )
     VisionSessionStore(registry.database_path).create(first)
 
     session_db = SessionDB(db_path=tmp_path / "state.db")
@@ -974,7 +992,16 @@ def test_account_export_contains_only_authenticated_users_data(
     )
     assert data["audit_events"][-1]["event_type"] == "account.export_requested"
     assert any(first_artifact.id in name for name in names)
+    assert "workspace/notes/first.txt" in names
+    assert data["workspace_files"] == [
+        {
+            "archive_path": "workspace/notes/first.txt",
+            "path": "notes/first.txt",
+            "size": len(b"FIRST WORKSPACE EXPORT CONTENT"),
+        }
+    ]
     assert b"%PDF-FIRST-EXPORT-CONTENT" in unpacked
+    assert b"FIRST WORKSPACE EXPORT CONTENT" in unpacked
 
     portable_json = json.dumps(payload, ensure_ascii=False)
     for forbidden in (
@@ -987,6 +1014,7 @@ def test_account_export_contains_only_authenticated_users_data(
         "SECOND USER PRIVATE MESSAGE",
         "SECOND_WIFI",
         "SECOND PLACE",
+        "SECOND WORKSPACE PRIVATE CONTENT",
         second_artifact.id,
         "token_digest",
         "nonce_digest",
@@ -997,6 +1025,7 @@ def test_account_export_contains_only_authenticated_users_data(
         assert forbidden not in portable_json
         assert forbidden.encode("utf-8") not in unpacked
     assert b"%PDF-SECOND-USER-PRIVATE-CONTENT" not in unpacked
+    assert b"SECOND WORKSPACE PRIVATE CONTENT" not in unpacked
     assert first_token.encode("utf-8") not in unpacked
     session_db.close()
 

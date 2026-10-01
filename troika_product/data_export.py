@@ -10,10 +10,11 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from troika_product.access import AccessPrincipal, AccessRegistry
 from troika_product.artifacts import ArtifactStore
+from troika_product.workspace import WorkspaceStore
 
 
-EXPORT_SCHEMA_VERSION = 1
-RETENTION_POLICY_VERSION = "2026-09-14"
+EXPORT_SCHEMA_VERSION = 2
+RETENTION_POLICY_VERSION = "2026-10-01"
 
 
 class DataExportUnavailableError(RuntimeError):
@@ -83,10 +84,12 @@ class ProductDataExporter:
         registry: AccessRegistry,
         artifact_store: ArtifactStore | None,
         session_db: Any | None,
+        workspace_store: WorkspaceStore | None = None,
     ) -> None:
         self.registry = registry
         self.artifact_store = artifact_store
         self.session_db = session_db
+        self.workspace_store = workspace_store
 
     def build_archive(self, principal: AccessPrincipal) -> bytes:
         """Return a complete in-memory ZIP for the authenticated owner."""
@@ -155,6 +158,21 @@ class ProductDataExporter:
                 archive.writestr(archive_path, artifact_bytes)
                 portable_artifacts.append({**row, "archive_path": archive_path})
 
+            portable_workspace: list[dict[str, object]] = []
+            if self.workspace_store is not None:
+                for relative_path, workspace_bytes in self.workspace_store.export_files(
+                    principal.user_id
+                ):
+                    archive_path = f"workspace/{relative_path}"
+                    archive.writestr(archive_path, workspace_bytes)
+                    portable_workspace.append(
+                        {
+                            "path": relative_path,
+                            "archive_path": archive_path,
+                            "size": len(workspace_bytes),
+                        }
+                    )
+
             payload = {
                 "export": {
                     "schema_version": EXPORT_SCHEMA_VERSION,
@@ -165,6 +183,7 @@ class ProductDataExporter:
                         "bearer token values and digests",
                         "vision nonce digests",
                         "artifact physical paths and storage names",
+                        "workspace physical paths and owner bucket names",
                         "model private reasoning and server system prompts",
                     ],
                 },
@@ -173,6 +192,7 @@ class ProductDataExporter:
                     "conversations": conversations,
                     "locations": locations,
                     "artifacts": portable_artifacts,
+                    "workspace_files": portable_workspace,
                 },
             }
             serialized = json.dumps(

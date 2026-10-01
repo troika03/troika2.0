@@ -963,6 +963,7 @@ class APIServerAdapter(BasePlatformAdapter):
         ).rstrip("/")
         self._access_registry = None
         self._artifact_store = None
+        self._workspace_store = None
         self._proactive_store = None
         self._memory_store = None
         self._assistant_event_task: Optional[asyncio.Task[Any]] = None
@@ -1003,8 +1004,18 @@ class APIServerAdapter(BasePlatformAdapter):
         )
         self._product_auth_error: Optional[str] = None
         self._product_artifact_error: Optional[str] = None
+        self._product_workspace_error: Optional[str] = None
         self._product_artifact_db: Optional[Path] = None
         self._product_artifact_root: Optional[Path] = None
+        raw_workspace_root = extra.get(
+            "product_workspace_root",
+            os.getenv("TROIKA_PRODUCT_WORKSPACE_ROOT", ""),
+        )
+        self._product_workspace_root = (
+            Path(str(raw_workspace_root)).resolve()
+            if raw_workspace_root
+            else (get_hermes_home() / "product-workspaces").resolve()
+        )
         self._product_sessions_dir = get_hermes_home() / "sessions"
         if self._product_auth_enabled:
             try:
@@ -1043,6 +1054,16 @@ class APIServerAdapter(BasePlatformAdapter):
                     # Chat stays available if the optional file subsystem is
                     # unhealthy, while every artifact endpoint/tool fails closed.
                     self._product_artifact_error = str(exc)
+                try:
+                    from troika_product.workspace import WorkspaceStore
+
+                    self._workspace_store = WorkspaceStore(
+                        self._product_workspace_root
+                    )
+                except Exception as exc:
+                    # Chat remains available, but workspace tools, export, and
+                    # account deletion fail closed until storage recovers.
+                    self._product_workspace_error = str(exc)
             except Exception as exc:
                 # Product auth must fail closed at connect time; never silently
                 # fall back to the legacy shared-key mode.
@@ -1860,6 +1881,9 @@ class APIServerAdapter(BasePlatformAdapter):
                 raise RuntimeError("private artifact storage is unavailable")
         else:
             self._artifact_store.delete_all_files_for_user(user_id)
+        if self._workspace_store is None:
+            raise RuntimeError("private workspace storage is unavailable")
+        self._workspace_store.delete_all_for_user(user_id)
 
         if manifest.session_ids:
             session_db = self._ensure_session_db()
@@ -2218,10 +2242,13 @@ class APIServerAdapter(BasePlatformAdapter):
         try:
             from troika_product.data_export import ProductDataExporter
 
+            if self._workspace_store is None:
+                raise RuntimeError("private workspace storage is unavailable")
             exporter = ProductDataExporter(
                 registry=self._access_registry,
                 artifact_store=self._artifact_store,
                 session_db=self._ensure_session_db(),
+                workspace_store=self._workspace_store,
             )
             archive_bytes = await asyncio.to_thread(exporter.build_archive, principal)
         except PermissionError:
@@ -2326,9 +2353,9 @@ class APIServerAdapter(BasePlatformAdapter):
                 "tool_execution": "server",
                 "split_runtime": False,
                 "description": (
-                    "The API server creates a server-side Hermes AIAgent; "
-                    "tools execute on the API-server host unless a future "
-                    "explicit split-runtime mode is enabled."
+                    "The API server creates a server-side Hermes AIAgent. "
+                    "Product tools use owner-scoped stores or explicit device "
+                    "bridges; no general host terminal is exposed."
                 ),
             },
             "features": {
@@ -2347,6 +2374,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 "tool_progress_events": True,
                 "approval_events": True,
                 "private_artifacts": self._artifact_store is not None,
+                "private_workspace": self._workspace_store is not None,
                 "notification_preferences": self._access_registry is not None,
                 "assistant_projects": self._proactive_store is not None,
                 "assistant_inbox": self._proactive_store is not None,
@@ -5208,6 +5236,10 @@ class APIServerAdapter(BasePlatformAdapter):
                     "1" if self._artifact_store is not None else "0",
                 )
                 set_session_override(
+                    "TROIKA_PRODUCT_WORKSPACE_AVAILABLE",
+                    "1" if self._workspace_store is not None else "0",
+                )
+                set_session_override(
                     "TROIKA_PRODUCT_SCREEN_SNAPSHOT_ENABLED",
                     "1" if self._product_screen_snapshot_enabled else "0",
                 )
@@ -5222,6 +5254,7 @@ class APIServerAdapter(BasePlatformAdapter):
                         "TROIKA_PRODUCT_DEVICE_ID",
                         "TROIKA_PRODUCT_TOKEN_ID",
                         "TROIKA_PRODUCT_ARTIFACTS_AVAILABLE",
+                        "TROIKA_PRODUCT_WORKSPACE_AVAILABLE",
                         "TROIKA_PRODUCT_SCREEN_SNAPSHOT_ENABLED",
                         "TROIKA_PRODUCT_SCREEN_EXTERNAL_VISION_ENABLED",
                     ]
@@ -5242,6 +5275,11 @@ class APIServerAdapter(BasePlatformAdapter):
                         str(self._product_artifact_root),
                     )
                     product_override_names.append("TROIKA_PRODUCT_ARTIFACT_ROOT")
+                set_session_override(
+                    "TROIKA_PRODUCT_WORKSPACE_ROOT",
+                    str(self._product_workspace_root),
+                )
+                product_override_names.append("TROIKA_PRODUCT_WORKSPACE_ROOT")
             try:
                 agent = self._create_agent(
                     ephemeral_system_prompt=ephemeral_system_prompt,
@@ -5598,6 +5636,10 @@ class APIServerAdapter(BasePlatformAdapter):
                                 "1" if self._artifact_store is not None else "0",
                             )
                             set_session_override(
+                                "TROIKA_PRODUCT_WORKSPACE_AVAILABLE",
+                                "1" if self._workspace_store is not None else "0",
+                            )
+                            set_session_override(
                                 "TROIKA_PRODUCT_SCREEN_SNAPSHOT_ENABLED",
                                 "1" if self._product_screen_snapshot_enabled else "0",
                             )
@@ -5612,6 +5654,7 @@ class APIServerAdapter(BasePlatformAdapter):
                                     "TROIKA_PRODUCT_DEVICE_ID",
                                     "TROIKA_PRODUCT_TOKEN_ID",
                                     "TROIKA_PRODUCT_ARTIFACTS_AVAILABLE",
+                                    "TROIKA_PRODUCT_WORKSPACE_AVAILABLE",
                                     "TROIKA_PRODUCT_SCREEN_SNAPSHOT_ENABLED",
                                     "TROIKA_PRODUCT_SCREEN_EXTERNAL_VISION_ENABLED",
                                 ]
@@ -5639,6 +5682,13 @@ class APIServerAdapter(BasePlatformAdapter):
                                 product_override_names.append(
                                     "TROIKA_PRODUCT_ARTIFACT_ROOT"
                                 )
+                            set_session_override(
+                                "TROIKA_PRODUCT_WORKSPACE_ROOT",
+                                str(self._product_workspace_root),
+                            )
+                            product_override_names.append(
+                                "TROIKA_PRODUCT_WORKSPACE_ROOT"
+                            )
                         agent = self._create_agent(
                             ephemeral_system_prompt=ephemeral_system_prompt,
                             session_id=session_id,

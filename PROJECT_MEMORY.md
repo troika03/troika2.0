@@ -1016,6 +1016,24 @@ AI-ассистент для Android и Windows, где чат остаётся 
   10 000 запросов в сутки. Production quota enforcement остаётся выключенным,
   поэтому доступ сейчас фактически не ограничивается этим счётчиком.
 
+## Выполнено: личное workspace и безопасные файловые инструменты (2026-10-01)
+
+- В product toolset добавлены `troika_files`, `troika_file_search` и
+  `troika_terminal`. Агент может создавать папки, читать, создавать,
+  редактировать, копировать, перемещать, удалять и искать UTF-8 файлы.
+- Workspace принадлежит аккаунту, а не устройству. Android и Windows под одним
+  аккаунтом используют одни данные; путь владельца скрыт SHA-256 bucket.
+- `troika_terminal` не запускает shell и не имеет доступа к серверу или PC.
+  Разрешены только bounded-команды внутри workspace: `pwd`, `ls`, `cat`,
+  `head`, `tail`, `wc`, `mkdir`, `touch`, `cp`, `mv`, `rm`, `grep`, `find`.
+- Заблокированы абсолютные пути, `..`, symlink escape, shell operators,
+  произвольные executable, сеть и установка пакетов. Лимиты: 1 MB на файл,
+  25 MB и 2 000 файлов на аккаунт. Удаление требует одноразового approval.
+- Workspace включён в owner-scoped ZIP-экспорт и полное удаление аккаунта.
+  Audit хранит тип действия, размер и digest пути, но не путь и содержимое.
+- Production compose использует постоянный volume `/opt/troika/workspaces`.
+  Проверено: targeted `ruff` и 112 product/auth pytest tests прошли.
+
 ## Проверенный рабочий срез и бесплатная модель (2026-09-10)
 
 - Для новой копии создан отдельный локальный runtime:
@@ -1206,6 +1224,8 @@ AI-ассистент для Android и Windows, где чат остаётся 
       backup/object storage с явной отметкой о нереализованных гарантиях.
 - [x] Добавлена owner-scoped личная память: API, Android CRUD, prompt context,
       tool actions, экспорт, account deletion и cross-tenant тесты.
+- [x] Добавлен account-scoped workspace с файловыми CRUD/search tools и
+      безопасным terminal-style allowlist без доступа к host shell или PC.
 - [x] Реализован и проверен автоматический owner-scoped retention worker для
       текущих локальных SQLite/filesystem stores, включая dry-run.
 - [ ] Реализованы и проверены production object purge, backup deletion ledger,

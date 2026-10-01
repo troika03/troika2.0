@@ -37,6 +37,9 @@ def test_normal_product_toolset_has_scope_and_no_experimental_tools():
         "troika_create_docx",
         "troika_create_pdf",
         "troika_create_pptx",
+        "troika_files",
+        "troika_file_search",
+        "troika_terminal",
         "android_status",
     } <= tools
     assert not tools.intersection(FORBIDDEN_PRODUCT_TOOLS)

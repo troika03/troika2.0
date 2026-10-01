@@ -50,7 +50,7 @@ async def client_for(handler):
     return client
 
 
-@pytest.mark.parametrize("bad_access", ["missing", "revoked", "other_user", "other_device", "no_session"])
+@pytest.mark.parametrize("bad_access", ["missing", "revoked", "other_user", "no_session"])
 def test_denied_voice_never_calls_provider(proxy, monkeypatch, bad_access):
     registry = proxy.ACCESS_REGISTRY
     token = issue(registry)
@@ -58,8 +58,6 @@ def test_denied_voice_never_calls_provider(proxy, monkeypatch, bad_access):
     registry.claim_session(owner, "private-session")
     if bad_access == "other_user":
         token = issue(registry, "other@example.com")
-    elif bad_access == "other_device":
-        token = registry.issue_device_token(registry.create_device(owner.user_id, name="Other", platform="android"))
     elif bad_access == "revoked":
         registry.revoke_token(token)
     elif bad_access == "missing":
@@ -80,6 +78,39 @@ def test_denied_voice_never_calls_provider(proxy, monkeypatch, bad_access):
             response = await client.post("/v1/audio/transcriptions", headers=headers, data=upload())
             assert response.status in {401, 403}
         assert not calls
+    asyncio.run(check())
+
+
+def test_same_account_second_device_can_use_owned_session(proxy, monkeypatch):
+    registry = proxy.ACCESS_REGISTRY
+    first_token = issue(registry)
+    owner = registry.authenticate(first_token)
+    registry.claim_session(owner, "shared-account-session")
+    second_token = registry.issue_device_token(
+        registry.create_device(owner.user_id, name="Other", platform="windows")
+    )
+    calls = []
+
+    async def provider(*args):
+        calls.append(args)
+        return "Общий аккаунт", {}
+
+    monkeypatch.setattr(proxy, "_transcribe_local", provider)
+
+    async def check():
+        async with await client_for(proxy.transcribe) as client:
+            response = await client.post(
+                "/v1/audio/transcriptions",
+                headers={
+                    "Authorization": f"Bearer {second_token}",
+                    "X-Hermes-Session-Id": "shared-account-session",
+                },
+                data=upload(),
+            )
+            assert response.status == 200
+            assert (await response.json())["text"] == "Общий аккаунт"
+        assert len(calls) == 1
+
     asyncio.run(check())
 
 
