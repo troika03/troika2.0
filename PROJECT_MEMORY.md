@@ -914,6 +914,31 @@ AI-ассистент для Android и Windows, где чат остаётся 
   matcher появятся на телефоне после установки новой APK. Напоминания остаются
   безопасной opt-in in-app доставкой; отдельный push lifecycle ещё не реализован.
 
+## Выполнено: короткие access-токены и ротация refresh-токенов (2026-10-01)
+
+- Self-service регистрация и вход теперь выдают совместимую пару: access-токен
+  на 24 часа и refresh-токен на 90 дней. Оба секрета хранятся на сервере только
+  как SHA-256 digest; сроки жизни проверяются сервером.
+- `POST /v1/auth/refresh` атомарно заменяет refresh-токен и выдаёт новую пару.
+  Использованный refresh-токен повторно не принимается. Logout, logout-all,
+  отзыв устройства и удаление аккаунта отзывают также refresh-токены.
+- `POST /v1/auth/upgrade-token` переносит существующую Android-сессию с прежнего
+  долгоживущего device token на новую схему без принудительного выхода.
+- Android хранит refresh-токен в зашифрованном виде через AES-GCM и
+  неэкспортируемый ключ Android Keystore. Access-токен остаётся в private
+  SharedPreferences для совместимости с native background service, но теперь
+  короткоживущий; приложение обновляет его перед запросами и при запуске.
+- Проверено: 111 Python product/auth tests; targeted `ruff`; Flutter config
+  tests — 11 passed/1 skipped; Flutter analyze без ошибок, с 20 прежними info;
+  release APK с production HTTPS endpoint успешно собран.
+- Production runtime обновлён до image/release `29c0c2f`; внутренний и публичный
+  health прошли. Публичный E2E подтвердил регистрацию с парой токенов, доступ к
+  subscription status, ротацию refresh, работу нового access и полное удаление
+  временного аккаунта.
+- Новая APK пока не установлена на Samsung: устройство не подключено к ADB.
+  Старая установленная версия продолжает работать со старым токеном до первого
+  запуска новой APK и безопасной миграции.
+
 ## Проверенный рабочий срез и бесплатная модель (2026-09-10)
 
 - Для новой копии создан отдельный локальный runtime:
@@ -957,13 +982,12 @@ AI-ассистент для Android и Windows, где чат остаётся 
 
 ### Что ещё не является готовым продуктом
 
-- Self-service регистрация, вход, список устройств и их отзыв есть. Пока нет
-  подтверждения почты, восстановления пароля и refresh-token rotation.
-  Logout-all реализован в API и Android. Текущий `trk_live_…` device token
-  хранится на сервере только как SHA-256 digest и корректно отзывается, но
-  выдаётся без TTL, а Android пока хранит его в обычных private
-  SharedPreferences, не в Keystore. До публичного запуска нужны короткий access
-  token, ротируемый refresh token в Keystore и миграция существующей сессии.
+- Self-service регистрация, вход, короткий access-токен, ротируемый refresh в
+  Android Keystore, миграция старой Android-сессии, список устройств и отзыв
+  работают. Пока нет подтверждения почты и восстановления пароля. Для полного
+  parity остаются безопасное постоянное хранение refresh-токена в Windows-клиенте
+  и native refresh фонового Android voice service, если приложение не открывали
+  дольше срока access-токена.
 - Subscription-status baseline работает: entitlement, дневной request ledger,
   owner-scoped API и Android-отображение тарифа. На production enforcement
   временно выключен, поэтому лимит справочный. Нет credits/token-cost ledger,
