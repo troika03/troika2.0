@@ -82,6 +82,28 @@ void main() {
         : false,
   );
 
+  test(
+    'hosted Windows build replaces legacy loopback endpoint',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'troika_server_url': 'http://127.0.0.1:8642',
+        'troika_api_key': 'legacy-local-key',
+        'troika_session_id': 'mobile-local-session',
+        'troika_hosted_endpoint_migration_version': 1,
+      });
+
+      await TroikaConfig.init();
+
+      const hostedEndpoint = String.fromEnvironment('TROIKA_SERVER_URL');
+      expect(TroikaConfig.serverUrl, hostedEndpoint);
+      expect(TroikaConfig.apiKey, 'legacy-local-key');
+      expect(TroikaConfig.sessionId, 'mobile-local-session');
+    },
+    skip: const String.fromEnvironment('TROIKA_SERVER_URL').isEmpty
+        ? 'requires TROIKA_SERVER_URL build define'
+        : false,
+  );
+
   test('product STT preserves HTTPS origin, prefix and port', () {
     TroikaConfig.apiKey = 'trk_live_test';
     TroikaConfig.serverUrl = 'https://example.test:9443/troika/';

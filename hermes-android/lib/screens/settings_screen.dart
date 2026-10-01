@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/troika_config.dart';
+import 'auth_screen.dart';
 import '../services/assistant_service.dart';
 import '../services/troika_api_service.dart';
 import '../services/voice_presets.dart';
@@ -531,6 +532,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Настройки сохранены')));
+  }
+
+  Future<void> _openAccountLogin() async {
+    final authenticated = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (routeContext) => AuthScreen(
+          onAuthenticated: () => Navigator.of(routeContext).pop(true),
+        ),
+      ),
+    );
+    if (authenticated != true || !mounted) return;
+    setState(() {
+      _urlController.text = TroikaConfig.serverUrl;
+      _apiKeyController.text = TroikaConfig.apiKey;
+    });
+    await _loadAccountDevices();
+    await _loadSubscription();
   }
 
   Future<void> _loadAccountDevices() async {
@@ -1422,13 +1440,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ],
           if (widget.section == SettingsSection.account &&
-              !TroikaConfig.apiKey.startsWith('trk_live_'))
+              !TroikaConfig.signedIn) ...[
             const Text(
-              'Аккаунт не подключён. Войди в Тройку, чтобы управлять '
-              'устройствами, экспортом и удалением данных.',
+              'Аккаунт не подключён. Войди в Тройку, чтобы история, задачи '
+              'и файлы были одинаковыми на телефоне и Windows.',
               style:
                   TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
             ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _openAccountLogin,
+              icon: const Icon(Icons.login),
+              label: const Text('Войти в аккаунт'),
+            ),
+          ],
           if (widget.section != SettingsSection.permissions &&
               TroikaConfig.apiKey.startsWith('trk_live_')) ...[
             const SizedBox(height: 24),

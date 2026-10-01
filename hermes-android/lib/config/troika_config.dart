@@ -57,23 +57,24 @@ class TroikaConfig {
   static const int _brandMigrationVersion = 1;
   static const String _keyHostedEndpointMigrationVersion =
       'troika_hosted_endpoint_migration_version';
-  static const int _hostedEndpointMigrationVersion = 1;
+  static const int _hostedEndpointMigrationVersion = 2;
 
   // Дефолтные значения.
-  // Мобильный клиент не содержит адрес общего production-сервера. Его задаёт
-  // пользователь после подключения аккаунта; для закрытой разработки адрес
-  // можно передать при сборке через --dart-define=TROIKA_SERVER_URL=...
-  // Десктоп (Windows/Linux/macOS) — LOCAL-FIRST: локальный gateway на этой же
-  // машине (127.0.0.1:8642), где живут PC-инструменты (зрение экрана, управление
-  // ПК). Пользователь может сменить адрес в Настройках — сохранённое значение
-  // перекрывает дефолт (см. геттер serverUrl). См. docs/TROIKA_PC_AGENT_PLAN.md.
-  static const String _mobileServerUrl = String.fromEnvironment(
+  // Product builds receive the shared account API through TROIKA_SERVER_URL on
+  // every platform. Developer desktop builds without that define keep the local
+  // gateway default for PC tools. A saved explicit URL still wins.
+  static const String _packagedServerUrl = String.fromEnvironment(
     'TROIKA_SERVER_URL',
     defaultValue: '',
   );
-  static String get defaultServerUrl => (Platform.isAndroid || Platform.isIOS)
-      ? _mobileServerUrl
-      : 'http://127.0.0.1:8642';
+  static String get defaultServerUrl {
+    final packagedEndpoint = _packagedServerUrl.trim();
+    if (packagedEndpoint.isNotEmpty) return packagedEndpoint;
+    return (Platform.isAndroid || Platform.isIOS)
+        ? ''
+        : 'http://127.0.0.1:8642';
+  }
+
   static const String defaultApiKey = '';
   static const String defaultModel =
       ''; // пустая строка = использует модель из конфига на PC
@@ -127,7 +128,7 @@ class TroikaConfig {
   }
 
   static Future<void> _migrateHostedEndpoint() async {
-    final endpoint = _mobileServerUrl.trim();
+    final endpoint = _packagedServerUrl.trim();
     if (endpoint.isEmpty ||
         (_prefs.getInt(_keyHostedEndpointMigrationVersion) ?? 0) >=
             _hostedEndpointMigrationVersion) {
@@ -138,8 +139,13 @@ class TroikaConfig {
     final accountEmail =
         _prefs.getString(_keyAccountEmail)?.trim().toLowerCase() ?? '';
     final legacyBetaAccount = accountEmail.endsWith('@beta.troika.local');
+    final legacyLocalDesktop = !Platform.isAndroid &&
+        !Platform.isIOS &&
+        accountEmail.isEmpty &&
+        (currentUrl == 'http://127.0.0.1:8642' ||
+            currentUrl == 'http://localhost:8642');
 
-    if (currentUrl.isEmpty || legacyBetaAccount) {
+    if (currentUrl.isEmpty || legacyBetaAccount || legacyLocalDesktop) {
       await _setStringCompat(_keyServerUrl, _legacyKeyServerUrl, endpoint);
     }
     if (legacyBetaAccount) {
