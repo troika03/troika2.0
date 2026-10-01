@@ -367,6 +367,17 @@ class AssistantService extends ChangeNotifier {
 
     _setState(AssistantState.processing);
 
+    // Android uses the platform SpeechRecognizer directly, so the second orb
+    // tap finalizes that recognizer instead of trying to stop Dart's recorder.
+    if (Platform.isAndroid) {
+      try {
+        await _platform.invokeMethod<void>('stopLocalSpeechRecognition');
+      } catch (e) {
+        _setError('Не удалось завершить распознавание: $e');
+      }
+      return;
+    }
+
     final audioFile = await _recorder.stopRecording();
     if (audioFile == null) {
       _setError('Не удалось записать аудио');

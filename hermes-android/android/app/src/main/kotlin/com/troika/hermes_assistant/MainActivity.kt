@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.view.WindowManager
@@ -32,10 +33,10 @@ class MainActivity : FlutterActivity() {
     private val REQ_LOCATION = 7422
     private val REQ_LOCATION_BG = 7423
     private val REQ_SCREEN_CAPTURE = 7424
-    private val REQ_LOCAL_SPEECH = 7425
     private var methodChannel: MethodChannel? = null
     private var pendingScreenConsentResult: MethodChannel.Result? = null
     private var pendingLocalSpeechResult: MethodChannel.Result? = null
+    private var localSpeechRecognizer: SpeechRecognizer? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -181,6 +182,10 @@ class MainActivity : FlutterActivity() {
                 "recognizeLocalCommand" -> {
                     startLocalSpeechRecognition(result)
                 }
+                "stopLocalSpeechRecognition" -> {
+                    stopLocalSpeechRecognition()
+                    result.success(null)
+                }
                 "requestScreenSnapshotConsent" -> {
                     if (ScreenCaptureService.isReady()) {
                         result.success(true)
@@ -231,6 +236,14 @@ class MainActivity : FlutterActivity() {
         if (intent.getBooleanExtra("wake_word_detected", false)) {
             methodChannel?.invokeMethod("wake_word_detected", null)
         }
+    }
+
+    override fun onDestroy() {
+        try { localSpeechRecognizer?.cancel() } catch (_: Exception) {}
+        try { localSpeechRecognizer?.destroy() } catch (_: Exception) {}
+        localSpeechRecognizer = null
+        pendingLocalSpeechResult = null
+        super.onDestroy()
     }
 
     private fun sharePrivateFile(rawPath: String): Boolean {
@@ -550,35 +563,6 @@ class MainActivity : FlutterActivity() {
     @Deprecated("Uses the platform MediaProjection consent result")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQ_LOCAL_SPEECH) {
-            val pending = pendingLocalSpeechResult
-            pendingLocalSpeechResult = null
-            if (pending == null) return
-            if (resultCode != RESULT_OK || data == null) {
-                pending.success(
-                    mapOf("handled" to false, "response" to "", "heard" to "")
-                )
-                return
-            }
-            val heard = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-                ?.firstOrNull()
-                ?.trim()
-                .orEmpty()
-            val response = if (heard.isEmpty()) null else
-                PhoneCommands.tryExecute(
-                    applicationContext,
-                    heard.lowercase(Locale.forLanguageTag("ru-RU")),
-                    heard,
-                )
-            pending.success(
-                mapOf(
-                    "handled" to (response != null),
-                    "response" to (response ?: ""),
-                    "heard" to heard,
-                )
-            )
-            return
-        }
         if (requestCode == REQ_SCREEN_CAPTURE) {
             if (resultCode == RESULT_OK && data != null) {
                 val serviceIntent = ScreenCaptureService.startIntent(this, resultCode, data)
@@ -595,7 +579,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    @Suppress("DEPRECATION")
     private fun startLocalSpeechRecognition(result: MethodChannel.Result) {
         if (pendingLocalSpeechResult != null) {
             result.error("speech_pending", "Распознавание уже запущено", null)
@@ -607,6 +590,68 @@ class MainActivity : FlutterActivity() {
             result.error("microphone_denied", "Нет доступа к микрофону", null)
             return
         }
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            result.error(
+                "speech_unavailable",
+                "На устройстве нет системного распознавания речи",
+                null,
+            )
+            return
+        }
+
+        val recognizer = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
+            ) {
+                SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
+            } else {
+                SpeechRecognizer.createSpeechRecognizer(this)
+            }
+        } catch (e: Exception) {
+            result.error(
+                "speech_unavailable",
+                e.message ?: "Не удалось запустить системное распознавание",
+                null,
+            )
+            return
+        }
+
+        pendingLocalSpeechResult = result
+        localSpeechRecognizer = recognizer
+        recognizer.setRecognitionListener(object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) = Unit
+            override fun onBeginningOfSpeech() = Unit
+            override fun onRmsChanged(rmsdB: Float) = Unit
+            override fun onBufferReceived(buffer: ByteArray?) = Unit
+            override fun onEndOfSpeech() = Unit
+            override fun onEvent(eventType: Int, params: Bundle?) = Unit
+
+            override fun onPartialResults(partialResults: Bundle?) {
+                val partial = partialResults
+                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    ?.firstOrNull()
+                    ?.trim()
+                    .orEmpty()
+                if (partial.isNotEmpty()) {
+                    methodChannel?.invokeMethod("debug_heard", partial)
+                }
+            }
+
+            override fun onResults(results: Bundle?) {
+                val heard = results
+                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    ?.firstOrNull()
+                    ?.trim()
+                    .orEmpty()
+                finishLocalSpeechRecognition(heard)
+            }
+
+            override fun onError(error: Int) {
+                android.util.Log.i("MainActivity", "System speech ended with code=$error")
+                finishLocalSpeechRecognition("")
+            }
+        })
+
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(
                 RecognizerIntent.EXTRA_LANGUAGE_MODEL,
@@ -615,24 +660,48 @@ class MainActivity : FlutterActivity() {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "ru-RU")
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Скажите команду Тройке")
         }
-        if (intent.resolveActivity(packageManager) == null) {
-            result.error(
-                "speech_unavailable",
-                "На устройстве нет системного распознавания речи",
-                null,
-            )
-            return
-        }
-        pendingLocalSpeechResult = result
         try {
-            startActivityForResult(intent, REQ_LOCAL_SPEECH)
+            recognizer.startListening(intent)
         } catch (e: Exception) {
             pendingLocalSpeechResult = null
-            result.error("speech_failed", e.message ?: "Не удалось открыть распознавание", null)
+            clearLocalSpeechRecognizer()
+            result.error(
+                "speech_failed",
+                e.message ?: "Не удалось запустить распознавание",
+                null,
+            )
         }
+    }
+
+    private fun finishLocalSpeechRecognition(heard: String) {
+        val pending = pendingLocalSpeechResult ?: return
+        pendingLocalSpeechResult = null
+        clearLocalSpeechRecognizer()
+        val response = if (heard.isEmpty()) null else
+            PhoneCommands.tryExecute(
+                applicationContext,
+                heard.lowercase(Locale.forLanguageTag("ru-RU")),
+                heard,
+            )
+        pending.success(
+            mapOf(
+                "handled" to (response != null),
+                "response" to (response ?: ""),
+                "heard" to heard,
+            )
+        )
+    }
+
+    private fun stopLocalSpeechRecognition() {
+        try { localSpeechRecognizer?.stopListening() } catch (_: Exception) {}
+    }
+
+    private fun clearLocalSpeechRecognizer() {
+        try { localSpeechRecognizer?.destroy() } catch (_: Exception) {}
+        localSpeechRecognizer = null
     }
 
     @Suppress("BatteryLife")
