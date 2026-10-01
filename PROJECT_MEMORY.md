@@ -1036,7 +1036,9 @@ AI-ассистент для Android и Windows, где чат остаётся 
 - Production runtime обновлён до image/release `2793c2d`; API и STT healthy.
   Production smoke на временных аккаунтах подтвердил регистрацию всех трёх
   tools, write/search/read через bounded terminal, cross-account изоляцию и
-  отсутствие общего `terminal`. Fixture-аккаунты и их workspace удалены.
+  отсутствие общего `terminal`. Дополнительный полный agent E2E подтвердил:
+  production-модель `openrouter/free` сама вызвала `troika_files`, создала файл
+  и вернула результат. Fixture-аккаунты и их workspace удалены.
 
 ## Проверенный рабочий срез и бесплатная модель (2026-09-10)
 
