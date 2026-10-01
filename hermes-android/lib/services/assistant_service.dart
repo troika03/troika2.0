@@ -59,6 +59,8 @@ class AssistantService extends ChangeNotifier {
   // Единая лента диалога — голос и текст вперемешку, как в мессенджере.
   final List<ChatMessage> _messages = [];
   bool _historyLoaded = false;
+  Timer? _accountSyncTimer;
+  bool _accountSyncInFlight = false;
 
   // Скрытый тег эмоции [emo:...] управляет интонацией голоса. В тексте чата и
   // в произношении локального TTS его быть не должно — вырезаем.
@@ -134,7 +136,9 @@ class AssistantService extends ChangeNotifier {
     TroikaConfig.serverUrl = TroikaConfig.serverUrl;
     TroikaConfig.apiKey = TroikaConfig.apiKey;
     if (TroikaConfig.signedIn) {
-      await AccountService().ensureFreshSession();
+      await AccountService().ensureFreshSession(
+        force: !TroikaConfig.sessionId.startsWith('ses_'),
+      );
       unawaited(_troika.syncDeviceTimeZone());
     }
 
@@ -145,13 +149,40 @@ class AssistantService extends ChangeNotifier {
 
     // Подтянуть историю общей сессии с сервера, чтобы чат открылся не пустым.
     unawaited(loadHistory());
+    _accountSyncTimer ??= Timer.periodic(
+      const Duration(seconds: 20),
+      (_) => unawaited(_syncAccountConversation()),
+    );
+  }
+
+  /// Switch a newly authenticated installation to the account-wide session
+  /// and load the same conversation that other owned devices see.
+  Future<void> onAccountAuthenticated() async {
+    await AccountService().ensureFreshSession();
+    unawaited(_troika.syncDeviceTimeZone());
+    await loadHistory(replaceEvenIfEmpty: true);
+  }
+
+  Future<void> _syncAccountConversation() async {
+    if (!TroikaConfig.signedIn ||
+        _accountSyncInFlight ||
+        _state != AssistantState.idle ||
+        _messages.any((message) => message.pending)) {
+      return;
+    }
+    _accountSyncInFlight = true;
+    try {
+      await loadHistory();
+    } finally {
+      _accountSyncInFlight = false;
+    }
   }
 
   /// Загрузить ленту общей сессии (голос+текст) с сервера.
-  Future<void> loadHistory() async {
+  Future<void> loadHistory({bool replaceEvenIfEmpty = false}) async {
     try {
       final loaded = await _troika.loadSessionHistory();
-      if (loaded.isNotEmpty) {
+      if (loaded.isNotEmpty || replaceEvenIfEmpty) {
         _messages
           ..clear()
           ..addAll(loaded);
@@ -681,6 +712,7 @@ class AssistantService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _accountSyncTimer?.cancel();
     resolvePendingApproval('deny');
     _recorder.dispose();
     _tts.dispose();

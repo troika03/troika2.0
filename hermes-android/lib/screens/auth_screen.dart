@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../config/troika_config.dart';
 import '../services/account_service.dart';
-import '../services/troika_api_service.dart';
+import '../services/assistant_service.dart';
 
 class AuthScreen extends StatefulWidget {
   final VoidCallback onAuthenticated;
@@ -61,7 +62,8 @@ class _AuthScreenState extends State<AuthScreen> {
       } else {
         await _accounts.login(email: email, password: password);
       }
-      await TroikaApiService().syncDeviceTimeZone();
+      if (!mounted) return;
+      await context.read<AssistantService>().onAccountAuthenticated();
       if (mounted) widget.onAuthenticated();
     } on AccountException catch (error) {
       if (mounted) setState(() => _error = error.message);

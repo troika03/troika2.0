@@ -234,6 +234,7 @@ class TroikaConfig {
     required String token,
     String refreshToken = '',
     double accessExpiresAt = 0,
+    String homeSessionId = '',
   }) async {
     await _prefs.setString(_keyAccountEmail, email.trim().toLowerCase());
     await _setStringCompat(_keyApiKey, _legacyKeyApiKey, token.trim());
@@ -244,6 +245,21 @@ class TroikaConfig {
       );
     }
     if (refreshToken.isNotEmpty) await storeRefreshToken(refreshToken);
+    final sharedSession = homeSessionId.trim();
+    if (sharedSession.isNotEmpty) {
+      _sessionKey = sharedSession;
+      _sessionId = sharedSession;
+      await _setStringCompat(
+        _keySessionKey,
+        _legacyKeySessionKey,
+        sharedSession,
+      );
+      await _setStringCompat(
+        _keySessionId,
+        _legacyKeySessionId,
+        sharedSession,
+      );
+    }
   }
 
   static DateTime? get accessTokenExpiresAt {
@@ -254,7 +270,9 @@ class TroikaConfig {
   }
 
   static Future<bool> storeRefreshToken(String token) async {
-    if (!Platform.isAndroid || token.isEmpty) return false;
+    if ((!Platform.isAndroid && !Platform.isWindows) || token.isEmpty) {
+      return false;
+    }
     try {
       const platform = MethodChannel('com.troika.hermes/background');
       return await platform.invokeMethod<bool>(
@@ -268,7 +286,7 @@ class TroikaConfig {
   }
 
   static Future<String> getRefreshToken() async {
-    if (!Platform.isAndroid) return '';
+    if (!Platform.isAndroid && !Platform.isWindows) return '';
     try {
       const platform = MethodChannel('com.troika.hermes/background');
       return (await platform.invokeMethod<String>('getRefreshToken')) ?? '';
@@ -279,7 +297,7 @@ class TroikaConfig {
 
   static Future<void> clearRefreshToken() async {
     await _prefs.remove(_keyAccessTokenExpiresAt);
-    if (!Platform.isAndroid) return;
+    if (!Platform.isAndroid && !Platform.isWindows) return;
     try {
       const platform = MethodChannel('com.troika.hermes/background');
       await platform.invokeMethod<void>('clearRefreshToken');

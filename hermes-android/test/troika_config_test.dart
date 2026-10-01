@@ -155,6 +155,21 @@ void main() {
     );
   });
 
+  test('account login adopts shared conversation identity', () async {
+    await TroikaConfig.saveAccount(
+      email: 'owner@example.com',
+      token: 'trk_live_private',
+      homeSessionId: 'ses_shared_account',
+    );
+
+    expect(TroikaConfig.sessionId, 'ses_shared_account');
+    expect(TroikaConfig.sessionKey, 'ses_shared_account');
+    expect(
+      TroikaConfig.chatHeaders['X-Hermes-Session-Id'],
+      'ses_shared_account',
+    );
+  });
+
   test('does not send device context without explicit consent', () async {
     expect(TroikaConfig.locationContextEnabled, isFalse);
     await TroikaConfig.setLocationContextEnabled(true);

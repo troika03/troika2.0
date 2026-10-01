@@ -131,6 +131,7 @@ class AccessRegistry:
                     email TEXT NOT NULL UNIQUE,
                     password_salt TEXT,
                     password_digest TEXT,
+                    home_session_id TEXT,
                     status TEXT NOT NULL DEFAULT 'active',
                     created_at REAL NOT NULL
                 );
@@ -243,6 +244,23 @@ class AccessRegistry:
                 connection.execute(
                     "ALTER TABLE troika_users ADD COLUMN password_digest TEXT"
                 )
+            if "home_session_id" not in user_columns:
+                connection.execute(
+                    "ALTER TABLE troika_users ADD COLUMN home_session_id TEXT"
+                )
+            users_without_home = connection.execute(
+                "SELECT id FROM troika_users "
+                "WHERE home_session_id IS NULL OR trim(home_session_id) = ''"
+            ).fetchall()
+            for row in users_without_home:
+                connection.execute(
+                    "UPDATE troika_users SET home_session_id = ? WHERE id = ?",
+                    (self._new_id("ses"), row["id"]),
+                )
+            connection.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_troika_users_home_session "
+                "ON troika_users(home_session_id)"
+            )
 
     @staticmethod
     def _new_id(prefix: str) -> str:
@@ -297,9 +315,16 @@ class AccessRegistry:
             try:
                 connection.execute(
                     "INSERT INTO troika_users "
-                    "(id, email, password_salt, password_digest, created_at) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (user_id, normalized_email, salt.hex(), digest, now),
+                    "(id, email, password_salt, password_digest, home_session_id, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        user_id,
+                        normalized_email,
+                        salt.hex(),
+                        digest,
+                        self._new_id("ses"),
+                        now,
+                    ),
                 )
                 connection.execute(
                     "INSERT INTO troika_entitlements "
@@ -375,8 +400,9 @@ class AccessRegistry:
         now = time.time()
         with self._connect() as connection:
             connection.execute(
-                "INSERT INTO troika_users (id, email, created_at) VALUES (?, ?, ?)",
-                (user_id, normalized_email, now),
+                "INSERT INTO troika_users "
+                "(id, email, home_session_id, created_at) VALUES (?, ?, ?, ?)",
+                (user_id, normalized_email, self._new_id("ses"), now),
             )
             connection.execute(
                 "INSERT INTO troika_entitlements "
@@ -1025,10 +1051,10 @@ class AccessRegistry:
                     ),
                 )
                 return True
-            return (
-                existing["user_id"] == principal.user_id
-                and existing["device_id"] == principal.device_id
-            )
+            # A conversation belongs to the account. ``device_id`` records the
+            # device that created it, but another active device of the same
+            # account may continue it after synchronisation.
+            return existing["user_id"] == principal.user_id
 
     def session_belongs_to(self, principal: AccessPrincipal, session_id: str) -> bool:
         """Check session ownership without creating a new mapping."""
@@ -1037,11 +1063,19 @@ class AccessRegistry:
                 "SELECT user_id, device_id FROM troika_sessions WHERE session_id = ?",
                 (session_id.strip(),),
             ).fetchone()
-        return bool(
-            row
-            and row["user_id"] == principal.user_id
-            and row["device_id"] == principal.device_id
-        )
+        return bool(row and row["user_id"] == principal.user_id)
+
+    def account_home_session_id(self, principal: AccessPrincipal) -> str:
+        """Return the stable shared conversation ID for this account."""
+        with self._connect() as connection:
+            self._require_active_principal(connection, principal)
+            row = connection.execute(
+                "SELECT home_session_id FROM troika_users WHERE id = ?",
+                (principal.user_id,),
+            ).fetchone()
+        if row is None or not row["home_session_id"]:
+            raise RuntimeError("account home session is unavailable")
+        return str(row["home_session_id"])
 
     def user_session_ids(self, principal: AccessPrincipal) -> set[str]:
         """Return only the active user's server-side session IDs."""
@@ -1088,7 +1122,8 @@ class AccessRegistry:
             }
 
             account = connection.execute(
-                "SELECT id, email, status, created_at FROM troika_users WHERE id = ?",
+                "SELECT id, email, home_session_id, status, created_at "
+                "FROM troika_users WHERE id = ?",
                 (principal.user_id,),
             ).fetchone()
             if account is None:

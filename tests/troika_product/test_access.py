@@ -175,6 +175,28 @@ def test_session_claims_are_isolated_between_users(tmp_path) -> None:
     assert not registry.session_belongs_to(second, "private-session")
 
 
+def test_account_home_session_is_shared_between_owned_devices(tmp_path) -> None:
+    registry = AccessRegistry(tmp_path / "access.db")
+    user_id = registry.create_user("owner@example.com")
+    phone_token = registry.issue_device_token(
+        registry.create_device(user_id, name="Phone", platform="android")
+    )
+    pc_token = registry.issue_device_token(
+        registry.create_device(user_id, name="PC", platform="windows")
+    )
+    phone = registry.authenticate(phone_token)
+    pc = registry.authenticate(pc_token)
+    assert phone is not None and pc is not None
+
+    home_session_id = registry.account_home_session_id(phone)
+
+    assert home_session_id.startswith("ses_")
+    assert registry.account_home_session_id(pc) == home_session_id
+    assert registry.claim_session(phone, home_session_id)
+    assert registry.claim_session(pc, home_session_id)
+    assert registry.session_belongs_to(pc, home_session_id)
+
+
 def test_daily_quota_is_atomic_per_user_and_resets_each_utc_day(tmp_path) -> None:
     registry = AccessRegistry(tmp_path / "access.db")
     user_id = registry.create_user("one@example.com", daily_request_limit=2)

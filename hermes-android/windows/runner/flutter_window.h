@@ -37,6 +37,8 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       windows_channel_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      account_channel_;
   bool compact_mode_ = false;
   UINT hotkey_modifiers_ = 0;
   UINT hotkey_key_ = 0;

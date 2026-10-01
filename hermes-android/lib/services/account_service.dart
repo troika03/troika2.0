@@ -73,11 +73,18 @@ class AccountService {
       }
       final accessExpiresAt =
           (payload['access_expires_at'] as num?)?.toDouble() ?? 0;
+      final homeSessionId = payload['home_session_id']?.toString().trim() ?? '';
+      if (homeSessionId.isEmpty) {
+        throw const AccountException(
+          'Сервер не вернул общую историю аккаунта.',
+        );
+      }
       await TroikaConfig.saveAccount(
         email: email,
         token: token,
         refreshToken: refreshToken,
         accessExpiresAt: accessExpiresAt,
+        homeSessionId: homeSessionId,
       );
     } on SocketException {
       throw const AccountException('Нет соединения с сервером регистрации.');
@@ -122,9 +129,12 @@ class AccountService {
       final access = (payload['access_token'] ?? payload['token']).toString();
       final nextRefresh = (payload['refresh_token'] ?? '').toString();
       final expiresAt = (payload['access_expires_at'] as num?)?.toDouble() ?? 0;
+      final homeSessionId =
+          (payload['home_session_id'] ?? '').toString().trim();
       if (!access.startsWith('trk_live_') ||
           !nextRefresh.startsWith('trk_refresh_') ||
-          expiresAt <= 0) {
+          expiresAt <= 0 ||
+          homeSessionId.isEmpty) {
         return false;
       }
       await TroikaConfig.saveAccount(
@@ -132,6 +142,7 @@ class AccountService {
         token: access,
         refreshToken: nextRefresh,
         accessExpiresAt: expiresAt,
+        homeSessionId: homeSessionId,
       );
       return true;
     } catch (_) {

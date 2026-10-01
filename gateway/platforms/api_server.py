@@ -1498,6 +1498,12 @@ class APIServerAdapter(BasePlatformAdapter):
             return web.json_response(
                 _openai_error(message, code="registration_failed"), status=status
             )
+        principal = self._access_registry.authenticate(pair.access_token)
+        if principal is None:
+            return web.json_response(
+                _openai_error("Account session setup failed"), status=503
+            )
+        home_session_id = self._access_registry.account_home_session_id(principal)
         return web.json_response(
             {
                 "token": pair.access_token,
@@ -1507,6 +1513,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 "access_expires_at": pair.access_expires_at,
                 "refresh_expires_at": pair.refresh_expires_at,
                 "token_type": "bearer",
+                "home_session_id": home_session_id,
                 "account": {"email": email.lower(), "plan": "free"},
             },
             status=201,
@@ -1552,6 +1559,12 @@ class APIServerAdapter(BasePlatformAdapter):
             return web.json_response(
                 _openai_error("Account login failed", code="login_failed"), status=400
             )
+        principal = self._access_registry.authenticate(pair.access_token)
+        if principal is None:
+            return web.json_response(
+                _openai_error("Account session setup failed"), status=503
+            )
+        home_session_id = self._access_registry.account_home_session_id(principal)
         return web.json_response(
             {
                 "token": pair.access_token,
@@ -1561,6 +1574,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 "access_expires_at": pair.access_expires_at,
                 "refresh_expires_at": pair.refresh_expires_at,
                 "token_type": "bearer",
+                "home_session_id": home_session_id,
                 "account": {"email": email.lower()},
             },
             headers={"Cache-Control": "no-store"},
@@ -1586,6 +1600,12 @@ class APIServerAdapter(BasePlatformAdapter):
                 ),
                 status=401,
             )
+        principal = self._access_registry.authenticate(pair.access_token)
+        if principal is None:
+            return web.json_response(
+                _openai_error("Account session setup failed"), status=503
+            )
+        home_session_id = self._access_registry.account_home_session_id(principal)
         return web.json_response(
             {
                 "token": pair.access_token,
@@ -1595,6 +1615,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 "access_expires_at": pair.access_expires_at,
                 "refresh_expires_at": pair.refresh_expires_at,
                 "token_type": "bearer",
+                "home_session_id": home_session_id,
             },
             headers={"Cache-Control": "no-store"},
         )
@@ -1612,6 +1633,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 _openai_error("Token upgrade is unavailable"), status=404
             )
         pair = self._access_registry.upgrade_access_token(principal)
+        home_session_id = self._access_registry.account_home_session_id(principal)
         return web.json_response(
             {
                 "token": pair.access_token,
@@ -1621,6 +1643,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 "access_expires_at": pair.access_expires_at,
                 "refresh_expires_at": pair.refresh_expires_at,
                 "token_type": "bearer",
+                "home_session_id": home_session_id,
             },
             headers={"Cache-Control": "no-store"},
         )

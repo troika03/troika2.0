@@ -2,11 +2,15 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include <shlobj.h>
 #include <wincodec.h>
+#include <wincrypt.h>
 #include <wrl/client.h>
 #include <shellapi.h>
 
@@ -15,6 +19,83 @@
 namespace {
 
 using Microsoft::WRL::ComPtr;
+
+std::optional<std::filesystem::path> RefreshTokenPath() {
+  PWSTR local_app_data = nullptr;
+  const HRESULT result = SHGetKnownFolderPath(
+      FOLDERID_LocalAppData, KF_FLAG_CREATE, nullptr, &local_app_data);
+  if (FAILED(result) || local_app_data == nullptr) return std::nullopt;
+  std::filesystem::path directory(local_app_data);
+  CoTaskMemFree(local_app_data);
+  directory /= L"Troika";
+  std::error_code error;
+  std::filesystem::create_directories(directory, error);
+  if (error) return std::nullopt;
+  return directory / L"refresh_token.bin";
+}
+
+bool StoreRefreshToken(const std::string& token) {
+  const auto path = RefreshTokenPath();
+  if (!path || token.empty()) return false;
+  DATA_BLOB input{
+      static_cast<DWORD>(token.size()),
+      reinterpret_cast<BYTE*>(const_cast<char*>(token.data()))};
+  DATA_BLOB encrypted{};
+  if (!CryptProtectData(&input, L"Troika refresh token", nullptr, nullptr,
+                        nullptr, CRYPTPROTECT_UI_FORBIDDEN, &encrypted)) {
+    return false;
+  }
+
+  const std::filesystem::path temporary = path->wstring() + L".tmp";
+  std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
+  output.write(reinterpret_cast<const char*>(encrypted.pbData),
+               encrypted.cbData);
+  output.close();
+  LocalFree(encrypted.pbData);
+  if (!output) {
+    std::error_code ignored;
+    std::filesystem::remove(temporary, ignored);
+    return false;
+  }
+  std::error_code error;
+  std::filesystem::rename(temporary, *path, error);
+  if (error) {
+    std::filesystem::remove(*path, error);
+    error.clear();
+    std::filesystem::rename(temporary, *path, error);
+  }
+  return !error;
+}
+
+std::string GetRefreshToken() {
+  const auto path = RefreshTokenPath();
+  if (!path || !std::filesystem::exists(*path)) return {};
+  std::ifstream input(*path, std::ios::binary);
+  std::vector<BYTE> encrypted(
+      (std::istreambuf_iterator<char>(input)),
+      std::istreambuf_iterator<char>());
+  if (input.bad() || encrypted.empty() ||
+      encrypted.size() > static_cast<size_t>(64 * 1024)) {
+    return {};
+  }
+  DATA_BLOB protected_data{
+      static_cast<DWORD>(encrypted.size()), encrypted.data()};
+  DATA_BLOB clear{};
+  if (!CryptUnprotectData(&protected_data, nullptr, nullptr, nullptr, nullptr,
+                          CRYPTPROTECT_UI_FORBIDDEN, &clear)) {
+    return {};
+  }
+  std::string token(reinterpret_cast<const char*>(clear.pbData), clear.cbData);
+  LocalFree(clear.pbData);
+  return token;
+}
+
+void ClearRefreshToken() {
+  const auto path = RefreshTokenPath();
+  if (!path) return;
+  std::error_code ignored;
+  std::filesystem::remove(*path, ignored);
+}
 
 std::wstring Utf16FromUtf8(const std::string& value) {
   if (value.empty()) return {};
@@ -236,6 +317,38 @@ bool FlutterWindow::OnCreate() {
         }
         result->NotImplemented();
       });
+  account_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(),
+          "com.troika.hermes/background",
+          &flutter::StandardMethodCodec::GetInstance());
+  account_channel_->SetMethodCallHandler(
+      [](const auto& call, auto result) {
+        if (call.method_name() == "storeRefreshToken") {
+          const auto* arguments =
+              std::get_if<flutter::EncodableMap>(call.arguments());
+          const auto token_key = flutter::EncodableValue("token");
+          if (arguments == nullptr || arguments->find(token_key) == arguments->end()) {
+            result->Success(flutter::EncodableValue(false));
+            return;
+          }
+          const auto* token =
+              std::get_if<std::string>(&arguments->at(token_key));
+          result->Success(flutter::EncodableValue(
+              token != nullptr && StoreRefreshToken(*token)));
+          return;
+        }
+        if (call.method_name() == "getRefreshToken") {
+          result->Success(flutter::EncodableValue(GetRefreshToken()));
+          return;
+        }
+        if (call.method_name() == "clearRefreshToken") {
+          ClearRefreshToken();
+          result->Success();
+          return;
+        }
+        result->NotImplemented();
+      });
   RegisterSelectedHotkey("ctrlAltSpace");
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -252,6 +365,7 @@ bool FlutterWindow::OnCreate() {
 
 void FlutterWindow::OnDestroy() {
   UnregisterHotKey(GetHandle(), kTroikaHotkeyId);
+  account_channel_.reset();
   windows_channel_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
