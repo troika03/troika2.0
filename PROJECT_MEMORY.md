@@ -995,8 +995,14 @@ AI-ассистент для Android и Windows, где чат остаётся 
   account-backed решением и прошёл DOCX validation против исходной структуры;
   PDF-визуализация изменённых страниц проверена без обрезания и артефактов.
 - Проверено: 39 targeted Python product/auth/retention tests, `ruff`, 41 Flutter
-  tests/1 skipped, Flutter analyze без ошибок с 20 прежними info и Windows
-  release build. Production deployment и новая Android APK ещё не выполнены.
+  tests/1 skipped, Flutter analyze без ошибок с 20 прежними info, Windows
+  release build и Android release APK с production HTTPS endpoint.
+- Production runtime обновлён до image/release `0970f56`; API и STT healthy.
+  Production migration smoke создал временный аккаунт, вошёл с Android- и
+  Windows-устройства, получил одинаковый `home_session_id`, подтвердил доступ
+  второго устройства к общей сессии и полностью удалил fixture-аккаунт.
+- Android APK пока не установлена на Samsung: ADB не видит подключённых
+  устройств. Готовый файл находится в стандартном Flutter release output.
 
 ## Проверенный рабочий срез и бесплатная модель (2026-09-10)
 
