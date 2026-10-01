@@ -1033,6 +1033,10 @@ AI-ассистент для Android и Windows, где чат остаётся 
   Audit хранит тип действия, размер и digest пути, но не путь и содержимое.
 - Production compose использует постоянный volume `/opt/troika/workspaces`.
   Проверено: targeted `ruff` и 112 product/auth pytest tests прошли.
+- Production runtime обновлён до image/release `2793c2d`; API и STT healthy.
+  Production smoke на временных аккаунтах подтвердил регистрацию всех трёх
+  tools, write/search/read через bounded terminal, cross-account изоляцию и
+  отсутствие общего `terminal`. Fixture-аккаунты и их workspace удалены.
 
 ## Проверенный рабочий срез и бесплатная модель (2026-09-10)
 
