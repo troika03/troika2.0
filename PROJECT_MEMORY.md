@@ -1001,9 +1001,9 @@ AI-ассистент для Android и Windows, где чат остаётся 
   Production migration smoke создал временный аккаунт, вошёл с Android- и
   Windows-устройства, получил одинаковый `home_session_id`, подтвердил доступ
   второго устройства к общей сессии и полностью удалил fixture-аккаунт.
-- Release APK с account sync установлена поверх данных и запущена на Samsung
-  SM-A225F. Следующая сборка с Windows account-entry исправлением также готова,
-  но телефон отключился от ADB до повторной установки.
+- Финальная release APK с account sync и account-entry исправлением установлена
+  поверх данных и запущена на Samsung SM-A225F; package version `1.0.0`,
+  `MainActivity` подтверждена как активная.
 - Старый Windows local-gateway ключ больше не блокирует подключение аккаунта:
   экран «Аккаунт и данные» показывает действие «Войти в аккаунт», а packaged
   production build мигрирует loopback endpoint на общий HTTPS API. Проверено
