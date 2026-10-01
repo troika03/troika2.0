@@ -61,6 +61,10 @@ class HermesListenerService : Service() {
         const val ACTION_TRIGGER_DIALOG = "TRIGGER_DIALOG"
         const val ACTION_INTERRUPT_TTS = "INTERRUPT_TTS"
         const val ACTION_REFRESH_PHONE_BRIDGE = "REFRESH_PHONE_BRIDGE"
+        const val ACTION_PAUSE_WAKE_FOR_FOREGROUND_SPEECH =
+            "PAUSE_WAKE_FOR_FOREGROUND_SPEECH"
+        const val ACTION_RESUME_WAKE_AFTER_FOREGROUND_SPEECH =
+            "RESUME_WAKE_AFTER_FOREGROUND_SPEECH"
         const val PREFS = "FlutterSharedPreferences"
         const val PREF_URL = "flutter.hermes_server_url"
         const val PREF_KEY = "flutter.hermes_api_key"
@@ -383,6 +387,17 @@ class HermesListenerService : Service() {
                 // Вызывается тапом по орбу когда Тройка говорит.
                 try { edgeTts?.stop() } catch (_: Exception) {}
                 try { tts?.stop() } catch (_: Exception) {}
+            }
+            ACTION_PAUSE_WAKE_FOR_FOREGROUND_SPEECH -> {
+                listenerPaused.set(true)
+                try { localWakeRecognizer?.cancel() } catch (_: Exception) {}
+                localWakeActive.set(false)
+            }
+            ACTION_RESUME_WAKE_AFTER_FOREGROUND_SPEECH -> {
+                listenerPaused.set(false)
+                if (usingOnDeviceWake && wakeWordEnabled() && !isInDialog.get()) {
+                    startLocalWakeCycle(250)
+                }
             }
             ACTION_REFRESH_PHONE_BRIDGE -> refreshPhoneBridge()
             else -> {

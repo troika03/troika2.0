@@ -9,6 +9,7 @@ import android.net.Uri
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.os.PowerManager
 import android.provider.Settings
 import android.speech.RecognitionListener
@@ -37,6 +38,7 @@ class MainActivity : FlutterActivity() {
     private var pendingScreenConsentResult: MethodChannel.Result? = null
     private var pendingLocalSpeechResult: MethodChannel.Result? = null
     private var localSpeechRecognizer: SpeechRecognizer? = null
+    private var backgroundWakePausedForSpeech = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -243,6 +245,7 @@ class MainActivity : FlutterActivity() {
         try { localSpeechRecognizer?.destroy() } catch (_: Exception) {}
         localSpeechRecognizer = null
         pendingLocalSpeechResult = null
+        resumeBackgroundWakeAfterSpeech()
         super.onDestroy()
     }
 
@@ -663,17 +666,22 @@ class MainActivity : FlutterActivity() {
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
         }
-        try {
-            recognizer.startListening(intent)
-        } catch (e: Exception) {
-            pendingLocalSpeechResult = null
-            clearLocalSpeechRecognizer()
-            result.error(
-                "speech_failed",
-                e.message ?: "Не удалось запустить распознавание",
-                null,
-            )
-        }
+        pauseBackgroundWakeForSpeech()
+        val startDelayMs = if (backgroundWakePausedForSpeech) 300L else 0L
+        Handler(mainLooper).postDelayed({
+            if (pendingLocalSpeechResult !== result) return@postDelayed
+            try {
+                recognizer.startListening(intent)
+            } catch (e: Exception) {
+                pendingLocalSpeechResult = null
+                clearLocalSpeechRecognizer()
+                result.error(
+                    "speech_failed",
+                    e.message ?: "Не удалось запустить распознавание",
+                    null,
+                )
+            }
+        }, startDelayMs)
     }
 
     private fun finishLocalSpeechRecognition(heard: String) {
@@ -702,6 +710,23 @@ class MainActivity : FlutterActivity() {
     private fun clearLocalSpeechRecognizer() {
         try { localSpeechRecognizer?.destroy() } catch (_: Exception) {}
         localSpeechRecognizer = null
+        resumeBackgroundWakeAfterSpeech()
+    }
+
+    private fun pauseBackgroundWakeForSpeech() {
+        if (!HermesListenerService.serviceActive) return
+        backgroundWakePausedForSpeech = true
+        startService(Intent(this, HermesListenerService::class.java).apply {
+            action = HermesListenerService.ACTION_PAUSE_WAKE_FOR_FOREGROUND_SPEECH
+        })
+    }
+
+    private fun resumeBackgroundWakeAfterSpeech() {
+        if (!backgroundWakePausedForSpeech) return
+        backgroundWakePausedForSpeech = false
+        startService(Intent(this, HermesListenerService::class.java).apply {
+            action = HermesListenerService.ACTION_RESUME_WAKE_AFTER_FOREGROUND_SPEECH
+        })
     }
 
     @Suppress("BatteryLife")
