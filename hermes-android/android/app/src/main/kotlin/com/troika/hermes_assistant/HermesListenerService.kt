@@ -1126,6 +1126,17 @@ class HermesListenerService : Service() {
         val history = mutableListOf<JSONObject>()
         var firstTurn = true
         val localOnly = resolvedUrl(getSharedPreferences(PREFS, MODE_PRIVATE)).isBlank()
+        val onDeviceSpeechAvailable =
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
+        android.util.Log.i(
+            "HermesListener",
+            if (onDeviceSpeechAvailable) {
+                "Dialog STT route: Android on-device"
+            } else {
+                "Dialog STT route: private server fallback"
+            },
+        )
 
         try {
             HermesOverlay.get(this).show("✨ Слушаю...")
@@ -1158,14 +1169,20 @@ class HermesListenerService : Service() {
                     if (firstTurn) "🎙 Говори..." else "🎙 Продолжай..."
                 )
                 val maxMs = if (firstTurn) 9000L else 8000L
-                val rawQuestion = if (localOnly) {
+                val rawQuestion = if (onDeviceSpeechAvailable) {
+                    // Prefer Android's built-in recognizer for the whole dialog.
+                    // No audio leaves the phone and short commands return faster.
                     recognizeCommandOnDevice(maxMs)?.trim() ?: ""
-                } else {
+                } else if (!localOnly) {
+                    // Older/unsupported devices retain the authenticated private
+                    // server STT path instead of losing voice input completely.
                     val questionWav = recordUtterance(maxMs)
                     if (questionWav == null) "" else {
                         HermesOverlay.get(this).updateStatus("⏳ Распознаю...")
                         transcribeSync(questionWav)?.trim() ?: ""
                     }
+                } else {
+                    ""
                 }
                 if (rawQuestion.isEmpty()) {
                     if (firstTurn && !manual) {
