@@ -6,6 +6,26 @@ import 'package:http/http.dart' as http;
 import '../config/troika_config.dart';
 import 'account_service.dart';
 
+/// Repeats an HTTP operation only when TLS negotiation failed before the
+/// request could be sent. Rebuilding the request in [operation] is required.
+Future<T> retryTlsHandshake<T>(
+  Future<T> Function() operation, {
+  List<Duration> delays = const [
+    Duration(milliseconds: 300),
+    Duration(milliseconds: 1200),
+    Duration(milliseconds: 2500),
+  ],
+}) async {
+  for (var attempt = 0;; attempt++) {
+    try {
+      return await operation();
+    } on HandshakeException {
+      if (attempt >= delays.length) rethrow;
+      await Future<void>.delayed(delays[attempt]);
+    }
+  }
+}
+
 /// Тип шага в «потоке мыслей» Тройки (что она делает перед ответом).
 enum ThoughtKind {
   thinking, // размышление (reasoning.available)
@@ -522,10 +542,12 @@ class TroikaApiService {
       await AccountService().ensureFreshSession();
       // Async headers — с device_context (GPS) для streaming-пути тоже.
       final chatHdrs = await TroikaConfig.chatHeadersAsync();
-      final startReq = http.Request('POST', Uri.parse(TroikaConfig.runsUrl))
-        ..headers.addAll(chatHdrs)
-        ..body = json.encode(startBody);
-      final startResp = await client.send(startReq).timeout(_timeout);
+      final startResp = await retryTlsHandshake(() {
+        final request = http.Request('POST', Uri.parse(TroikaConfig.runsUrl))
+          ..headers.addAll(chatHdrs)
+          ..body = json.encode(startBody);
+        return client.send(request).timeout(_timeout);
+      });
       final startBodyStr = await startResp.stream.bytesToString();
       // Сервер отдаёт 202 Accepted (run стартовал асинхронно), реже 200.
       if (startResp.statusCode != 200 && startResp.statusCode != 202) {
@@ -541,9 +563,11 @@ class TroikaApiService {
 
       // 2) Слушаем поток событий.
       final evUri = Uri.parse('${TroikaConfig.runsUrl}/$runId/events');
-      final evReq = http.Request('GET', evUri)
-        ..headers.addAll(TroikaConfig.headers);
-      final evResp = await client.send(evReq).timeout(_timeout);
+      final evResp = await retryTlsHandshake(() {
+        final request = http.Request('GET', evUri)
+          ..headers.addAll(TroikaConfig.headers);
+        return client.send(request).timeout(_timeout);
+      });
       if (evResp.statusCode != 200) {
         throw TroikaApiException(
           'Поток событий недоступен (${evResp.statusCode}).',
@@ -641,6 +665,11 @@ class TroikaApiService {
         return r;
       }
       return full;
+    } on HandshakeException {
+      throw TroikaApiException(
+        'Не удалось установить защищённое соединение. '
+        'Проверь VPN/WARP и повтори.',
+      );
     } on SocketException {
       throw TroikaApiException('Нет соединения с сервером.');
     } on TimeoutException {

@@ -447,7 +447,7 @@ class AssistantService extends ChangeNotifier {
     } catch (e) {
       await audioFile.delete().catchError((_) => audioFile);
       _messages.removeWhere((m) => m.pending);
-      _setError(e.toString());
+      _setError(safeErrorMessage(e));
     }
   }
 
@@ -614,7 +614,7 @@ class AssistantService extends ChangeNotifier {
       _setState(AssistantState.idle);
     } catch (e) {
       _messages.remove(pending);
-      _setError(e.toString());
+      _setError(safeErrorMessage(e));
     } finally {
       _actionInProgress = false;
       _activityStatus = '';
@@ -646,6 +646,13 @@ class AssistantService extends ChangeNotifier {
       return 'Открываю приложение';
     }
     return 'Выполняю задачу';
+  }
+
+  static String safeErrorMessage(Object error) {
+    if (error is TroikaApiException && error.message.trim().isNotEmpty) {
+      return error.message.trim();
+    }
+    return 'Не удалось связаться с Тройкой. Повтори попытку.';
   }
 
   /// Стереть локальную ленту (визуально). Серверную сессию не трогает.
