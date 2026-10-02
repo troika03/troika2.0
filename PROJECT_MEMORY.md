@@ -1331,9 +1331,12 @@ AI-ассистент для Android и Windows, где чат остаётся 
   с release по SHA-256, приложение запущено. Прежние binary files сохранены
   в рабочей резервной копии; настройки аккаунта не очищались.
 - Android APK находится в `hermes-android/build/app/outputs/flutter-apk/`
-  `app-release.apk` (106279360 bytes). На телефон этот срез не установлен:
-  ADB не показывает подключённого устройства. Полный физический voice E2E
-  этого среза не выполнялся. После добавления отдельного regression для
+  `app-release.apk` (106279360 bytes). По отдельной просьбе владельца APK
+  установлена поверх прежней версии на Samsung Galaxy A22 (SM-A225F);
+  установщик вернул `Success`, SHA-256 установленного `base.apk` совпал
+  с release APK. Повторный запуск MainActivity вернул `Status: ok`, процесс
+  приложения работает. Данные приложения не очищались. Полный физический
+  voice E2E этого среза не выполнялся. После добавления отдельного regression для
   done-orb прошли все 18 home/result tests; analyze не нашёл errors/warnings,
   остаются прежние informational diagnostics.
 - Production image `e511391` проверен отдельно до активации: guard, persona 3
