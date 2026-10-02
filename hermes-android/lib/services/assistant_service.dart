@@ -356,7 +356,9 @@ class AssistantService extends ChangeNotifier {
   Future<void> _recognizeLocalAndroidCommand() async {
     _setState(AssistantState.recording);
     try {
-      final result = await _localCommands.recognizeAndExecute();
+      final result = await _localCommands.recognizeAndExecute(
+        preferAgentConversation: TroikaConfig.serverUrl.trim().isNotEmpty,
+      );
       final heard = result.heard.trim();
       if (heard.isEmpty) {
         _setState(AssistantState.idle);
@@ -522,7 +524,10 @@ class AssistantService extends ChangeNotifier {
 
     try {
       if (imageDataUrls.isEmpty) {
-        final local = await _localCommands.execute(text);
+        final local = await _localCommands.execute(
+          text,
+          preferAgentConversation: TroikaConfig.serverUrl.trim().isNotEmpty,
+        );
         if (local.handled) {
           _queueUiAction(local, text);
           final response = local.response.isEmpty ? 'Готово' : local.response;

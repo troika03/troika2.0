@@ -76,7 +76,11 @@ object PhoneCommands {
      * Главная точка входа. norm — lowercase-версия фразы (для матчинга), raw — исходник (для подсказок).
      * Возвращает результат или null, если не распознали.
      */
-    fun tryExecute(ctx: Context, norm: String, raw: String): String? {
+    fun tryExecute(
+        ctx: Context, norm: String, raw: String,
+        preferAgentConversation: Boolean = false,
+    ): String? {
+        if (preferAgentConversation && isConversation(norm)) return null
         commonReply(norm)?.let { return it }
 
         // Открыть приложение
@@ -287,6 +291,20 @@ object PhoneCommands {
      * Короткие ответы, которые должны работать без сервера и из фонового
      * voice-сервиса. Набор намеренно совпадает с Flutter local matcher.
      */
+    private fun isConversation(input: String): Boolean {
+        val normalized = withoutAssistantAddress(normalizeCommon(input))
+        return normalized in setOf(
+            "привет", "приветик", "здравствуй", "здравствуйте",
+            "доброе утро", "добрый день", "добрый вечер",
+            "пока", "до свидания", "до встречи", "увидимся", "спокойной ночи",
+            "спасибо", "благодарю", "спасибо большое", "большое спасибо",
+            "как дела", "как ты", "ты тут", "ты здесь", "ты работаешь",
+            "кто ты", "как тебя зовут", "представься", "помоги",
+            "что ты умеешь", "что умеешь", "что ты можешь", "что можешь",
+            "твои возможности",
+        )
+    }
+
     private fun commonReply(input: String): String? {
         val normalized = withoutAssistantAddress(normalizeCommon(input))
 
@@ -312,16 +330,15 @@ object PhoneCommands {
             return "Я на связи и готова помочь."
         }
         if (normalized in setOf("кто ты", "как тебя зовут", "представься")) {
-            return "Я Тройка, твой локальный голосовой помощник."
+            return "Я Тройка."
         }
         if (normalized in setOf(
                 "помощь", "помоги", "команды", "список команд", "покажи команды",
-                "что ты умеешь", "что я могу сказать",
+                "что ты умеешь", "что умеешь", "что ты можешь", "что можешь",
+                "твои возможности", "что я могу сказать",
             )) {
-            return "Без интернета умею отвечать на простые фразы, считать, " +
-                "называть время и дату, открывать приложения, искать в браузере, " +
-                "строить маршрут, ставить таймер и будильник, управлять фонариком, " +
-                "звуком, яркостью и музыкой. Например: включи фонарик."
+            return "Могу открыть приложение, поставить таймер или включить фонарик. " +
+                "Попробуй: таймер на пять минут или включи фонарик."
         }
         if (normalized.contains("день недели") ||
             normalized == "какой сегодня день" ||

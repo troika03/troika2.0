@@ -187,7 +187,12 @@ def _restore_or_build_system_prompt(agent, system_message, conversation_history)
             product_mode = _is_troika_product_mode()
         except Exception:
             product_mode = False
-        if product_mode and not stored_prompt.lstrip().startswith("# Тройка — кто ты"):
+        from troika_product.persona import TROIKA_PERSONA_MARKER
+
+        if product_mode and (
+            not stored_prompt.lstrip().startswith("# Тройка — кто ты")
+            or TROIKA_PERSONA_MARKER not in stored_prompt
+        ):
             logger.info(
                 "Refreshing stale product system prompt for session %s",
                 agent.session_id,

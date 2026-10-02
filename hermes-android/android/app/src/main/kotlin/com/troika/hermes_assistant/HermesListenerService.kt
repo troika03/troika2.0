@@ -1263,7 +1263,9 @@ class HermesListenerService : Service() {
                 Thread.sleep(300)
 
                 // Локальный матчер команд телефона — пробуем выполнить ДО вызова LLM
-                val localResult = PhoneCommands.tryExecute(this, question, rawQuestion)
+                val localResult = PhoneCommands.tryExecute(
+                    this, question, rawQuestion, preferAgentConversation = !localOnly,
+                )
                 if (localResult != null) {
                     android.util.Log.i("HermesListener", "LOCAL COMMAND handled")
                     HermesOverlay.get(this).updateStatus(localResult)

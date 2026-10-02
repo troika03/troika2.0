@@ -84,7 +84,10 @@ class LocalCommandService {
     'google maps': 'https://www.google.com/maps',
   };
 
-  Future<LocalCommandResult> execute(String text) async {
+  Future<LocalCommandResult> execute(
+    String text, {
+    bool preferAgentConversation = false,
+  }) async {
     final clean = text.trim();
     if (clean.isEmpty) return const LocalCommandResult(handled: false);
     final direct = await _modeCommand(clean);
@@ -93,6 +96,9 @@ class LocalCommandService {
     final command = custom ?? clean;
     final mappedMode = await _modeCommand(command);
     if (mappedMode != null) return mappedMode;
+    if (preferAgentConversation && _isConversation(command)) {
+      return const LocalCommandResult(handled: false);
+    }
     final common = _commonCommand(command);
     if (common != null) return common;
     final workspace = _workspaceCommand(command);
@@ -102,7 +108,10 @@ class LocalCommandService {
       try {
         final value = await _platform.invokeMethod<Map<Object?, Object?>>(
           'executeLocalCommand',
-          {'text': command},
+          {
+            'text': command,
+            'preferAgentConversation': preferAgentConversation,
+          },
         );
         return value == null
             ? const LocalCommandResult(handled: false)
@@ -118,19 +127,25 @@ class LocalCommandService {
     return const LocalCommandResult(handled: false);
   }
 
-  Future<LocalCommandResult> recognizeAndExecute() async {
+  Future<LocalCommandResult> recognizeAndExecute({
+    bool preferAgentConversation = false,
+  }) async {
     if (!Platform.isAndroid) {
       return const LocalCommandResult(handled: false);
     }
     try {
       final value = await _platform.invokeMethod<Map<Object?, Object?>>(
         'recognizeLocalCommand',
+        {'preferAgentConversation': preferAgentConversation},
       );
       final result = value == null
           ? const LocalCommandResult(handled: false)
           : LocalCommandResult.fromMap(value);
       if (!result.handled && result.heard.trim().isNotEmpty) {
-        final retried = await execute(result.heard);
+        final retried = await execute(
+          result.heard,
+          preferAgentConversation: preferAgentConversation,
+        );
         return LocalCommandResult(
           handled: retried.handled,
           response: retried.response,
@@ -246,7 +261,7 @@ class LocalCommandService {
     }.contains(normalized)) {
       return const LocalCommandResult(
         handled: true,
-        response: 'Я Тройка, твой локальный голосовой помощник.',
+        response: 'Я Тройка.',
       );
     }
     if (const {
@@ -256,6 +271,10 @@ class LocalCommandService {
       'список команд',
       'покажи команды',
       'что ты умеешь',
+      'что умеешь',
+      'что ты можешь',
+      'что можешь',
+      'твои возможности',
       'что я могу сказать',
     }.contains(normalized)) {
       return LocalCommandResult(
@@ -310,20 +329,52 @@ class LocalCommandService {
 
   String _helpText() {
     if (windowsForTesting ?? Platform.isWindows) {
-      return 'Без интернета умею отвечать на простые фразы, считать, '
-          'называть время и дату, открывать приложения и папки, искать в '
-          'браузере, управлять окнами, звуком и музыкой, открывать настройки, '
-          'создавать документы и презентации. Например: «открой калькулятор».';
+      return 'Могу открыть приложение, переключить окно или помочь создать '
+          'документ. Попробуй: «открой калькулятор» или «создай презентацию».';
     }
     if (Platform.isAndroid) {
-      return 'Без интернета умею отвечать на простые фразы, считать, '
-          'называть время и дату, открывать приложения, искать в браузере, '
-          'строить маршрут, ставить таймер и будильник, управлять фонариком, '
-          'звуком, яркостью и музыкой. Например: «включи фонарик».';
+      return 'Могу открыть приложение, поставить таймер или включить фонарик. '
+          'Попробуй: «таймер на пять минут» или «включи фонарик».';
     }
-    return 'Без интернета умею отвечать на простые фразы, считать, называть '
-        'время и дату, открывать приложения, управлять устройством и создавать '
-        'документы и презентации.';
+    return 'Могу подсказать время, посчитать или помочь создать документ. '
+        'Попробуй: «сколько будет 12 плюс 8».';
+  }
+
+  // Only exact conversational phrases bypass the deterministic action layer.
+  static bool _isConversation(String text) {
+    final normalized = _withoutAssistantAddress(_normalize(text));
+    return const {
+      'привет',
+      'приветик',
+      'здравствуй',
+      'здравствуйте',
+      'доброе утро',
+      'добрый день',
+      'добрый вечер',
+      'пока',
+      'до свидания',
+      'до встречи',
+      'увидимся',
+      'спокойной ночи',
+      'спасибо',
+      'благодарю',
+      'спасибо большое',
+      'большое спасибо',
+      'как дела',
+      'как ты',
+      'ты тут',
+      'ты здесь',
+      'ты работаешь',
+      'кто ты',
+      'как тебя зовут',
+      'представься',
+      'помоги',
+      'что ты умеешь',
+      'что умеешь',
+      'что ты можешь',
+      'что можешь',
+      'твои возможности',
+    }.contains(normalized);
   }
 
   static LocalCommandResult? _calculationCommand(String normalized) {

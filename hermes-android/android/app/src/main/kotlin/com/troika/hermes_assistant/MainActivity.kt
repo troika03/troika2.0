@@ -37,6 +37,7 @@ class MainActivity : FlutterActivity() {
     private var methodChannel: MethodChannel? = null
     private var pendingScreenConsentResult: MethodChannel.Result? = null
     private var pendingLocalSpeechResult: MethodChannel.Result? = null
+    private var preferAgentSpeechConversation = false
     private var localSpeechRecognizer: SpeechRecognizer? = null
     private var backgroundWakePausedForSpeech = false
 
@@ -171,7 +172,8 @@ class MainActivity : FlutterActivity() {
                         PhoneCommands.tryExecute(
                             applicationContext,
                             raw.lowercase(Locale.forLanguageTag("ru-RU")),
-                            raw
+                            raw,
+                            preferAgentConversation = call.argument<Boolean>("preferAgentConversation") == true,
                         )
                     result.success(
                         mapOf(
@@ -182,7 +184,10 @@ class MainActivity : FlutterActivity() {
                     )
                 }
                 "recognizeLocalCommand" -> {
-                    startLocalSpeechRecognition(result)
+                    startLocalSpeechRecognition(
+                        result,
+                        preferAgentConversation = call.argument<Boolean>("preferAgentConversation") == true,
+                    )
                 }
                 "stopLocalSpeechRecognition" -> {
                     stopLocalSpeechRecognition()
@@ -582,7 +587,10 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun startLocalSpeechRecognition(result: MethodChannel.Result) {
+    private fun startLocalSpeechRecognition(
+        result: MethodChannel.Result,
+        preferAgentConversation: Boolean,
+    ) {
         if (pendingLocalSpeechResult != null) {
             result.error("speech_pending", "Распознавание уже запущено", null)
             return
@@ -620,6 +628,7 @@ class MainActivity : FlutterActivity() {
         }
 
         pendingLocalSpeechResult = result
+        preferAgentSpeechConversation = preferAgentConversation
         localSpeechRecognizer = recognizer
         recognizer.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) = Unit
@@ -693,6 +702,7 @@ class MainActivity : FlutterActivity() {
                 applicationContext,
                 heard.lowercase(Locale.forLanguageTag("ru-RU")),
                 heard,
+                preferAgentConversation = preferAgentSpeechConversation,
             )
         pending.success(
             mapOf(

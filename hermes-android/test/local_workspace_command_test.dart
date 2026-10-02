@@ -56,7 +56,7 @@ void main() {
     expect(thanks.response, 'Пожалуйста.');
   });
 
-  test('help and identity commands do not use cloud AI', () async {
+  test('help and identity work without a configured AI', () async {
     final service = LocalCommandService(windowsForTesting: true);
 
     final identity = await service.execute('Кто ты?');
@@ -64,8 +64,48 @@ void main() {
 
     expect(identity.response, contains('Тройка'));
     expect(help.handled, isTrue);
-    expect(help.response, contains('Без интернета'));
+    expect(identity.response, isNot(contains('локальный')));
+    expect(help.response, isNot(contains('Без интернета')));
     expect(help.response, contains('калькулятор'));
+  });
+
+  test('configured AI receives conversation instead of canned local replies',
+      () async {
+    final service = LocalCommandService(windowsForTesting: true);
+    for (final phrase in [
+      'Тройка, привет!',
+      'Как дела?',
+      'Спасибо большое',
+      'Кто ты?',
+      'Что ты умеешь?',
+      'Что умеешь?',
+      'Что ты можешь?',
+      'Помоги',
+    ]) {
+      final result = await service.execute(
+        phrase,
+        preferAgentConversation: true,
+      );
+      expect(result.handled, isFalse, reason: phrase);
+    }
+  });
+
+  test('configured AI preserves explicit help, time and safe local actions',
+      () async {
+    final keys = <String>[];
+    final service = LocalCommandService(
+      windowsForTesting: true,
+      nowForTesting: () => DateTime(2026, 10, 2, 9, 15),
+      windowsKeySenderForTesting: (key) async => keys.add(key),
+    );
+    for (final phrase in ['Покажи команды', 'Который час', 'Переключи окно']) {
+      final result = await service.execute(
+        phrase,
+        preferAgentConversation: true,
+      );
+      expect(result.handled, isTrue, reason: phrase);
+    }
+    expect(keys, ['%{TAB}']);
   });
 
   test('date, weekday and arithmetic work in shared local layer', () async {

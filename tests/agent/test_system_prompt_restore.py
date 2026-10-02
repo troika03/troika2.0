@@ -42,6 +42,31 @@ def _make_agent(session_db=None, prebuilt_prompt: str = "BUILT_PROMPT"):
 
 
 class TestStoredPromptReuse:
+    def test_product_persona_update_migrates_once_then_reuses_cached_bytes(self):
+        """Refresh an old Troika persona across deployment without rebuilding every turn."""
+        from troika_product.persona import load_troika_persona
+
+        old = "# Тройка — кто ты\n\nOld product persona"
+        current = load_troika_persona() + "\n\nPreserved session context"
+        db = MagicMock()
+        db.get_session.return_value = {"system_prompt": old}
+        history = [{"role": "user", "content": "hi"}]
+        set_session_override("TROIKA_PRODUCT_MODE", "1")
+        try:
+            agent = _make_agent(session_db=db, prebuilt_prompt=current)
+            _restore_or_build_system_prompt(agent, None, history)
+            agent._build_system_prompt.assert_called_once()
+            db.update_system_prompt.assert_called_once_with(agent.session_id, current)
+
+            db.get_session.return_value = {"system_prompt": current}
+            resumed = _make_agent(session_db=db)
+            _restore_or_build_system_prompt(resumed, None, history)
+            resumed._build_system_prompt.assert_not_called()
+            assert resumed._cached_system_prompt is current
+            assert db.update_system_prompt.call_count == 1
+        finally:
+            clear_session_override("TROIKA_PRODUCT_MODE")
+
     def test_present_row_is_reused_verbatim(self, caplog):
         """Continuing session with a stored prompt → reuse byte-for-byte."""
         stored = "Stored prompt from turn 1 — byte-identical reuse"
