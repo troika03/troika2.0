@@ -143,6 +143,30 @@ void main() {
     assistant.dispose();
   });
 
+  testWidgets('unconfirmed answer does not show the completed-action orb',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final assistant = _ResultAssistant(
+      AssistantResult.forTurn(
+        response: 'Не удалось подтвердить выполнение просьбы.',
+        successfulTools: const ['action'],
+      ),
+    );
+
+    await tester.pumpWidget(_app(assistant));
+    await tester.pump();
+
+    expect(_orb(tester).state, VoiceOrbState.idle);
+    expect(find.text('Готово'), findsNothing);
+    expect(find.text('Результат сохранён ниже'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    assistant.dispose();
+  });
+
   testWidgets('saved task opens the task surface instead of chat',
       (tester) async {
     tester.view.physicalSize = const Size(390, 844);

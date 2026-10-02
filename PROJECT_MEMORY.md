@@ -292,11 +292,11 @@ AI-ассистент для Android и Windows, где чат остаётся 
   сохранена в локальной рабочей резервной копии. SHA-256 установленного
   `data/app.so` совпал с новой сборкой, процесс приложения запущен. Настройки и
   данные аккаунта не удалялись. Полный физический голосовой E2E не выполнялся.
-- Production переключён с `2793c2d` на проверенный коммит/image `f6e03c7`;
-  `/srv/troika/current` указывает на `/srv/troika/releases/f6e03c7`. API healthy,
+- Production теперь работает на коммите/image `e511391`;
+  `/srv/troika/current` указывает на `/srv/troika/releases/e511391`. API healthy,
   API/STT running без перезапусков; внутренний и публичный HTTPS health вернули
-  200. В работающем API проверен маркер `[TROIKA_PERSONA_VERSION:2]`. Private
-  volume и provider secrets сохранены; прежний release/image оставлен для отката.
+  200. В image проверен маркер `[TROIKA_PERSONA_VERSION:3]`. Private volume и
+  provider secrets сохранены; прежний release/image `f6e03c7` оставлен для отката.
 - На отдельном временном production-аккаунте выполнены два живых запроса через
   `openrouter/free`: «Что ты умеешь?» и вопрос о предпочтении простого дизайна
   или эффектов. Оба вернули HTTP 200/finish_reason stop; первый ответ содержит
@@ -1292,7 +1292,7 @@ AI-ассистент для Android и Windows, где чат остаётся 
 - [ ] Push для проактивности не включён до проверки push token lifecycle;
       in-app доставка работает.
 
-## Реализовано: проверка заявлений о выполнении (2026-10-02)
+## Выполнено: проверка заявлений о выполнении (2026-10-02)
 
 - По жалобе владельца на ложное «сделано» добавлен request-local
   `troika_product/completion.py`. Проверка сопоставляет распространённые
@@ -1326,8 +1326,25 @@ AI-ассистент для Android и Windows, где чат остаётся 
   семантическое доказательство любого текста модели или качества файла.
   Она не гарантирует отсутствие всех фактических галлюцинаций и не закрывает
   будущий unified verified runtime из раздела 10 основного плана.
-- Release-сборки, deployment и live smoke ещё выполняются; новая версия пока
-  не отмечена установленной. Телефон сейчас отсутствует в списке ADB.
+- Release Android APK и Windows bundle собраны с production HTTPS endpoint.
+  Windows обновлён в `C:\Users\kiqu\Troika`, установленный `app.so` совпадает
+  с release по SHA-256, приложение запущено. Прежние binary files сохранены
+  в рабочей резервной копии; настройки аккаунта не очищались.
+- Android APK находится в `hermes-android/build/app/outputs/flutter-apk/`
+  `app-release.apk` (106279360 bytes). На телефон этот срез не установлен:
+  ADB не показывает подключённого устройства. Полный физический voice E2E
+  этого среза не выполнялся. После добавления отдельного regression для
+  done-orb прошли все 18 home/result tests; analyze не нашёл errors/warnings,
+  остаются прежние informational diagnostics.
+- Production image `e511391` проверен отдельно до активации: guard, persona 3
+  и request-local workspace availability. После переключения API healthy,
+  API/STT running с restart_count=0, внутренний и публичный HTTPS health 200.
+  Ранее активный `f6e03c7` сохранён для rollback; private volume/secrets прежние.
+- Live smoke на отдельном временном аккаунте проверил две ситуации: просьба
+  объявить несуществующий DOCX созданным вернула честный отказ и ноль artifacts;
+  следующая просьба создала один `completion-proof.docx`, owner-authenticated
+  download вернул 36774 bytes с ZIP/OpenXML signature. Тестовый аккаунт и его
+  artifact удалены через account API: HTTP 200/status deleted.
 
 ## Выполнено: устойчивость клиентского TLS (2026-10-02)
 
