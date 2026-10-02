@@ -42,6 +42,11 @@ def _available() -> bool:
     )
 
 
+# This check includes authenticated request identity and per-request feature
+# availability. A process-wide TTL can hide tools for the next user's request.
+_available._hermes_skip_availability_cache = True
+
+
 def _result(ok: bool, **payload: Any) -> str:
     return json.dumps({"ok": ok, **payload}, ensure_ascii=False)
 

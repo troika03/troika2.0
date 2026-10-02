@@ -20,6 +20,28 @@ FIRST = "usr_11111111111111111111111111111111"
 SECOND = "usr_22222222222222222222222222222222"
 
 
+def test_tool_availability_never_reuses_another_requests_identity():
+    from tools.registry import _check_fn_cached
+    from tools.troika_workspace_tool import _available
+
+    overrides = {
+        "TROIKA_PRODUCT_MODE": "1", "TROIKA_PRODUCT_USER_ID": FIRST,
+        "TROIKA_PRODUCT_DEVICE_ID": "device_test", "TROIKA_PRODUCT_TOKEN_ID": "token_test",
+        "TROIKA_PRODUCT_WORKSPACE_AVAILABLE": "0",
+    }
+    try:
+        for name, value in overrides.items():
+            set_session_override(name, value)
+        assert not _check_fn_cached(_available)
+        set_session_override("TROIKA_PRODUCT_WORKSPACE_AVAILABLE", "1")
+        assert _check_fn_cached(_available)
+        set_session_override("TROIKA_PRODUCT_USER_ID", "")
+        assert not _check_fn_cached(_available)
+    finally:
+        for name in overrides:
+            clear_session_override(name)
+
+
 def test_workspace_crud_search_and_owner_isolation(tmp_path):
     store = WorkspaceStore(tmp_path / "workspaces")
 

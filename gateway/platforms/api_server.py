@@ -93,7 +93,7 @@ def _safe_product_action_result(tool_name: str, raw_result: Any) -> Optional[Dic
 
     if tool_name.startswith("troika_create_"):
         artifact = payload.get("artifact")
-        if not isinstance(artifact, dict):
+        if not isinstance(artifact, dict) or not artifact.get("id") or not artifact.get("filename"):
             return None
         return {
             "kind": "file",
@@ -114,10 +114,14 @@ def _safe_product_action_result(tool_name: str, raw_result: Any) -> Optional[Dic
     result = payload.get("result")
     if kind is None or not isinstance(result, dict):
         return None
+    if kind == "reminder" and result.get("delivery_enabled") is False:
+        return None
     result_id = (
         result.get("id") or result.get("message_id") or result.get("task_id")
         or result.get("memory_id") or ""
     )
+    if not result_id:
+        return None
     default_titles = {
         "task": "Задача сохранена",
         "reminder": "Напоминание сохранено",
@@ -3870,6 +3874,13 @@ class APIServerAdapter(BasePlatformAdapter):
             try:
                 result, agent_usage = await agent_task
                 usage = agent_usage or usage
+                if self._product_principal(request) is not None:
+                    # All product text is withheld until runtime verification.
+                    # Emit exactly the checked final response, including for
+                    # providers that never call the delta callback.
+                    final_text = result.get("final_response", "") if isinstance(result, dict) else ""
+                    if final_text:
+                        await _emit(final_text)
             except Exception as exc:
                 logger.warning("Agent task %s failed, usage data lost: %s", completion_id, exc)
 
@@ -5284,7 +5295,12 @@ class APIServerAdapter(BasePlatformAdapter):
                 agent = self._create_agent(
                     ephemeral_system_prompt=ephemeral_system_prompt,
                     session_id=session_id,
-                    stream_delta_callback=stream_delta_callback,
+                    # Product narration must pass the completion guard before
+                    # the client displays it or speaks it. The SSE writer emits
+                    # the validated final answer when no deltas were forwarded.
+                    stream_delta_callback=(
+                        None if product_principal is not None else stream_delta_callback
+                    ),
                     tool_progress_callback=tool_progress_callback,
                     tool_start_callback=tool_start_callback,
                     tool_complete_callback=tool_complete_callback,
@@ -5692,7 +5708,7 @@ class APIServerAdapter(BasePlatformAdapter):
                         agent = self._create_agent(
                             ephemeral_system_prompt=ephemeral_system_prompt,
                             session_id=session_id,
-                            stream_delta_callback=_text_cb,
+                            stream_delta_callback=None if principal is not None else _text_cb,
                             tool_progress_callback=event_cb,
                             gateway_session_key=gateway_session_key,
                         )
@@ -5751,6 +5767,13 @@ class APIServerAdapter(BasePlatformAdapter):
                     )
                 else:
                     final_response = result.get("final_response", "") if isinstance(result, dict) else ""
+                    if principal is not None and final_response:
+                        q.put_nowait({
+                            "event": "message.delta",
+                            "run_id": run_id,
+                            "timestamp": time.time(),
+                            "delta": final_response,
+                        })
                     q.put_nowait({
                         "event": "run.completed",
                         "run_id": run_id,

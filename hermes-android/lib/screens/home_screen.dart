@@ -603,7 +603,10 @@ VoiceOrbState _voiceOrbState(AssistantService assistant) {
   if (assistant.pendingApproval != null) return VoiceOrbState.approval;
   return switch (assistant.state) {
     AssistantState.idle =>
-      assistant.lastResult == null ? VoiceOrbState.idle : VoiceOrbState.done,
+      assistant.lastResult == null ||
+              assistant.lastResult!.kind == AssistantResultKind.answer
+          ? VoiceOrbState.idle
+          : VoiceOrbState.done,
     AssistantState.wakeDetected ||
     AssistantState.recording =>
       VoiceOrbState.listening,

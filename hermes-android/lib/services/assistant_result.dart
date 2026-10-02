@@ -44,8 +44,6 @@ class AssistantResult {
     String structuredTitle = '',
     String resourceId = '',
   }) {
-    final tools =
-        successfulTools.where((tool) => tool.trim().isNotEmpty).toSet();
     final summary = _shortSummary(response);
 
     if (structuredKind.isNotEmpty) {
@@ -70,31 +68,8 @@ class AssistantResult {
       );
     }
 
-    if (tools.any((tool) => tool.startsWith('troika_create_'))) {
-      return AssistantResult(
-        kind: AssistantResultKind.file,
-        title: 'Файл создан',
-        summary:
-            summary.isEmpty ? 'Файл сохранён в личных файлах Тройки.' : summary,
-        resourceId: resourceId,
-      );
-    }
-    if (tools.contains('troika_assistant')) {
-      return AssistantResult(
-        kind: AssistantResultKind.saved,
-        title: 'Результат сохранён',
-        summary: summary.isEmpty ? 'Изменения сохранены.' : summary,
-        resourceId: resourceId,
-      );
-    }
-    if (tools.isNotEmpty) {
-      return AssistantResult(
-        kind: AssistantResultKind.action,
-        title: 'Готово',
-        summary: summary.isEmpty ? 'Действие выполнено.' : summary,
-        resourceId: resourceId,
-      );
-    }
+    // A tool finishing proves only that it returned, not that the requested
+    // action succeeded. Only an explicit server receipt creates a result card.
     return AssistantResult(
       kind: AssistantResultKind.answer,
       title: 'Ответ готов',

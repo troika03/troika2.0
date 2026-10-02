@@ -673,6 +673,14 @@ def run_conversation(
     interrupted = False
     failed = False
     codex_ack_continuations = 0
+    from agent.system_prompt import _is_troika_product_mode
+
+    product_completion_evidence = None
+    product_completion_retries = 0
+    if _is_troika_product_mode():
+        from troika_product.completion import CompletionEvidence
+
+        product_completion_evidence = CompletionEvidence()
     length_continue_retries = 0
     truncated_tool_call_retries = 0
     truncated_response_parts: List[str] = []
@@ -3569,6 +3577,10 @@ def run_conversation(
                 agent._post_tool_empty_retried = False
 
                 messages.append(assistant_msg)
+                if product_completion_evidence is not None:
+                    # Pre-tool narration may claim success before execution.
+                    # Keep the calls/receipts, never store that claim as fact.
+                    assistant_msg["content"] = ""
                 agent._emit_interim_assistant_message(assistant_msg)
 
                 # Close any open streaming display (response box, reasoning
@@ -3583,7 +3595,19 @@ def run_conversation(
                     except Exception:
                         pass
 
+                tool_results_start = len(messages)
                 agent._execute_tool_calls(assistant_message, messages, effective_task_id, api_call_count)
+                if product_completion_evidence is not None:
+                    # Capture receipts before compression can drop them. Only
+                    # calls from this batch count, never a previous user turn.
+                    batch_calls = {tc.id: tc for tc in assistant_message.tool_calls}
+                    for tool_message in messages[tool_results_start:]:
+                        call = batch_calls.get(tool_message.get("tool_call_id"))
+                        if tool_message.get("role") == "tool" and call is not None:
+                            product_completion_evidence.record(
+                                call.function.name, call.function.arguments,
+                                tool_message.get("content"),
+                            )
 
                 if agent._tool_guardrail_halt_decision is not None:
                     decision = agent._tool_guardrail_halt_decision
@@ -3982,6 +4006,25 @@ def run_conversation(
                     length_continue_retries = 0
                 
                 final_response = agent._strip_think_blocks(final_response).strip()
+                if (
+                    product_completion_evidence is not None
+                    and product_completion_evidence.unsupported(final_response, original_user_message)
+                ):
+                    if (
+                        product_completion_retries < 1
+                        and product_completion_evidence.may_retry()
+                        and agent.iteration_budget.remaining > 0
+                    ):
+                        from troika_product.completion import COMPLETION_RETRY_INSTRUCTION
+
+                        product_completion_retries += 1
+                        # Inject only into the next API request's current user
+                        # message. Preserve history and valid role alternation.
+                        _plugin_user_context += "\n\n" + COMPLETION_RETRY_INSTRUCTION
+                        final_response = None
+                        continue
+                    final_response = product_completion_evidence.fallback()
+                    assistant_message.content = final_response
                 
                 final_msg = agent._build_assistant_message(assistant_message, finish_reason)
 
@@ -4117,6 +4160,19 @@ def run_conversation(
                     exc_info=True,
                 )
 
+    # Cover budget summaries and empty-response fallbacks too, before history
+    # persistence. These paths bypass the normal final-answer branch above.
+    if (
+        product_completion_evidence is not None
+        and final_response
+        and product_completion_evidence.unsupported(final_response, original_user_message)
+    ):
+        final_response = product_completion_evidence.fallback()
+        for message in reversed(messages):
+            if message.get("role") == "assistant" and not message.get("tool_calls"):
+                message["content"] = final_response
+                break
+
     # Determine if conversation completed successfully
     completed = (
         final_response is not None
@@ -4235,6 +4291,14 @@ def run_conversation(
     # Fired once per turn after the tool-calling loop completes.
     # Plugins can use this to persist conversation data (e.g. sync
     # to an external memory system).
+    if (
+        product_completion_evidence is not None
+        and final_response
+        and product_completion_evidence.unsupported(final_response, original_user_message)
+    ):
+        final_response = product_completion_evidence.fallback()
+        _response_transformed = True
+
     if final_response and not interrupted:
         try:
             from hermes_cli.plugins import invoke_hook as _invoke_hook
