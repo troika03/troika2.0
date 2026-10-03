@@ -21,6 +21,45 @@ def _adapter(tmp_path):
     }))
 
 
+def test_reminder_plan_and_html_download_are_authenticated_and_owner_scoped(tmp_path):
+    async def scenario():
+        adapter = _adapter(tmp_path)
+        registry = adapter._access_registry
+        tokens = [registry.issue_device_token(registry.create_device(
+            registry.create_user(email), name="Phone", platform="android"))
+            for email in ("first@example.com", "second@example.com")]
+        first = registry.authenticate(tokens[0])
+        due = (datetime.now(timezone.utc) + timedelta(minutes=2)).isoformat()
+        adapter._proactive_store.enqueue_message(first, kind="reminder", category="reminder",
+            title="Вода", body="Выпить воды", reason="Явная просьба", available_at=due)
+        registry.set_notification_preferences(first, NotificationPreferences(reminders_enabled=True))
+        html = b'<!doctype html><html><body>coffee</body></html>'
+        artifact = adapter._artifact_store.create(user_id=first.user_id, device_id=first.device_id,
+            filename="coffee.html", kind="html", data=html)
+        with patch("tools.job_runner.cleanup_orphan_jobs", return_value=0), patch("tools.job_runner.ensure_watchdog_started"):
+            assert await adapter.connect()
+        try:
+            port = adapter._site._server.sockets[0].getsockname()[1]
+            async with ClientSession(base_url=f"http://127.0.0.1:{port}") as client:
+                assert (await client.get("/v1/assistant/reminders")).status == 401
+                headers = [{"Authorization": f"Bearer {token}"} for token in tokens]
+                plan = await (await client.get("/v1/assistant/reminders", headers=headers[0])).json()
+                assert plan["owner_id"] == first.user_id
+                assert plan["reminders"][0]["available_at"] == due.replace("+00:00", "Z")
+                other = await (await client.get("/v1/assistant/reminders", headers=headers[1])).json()
+                assert other["reminders"] == []
+                path = artifact.download_url
+                assert (await client.get(path, headers=headers[1])).status == 404
+                response = await client.get(path, headers=headers[0])
+                assert response.status == 200
+                assert await response.read() == html
+                assert response.headers["Content-Disposition"].startswith("attachment;")
+                assert response.headers["X-Content-Type-Options"] == "nosniff"
+        finally:
+            await adapter.disconnect()
+    asyncio.run(scenario())
+
+
 def test_assistant_api_isolated_and_idempotent(tmp_path):
     async def scenario():
         adapter = _adapter(tmp_path)

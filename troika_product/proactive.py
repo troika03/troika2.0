@@ -954,6 +954,50 @@ class ProactiveStore:
             rows = connection.execute(query, params).fetchall()
         return [self._message(row) for row in rows]
 
+    def reminder_delivery_plan(
+        self, principal: AccessPrincipal, *, now: datetime | None = None,
+    ) -> dict[str, object]:
+        """Return owner-scoped reminders for a device's local alarm scheduler.
+
+        Reading this snapshot is not a delivery acknowledgement. Quiet hours
+        defer an alarm; disabled consent, read messages, and closed tasks remove
+        it from the snapshot so a connected client cancels its local copy.
+        """
+        instant = now or datetime.now(timezone.utc)
+        if instant.tzinfo is None or instant.utcoffset() is None:
+            raise ValueError("now must be timezone-aware")
+        timestamp = instant.timestamp()
+        with self._connect() as connection:
+            self._require_principal(connection, principal)
+            preferences = self._preferences(connection, principal.user_id)
+            payload = {"owner_id": principal.user_id, "reminders": [],
+                       "reminders_enabled": preferences.reminders_enabled}
+            if not preferences.reminders_enabled:
+                return payload
+            rows = connection.execute(
+                "SELECT messages.* FROM troika_inbox_messages AS messages "
+                "LEFT JOIN troika_project_tasks AS tasks ON tasks.id = messages.task_id "
+                "AND tasks.user_id = messages.user_id "
+                "WHERE messages.user_id = ? AND messages.kind = 'reminder' "
+                "AND messages.read_at IS NULL AND messages.requires_approval = 0 "
+                "AND messages.available_at >= ? "
+                "AND (messages.task_id IS NULL OR tasks.status NOT IN ('completed', 'cancelled')) "
+                "ORDER BY messages.available_at, messages.created_at LIMIT 200",
+                (principal.user_id, timestamp - 48 * 3600),
+            ).fetchall()
+        reminders = []
+        for row in rows:
+            fire_at = max(float(row["available_at"]), timestamp)
+            # Advance real instants instead of ambiguous local times (DST).
+            for _ in range(1441):
+                if preferences.allows_delivery("reminder", now=datetime.fromtimestamp(fire_at, timezone.utc)):
+                    break
+                fire_at += 60
+            reminders.append({"id": row["id"], "title": row["title"], "body": row["body"],
+                              "fire_at": fire_at, "available_at": _iso(float(row["available_at"]))})
+        payload["reminders"] = reminders
+        return payload
+
     def mark_read(self, principal: AccessPrincipal, message_id: object) -> InboxMessage:
         clean_id = _clean_text(message_id, "message_id", minimum=5, maximum=80)
         with self._connect() as connection:

@@ -916,6 +916,19 @@ class TroikaApiService {
         as Map<String, dynamic>)['task'] as Map<String, dynamic>);
   }
 
+  Future<Map<String, dynamic>> reminderDeliveryPlan() async {
+    await AccountService().ensureFreshSession();
+    final response = await http
+        .get(Uri.parse('${TroikaConfig.serverUrl}/v1/assistant/reminders'),
+            headers: TroikaConfig.headers)
+        .timeout(const Duration(seconds: 15));
+    if (response.statusCode == 401) {
+      throw TroikaApiException('Вход в аккаунт истёк.', statusCode: 401);
+    }
+    _checkAssistantResponse(response, 'Напоминания недоступны');
+    return json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+  }
+
   Future<List<TroikaInboxMessage>> listAssistantInbox(
       {bool unreadOnly = false}) async {
     final uri = Uri.parse('${TroikaConfig.serverUrl}/v1/assistant/inbox')

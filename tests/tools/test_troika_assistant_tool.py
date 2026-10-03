@@ -25,6 +25,31 @@ def test_tool_requires_server_derived_product_identity():
     assert payload == {"ok": False, "error": "product_identity_required"}
 
 
+def test_relative_reminder_uses_server_clock_and_title(tmp_path):
+    registry = AccessRegistry(tmp_path / "access.db")
+    user = registry.create_user("reminder@example.com")
+    principal = registry.authenticate(registry.issue_device_token(registry.create_device(user, name="Phone", platform="android")))
+    registry.set_notification_preferences(principal, NotificationPreferences(reminders_enabled=True))
+    overrides = _overrides(registry.database_path, principal)
+    try:
+        for name, value in overrides.items():
+            set_session_override(name, value)
+        start = datetime.now(timezone.utc)
+        result = json.loads(troika_assistant_tool._handle_reminder({"title": "Выпить воды", "delay_seconds": 120}))
+        assert result["ok"] and result["result"]["delivery_enabled"]
+        due = datetime.fromisoformat(result["result"]["due_at"])
+        assert 120 <= (due - start).total_seconds() < 123
+        plan = ProactiveStore(registry.database_path).reminder_delivery_plan(principal)
+        assert plan["reminders"][0]["title"] == "Выпить воды"
+        assert plan["reminders"][0]["id"] == result["result"]["message_id"]
+        for bad in [{"title": "Вода", "delay_seconds": True}, {"title": "Вода", "delay_seconds": 0},
+                    {"title": "Вода", "delay_seconds": 120, "due_at": due.isoformat()}, {"delay_seconds": 120}]:
+            assert json.loads(troika_assistant_tool._handle_reminder(bad))["ok"] is False
+    finally:
+        for name in overrides:
+            clear_session_override(name)
+
+
 def test_tool_persists_project_note_and_task(tmp_path):
     database = tmp_path / "access.db"
     registry = AccessRegistry(database)

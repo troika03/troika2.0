@@ -1,7 +1,10 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../config/troika_config.dart';
 import '../services/troika_api_service.dart';
+import '../services/reminder_delivery_service.dart';
 import '../theme/troika_theme.dart';
 import 'memory_screen.dart';
 
@@ -234,6 +237,10 @@ class _AssistantHubScreenState extends State<AssistantHubScreen> {
     setState(() => _preferences = next);
     try {
       await _api.setNotificationPreferences(next);
+      if (Platform.isAndroid && next.remindersEnabled) {
+        await Permission.notification.request();
+      }
+      await ReminderDeliveryService.instance.sync();
     } catch (error) {
       _showError(error.toString());
       await _load();
@@ -380,7 +387,8 @@ class _AssistantHubScreenState extends State<AssistantHubScreen> {
                           contentPadding: EdgeInsets.zero,
                           title: const Text('Напоминания',
                               style: TextStyle(color: TroikaColors.text)),
-                          subtitle: const Text('Только задачи со сроком',
+                          subtitle: const Text(
+                              'Просьбы напомнить и задачи со сроком',
                               style: TextStyle(color: TroikaColors.textMuted)),
                           value: prefs?.remindersEnabled ?? false,
                           onChanged: (value) {
@@ -389,6 +397,21 @@ class _AssistantHubScreenState extends State<AssistantHubScreen> {
                                   prefs.copyWith(remindersEnabled: value));
                             }
                           }),
+                      if (Platform.isAndroid)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Точные напоминания на телефоне',
+                              style: TextStyle(color: TroikaColors.text)),
+                          subtitle: const Text(
+                              'Разрешение Android для уведомления в нужную минуту',
+                              style: TextStyle(color: TroikaColors.textMuted)),
+                          onTap: () async {
+                            await Permission.notification.request();
+                            await ReminderDeliveryService.instance
+                                .requestExactAlarms();
+                            await ReminderDeliveryService.instance.sync();
+                          },
+                        ),
                       SwitchListTile(
                           contentPadding: EdgeInsets.zero,
                           title: const Text('Полезные follow-up',

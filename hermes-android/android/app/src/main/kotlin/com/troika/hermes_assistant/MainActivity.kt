@@ -69,6 +69,21 @@ class MainActivity : FlutterActivity() {
         )
         methodChannel!!.setMethodCallHandler { call, result ->
             when (call.method) {
+                "syncReminders" -> {
+                    try {
+                        result.success(ReminderScheduler.sync(this, org.json.JSONObject(call.argument<String>("snapshot") ?: "{}")))
+                    } catch (error: Exception) {
+                        result.error("reminder_sync_failed", "Не удалось установить напоминание на телефоне", null)
+                    }
+                }
+                "clearReminders" -> { ReminderScheduler.clear(this); result.success(null) }
+                "reminderStatus" -> { result.success(ReminderScheduler.status(this)) }
+                "requestExactReminderAlarms" -> {
+                    if (Build.VERSION.SDK_INT >= 31 && ReminderScheduler.status(this)["exact_alarms"] != true) {
+                        startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
+                    }
+                    result.success(null)
+                }
                 "startListenerService" -> { startListenerService(); result.success(null) }
                 "stopListenerService" -> { stopListenerService(); result.success(null) }
                 "triggerDialog" -> { triggerDialog(); result.success(null) }

@@ -33,6 +33,13 @@ _KINDS = {
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ),
     "pdf": (".pdf", "application/pdf"),
+    "html": (".html", "text/html"),
+    "txt": (".txt", "text/plain"),
+    "md": (".md", "text/markdown"),
+    "csv": (".csv", "text/csv"),
+    "json": (".json", "application/json"),
+    "css": (".css", "text/css"),
+    "js": (".js", "text/javascript"),
     "pptx": (
         ".pptx",
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
@@ -138,7 +145,7 @@ class ArtifactStore:
         return sha256(user_id.encode("utf-8")).hexdigest()[:32]
 
     def _path_for(self, user_id: str, storage_name: str) -> Path:
-        if not re.fullmatch(r"art_[0-9a-f]{32}\.(?:docx|pdf|pptx)", storage_name):
+        if not re.fullmatch(r"art_[0-9a-f]{32}\.(?:docx|pdf|pptx|html|txt|md|csv|json|css|js)", storage_name):
             raise ArtifactIntegrityError("invalid artifact storage reference")
         target = (self.storage_root / self._user_bucket(user_id) / storage_name).resolve()
         if self.storage_root not in target.parents:

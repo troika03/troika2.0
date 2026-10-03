@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 import 'dart:math';
 import 'package:flutter/services.dart' show MethodChannel;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/reminder_delivery_service.dart';
 
 /// Настройки подключения к Troika API Server.
 class TroikaConfig {
@@ -311,6 +312,7 @@ class TroikaConfig {
   }
 
   static Future<void> signOut() async {
+    await ReminderDeliveryService.instance.clear();
     await setPhoneControlEnabled(false);
     await clearRefreshToken();
     await _prefs.remove(_keyAccountEmail);

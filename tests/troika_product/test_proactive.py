@@ -65,6 +65,39 @@ def test_reminder_waits_for_opt_in_and_quiet_hours(tmp_path):
     assert delivered[0].reason == "Срок проверки плана."
 
 
+def test_phone_alarm_snapshot_is_private_retractable_and_quiet_aware(tmp_path):
+    access, store, first, second = _setup(tmp_path)
+    now = datetime(2026, 10, 3, 18, 59, tzinfo=timezone.utc)
+    due = now + timedelta(minutes=2)  # 22:01 in Moscow, inside quiet hours.
+    message_id = store.enqueue_message(first, kind="reminder", category="reminder", title="Вода",
+        body="Выпить воды", reason="Пользователь попросил", available_at=due.isoformat())
+    assert store.reminder_delivery_plan(first, now=now)["reminders"] == []
+    access.set_notification_preferences(first, NotificationPreferences(reminders_enabled=True,
+        quiet_hours_enabled=True, timezone="Europe/Moscow"))
+    plan = store.reminder_delivery_plan(first, now=now)
+    assert plan["owner_id"] == first.user_id
+    assert plan["reminders"][0]["id"] == message_id
+    assert datetime.fromtimestamp(plan["reminders"][0]["fire_at"], timezone.utc).hour == 5
+    assert store.reminder_delivery_plan(second, now=now)["reminders"] == []
+    assert store.list_inbox(first, now=now) == []  # Fetching does not deliver early.
+    access.set_notification_preferences(first, NotificationPreferences(reminders_enabled=True))
+    assert store.reminder_delivery_plan(first, now=now)["reminders"][0]["fire_at"] == due.timestamp()
+    store.list_inbox(first, now=due)
+    store.mark_read(first, message_id)
+    assert store.reminder_delivery_plan(first, now=due)["reminders"] == []
+
+
+def test_cancelled_task_removes_its_pending_phone_alarm(tmp_path):
+    access, store, first, _ = _setup(tmp_path)
+    access.set_notification_preferences(first, NotificationPreferences(reminders_enabled=True))
+    project = store.create_project(first, name="План")
+    task = store.create_task(first, project_id=project.id, title="Проверить",
+        due_at=(datetime.now(timezone.utc) + timedelta(hours=1)).isoformat())
+    assert len(store.reminder_delivery_plan(first)["reminders"]) == 1
+    store.update_task(first, task.id, status="cancelled")
+    assert store.reminder_delivery_plan(first)["reminders"] == []
+
+
 def test_proactive_requires_concrete_context_and_caps_delivery(tmp_path):
     access, store, first, _ = _setup(tmp_path)
     project = store.create_project(first, name="Развитие")

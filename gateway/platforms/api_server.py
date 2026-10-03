@@ -79,7 +79,7 @@ def _safe_product_action_result(tool_name: str, raw_result: Any) -> Optional[Dic
     """Expose only owner-safe product result metadata to first-party clients."""
     if tool_name not in {
         "troika_create_docx", "troika_create_pdf", "troika_create_pptx",
-        "troika_assistant",
+        "troika_assistant", "troika_reminder", "troika_files",
     }:
         return None
     if not isinstance(raw_result, str):
@@ -91,7 +91,7 @@ def _safe_product_action_result(tool_name: str, raw_result: Any) -> Optional[Dic
     if not isinstance(payload, dict) or payload.get("ok") is not True:
         return None
 
-    if tool_name.startswith("troika_create_"):
+    if tool_name.startswith("troika_create_") or tool_name == "troika_files":
         artifact = payload.get("artifact")
         if not isinstance(artifact, dict) or not artifact.get("id") or not artifact.get("filename"):
             return None
@@ -2788,6 +2788,16 @@ class APIServerAdapter(BasePlatformAdapter):
             {"messages": [item.to_dict() for item in items]},
             headers={"Cache-Control": "no-store"},
         )
+
+    async def _handle_reminder_delivery_plan(self, request: "web.Request") -> "web.Response":
+        principal = self._require_proactive_principal(request)
+        if isinstance(principal, web.Response):
+            return principal
+        try:
+            payload = self._proactive_store.reminder_delivery_plan(principal)
+        except PermissionError:
+            return web.json_response(_openai_error("Product authentication is required"), status=401)
+        return web.json_response(payload, headers={"Cache-Control": "no-store"})
 
     async def _handle_assistant_inbox_read(self, request: "web.Request") -> "web.Response":
         resolved = self._require_proactive_principal(request)
@@ -6285,6 +6295,9 @@ class APIServerAdapter(BasePlatformAdapter):
                 )
                 self._app.router.add_get(
                     "/v1/assistant/inbox", self._handle_assistant_inbox,
+                )
+                self._app.router.add_get(
+                    "/v1/assistant/reminders", self._handle_reminder_delivery_plan,
                 )
                 self._app.router.add_post(
                     "/v1/assistant/inbox/{message_id}/read",

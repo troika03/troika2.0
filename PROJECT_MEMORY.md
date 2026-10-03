@@ -106,7 +106,7 @@ AI-ассистент для Android и Windows, где чат остаётся 
 - Голос и текст используют случайный persistent session ID на установку; статические `phone-misha` IDs убраны из маршрутов сессий и background jobs.
 - `model_tools` принудительно передаёт текущий session scope каждому tool call и игнорирует подставленный моделью ID.
 - Location fingerprints, list и delete изолированы по session scope; миграция старой SQLite-схемы сохраняет старые записи в scope `legacy`.
-- Убрана небезопасная общая доставка reminders: создание временно честно отклоняется до реализации личного push/in-app channel.
+- Общая доставка reminders заменена личным owner-scoped inbox. Явные напоминания сохраняются через `troika_reminder`; Android-клиент синхронизирует их с локальным AlarmManager. FCM push ещё отсутствует.
 - Проверено: 4 targeted pytest tests passed; Python compilation passed; Dart files formatted. Flutter test ещё не запускался из-за отсутствующих packages.
 
 ## Выполнено: P0 beta access foundation (2026-09-09)
@@ -965,8 +965,9 @@ AI-ассистент для Android и Windows, где чат остаётся 
   «через 10 минут». Временные smoke-аккаунты и их данные удалены.
 - APK с timezone header и расширенным локальным matcher установлена поверх
   текущей версии на Samsung SM-A225F 2026-10-01 без удаления пользовательских
-  данных и успешно запущена. Напоминания остаются безопасной opt-in in-app
-  доставкой; отдельный push lifecycle ещё не реализован.
+  данных и успешно запущена. Теперь к opt-in in-app inbox добавлен локальный
+  Android AlarmManager для явных напоминаний; отдельный FCM push lifecycle ещё
+  не реализован. Установка и физическая проверка новой сборки пока ожидают USB.
 
 ## Выполнено: короткие access-токены и ротация refresh-токенов (2026-10-01)
 
@@ -1366,3 +1367,43 @@ AI-ассистент для Android и Windows, где чат остаётся 
 - Windows-клиент обновлён в `C:\Users\kiqu\Troika` без очистки аккаунта и
   локальных данных, совпадение release `app.so` проверено, приложение запущено
   и установило HTTPS-соединения с production API.
+
+## Исправление напоминаний и доступности созданных сайтов (2026-10-03)
+
+- Уточнён regression completion guard: слова «на телефоне» в подтверждении
+  таймера/напоминания больше не требуют второго device-action; запуск таймера
+  подтверждается успешным set_timer. Создание HTML-сайта проверяется по реально
+  сохранённому `.html`, но не доказывает публикацию. Grounded fallback для
+  сохранённого reminder сообщает его тему и фактический срок вместо общего
+  «часть действий выполнена».
+- `troika_reminder` — отдельный инструмент с обязательным title. Относительный
+  срок передаётся как delay_seconds, вычисляется по серверным часам. Абсолютный
+  due_at требует RFC3339 с offset. Старый reminder_schedule handler сохранён
+  для совместимости, в новом generic schema его нет. Persona marker повышен до 4.
+- Новый GET `/v1/assistant/reminders` отдаёт только reminders текущего владельца,
+  проверяет актуальный opt-in, откладывает quiet hours, исключает прочитанные
+  сообщения и закрытые задачи. Чтение snapshot не означает раннюю доставку.
+- Android сохраняет snapshot локально и ставит AlarmManager notifications:
+  дедупликация по message ID, восстановление после reboot/package update,
+  отмена на logout, защита от завершившегося после logout сетевого запроса.
+  Синхронизация при входе, после chat/voice, периодически вместе с account history
+  и при смене настроек. Offline использует последний полученный snapshot:
+  серверное удаление/отзыв учитываются после следующей успешной синхронизации.
+- В «Помощнике» включение reminders запрашивает Android notification permission;
+  отдельный пункт открывает exact-alarm permission. При отсутствии уведомлений,
+  точных таймеров или успешной синхронизации клиент добавляет понятное ограничение
+  к результату. Windows AlarmManager не поддерживает; FCM и доставка на телефон
+  без предварительной синхронизации в этом срезе не реализованы.
+- Непустые HTML/TXT/MD/CSV/JSON/CSS/JS при workspace write/replace/copy/move
+  экспортируются как immutable owner-scoped artifacts. Они появляются в файлах
+  клиента и скачиваются с attachment/nosniff; сырой путь сервера не раскрывается.
+  HTML — скачиваемый сайт, а не подтверждение публичного хостинга.
+- Проверено: focused Python 290 passed/1 skipped; Flutter 50 passed/2 define-only
+  skipped; analyze без errors/warnings (20 прежних info); targeted Ruff и diff
+  whitespace checks прошли. Release APK собрана с production HTTPS endpoint.
+  После расширения export на replace/copy/move дополнительно 12 Python tests
+  прошли, включая проверку новой версии HTML artifact.
+- Production и установленная Android-версия пока e511391/persona 3. Физический
+  телефон сейчас отсутствует в `adb devices`; новая доставка на устройстве пока
+  не проверена. Следующий шаг: production rollout, живой reminder/HTML smoke,
+  затем установка APK и проверка уведомления на подключённом Samsung A22.

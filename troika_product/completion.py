@@ -27,7 +27,7 @@ _VERBS = {
 }
 _CLAIMS = {key: re.compile(r"\b(?:" + value + r")\b", re.I) for key, value in _VERBS.items()}
 _DOMAINS = {
-    "file": re.compile(r"файл|документ|презентац|отч[её]т|папк|\.docx|\.pdf|\.pptx|\.txt|document|file|folder", re.I),
+    "file": re.compile(r"файл|документ|презентац|отч[её]т|папк|\.docx|\.pdf|\.pptx|\.txt|\.html|document|file|folder", re.I),
     "reminder": re.compile(r"напомин|будильник|таймер|remind|alarm|timer", re.I),
     "task": re.compile(r"задач|task", re.I),
     "memory": re.compile(r"памят|запом|memory|remember", re.I),
@@ -99,6 +99,7 @@ class CompletionEvidence:
     disabled_reminders: bool = False
     filenames: set[str] = field(default_factory=set)
     phone_file_saved: bool = False
+    saved_reminders: dict[str, dict] = field(default_factory=dict)
 
     def record(self, name: str, args: Any, raw_result: Any) -> None:
         args, payload = _object(args), _object(raw_result)
@@ -111,7 +112,9 @@ class CompletionEvidence:
             proved = proved and bool(artifact.get("id") and artifact.get("filename"))
             if proved:
                 self.filenames.add(str(artifact["filename"]).casefold())
-        elif name == "troika_assistant":
+        elif name in {"troika_assistant", "troika_reminder"}:
+            if name == "troika_reminder":
+                action = "reminder_schedule"
             domain, operation = _ASSISTANT_ACTIONS.get(action, ("", ""))
             result = _object(payload.get("result"))
             proved = proved and payload.get("action") == action and bool(
@@ -120,6 +123,8 @@ class CompletionEvidence:
             if domain == "reminder" and result.get("delivery_enabled") is False:
                 self.disabled_reminders = True
                 proved = False
+            if proved and action == "reminder_schedule":
+                self.saved_reminders[str(result["message_id"])] = result
         elif name == "troika_files":
             domain = "file"
             operation = {"write": "create", "mkdir": "create", "copy": "create",
@@ -178,6 +183,14 @@ class CompletionEvidence:
             if not operations:
                 continue
             domains = [domain for domain, pattern in _DOMAINS.items() if pattern.search(clean)]
+            if "information" in domains and "create" in operations and any(name.endswith(".html") for name in self.filenames):
+                domains = ["file" if domain == "information" else domain for domain in domains]
+            # A location or purpose is not a second performed action:
+            # "таймер на телефоне", "файл сайта".
+            if "reminder" in domains and not re.search(r"приложени|громкост|яркост|фонарик|device|app", clean, re.I):
+                domains = [domain for domain in domains if domain != "device"]
+            if "file" in domains and any(op in {"create", "update"} for op in operations):
+                domains = [domain for domain in domains if domain != "information"]
             # Writing an answer/poem in chat and checking supplied text require
             # no external tool. Short "сохранила" after an action request does.
             if not domains and not self.receipts and not _ACTION_REQUEST.search(str(user_message)):
@@ -189,7 +202,7 @@ class CompletionEvidence:
                     return True
                 if re.search(r"(?:на|в)\s+телефон", clean, re.I) and not self.phone_file_saved:
                     return True
-                for filename in re.findall(r"[\w-]+\.(?:docx|pdf|pptx|txt|csv|xlsx)\b", clean, re.I):
+                for filename in re.findall(r"[\w-]+\.(?:docx|pdf|pptx|txt|csv|xlsx|html|css|js|json|md)\b", clean, re.I):
                     if filename.casefold() not in self.filenames:
                         return True
             for operation in operations:
@@ -200,6 +213,8 @@ class CompletionEvidence:
                     compatible.add("create")
                 if operation == "remind":
                     compatible = {"set"}
+                if operation == "open" and "reminder" in domains:
+                    compatible.add("set")  # Starting a timer.
                 if not any(op in compatible and (not domains or domain in domains)
                            for domain, op in successes):
                     return True
@@ -220,6 +235,15 @@ class CompletionEvidence:
         successful_actions = any(ok and operation != "read" for _, operation, ok in self.receipts.values())
         if self.disabled_reminders:
             return "Напоминание сохранено, но доставка отключена. Включи напоминания в настройках, чтобы получать их."
+        if self.saved_reminders:
+            # Describe persisted scheduling even when model prose failed the
+            # check. Never hide a landed reminder behind a generic refusal.
+            lines = []
+            for result in self.saved_reminders.values():
+                title = str(result.get("title") or "Напоминание")[:160]
+                due = str(result.get("due_at") or "")
+                lines.append(f"Напоминание сохранено: «{title}»." + (f" Срок: {due}." if due else ""))
+            return "\n".join(lines)
         if successful_actions:
             return "Часть действий выполнена, но подтвердить выполнение всей просьбы не удалось. Не буду говорить, что всё готово."
         return "Не удалось подтвердить выполнение просьбы. Действие не считаю выполненным."

@@ -12,6 +12,7 @@ from gateway.session_context import get_session_env
 from hermes_constants import get_hermes_home
 from tools.registry import registry
 from troika_product.access import AccessPrincipal, AccessRegistry
+from troika_product.artifacts import ArtifactStore
 from troika_product.workspace import WorkspaceError, WorkspaceStore
 
 
@@ -91,6 +92,19 @@ def _approve_delete(path: str, recursive: bool) -> bool:
         return False
 
 
+def _written_file_result(action: str, entry: Any, store: WorkspaceStore, identity: tuple[str, str, str]) -> str:
+    payload = {"action": action, "entry": entry.to_dict()}
+    kind = Path(entry.path).suffix.lower().lstrip(".")
+    if entry.size and kind in {"html", "txt", "md", "csv", "json", "css", "js"} and get_session_env("TROIKA_PRODUCT_ARTIFACTS_AVAILABLE", "") == "1":
+        artifact = ArtifactStore(
+            Path(get_session_env("TROIKA_PRODUCT_ARTIFACT_DB")),
+            Path(get_session_env("TROIKA_PRODUCT_ARTIFACT_ROOT")),
+        ).create(user_id=identity[0], device_id=identity[1], filename=Path(entry.path).name,
+                 kind=kind, data=store.read_text(identity[0], entry.path).encode("utf-8"))
+        payload["artifact"] = artifact.to_dict()
+    return _result(True, **payload)
+
+
 def _handle_files(args: dict[str, Any], **kwargs: Any) -> str:
     identity = _identity()
     if identity is None:
@@ -126,7 +140,7 @@ def _handle_files(args: dict[str, Any], **kwargs: Any) -> str:
             _audit(
                 "write", path=path, size=entry.size, task_id=kwargs.get("task_id") or ""
             )
-            return _result(True, action=action, entry=entry.to_dict())
+            return _written_file_result(action, entry, store, identity)
         if action == "replace":
             entry = store.replace_text(
                 user_id,
@@ -141,7 +155,7 @@ def _handle_files(args: dict[str, Any], **kwargs: Any) -> str:
                 size=entry.size,
                 task_id=kwargs.get("task_id") or "",
             )
-            return _result(True, action=action, entry=entry.to_dict())
+            return _written_file_result(action, entry, store, identity)
         if action == "mkdir":
             entry = store.mkdir(user_id, path)
             _audit("mkdir", path=path, task_id=kwargs.get("task_id") or "")
@@ -155,12 +169,12 @@ def _handle_files(args: dict[str, Any], **kwargs: Any) -> str:
                 size=entry.size,
                 task_id=kwargs.get("task_id") or "",
             )
-            return _result(True, action=action, entry=entry.to_dict())
+            return _written_file_result(action, entry, store, identity)
         if action == "move":
             destination = str(args.get("destination") or "")
             entry = store.move(user_id, path, destination)
             _audit("move", path=destination, task_id=kwargs.get("task_id") or "")
-            return _result(True, action=action, entry=entry.to_dict())
+            return _written_file_result(action, entry, store, identity)
         if action == "delete":
             recursive = bool(args.get("recursive", False))
             if not _approve_delete(path, recursive):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -109,6 +110,13 @@ def _handle(args: dict[str, Any], **_: Any) -> str:
             item = memory_store.delete_memory(principal, args.get("memory_id"))
             result = {"deleted": True, "memory_id": item.id}
         elif action == "reminder_schedule":
+            if args.get("delay_seconds") is not None:
+                delay = args["delay_seconds"]
+                if isinstance(delay, bool) or not isinstance(delay, int) or not 1 <= delay <= 31_536_000:
+                    raise ValueError("delay_seconds must be an integer between 1 and 31536000")
+                if args.get("due_at"):
+                    raise ValueError("provide delay_seconds or due_at, not both")
+                args = {**args, "due_at": (datetime.now(timezone.utc) + timedelta(seconds=delay)).isoformat()}
             if not args.get("due_at"):
                 raise ValueError("reminder_schedule requires due_at")
             title = args.get("title")
@@ -129,6 +137,7 @@ def _handle(args: dict[str, Any], **_: Any) -> str:
                 "message_id": message_id,
                 "kind": "reminder",
                 "title": title,
+                "due_at": args["due_at"],
                 "delivery_enabled": store.notification_preferences(
                     principal
                 ).reminders_enabled,
@@ -175,12 +184,8 @@ SCHEMA = {
         "the user explicitly asks to remember it or clearly confirms it. Use memory_update or "
         "memory_delete only for an explicit change to an existing memory. Never store passwords, "
         "access tokens, payment credentials, or authentication secrets. "
-        "Use reminder_schedule only for a reminder explicitly requested by the user. Use "
-        "the current local date, time, and time zone from the system context to resolve "
-        "relative phrases such as today, tomorrow, or in two hours, then pass due_at as "
-        "an exact RFC 3339 timestamp with an offset. "
+        "For an explicitly requested reminder, use the dedicated troika_reminder tool. "
         "follow_up_schedule only for a concrete project follow-up allowed by proactive opt-in. "
-        "If reminder_schedule returns delivery_enabled=false, tell the user to enable reminders. "
         "Never schedule greetings or generic check-ins. Future external actions are proposals only; "
         "execute them later through the relevant tool and its separate approval."
     ),
@@ -193,7 +198,7 @@ SCHEMA = {
                     "project_create", "project_list", "project_activate",
                     "note_add", "note_list", "task_add", "task_list",
                     "task_update", "memory_add", "memory_list", "memory_update",
-                    "memory_delete", "reminder_schedule", "follow_up_schedule",
+                    "memory_delete", "follow_up_schedule",
                 ],
             },
             "project_id": {"type": "string", "description": "Omit to use active project."},
@@ -256,4 +261,38 @@ registry.register(
     handler=_handle,
     check_fn=lambda: True,
     emoji="📌",
+)
+
+
+def _handle_reminder(args: dict[str, Any], **kwargs: Any) -> str:
+    return _handle({**args, "action": "reminder_schedule"}, **kwargs)
+
+
+registry.register(
+    name="troika_reminder",
+    toolset="troika_assistant",
+    schema={
+        "name": "troika_reminder",
+        "description": (
+            "Save a reminder explicitly requested by the user. For 'in two minutes', "
+            "pass delay_seconds=120; the server calculates the due time. For an absolute "
+            "date pass due_at with an RFC3339 UTC offset instead. Provide exactly one "
+            "of delay_seconds and due_at. Always include a short title naming what to "
+            "remind about. If delivery_enabled=false, tell the user to enable reminders "
+            "in the Assistant settings. Do not use a phone timer for a personal reminder."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "What the user wants to remember."},
+                "delay_seconds": {"type": "integer", "minimum": 1, "maximum": 31_536_000},
+                "due_at": {"type": "string", "description": "Absolute RFC3339 timestamp with UTC offset."},
+                "idempotency_key": {"type": "string"},
+            },
+            "required": ["title"],
+            "additionalProperties": False,
+        },
+    },
+    handler=_handle_reminder,
+    check_fn=lambda: True,
 )

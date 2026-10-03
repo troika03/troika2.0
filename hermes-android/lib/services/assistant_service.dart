@@ -14,6 +14,7 @@ import 'wake_word_service.dart';
 import 'local_command_service.dart';
 import '../config/troika_config.dart';
 import 'account_service.dart';
+import 'reminder_delivery_service.dart';
 
 enum AssistantState {
   idle,
@@ -140,6 +141,7 @@ class AssistantService extends ChangeNotifier {
         force: !TroikaConfig.sessionId.startsWith('ses_'),
       );
       unawaited(_troika.syncDeviceTimeZone());
+      unawaited(ReminderDeliveryService.instance.sync());
     }
 
     if (_wakeWordEnabled) {
@@ -160,6 +162,7 @@ class AssistantService extends ChangeNotifier {
   Future<void> onAccountAuthenticated() async {
     await AccountService().ensureFreshSession();
     unawaited(_troika.syncDeviceTimeZone());
+    unawaited(ReminderDeliveryService.instance.sync());
     await loadHistory(replaceEvenIfEmpty: true);
   }
 
@@ -172,6 +175,8 @@ class AssistantService extends ChangeNotifier {
     }
     _accountSyncInFlight = true;
     try {
+      await AccountService().ensureFreshSession();
+      unawaited(ReminderDeliveryService.instance.sync());
       await loadHistory();
     } finally {
       _accountSyncInFlight = false;
@@ -277,6 +282,7 @@ class AssistantService extends ChangeNotifier {
     if (text.isEmpty) return;
     // снять pending-«печатает», если был
     if (role == 'assistant') {
+      unawaited(ReminderDeliveryService.instance.sync());
       final idx = _messages.lastIndexWhere((m) => m.pending);
       if (idx >= 0) {
         _messages[idx]
@@ -598,7 +604,20 @@ class AssistantService extends ChangeNotifier {
         },
         onApproval: _waitForApproval,
       );
-      final cleanResponse = _stripEmoTag(response);
+      var cleanResponse = _stripEmoTag(response);
+      final reminderStatus = await ReminderDeliveryService.instance.sync();
+      if (structuredResult?.kind == 'reminder' && Platform.isAndroid) {
+        if (reminderStatus == null) {
+          cleanResponse +=
+              '\nНа телефоне пока не удалось настроить уведомление. Проверь соединение.';
+        } else if (!reminderStatus.notificationsEnabled) {
+          cleanResponse +=
+              '\nРазреши уведомления Тройки в настройках телефона, чтобы напоминание сработало.';
+        } else if (!reminderStatus.exactAlarms) {
+          cleanResponse +=
+              '\nAndroid может задержать уведомление. Включи точные напоминания в разделе «Помощник».';
+        }
+      }
       _lastTroikaText = cleanResponse;
       _setLastResult(AssistantResult.forTurn(
         response: cleanResponse,

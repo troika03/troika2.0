@@ -77,6 +77,41 @@ def test_workspace_crud_search_and_owner_isolation(tmp_path):
     assert {entry.path for entry in store.list(FIRST, "archive")} == {"archive/copy.md"}
 
 
+def test_generated_html_is_downloadable_as_private_artifact(tmp_path):
+    from troika_product.artifacts import ArtifactStore
+    from gateway.platforms.api_server import _safe_product_action_result
+
+    access = AccessRegistry(tmp_path / "access.db")
+    owner = access.create_user("site@example.com")
+    device = access.create_device(owner, name="Phone", platform="android")
+    principal = access.authenticate(access.issue_device_token(device))
+    overrides = {"TROIKA_PRODUCT_MODE": "1", "TROIKA_PRODUCT_USER_ID": owner,
+        "TROIKA_PRODUCT_DEVICE_ID": device, "TROIKA_PRODUCT_TOKEN_ID": principal.token_id,
+        "TROIKA_PRODUCT_ACCESS_DB": str(access.database_path),
+        "TROIKA_PRODUCT_WORKSPACE_ROOT": str(tmp_path / "workspaces"),
+        "TROIKA_PRODUCT_ARTIFACTS_AVAILABLE": "1", "TROIKA_PRODUCT_ARTIFACT_DB": str(access.database_path),
+        "TROIKA_PRODUCT_ARTIFACT_ROOT": str(tmp_path / "artifacts")}
+    html = '<!doctype html><html><body>Кофейня</body></html>'
+    try:
+        for name, value in overrides.items():
+            set_session_override(name, value)
+        raw = _handle_files({"action": "write", "path": "coffee.html", "content": html})
+        payload = json.loads(raw)
+        assert payload["ok"]
+        artifact = payload["artifact"]
+        assert _safe_product_action_result("troika_files", raw)["id"] == artifact["id"]
+        store = ArtifactStore(access.database_path, tmp_path / "artifacts")
+        metadata, data = store.read_for_user(owner, artifact["id"])
+        assert metadata.kind == "html" and data.decode() == html
+        changed = json.loads(_handle_files({"action": "replace", "path": "coffee.html", "old": "Кофейня", "new": "Чайная"}))
+        _, revised = store.read_for_user(owner, changed["artifact"]["id"])
+        assert "Чайная" in revised.decode()
+        assert changed["artifact"]["id"] != artifact["id"]
+    finally:
+        for name in overrides:
+            clear_session_override(name)
+
+
 def test_workspace_blocks_path_escape_and_symlinks(tmp_path):
     store = WorkspaceStore(tmp_path / "workspaces")
 

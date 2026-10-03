@@ -88,6 +88,34 @@ def test_disabled_delivery_is_not_a_reminder_promise():
     assert "доставка отключена" in evidence.fallback()
 
 
+def test_reminder_on_phone_is_not_a_second_device_action():
+    evidence = CompletionEvidence()
+    evidence.record("troika_reminder", {"title": "Вода", "delay_seconds": 120}, {
+        "ok": True, "action": "reminder_schedule",
+        "result": {"message_id": "msg_1", "title": "Вода", "due_at": "2026-10-03T10:02:00Z", "delivery_enabled": True},
+    })
+    assert not evidence.unsupported("Напоминание установлено на телефоне. Напомню через две минуты.")
+    assert "Вода" in evidence.fallback()
+    assert "10:02" in evidence.fallback()
+    assert "Часть" not in evidence.fallback()
+    assert evidence.unsupported("Напоминание установлено и приложение открыто.")
+
+
+def test_launched_timer_has_set_receipt():
+    evidence = CompletionEvidence()
+    evidence.record("android_set_timer", {"seconds": 120}, {"ok": True})
+    assert not evidence.unsupported("Таймер на телефоне запущен.")
+
+
+def test_saved_html_proves_created_website_but_not_publication():
+    evidence = CompletionEvidence()
+    evidence.record("troika_files", {"action": "write", "path": "coffee.html"}, {"ok": True, "entry": {"path": "coffee.html"}})
+    assert not evidence.unsupported("Файл сайта coffee.html создан.")
+    assert not evidence.unsupported("Сайт создан и сохранён в coffee.html.")
+    assert evidence.unsupported("Файл missing.html создан.")
+    assert evidence.unsupported("Сайт опубликован.")
+
+
 def test_opening_search_is_not_reading_results():
     evidence = CompletionEvidence()
     evidence.record("android_web_search", {"query": "weather"}, {"ok": True})

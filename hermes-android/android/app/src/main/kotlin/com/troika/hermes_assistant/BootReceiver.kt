@@ -15,6 +15,7 @@ class BootReceiver : BroadcastReceiver() {
             action == Intent.ACTION_LOCKED_BOOT_COMPLETED ||
             action == "android.intent.action.QUICKBOOT_POWERON"
         ) {
+            if (action != Intent.ACTION_LOCKED_BOOT_COMPLETED) ReminderScheduler.reschedule(context)
             // После reboot восстанавливаем только явно включённое пользователем
             // фоновое пробуждение. Другие старые настройки не должны сами
             // активировать микрофонный foreground service.
