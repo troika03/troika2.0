@@ -56,7 +56,7 @@ jobs:
 
       # Сборка amd64 (основная платформа для VPS)
       - name: Build and push (amd64)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.troika
