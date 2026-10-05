@@ -63,6 +63,17 @@ listener.
 
 ## Deployment status
 
+Verified again on 2026-10-05: API and STT containers run image
+`troika-production:bf92c78`; API is healthy and public HTTPS `/health` returns
+200. Register/login/refresh, memory CRUD, one agent run creating DOCX/HTML and
+a reminder, authenticated downloads and account export passed on an isolated
+temporary account; account deletion returned `200/deleted`. This verifies
+that slice, not billing, all voice paths or launch readiness.
+
+The production web backend resolves to Firecrawl, but its requirement check
+returns false. Web search/extract/research are currently unavailable until a
+provider is configured and tested. See [functional audit](TROIKA_FUNCTIONAL_AUDIT.md).
+
 The operating-system baseline and private application runtime are configured.
 The current product revision runs the authenticated API and a separate STT
 worker from `deploy/production/compose.yaml`. The API binds only to host

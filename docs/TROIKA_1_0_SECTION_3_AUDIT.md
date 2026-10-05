@@ -3,7 +3,8 @@
 Дата проверки: 2026-09-24. Главный критерий: раздел 3
 `Troika_1.0_Launch_Plan_Final_Updated.docx`.
 
-Статусы ниже описывают текущую реализацию. Они не заменяют подробные критерии
+Это исторический аудит этапа 2026-09-24. Свежий статус находится в
+[аудите функций](TROIKA_FUNCTIONAL_AUDIT.md). Статусы ниже описывают реализацию того этапа. Они не заменяют подробные критерии
 следующих разделов плана.
 
 ## Обязательные области
@@ -19,7 +20,7 @@
 | Tasks | Реализовано | `troika_product/proactive.py`, `tools/troika_assistant_tool.py`, `assistant_hub_screen.dart`; `tests/troika_product/test_proactive.py`, `tests/gateway/test_product_assistant.py` | Push не включён; in-app inbox работает. |
 | Devices | Частично | Owner-scoped список/отзыв устройств; безопасный Android bridge; локальные allowlist-команды Android/Windows в `local_command_service.dart`; device/phone tests | Отдельный production Windows Companion ещё не выпущен. |
 | Subscription | Частично | Entitlement и usage ledger в `troika_product/access.py`; owner-scoped `GET /v1/subscription`; Android показывает тариф и остаток лимита; auth/usage/Flutter tests | Нет Plus/Pro checkout, webhook, отмены и платёжного статуса. Это основной scope раздела 8. |
-| Production | Частично | Security headers, health endpoints, locked product CI, tenant isolation и retention tests | Нет production deployment, object storage, backup/restore, monitoring и централизованных логов. Это основной scope раздела 13. |
+| Production | Частично | Security headers, health endpoints, locked product CI, tenant isolation и retention tests | Позднее подняты VPS/API/STT/TLS. Object storage, backup/restore и monitoring всё ещё не завершены. Это основной scope раздела 13. |
 
 ## Экспериментальные возможности
 

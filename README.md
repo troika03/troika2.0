@@ -1,129 +1,103 @@
-<p align="center">
-  <img src="assets/troika-banner.svg" alt="Тройка — личный AI-ассистент" width="100%">
-</p>
-
 # Troika 1.0
 
-Troika — voice-first персональный AI-ассистент для Android и Windows. Голос —
-главный интерфейс. Чат остаётся дополнительным способом ввода и просмотра
-деталей.
+Персональный AI-ассистент для Android и Windows. Главный интерфейс — голос;
+текст служит дополнительным вводом. Цель: выполнить задачу, сохранить результат
+и использовать личный контекст под контролем пользователя.
 
-> Скажи Тройке, что нужно сделать. Она поймёт задачу, сама выберет нужные
-> инструменты, выполнит работу, сохранит результат и будет помнить контекст в
-> следующий раз.
+Целевое обещание Troika 1.0: «Скажи Тройке, что нужно сделать. Она поймёт
+задачу, сама выберет нужные инструменты, выполнит работу, сохранит результат
+и будет помнить контекст в следующий раз». Это цель релиза, а не утверждение
+о готовности всех сценариев текущей версии.
 
-Troika продаётся как личный AI, который экономит время в повседневных,
-учебных и рабочих задачах. Пользователю не нужно выбирать модель, режим агента
-или внутренний инструмент.
+Аудитория главного плана:
 
-## Для кого
+- Студент: задания, объяснения и учебные документы.
+- Начинающий специалист: отчёты, сравнения и рабочая рутина.
+- Разработчик или power user: research, файлы и coding при настроенном backend.
+- Обычный пользователь: понятные команды, задачи и напоминания.
 
-| Пользователь | Главная задача | Сценарий Troika 1.0 |
-|---|---|---|
-| Студент | Разобраться с заданиями и файлами | Голосом попросить объяснить задание, найти информацию, подготовить DOCX/PPTX и напомнить отправить. |
-| Начинающий специалист | Быстрее справляться с письмами, исследованиями, документами и рутиной | Попросить подготовить отчёт, сравнение, файл, поиск и список следующих действий. |
-| Разработчик или power user | Делегировать сложную работу без ручного выбора внутренней архитектуры | Поручить research, работу с файлами или coding-задачу; BYOK и дополнительные возможности остаются в Advanced. |
-| Обычный пользователь | Получить результат без изучения сложного AI-интерфейса | Сказать естественной фразой: «напомни», «найди», «открой» или «сделай документ». |
+Продукт находится в разработке. Публичная платная версия ещё не готова.
+[Аудит функций](docs/TROIKA_FUNCTIONAL_AUDIT.md) отделяет работающий foundation,
+подтверждённые дефекты, отсутствующие функции и непроверенные сценарии.
 
-## Что получает пользователь
+## Начать здесь
 
-- голосовой запуск задачи с главного экрана;
-- выполненное действие, файл, найденную информацию, задачу или короткий ответ;
-- сохранённые результаты и owner-scoped память, которую можно посмотреть,
-  изменить или удалить;
-- понятное одноразовое подтверждение перед чувствительным действием;
-- один интерфейс Тройки без выбора моделей, tools, workers и agent framework.
+- [Документация](docs/README.md): один вход во все планы, runbooks и reviews.
+- [Главный план](docs/Troika_1.0_Launch_Plan_Final_Updated.docx): требования и Definition of Done.
+- [Трекер](docs/TROIKA_1_0_EXECUTION_TRACKER.md): прогресс разделов 1–20.
+- [Память проекта](PROJECT_MEMORY.md): краткое текущее состояние.
+- [Карта репозитория](docs/REPOSITORY_MAP.md): назначение всех каталогов и выполненная очистка.
 
-Troika 1.0 находится в разработке. Публично обещаются только возможности,
-которые прошли проверки из канонического плана. Экспериментальные функции
-сохраняются в коде, но не входят в обычный UI и маркетинг до отдельных gates.
+## Текущие возможности
 
-## Документы продукта
+В коде есть локальные Android/Windows allowlist-команды, voice-first UI,
+hosted agent/tool loop, индивидуальные аккаунты/устройства, общая история,
+owner-scoped память, проекты/задачи/inbox, создание DOCX/PDF/PPTX и личные
+artifacts. Локально создаются DOCX/PPTX. Напоминания на Android требуют
+синхронизации и системных permissions; Windows background delivery отсутствует.
 
-- [Главный план Troika 1.0](docs/Troika_1.0_Launch_Plan_Final_Updated.docx)
-- [Трекер реализации](docs/TROIKA_1_0_EXECUTION_TRACKER.md)
-- [Текущий проверенный статус](PROJECT_MEMORY.md)
-- [Вспомогательный план реализации](PRODUCTIZATION_PLAN.md)
-- [План безопасного восстановления возможностей](docs/TROIKA_CAPABILITY_RESTORATION_PLAN.md)
+Нет password recovery, email verification, billing/checkout/credits,
+production backup/restore и полного offline-first sync. Live screen/camera,
+автономный PC и прочие эксперименты не входят в обычный продукт.
+Реальный результат и установленная версия проверяются отдельно от сборки.
 
-DOCX — основной план продукта. Он определяет scope, UX, тарифы, порядок релиза
-и Definition of Done. Остальные документы фиксируют исполнение и не
-переопределяют Word-план.
+## Локальная разработка на Windows
 
-## Принципы интерфейса
+Рабочая копия: `D:\troika-product`. Не запускать новый runtime в историческом
+`D:\troikahermes` и не использовать его профиль. После установки locked
+Python dependencies подготовить отдельный `data/test-runtime`, скопировать
+`config.troika-product-test.yaml.example` в его `config.yaml`, хранить нужные
+provider credentials только в его `.env`.
 
-- Voice-first: говорить можно сразу, без перехода в чат.
-- Action-first: приоритет у результата, а не у длинного ответа.
-- One assistant: внутреннюю маршрутизацию выбирает Troika.
-- Minimal settings: редкие технические параметры находятся в Advanced.
-- Safe actions: внешние эффекты требуют ясного approval.
-- User-controlled memory: пользователь управляет сохранёнными фактами.
+В PowerShell, из корня продукта:
 
-## Архитектура продукта
-
-```text
-Android / Windows
-       |
-     HTTPS
-       |
-Troika API Gateway
-       |
-Auth + Device + Entitlement
-       |
-Owner-scoped Run
-       |
-Router + Tools + Approval
-       |
-Result + Artifact + Task + Memory
+```powershell
+$env:HERMES_HOME = Join-Path $PWD 'data/test-runtime'
+$env:API_SERVER_ENABLED = 'true'
+$env:API_SERVER_HOST = '127.0.0.1'
+$env:API_SERVER_PORT = '8765'
+$env:TROIKA_PRODUCT_AUTH_ENABLED = 'true'
+$env:TROIKA_PRODUCT_AUTH_DB = Join-Path $env:HERMES_HOME 'troika_access.db'
+$env:TROIKA_PRODUCT_ARTIFACT_ROOT = Join-Path $env:HERMES_HOME 'artifacts'
+$env:TROIKA_PRODUCT_WORKSPACE_ROOT = Join-Path $env:HERMES_HOME 'workspaces'
+./.venv/Scripts/python.exe -m hermes_cli.main gateway run
 ```
 
-Обычный клиент получает короткие статусы и готовый результат. Названия моделей,
-провайдеров, внутренних tools и скрытые рассуждения остаются внутри runtime.
+Если нужен hosted STT fallback, после создания access DB запустить отдельный
+процесс в другом PowerShell:
 
-## Разработка
-
-Основная рабочая копия продукта — этот репозиторий. Исторические имена Hermes в
-некоторых путях и compatibility identifiers пока сохраняются только для
-безопасной миграции данных и сборки.
-
-### Локальный запуск gateway
-
-```bash
-python cli.py --gateway
-python stt_proxy_server.py
+```powershell
+./.venv/Scripts/python.exe -m troika_product.voice_proxy --hermes-home ./data/test-runtime --host 127.0.0.1 --port 8766 --backend groq
 ```
 
-Проверка:
+Корневого `stt_proxy_server.py` нет. Product wrapper использует
+`hermes-android/stt_proxy_server.py`. Не копировать legacy shared API key в
+обычный клиент. Для пользователя доступен register/login; ручной provisioning
+описан в [beta runbook](docs/TROIKA_CLOSED_BETA_SETUP.md).
 
-```bash
-curl http://localhost:8642/health
+Проверка `http://127.0.0.1:8765/health` относится только к запущенному product
+gateway. Порт может занимать посторонний процесс; HTTP 404 не подтверждает
+здоровье Тройки. Production использует HTTPS и
+[единственный deployment path](docs/TROIKA_PRODUCTION_SERVER.md).
+
+## Проверки
+
+```powershell
+& 'C:/Program Files/Git/bin/bash.exe' scripts/run_tests.sh -j 6
 ```
 
-### Android
+В `hermes-android/`: `flutter test`, `flutter analyze --no-fatal-infos`,
+`flutter build apk --debug --no-pub`, `flutter build windows --debug --no-pub`.
+В `web/`: `npm run build`, `npm run lint`.
+В `ui-tui/`: `npm run type-check`, `npm test`, `npm run build`.
+Integration/e2e/docker требуют отдельного запуска и соответствующей среды.
+Для integration tests после `--` явно передавать `-m integration`, иначе
+default configuration может исключить все tests даже при указанном пути.
 
-```bash
-cd hermes-android
-flutter test
-flutter analyze --no-fatal-infos
-flutter build apk --debug
-```
+## Лицензия и совместимость
 
-### Основные каталоги
-
-| Каталог | Назначение |
-|---|---|
-| [`troika_product/`](troika_product/) | Product auth, ownership, usage и данные подписочного продукта. |
-| [`gateway/`](gateway/) | API, runs, events, approvals и интеграции клиентов. |
-| [`tools/`](tools/) | Внутренние возможности runtime; product toolset содержит только проверенный allowlist. |
-| [`hermes-android/`](hermes-android/) | Общий Flutter-клиент Android/Windows; исторический путь временно сохранён. |
-| [`docs/`](docs/) | Канонический план, security reviews, runbooks и execution tracker. |
-
-## Лицензия и происхождение
-
-MIT — см. [LICENSE](LICENSE). Обязательные notices исходных компонентов
-сохраняются.
-
-Troika основана на open-source проекте
-[Nous Research Hermes-Agent](https://github.com/NousResearch/Hermes-Agent), но
-пользовательский продукт, его UX, безопасность и release scope определяются
-планом Troika 1.0.
+[MIT LICENSE](LICENSE). Troika основана на
+[Nous Research Hermes-Agent](https://github.com/NousResearch/Hermes-Agent).
+Copyright и notices сохраняются. Исторические имена Python, CLI, каталога
+клиента, Android package/headers/preferences пока являются зависимостями
+и совместимостью; их удаление требует [миграции](docs/TROIKA_NATIVE_REBRAND_MIGRATION.md).

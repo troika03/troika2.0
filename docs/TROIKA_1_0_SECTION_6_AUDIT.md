@@ -3,6 +3,10 @@
 Baseline: commit `243278d` (2026-09-26). Scope: the complete Word-plan section
 “6. Windows-клиент”. Statuses describe the code before section 6 implementation.
 
+This is a historical baseline. Current implementation and remaining gaps are
+recorded in the [execution tracker](TROIKA_1_0_EXECUTION_TRACKER.md) and
+[functional audit](TROIKA_FUNCTIONAL_AUDIT.md); “Missing” below is not today's status.
+
 | Requirement | Baseline status | Evidence |
 |---|---|---|
 | Windows is not a stretched mobile layout | Partial | `lib/screens/home_screen.dart` uses a desktop sidebar and right rail at widths of 900 px or more, but there is no Windows-specific window shell or mode model. `test/home_screen_test.dart` covers only the wide responsive layout. |

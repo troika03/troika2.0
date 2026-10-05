@@ -6,6 +6,11 @@ product branding in UI, package names, commands, environment variables, paths,
 documentation, and runtime identifiers. LICENSE, NOTICE, upstream attribution,
 and explicit compatibility notes remain intact.
 
+Current owner decision, 2026-10-05: keep `hermes_cli` and required runtime/client
+identifiers until a compatible migration is implemented. This document is a
+migration reference, not permission to delete dependencies based on their names.
+Current status is in the [functional audit](TROIKA_FUNCTIONAL_AUDIT.md).
+
 ## Rules
 
 - Ship small, tested slices. Do not run a repository-wide blind replacement.

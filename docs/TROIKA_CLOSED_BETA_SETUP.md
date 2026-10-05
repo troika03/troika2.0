@@ -1,8 +1,11 @@
 # Закрытая beta: доступ пользователей и устройств
 
-Этот режим предназначен для закрытой beta до self-service регистрации и billing.
-Он заменяет общий API-ключ индивидуальными токенами устройств и не включает
-глобальные cron-задачи или удалённое управление телефоном.
+Обновлено 2026-10-05. Product mode поддерживает self-service регистрацию/вход
+и индивидуальные device tokens. Billing ещё отсутствует. Нормальный путь
+пользователя — экран входа в клиенте; ручное provision ниже предназначено только
+для оператора закрытой beta. Глобальные legacy cron/phone channels не включаются.
+Production запускается только через `deploy/production/compose.yaml`; старый
+`docker-compose.troika.yml` не является production deployment path.
 
 ## Запуск сервера
 
@@ -18,7 +21,13 @@ TROIKA_PRODUCT_RETENTION_DRY_RUN=false
 TROIKA_PRODUCT_RETENTION_INTERVAL_SECONDS=21600
 ```
 
-Запусти gateway и STT proxy из корня репозитория. API server и STT proxy будут
+Gateway запускается из корня: `python -m hermes_cli.main gateway run`.
+STT запускается отдельным процессом: `python -m troika_product.voice_proxy
+--hermes-home <runtime> --host 127.0.0.1 --port 8766 --backend groq`.
+Указанный runtime должен уже содержать `troika_access.db`; root-файла
+`stt_proxy_server.py` нет. Для изолированной локальной проверки API используй
+порт 8765 и отдельный `HERMES_HOME`, как описано в README.
+API server и STT proxy будут
 принимать только токены вида `trk_live_…`; `API_SERVER_KEY` больше не является
 пользовательским ключом в этом режиме.
 
@@ -38,8 +47,9 @@ python -m troika_product --database /opt/data/troika_access.db provision \
   --plan beta --daily-request-limit 50
 ```
 
-Передай значение `token=` пользователю безопасным каналом. Он вводит его в
-Android-приложении в «Настройки → API ключ». База хранит только SHA-256 digest
+Значение `token=` передавай только безопасным каналом для
+операторского подключения. В обычной сборке пользователь входит через экран
+аккаунта, а не через поле API-ключа. База хранит только SHA-256 digest
 токена, поэтому восстановить его после выдачи нельзя.
 
 Оператор может изменить лимит существующего пользователя без перевыпуска токена:
