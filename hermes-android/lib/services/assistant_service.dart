@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'web_sources.dart';
 import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
@@ -49,6 +50,8 @@ class AssistantService extends ChangeNotifier {
   String _errorMessage = '';
   String _debugHeard = '';
   String _activityStatus = '';
+  WebSourceTrace _webSources = WebSourceTrace();
+  WebSourceTrace get webSources => _webSources;
   bool _wakeWordEnabled = false;
   BackgroundVoiceState _backgroundVoiceState = BackgroundVoiceState.off;
   bool _actionInProgress = false;
@@ -160,6 +163,7 @@ class AssistantService extends ChangeNotifier {
   /// Switch a newly authenticated installation to the account-wide session
   /// and load the same conversation that other owned devices see.
   Future<void> onAccountAuthenticated() async {
+    _webSources = WebSourceTrace();
     await AccountService().ensureFreshSession();
     unawaited(_troika.syncDeviceTimeZone());
     unawaited(ReminderDeliveryService.instance.sync());
@@ -191,6 +195,7 @@ class AssistantService extends ChangeNotifier {
         _messages
           ..clear()
           ..addAll(loaded);
+        _webSources = loaded.where((message) => !message.isUser).lastOrNull?.webSources ?? WebSourceTrace();
       }
       _historyLoaded = true;
       notifyListeners();
@@ -372,7 +377,7 @@ class AssistantService extends ChangeNotifier {
       }
       if (!result.handled && TroikaConfig.serverUrl.trim().isNotEmpty) {
         _setState(AssistantState.idle);
-        await sendTextQuery(heard, speak: true);
+        await sendTextQuery(heard, speak: true, fromVoice: true);
         return;
       }
       _lastUserText = heard;
@@ -432,26 +437,7 @@ class AssistantService extends ChangeNotifier {
         return;
       }
 
-      _lastUserText = userText;
-      final userMsg =
-          ChatMessage(role: 'user', text: userText, fromVoice: true);
-      _messages.add(userMsg);
-      final pending = ChatMessage(role: 'assistant', pending: true);
-      _messages.add(pending);
-      notifyListeners();
-
-      final response = _stripEmoTag(
-          await _troika.sendMessage(userMsg, recent: _recentContext()));
-      _lastTroikaText = response;
-      _setLastResult(AssistantResult.forTurn(response: response));
-      pending
-        ..text = response
-        ..pending = false;
-      notifyListeners();
-
-      _setState(AssistantState.speaking);
-      await _tts.speak(response);
-      _setState(AssistantState.idle);
+      await sendTextQuery(userText, speak: true, fromVoice: true);
     } catch (e) {
       await audioFile.delete().catchError((_) => audioFile);
       _messages.removeWhere((m) => m.pending);
@@ -512,6 +498,7 @@ class AssistantService extends ChangeNotifier {
     String text, {
     List<String> imageDataUrls = const [],
     bool speak = false,
+    bool fromVoice = false,
   }) async {
     if (text.trim().isEmpty && imageDataUrls.isEmpty) return;
 
@@ -521,9 +508,11 @@ class AssistantService extends ChangeNotifier {
       role: 'user',
       text: text,
       imageDataUrls: List.of(imageDataUrls),
+      fromVoice: fromVoice,
     );
     _messages.add(userMsg);
     final pending = ChatMessage(role: 'assistant', pending: true);
+    _webSources = pending.webSources;
     _messages.add(pending);
     _setState(AssistantState.processing);
     notifyListeners();
@@ -579,6 +568,11 @@ class AssistantService extends ChangeNotifier {
       final response = await _troika.streamMessage(
         userMsg,
         recent: _recentContext(),
+        onWebActivity: (activity) {
+          pending.webSources.apply(activity);
+          _activityStatus = pending.webSources.label;
+          notifyListeners();
+        },
         onThought: (t) {
           pending.thoughts.add(ThoughtStep(ThoughtKind.thinking, t));
           notifyListeners();
@@ -641,6 +635,7 @@ class AssistantService extends ChangeNotifier {
       _setError(safeErrorMessage(e));
     } finally {
       _actionInProgress = false;
+      pending.webSources.finish();
       _activityStatus = '';
       notifyListeners();
       if (_wakeWordEnabled) await _startWakeWordListening();
@@ -682,6 +677,7 @@ class AssistantService extends ChangeNotifier {
   /// Стереть локальную ленту (визуально). Серверную сессию не трогает.
   void clearConversation() {
     _messages.clear();
+    _webSources = WebSourceTrace();
     _lastUserText = '';
     _lastTroikaText = '';
     _lastResult = null;

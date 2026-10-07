@@ -70,9 +70,27 @@ a reminder, authenticated downloads and account export passed on an isolated
 temporary account; account deletion returned `200/deleted`. This verifies
 that slice, not billing, all voice paths or launch readiness.
 
-The production web backend resolves to Firecrawl, but its requirement check
-returns false. Web search/extract/research are currently unavailable until a
-provider is configured and tested. See [functional audit](TROIKA_FUNCTIONAL_AUDIT.md).
+On 2026-10-06 SearXNG 2026.10.4-d48c4b555 was added to the existing runtime
+through the production Compose configuration. On 2026-10-07 the API was upgraded
+to `troika-production:web-sources-20261007`; STT remains `bf92c78`.
+SearXNG uses a pinned image digest. Only the SearXNG search plugin loads in
+this product profile; other search providers are explicitly disabled.
+English and Russian JSON searches and the real Troika search wrapper passed.
+Authenticated chat returned source links; the temporary account was deleted.
+The search service has no host port. Its secret lives separately in
+`/srv/troika/data/searxng.env`; logs containing upstream search terms are not
+persisted by Docker. Configuration rollback copies are in
+`/srv/troika/backups/searxng-config-20261006`.
+
+Authenticated run SSE now exposes bounded public source metadata, and session
+history reconstructs it from stored tool results without exposing page content.
+A live two-account smoke confirmed source persistence and denied cross-account
+access; both temporary accounts were deleted. The client displays a collapsible
+page count with domain initials and source links/status.
+
+Full-page extraction remains unconfigured; research can use search snippets.
+Google CSE returned results while Brave and DuckDuckGo reported rate limits
+and CAPTCHA. See [functional audit](TROIKA_FUNCTIONAL_AUDIT.md).
 
 The operating-system baseline and private application runtime are configured.
 The current product revision runs the authenticated API and a separate STT

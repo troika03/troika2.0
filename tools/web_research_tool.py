@@ -261,6 +261,11 @@ async def _handle(args: Dict[str, Any], **_kw) -> str:
             "question": question,
             "answer": answer,
             "sources": sources,
+            "source_details": [
+                {"url": r["url"], "title": r.get("title", ""),
+                 "status": "read" if pages else "found"}
+                for r in src_pool
+            ],
             "pages_read": len(pages),
             "synthesized": used_llm,
             # Тройка озвучивает это дословно. Источники не диктуем по буквам —

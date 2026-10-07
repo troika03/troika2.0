@@ -20,6 +20,7 @@ services:
       TROIKA_PRODUCT_WORKSPACE_ROOT: /opt/troika/workspaces
       TROIKA_PRODUCT_QUOTAS_ENABLED: "false"
       TROIKA_PRODUCT_STT_URL: http://stt:8766
+      SEARXNG_URL: http://searxng:8080
     volumes:
       - /srv/troika/data:/opt/troika
       - ./config.yaml:/opt/troika/config.yaml:ro
@@ -40,6 +41,45 @@ services:
       options:
         max-size: 10m
         max-file: "5"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      searxng:
+        condition: service_healthy
+
+  searxng:
+    image: docker.io/searxng/searxng@sha256:76b0bf285aca014c7191fc4d9234c4bfb358624ac33d8883833d496c059ec072
+    restart: unless-stopped
+    user: "977:977"
+    env_file:
+      - /srv/troika/data/searxng.env
+    environment:
+      GRANIAN_HOST: 0.0.0.0
+      GRANIAN_PORT: "8080"
+      GRANIAN_WORKERS: "1"
+      FORCE_OWNERSHIP: "false"
+    volumes:
+      - ./searxng-settings.yml:/etc/searxng/settings.yml:ro
+      - searxng-cache:/var/cache/searxng
+    expose:
+      - "8080"
+    mem_limit: 384m
+    cpus: 0.75
+    healthcheck:
+      test:
+        - CMD
+        - /usr/local/searxng/.venv/bin/python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5)"
+      interval: 20s
+      timeout: 8s
+      retries: 6
+      start_period: 30s
+    logging:
+      # Upstream engine errors can include search terms; do not persist them.
+      driver: none
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -88,3 +128,6 @@ services:
 networks:
   default:
     name: troika-private
+
+volumes:
+  searxng-cache:

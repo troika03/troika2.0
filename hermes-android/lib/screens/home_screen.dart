@@ -13,6 +13,7 @@ import '../services/troika_api_service.dart';
 import '../services/windows_shell_service.dart';
 import '../theme/troika_theme.dart';
 import '../widgets/status_orb.dart';
+import '../widgets/web_sources_view.dart';
 import 'chat_screen.dart';
 import 'commands_screen.dart';
 import 'assistant_hub_screen.dart';
@@ -724,7 +725,9 @@ class _CurrentCards extends StatelessWidget {
         ),
       );
     }
-    if (cards.isEmpty) return const SizedBox.shrink();
+    if (cards.isEmpty && assistant.webSources.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -737,6 +740,7 @@ class _CurrentCards extends StatelessWidget {
         ...cards.take(3).expand(
               (card) => [card, const SizedBox(height: 8)],
             ),
+        WebSourcesView(trace: assistant.webSources),
       ],
     );
   }

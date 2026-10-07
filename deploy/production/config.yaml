@@ -34,3 +34,20 @@ stt:
 openrouter:
   response_cache: true
   response_cache_ttl: 300
+
+web:
+  backend: searxng
+  search_backend: searxng
+
+logging:
+  level: WARNING
+
+plugins:
+  disabled:
+    - web/brave_free
+    - web/ddgs
+    - web/exa
+    - web/firecrawl
+    - web/parallel
+    - web/tavily
+    - web/xai

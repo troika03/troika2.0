@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'web_sources.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
@@ -163,6 +164,7 @@ class ChatMessage {
   final bool fromVoice;
   final DateTime time;
   bool pending; // ждём ответ сервера (для индикатора «печатает»)
+  final WebSourceTrace webSources = WebSourceTrace();
 
   // «Поток мыслей» Тройки: размышления и вызовы инструментов в реальном
   // времени. Пусто для пользовательских сообщений и старой истории.
@@ -519,6 +521,7 @@ class TroikaApiService {
     ChatMessage message, {
     List<ChatMessage> recent = const [],
     void Function(String thought)? onThought,
+    void Function(WebSourceActivity activity)? onWebActivity,
     void Function(String tool)? onToolStart,
     void Function(String tool, bool isError)? onToolDone,
     void Function(RunActionResult result)? onResult,
@@ -590,6 +593,8 @@ class TroikaApiService {
         } catch (_) {
           continue;
         }
+        final activity = WebSourceActivity.fromJson(ev['web_activity']);
+        if (activity != null) onWebActivity?.call(activity);
         switch (ev['event']) {
           case 'reasoning.available':
             final t = (ev['text'] ?? '').toString().trim();
@@ -767,13 +772,16 @@ class TroikaApiService {
         if (role != 'user' && role != 'assistant') continue;
         final content = _extractText(m['content']);
         if (content.trim().isEmpty) continue;
-        out.add(
-          ChatMessage(
-            role: role,
-            text: _stripDatePrefix(content),
-            time: _toTime(m['timestamp']),
-          ),
+        final message = ChatMessage(
+          role: role,
+          text: _stripDatePrefix(content),
+          time: _toTime(m['timestamp']),
         );
+        final activity = WebSourceActivity.fromJson(m['web_activity']);
+        if (role == 'assistant' && activity != null) {
+          message.webSources.apply(activity);
+        }
+        out.add(message);
       }
       return out;
     } on SocketException {

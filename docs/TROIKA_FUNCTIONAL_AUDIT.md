@@ -9,7 +9,7 @@ production image тоже `bf92c78`. Цель — проверить факты,
 
 | Приоритет | Функция/контур | Наблюдение | Доказательство и следующий шаг |
 |---|---|---|---|
-| P0 | Интернет-поиск, чтение сайтов, research | Production provider не настроен: search/extract выбирают Firecrawl, availability false. Инструменты отсутствуют у ordinary agent. | Проверено внутри запущенного API container. Настроить provider, затем реальный search/read/research smoke. |
+| P0 | Полное чтение сайтов | С 2026-10-06 поиск использует SearXNG; search/research доступны. Полное извлечение страниц не подключено; research использует snippets. | Реальные русские/английские search и wrapper smoke прошли; authenticated chat вернул ссылки. Подключить чтение страниц и проверить его отдельно. |
 | P0 | Android background voice после expiry | Native service читает сохранённый access token; native refresh endpoint flow отсутствует. Открытый Flutter-клиент имеет свой refresh flow. | `HermesListenerService.kt`, `SecureTokenStore.kt`, `account_service.dart`. Реализовать service refresh и тест длительного screen-off/expiry/revoke. |
 | P0 | Новые Android reminder notifications на текущем телефоне | Установлена прежняя APK, не содержащая последнюю доставку через AlarmManager. Backend reminder snapshot работает. | SHA-256 установленной APK отличается от текущего reminder release APK. Нужны update и device delivery E2E; серверная запись не доказывает сигнал телефона. |
 | P1 | Web dashboard lint | Build проходит, lint завершается ошибкой: 22 errors, 4 warnings. | Hooks/refs/static components/refresh exports; `npm run lint` в `web`. Это проблемы качества/CI; не утверждение, что каждая страница падает. |
@@ -60,6 +60,44 @@ production image тоже `bf92c78`. Цель — проверить факты,
 artifacts. Первый диагностический probe использовал неверный route/key;
 его 404/нулевой count не являются дефектами продукта.
 
+## SearXNG и видимые источники — 2026-10-07
+
+Единственный search provider product-профиля — SearXNG; альтернативные
+provider plugins отключены в config, их upstream source не удалён. API image
+`troika-production:web-sources-20261007` собран из изолированного дерева этих
+изменений и развёрнут; STT остаётся `bf92c78`. SearXNG private, healthy,
+закреплён digest; stdout/stderr сервиса не сохраняются Docker.
+
+Flutter Home/Text/Windows compact показывают свёрнутую строку «Найдено N
+страниц» и раскрываемые ссылки со статусом. Значки — локальные инициалы домена,
+без автоматических запросов favicon к сторонним сайтам. Search snippets
+не считаются прочитанной страницей. Полное чтение страниц пока не подключено;
+его неуспех отображается отдельно. Native background voice восстанавливает
+источники из истории при открытии клиента; live SSE относится к foreground.
+
+Проверки из чистого snapshot: 48 Python tests (15 источников, 26 API runs,
+7 research), 54 Flutter tests и 2 endpoint-only skips; отдельный render preview
+прошёл. Проверены свёрнутое/раскрытое состояние и ширина 320 px. Analyzer не
+имеет errors/warnings, 20 унаследованных infos. Android release APK и Windows
+release собираются с production endpoint без credentials.
+
+Живой authenticated run вернул 10 источников через SSE; после загрузки истории
+они сохранились. Другой аккаунт получил 404 на run и 403 на историю. Все
+временные аккаунты удалены. Это server/widget/build evidence; физический
+источниковый E2E установленной APK не проводился. На Samsung уже новая APK
+другой сессии; отдельный клиент источников не установлен поверх неё.
+
+Полный доступный default набор покрыт тремя журналами с возобновлением после
+прерывания: 1236 уникальных file runs, 24735 passed и 412 failed по распознанным
+per-file counters; 148 неуспешных file runs, у 41 нет счётчика failed tests.
+Baseline остаётся красным: Windows/POSIX несовместимость, отсутствующие
+providers/dependencies, collection/timeouts и ограничения среды. Часть первого
+прогона выполнялась до переноса TEMP на D: при заполнении C:. Другие сессии
+одновременно меняли рабочее дерево; этот прогон не является clean-commit
+baseline. Изменённый runtime проверен отдельно чистым snapshot и live smoke.
+Integration/e2e/docker не включены в default suite. Старый audit baseline ниже
+сохранён как результат проверки 5 октября и не подменяет этот повтор.
+
 ## Полный Python прогон и дополнительные проверки
 
 Проверены все **1233 default test files** через `scripts/run_tests.sh` с
@@ -109,7 +147,7 @@ DOCX/PDF/PPTX, вся optional-skills/plugin matrix и production recovery.
 
 ## Порядок устранения
 
-1. Настроить production web backend и подтвердить search/read/research.
+1. Подключить полное чтение страниц; поиск через SearXNG уже проверен 2026-10-06.
 2. Закрыть native Android refresh и выровнять установленную APK; проверить notification permissions/exact alarms/expiry/voice.
 3. Разобрать дефекты из полного Python списка и dashboard/TUI lint; платформенные ограничения документировать отдельно.
 4. Проверить реальные открытие/сохранение Office artifacts и доставку reminder на устройстве.

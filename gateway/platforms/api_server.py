@@ -3046,8 +3046,11 @@ class APIServerAdapter(BasePlatformAdapter):
             logger.error("get_messages failed for %s: %s", session_id, e, exc_info=True)
             return web.json_response({"error": f"load_failed: {e}"}, status=500)
 
+        from troika_product.web_sources import session_source_metadata
+
+        source_metadata = session_source_metadata(rows or [])
         items: List[Dict[str, Any]] = []
-        for row in rows or []:
+        for row_index, row in enumerate(rows or []):
             role = row.get("role")
             if role not in ("user", "assistant"):
                 continue
@@ -3062,6 +3065,8 @@ class APIServerAdapter(BasePlatformAdapter):
                 "role": role,
                 "content": content,
                 "timestamp": row.get("timestamp"),
+                **({"web_activity": source_metadata[row_index]}
+                   if row_index in source_metadata else {}),
             })
         return web.json_response({
             "session_id": session_id,
@@ -5388,6 +5393,8 @@ class APIServerAdapter(BasePlatformAdapter):
                 pass
 
         def _callback(event_type: str, tool_name: str = None, preview: str = None, args=None, **kwargs):
+            from troika_product.web_sources import web_source_activity
+
             ts = time.time()
             if event_type == "tool.started":
                 event = {
@@ -5398,6 +5405,9 @@ class APIServerAdapter(BasePlatformAdapter):
                 }
                 if not product_mode:
                     event["preview"] = preview
+                activity = web_source_activity(tool_name, args=args, started=True)
+                if activity is not None:
+                    event["web_activity"] = activity
                 _push(event)
             elif event_type == "tool.completed":
                 completed = {
@@ -5413,6 +5423,12 @@ class APIServerAdapter(BasePlatformAdapter):
                 )
                 if safe_result is not None:
                     completed["result"] = safe_result
+                activity = web_source_activity(
+                    tool_name, args=args, result=kwargs.get("result"),
+                    is_error=kwargs.get("is_error", False),
+                )
+                if activity is not None:
+                    completed["web_activity"] = activity
                 _push(completed)
             elif event_type == "reasoning.available" and not product_mode:
                 _push({

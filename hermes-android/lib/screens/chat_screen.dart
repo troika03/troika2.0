@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../widgets/web_sources_view.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -556,6 +557,7 @@ class _MessageBubble extends StatelessWidget {
                     ? TroikaColors.text.withOpacity(0.92)
                     : TroikaColors.text,
               ),
+            if (!isUser) WebSourcesView(trace: message.webSources),
             if (message.fromVoice)
               Padding(
                 padding: const EdgeInsets.only(top: 4),

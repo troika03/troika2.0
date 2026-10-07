@@ -1,6 +1,6 @@
 # Troika: текущая память проекта
 
-Обновлено 2026-10-05. Краткий рабочий срез; история находится в Git и
+Обновлено 2026-10-07. Краткий рабочий срез; история находится в Git и
 [архиве](docs/archive/README.md). Результаты проверок и дефекты хранятся в
 [аудите функций](docs/TROIKA_FUNCTIONAL_AUDIT.md), без дублирования здесь.
 
@@ -50,25 +50,45 @@ voice service пока не обновляет истёкший access token с�
 Нужны beta build и два server flags; оба flags выключены по умолчанию.
 Это не доказательство live WebRTC/CameraX.
 
-## Реальная среда на 2026-10-05
+## Реальная среда на 2026-10-07
 
-Production API/STT используют `troika-production:bf92c78`, API healthy;
+Production API использует `troika-production:web-sources-20261007`, STT —
+`troika-production:bf92c78`; API healthy;
 `https://api.zhulebino-teahouse.ru/health` отвечает 200. Deployment path:
 `deploy/production/compose.yaml`. API опубликован через loopback 8765/Nginx;
 STT — private Docker network. ОС/TLS foundation существуют; остальная
 production готовность не закрыта.
 
-На production web backend выбран Firecrawl, его availability check — false.
-Поэтому web search/extract/research сейчас недоступны. Наличие этих tools в
-source/allowlist не означает доступность у пользователя.
+На production единственный загруженный поисковый provider — SearXNG
+2026.10.4-d48c4b555, закреплённый digest в Compose. Сервис доступен только
+в Docker network; API использует `http://searxng:8080`. Firecrawl, Parallel,
+Tavily, Exa, Brave, DDGS и xAI отключены через `plugins.disabled`.
+Унаследованный код сохранён для совместимости. Русские/английские запросы
+вернули непустую выдачу; настоящий `web_search` вернул три источника;
+authenticated chat вернул ссылки, тестовый аккаунт удалён. Search/research
+доступны в product toolset, но полное чтение страниц не подключено:
+SearXNG возвращает snippets, research может использовать только их.
+Google CSE возвращает результаты; Brave/DDG внутри SearXNG ответили rate
+limit/CAPTCHA. Проверка не обещает постоянную доступность каждого движка.
+SearXNG Docker logs не сохраняются; API informational logs подавлены.
+Секрет сервиса находится отдельно в `/srv/troika/data/searxng.env`, вне Git.
 
-Samsung SM-A225F подключён. Установленная APK 1.0.0 имеет SHA-256
-`35f5a43c41f9af35b8e4064256744ea20871d8009e57580c8ee819fcd4ecc336`:
-это прежняя completion-guard сборка, а не актуальная reminder release APK
-с SHA-256 `f7e56cc6f6c10cd17403488d8af4adb907de4e06fe80e270d1f28eb9af3febc0`.
-Приложение запускается, главный экран/Файлы открываются, микрофон переходит
-в «Слушаю». APK и данные не заменялись. Полный свежий voice/reminder/file-save
-E2E установленного клиента не подтверждён.
+Обновлённый клиент показывает компактную строку «Найдено N страниц» со
+значками сайтов; по нажатию раскрываются названия, домены, ссылки и статусы
+«Найдено», «Открываю», «Прочитано» или ошибка чтения. Источники приходят из
+реальных tool results, до 20 уникальных ссылок на ответ, без содержимого страниц
+и скрытых рассуждений. SSE и восстановление источников из owner-scoped истории
+проверены на production; защитная оболочка внешнего результата сохраняется.
+Фоновый native voice показывает источники после загрузки истории, а не live SSE.
+Клиент собран отдельно от незавершённых native/reminder/file/development правок.
+Для установленного клиента нужен согласованный общий выпуск этих изменений.
+
+Проверка Samsung SM-A225F 2026-10-07: ADB видит устройство; установлена
+APK 1.0.0 с SHA-256
+`a52bfe5fedde15efcbb12818a658decd63adf625bc7562a90b70a071e1b041ed`,
+lastUpdateTime 2026-10-07 08:51:39. Её точный source revision в этой задаче
+не установлен. Отдельная сборка источников не заменяет новую APK другой
+сессии. Полный fresh voice/reminder/file-save E2E здесь не подтверждён.
 
 Локальный порт 8765 ответил HTTP 404; это не здоровый product gateway.
 Нельзя считать localhost health проверенным по одному факту открытого порта.
@@ -99,7 +119,8 @@ Android/Windows/dashboard/TUI/website builds и живой account/tool smoke.
 
 ## Следующий шаг
 
-Воспроизвести пользовательские отказы по установленной версии; восстановить
-настроенный web provider, закрыть Android background token refresh и проверить
+Воспроизвести пользовательские отказы по установленной версии; подключить
+полное чтение веб-страниц без дополнительных поисковых сервисов, закрыть
+Android background token refresh и проверить
 актуальный reminder APK на телефоне. Затем завершать раздел 7 и двигаться
 по Word-плану. Отдельные сборки и исторические smokes не означают «всё работает».
