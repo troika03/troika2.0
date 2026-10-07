@@ -20,7 +20,7 @@
 - [Word-план](docs/Troika_1.0_Launch_Plan_Final_Updated.docx) — authority для scope/UX/цен/DoD. Порядок разделов 1–20 сохраняется; section 20 — release summary.
 - Troika 1.0 — voice-first Android/Windows, текст вторичен. Результат важнее перечисления tools.
 - Hosted subscription без model keys у обычного пользователя; BYOK/diagnostics — developer/Advanced scope.
-- Целевые тарифы: Free, Plus 790 ₽/месяц, Pro 1 490 ₽/месяц. Billing отсутствует; текущая quota enforcement выключена. Безлимит не обещается.
+- Целевые тарифы: Free, Plus 790 ₽/месяц, Pro 1 490 ₽/месяц. По запросу владельца от 7 октября дневной счётчик AI-запросов включён по умолчанию и на production. Billing и месячные credits отсутствуют; безлимит не обещается. Экономические лимиты предложены в `docs/TROIKA_SUBSCRIPTION_ECONOMICS.md`, но ещё не утверждены и не применены.
 - Фоновое локальное пробуждение «Тройка» — P0 Android; OEM/Bluetooth/standby/expiry требуют E2E.
 - Данные принадлежат аккаунту. Сервер — основная копия; выбрано автоматическое восстановление после входа, а не невосстановимое E2EE. Production stores/backups должны шифроваться at rest.
 - Единый Run/Task/Worker runtime с до трёх specialist workers — целевая архитектура; текущий agent loop ещё не закрывает весь этот scope.
@@ -55,13 +55,27 @@ FCM/push отсутствуют. Наличие кода refresh не закры
 
 ## Реальная среда на 2026-10-07
 
-Production API использует `troika-production:reminder-voice-20261007-v2`
-(поверх `source-install-20261007`), STT —
+Production API использует `troika-production:subscription-limits-20261007`
+(поверх `reminder-voice-20261007-v2`, с сохранением других runtime fixes), STT —
 `troika-production:bf92c78`; API healthy;
 `https://api.zhulebino-teahouse.ru/health` отвечает 200. Deployment path:
 `deploy/production/compose.yaml`. API опубликован через loopback 8765/Nginx;
 STT — private Docker network. ОС/TLS foundation существуют; остальная
 production готовность не закрыта.
+
+Живой quota smoke подтвердил: Free-запрос принят, расход 1/1 виден в
+`/v1/subscription`; повторные `/v1/runs` и `/v1/chat/completions` возвращают
+429 с `daily_request_limit_exceeded`, остатком, `resets_at` и `Retry-After`.
+Доступ к списку устройств после исчерпания сохранён; временный аккаунт удалён.
+Существующие entitlements не изменены: при диагностике Free имел 1 запрос/сутки,
+Pro — 10 000. Это временный дневной guard, не защита себестоимости подписки.
+Новый профиль показывает тариф, расход, остаток и локальное время обновления,
+обновляется после облачного запроса/возврата приложения и раз в минуту;
+ошибка загрузки скрывает устаревший остаток. Светлая/тёмная темы просмотрены.
+Целевые Python: 355 passed, 1 skipped в текущем checkout, включая 9 тестов
+незавершённой работы с напоминаниями. Собственные quota/access tests — 41 passed.
+Изолированный клиент с этим исправлением: 74 passed, 2 skips; analyze —
+0 errors/warnings, 38 info. Сборки и полный Windows baseline фиксируются в аудите.
 
 На production единственный загруженный поисковый provider — SearXNG
 2026.10.4-d48c4b555, закреплённый digest в Compose. Сервис доступен только
@@ -101,11 +115,13 @@ errors/warnings, 38 info; Android/Windows release builds прошли. В сбо
 APK с поисковыми исправлениями готова в
 `_logs/source-install-20261007/hermes-android/build/app/outputs/flutter-apk/app-release.apk`;
 SHA-256 `c02066100495302ffc7ff464647735c6c5eff88cf19fff58f30c2961bba7a900`.
-Установка на Samsung отложена: после прежней проверки ADB перестал видеть
-телефон. Последняя проверенная установленная APK 1.0.0 имела SHA-256
-`85e1a5ece1e1306da8cfa304814876a00bc7a850549ce3e7e7a26ac663d2f7cc`
-и lastUpdateTime 2026-10-07 09:04:48; блок источников в ней отсутствовал.
-Новая APK не считается установленной по факту успешной сборки.
+После подключения Samsung SM-A225F обновление установлено через `adb install -r`
+без удаления приложения и сброса данных. SHA-256 установленного `base.apk`
+совпадает с готовой сборкой выше; lastUpdateTime 2026-10-07 16:15:41,
+versionName 1.0.0. Запуск приложения и переход на страницу «Текст» подтверждены
+на устройстве. Свежий телефонный поиск/голосовой E2E ещё не завершён.
+Установка согласована с сессией напоминаний: её старый frozen source ещё
+содержал перехват поиска и не должен заменять эту APK без обновления исходников.
 
 API обновлён слоем девяти committed runtime files `e0254f5` поверх
 `reminder-voice-20261007`, сохраняя существующую серверную правку напоминаний.
@@ -136,7 +152,8 @@ Inherited developer website собирается, но Windows generators/Skills
 Обновлённый Flutter запрашивает device delivery; native voice подготавливает
 файл, для сохранения нужно открыть «Файлы» до expiry. Старые cloud artifacts
 остаются доступны. Runtime `e0254f5` включён в текущий API, клиент Windows
-обновлён; установленная APK ещё требует обновления. Device-file E2E не закрыт.
+обновлён; APK с теми же возможностями установлена на Samsung. Device-file E2E
+не закрыт.
 
 Первый режим «Разработка» создаёт ZIP с текстовыми исходниками/README/тестами,
 распаковывает в новую папку и запускает на Windows Python syntax/unittest или
@@ -169,7 +186,7 @@ Android/Windows/dashboard/TUI/website builds и живой account/tool smoke.
 
 ## Следующий шаг
 
-Подключить Samsung и установить общую APK, затем проверить на устройстве сохранение
+Проверить свежий поиск и голос на обновлённом Samsung, затем проверить сохранение
 и открытие документа, создание проекта, запуск проверки и получение исправленной
 версии. Для native voice открыть «Файлы» в пределах TTL. Продолжать P0 по
 основному плану: чтение веб-страниц, background refresh, голос и напоминания.
