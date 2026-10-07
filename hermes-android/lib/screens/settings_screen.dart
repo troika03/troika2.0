@@ -6,6 +6,7 @@ import '../config/troika_config.dart';
 import 'auth_screen.dart';
 import '../services/assistant_service.dart';
 import '../services/troika_api_service.dart';
+import '../widgets/subscription_panel.dart';
 import '../services/voice_presets.dart';
 
 enum SettingsSection { advanced, permissions, account }
@@ -126,19 +127,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() => _subscription = subscription);
     } on TroikaApiException catch (error) {
       if (!mounted) return;
-      setState(() => _subscriptionError = error.message);
+      setState(() {
+        _subscription = null;
+        _subscriptionError = error.message;
+      });
     } finally {
       if (mounted) setState(() => _loadingSubscription = false);
     }
   }
-
-  String _planLabel(String plan) => switch (plan.toLowerCase()) {
-        'free' => 'Free',
-        'plus' => 'Plus',
-        'pro' => 'Pro',
-        'beta' => 'Beta',
-        _ => plan,
-      };
 
   Future<void> _loadBargeIn() async {
     final prefs = await SharedPreferences.getInstance();
@@ -1473,15 +1469,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             if (_loadingSubscription)
               const LinearProgressIndicator(minHeight: 2)
             else if (_subscription != null) ...[
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.workspace_premium_outlined),
-                title: Text('Тариф ${_planLabel(_subscription!.plan)}'),
-                subtitle: Text(
-                  _subscription!.quotaEnforced
-                      ? 'Осталось ${_subscription!.remaining} из ${_subscription!.dailyLimit} запросов сегодня'
-                      : 'Лимит показан справочно и пока не ограничивает запросы',
-                ),
+              SubscriptionUsageView(subscription: _subscription!),
+              TextButton.icon(
+                onPressed: _loadSubscription,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Обновить лимиты'),
               ),
               const SizedBox(height: 8),
             ] else if (_subscriptionError != null) ...[

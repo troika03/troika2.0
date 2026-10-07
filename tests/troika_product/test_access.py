@@ -1,6 +1,7 @@
 """Tests for the closed-beta user and device access registry."""
 
 from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
 import json
 import time
 
@@ -235,6 +236,21 @@ def test_operator_can_change_user_plan_and_limit(tmp_path) -> None:
     assert (decision.limit, decision.remaining) == (200, 199)
 
 
+def test_two_devices_cannot_spend_the_same_remaining_quota(tmp_path) -> None:
+    registry = AccessRegistry(tmp_path / "access.db")
+    user = registry.create_user("same@example.com", daily_request_limit=5)
+    principals = [registry.authenticate(registry.issue_device_token(
+        registry.create_device(user, name=name, platform="android")
+    )) for name in ("one", "two")]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        decisions = list(pool.map(
+            lambda index: registry.consume_chat_request(principals[index % 2]),
+            range(24),
+        ))
+    assert sum(decision.allowed for decision in decisions) == 5
+    assert registry.daily_usage(user) == 5
+
+
 def test_subscription_summary_is_owner_scoped_and_reports_current_usage(
     tmp_path,
 ) -> None:
@@ -256,6 +272,7 @@ def test_subscription_summary_is_owner_scoped_and_reports_current_usage(
         "plan": "plus",
         "status": "active",
         "usage_date": "2026-09-24",
+        "resets_at": "2026-09-25T00:00:00+00:00",
         "daily_limit": 5,
         "used": 1,
         "remaining": 4,

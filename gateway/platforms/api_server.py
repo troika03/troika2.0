@@ -934,13 +934,13 @@ class APIServerAdapter(BasePlatformAdapter):
                 os.getenv("TROIKA_PRODUCT_AUTH_ENABLED", "false"),
             )
         )
-        # Cost metering remains implemented, but early product development is
-        # intentionally unmetered.  Operators can re-enable quota enforcement
-        # without a schema migration when paid plans are introduced.
+        # Product quotas are enforced by default. Local/legacy mode has no
+        # access registry and remains unaffected; unmetered development must
+        # explicitly opt out.
         self._product_quotas_enabled = _coerce_config_bool(
             extra.get(
                 "product_quotas_enabled",
-                os.getenv("TROIKA_PRODUCT_QUOTAS_ENABLED", "false"),
+                os.getenv("TROIKA_PRODUCT_QUOTAS_ENABLED", "true"),
             )
         )
         self._product_voice_enabled = _coerce_config_bool(
@@ -1412,14 +1412,27 @@ class APIServerAdapter(BasePlatformAdapter):
             self._request_audit_log_suffix(request),
         )
         return web.json_response(
-            _openai_error(
-                "Daily request limit reached. Try again after the next UTC day.",
-                code="daily_request_limit_exceeded",
-            ),
+            {
+                **_openai_error(
+                    "Daily request limit reached. Try again after the next UTC day.",
+                    code="daily_request_limit_exceeded",
+                ),
+                "usage": {
+                    "daily_limit": decision.limit,
+                    "used": decision.used,
+                    "remaining": 0,
+                    "resets_at": decision.resets_at,
+                },
+            },
             status=429,
             headers={
                 "X-Troika-Daily-Request-Limit": str(decision.limit),
                 "X-Troika-Requests-Remaining": "0",
+                "X-Troika-Quota-Resets-At": decision.resets_at,
+                "Retry-After": str(max(1, int(
+                    datetime.fromisoformat(decision.resets_at).timestamp()
+                    - time.time()
+                ))),
             },
         )
 
@@ -1431,6 +1444,7 @@ class APIServerAdapter(BasePlatformAdapter):
         return {
             "X-Troika-Daily-Request-Limit": str(decision.limit),
             "X-Troika-Requests-Remaining": str(decision.remaining),
+            "X-Troika-Quota-Resets-At": decision.resets_at,
         }
 
     def _authorize_product_run(
@@ -3767,6 +3781,7 @@ class APIServerAdapter(BasePlatformAdapter):
         response_headers = {
             "X-Hermes-Session-Id": result.get("session_id", session_id),
         }
+        response_headers.update(self._product_quota_headers(request))
         if gateway_session_key:
             response_headers["X-Hermes-Session-Key"] = gateway_session_key
 

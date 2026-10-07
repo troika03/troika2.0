@@ -18,7 +18,7 @@ services:
       TROIKA_PRODUCT_AUTH_DB: /opt/troika/troika_access.db
       TROIKA_PRODUCT_ARTIFACT_ROOT: /opt/troika/artifacts
       TROIKA_PRODUCT_WORKSPACE_ROOT: /opt/troika/workspaces
-      TROIKA_PRODUCT_QUOTAS_ENABLED: "false"
+      TROIKA_PRODUCT_QUOTAS_ENABLED: "true"
       TROIKA_PRODUCT_STT_URL: http://stt:8766
       SEARXNG_URL: http://searxng:8080
     volumes:

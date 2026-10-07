@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'files_service.dart';
 import '../config/troika_config.dart';
 import 'account_service.dart';
+import 'subscription_usage.dart';
 
 /// Repeats an HTTP operation only when TLS negotiation failed before the
 /// request could be sent. Rebuilding the request in [operation] is required.
@@ -137,6 +138,7 @@ class AccountSubscription {
   final int used;
   final int remaining;
   final bool quotaEnforced;
+  final DateTime? resetsAt;
 
   const AccountSubscription({
     required this.plan,
@@ -145,6 +147,7 @@ class AccountSubscription {
     required this.used,
     required this.remaining,
     required this.quotaEnforced,
+    this.resetsAt,
   });
 
   factory AccountSubscription.fromJson(Map<String, dynamic> json) {
@@ -155,6 +158,7 @@ class AccountSubscription {
       used: (json['used'] as num?)?.toInt() ?? 0,
       remaining: (json['remaining'] as num?)?.toInt() ?? 0,
       quotaEnforced: json['quota_enforced'] == true,
+      resetsAt: DateTime.tryParse((json['resets_at'] ?? '').toString()),
     );
   }
 }
@@ -351,6 +355,7 @@ class TroikaApiService {
       throw TroikaApiException('Подписка доступна после входа в аккаунт.');
     }
     try {
+      await AccountService().ensureFreshSession();
       final response = await http
           .get(
             Uri.parse(TroikaConfig.subscriptionUrl),
@@ -505,9 +510,12 @@ class TroikaApiService {
           .post(uri, headers: chatHdrs, body: json.encode(bodyMap))
           .timeout(_timeout);
 
+      subscriptionUsageRevision.value++;
+
       if (response.statusCode != 200) {
         throw TroikaApiException(
-          'API error ${response.statusCode}: ${_short(response.body)}',
+          cloudRequestError(response.statusCode, utf8.decode(response.bodyBytes)),
+          statusCode: response.statusCode,
         );
       }
 
@@ -572,10 +580,12 @@ class TroikaApiService {
         return client.send(request).timeout(_timeout);
       });
       final startBodyStr = await startResp.stream.bytesToString();
+      subscriptionUsageRevision.value++;
       // Сервер отдаёт 202 Accepted (run стартовал асинхронно), реже 200.
       if (startResp.statusCode != 200 && startResp.statusCode != 202) {
         throw TroikaApiException(
-          'API error ${startResp.statusCode}: ${_short(startBodyStr)}',
+          cloudRequestError(startResp.statusCode, startBodyStr),
+          statusCode: startResp.statusCode,
         );
       }
       final startData = json.decode(startBodyStr) as Map<String, dynamic>;

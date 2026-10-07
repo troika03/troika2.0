@@ -4,6 +4,7 @@ import asyncio
 from io import BytesIO
 import json
 import sqlite3
+import pytest
 from zipfile import ZipFile
 
 from gateway.config import PlatformConfig
@@ -71,7 +72,7 @@ class _DeviceRequest(_Request):
         )
 
 
-def _adapter_with_two_users(tmp_path, *, quotas_enabled=False):
+def _adapter_with_two_users(tmp_path, *, quotas_enabled=True):
     adapter = APIServerAdapter(
         PlatformConfig(
             enabled=True,
@@ -277,6 +278,50 @@ def test_product_quota_and_run_status_are_isolated(tmp_path) -> None:
     assert hidden is not None and hidden.status == 404
 
 
+def test_product_quotas_are_enabled_when_not_configured(tmp_path, monkeypatch):
+    monkeypatch.delenv("TROIKA_PRODUCT_QUOTAS_ENABLED", raising=False)
+    adapter = APIServerAdapter(PlatformConfig(enabled=True, extra={
+        "product_auth_enabled": True,
+        "product_auth_db": str(tmp_path / "access.db"),
+    }))
+    assert adapter._product_quotas_enabled is True
+
+
+@pytest.mark.parametrize("endpoint", ["runs", "chat_completions"])
+def test_exhausted_quota_blocks_both_agent_entry_points(tmp_path, monkeypatch, endpoint):
+    adapter, token, _ = _adapter_with_two_users(tmp_path)
+    principal = adapter._access_registry.authenticate(token)
+    adapter._access_registry.set_entitlement(
+        principal.user_id, plan="free", daily_request_limit=1
+    )
+    adapter._access_registry.consume_chat_request(principal)
+    body = {"input": "test"} if endpoint == "runs" else {
+        "messages": [{"role": "user", "content": "test"}]
+    }
+    def fail_if_agent_starts(*args, **kwargs):
+        pytest.fail("an exhausted quota must not start an agent")
+    monkeypatch.setattr(adapter, "_create_agent", fail_if_agent_starts)
+    response = asyncio.run(getattr(adapter, f"_handle_{endpoint}")(_ChatRequest(token, body)))
+    assert response.status == 429
+    payload = json.loads(response.body)
+    assert payload["error"]["code"] == "daily_request_limit_exceeded"
+    assert payload["usage"]["remaining"] == 0
+    assert payload["usage"]["resets_at"].endswith("T00:00:00+00:00")
+    assert int(response.headers["Retry-After"]) > 0
+    assert adapter._access_registry.daily_usage(principal.user_id) == 1
+
+
+def test_usage_service_failure_does_not_allow_unmetered_work(tmp_path, monkeypatch):
+    adapter, token, _ = _adapter_with_two_users(tmp_path)
+    request = _Request(token)
+    assert adapter._check_auth(request) is None
+    def unavailable(*args, **kwargs):
+        raise RuntimeError("usage unavailable")
+    monkeypatch.setattr(adapter._access_registry, "consume_chat_request", unavailable)
+    response = adapter._consume_product_request_quota(request)
+    assert response.status == 503
+
+
 def test_product_device_list_and_revoke_close_device_activity(
     tmp_path, monkeypatch
 ) -> None:
@@ -418,7 +463,7 @@ def test_product_device_list_and_revoke_close_device_activity(
 def test_product_requests_are_unmetered_while_quota_enforcement_is_disabled(
     tmp_path,
 ) -> None:
-    adapter, first_token, _ = _adapter_with_two_users(tmp_path)
+    adapter, first_token, _ = _adapter_with_two_users(tmp_path, quotas_enabled=False)
     request = _Request(first_token)
     assert adapter._check_auth(request) is None
     principal = request["troika_product_principal"]
@@ -449,7 +494,7 @@ def test_product_capabilities_do_not_advertise_global_responses_api(tmp_path) ->
     assert "responses" not in payload["endpoints"]
     assert payload["features"]["private_artifacts"] is True
     assert payload["features"]["private_workspace"] is True
-    assert payload["features"]["product_quota_enforcement"] is False
+    assert payload["features"]["product_quota_enforcement"] is True
     assert payload["features"]["screen_snapshot"] is False
     assert payload["features"]["screen_snapshot_external_vision"] is False
     assert not any(payload["features"]["experimental"].values())

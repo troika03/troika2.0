@@ -25,7 +25,7 @@ installed-client E2E или релизной готовности. `[-]` — ч�
 | 5. Android | [-] | UI и голос реализованы, прежние Samsung проверки сохранены. Фоновый native refresh access token и свежий reminder/standby E2E не закрыты. |
 | 6. Windows | [-] | Compact/Command Center/hotkey/allowlist реализованы. Свежий installed-client voice/file/screenshot E2E и background reminders не закрыты. |
 | 7. Сайт и аккаунт | [-] | Статический приватный сайт есть. Account form — demo; публичные download/registration/support/status/legal и activation funnel не готовы. |
-| 8. Billing/credits | [ ] | Subscription-status foundation есть; cost engine, checkout/webhook/cancel/refund отсутствуют. |
+| 8. Billing/credits | [ ] | Дневной счётчик включён и проверен на production; профиль показывает тариф/расход/остаток/обновление. Предложена экономика Free/Plus/Pro; месячный cost engine, checkout/webhook/cancel/refund отсутствуют. |
 | 9. Backend | [ ] | Auth, owner stores, runs и tools существуют; весь раздел ещё не принят. |
 | 10. Голос/память/runtime | [ ] | Есть текущий agent loop и completion receipts; единый single/delegate/parallel/durable/verified Runtime не завершён. |
 | 11. Файлы | [ ] | Creation/download foundation есть; весь набор форматов, качество, edit/version и E2E ещё не принят. |

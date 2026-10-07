@@ -9,7 +9,7 @@ the clear-text token is returned exactly once when it is issued.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from hashlib import scrypt, sha256
 import json
 from pathlib import Path
@@ -60,6 +60,12 @@ class UsageDecision:
     limit: int
     used: int
     remaining: int
+
+    @property
+    def resets_at(self) -> str:
+        """The next UTC midnight, shared by status and rejection responses."""
+        day = datetime.fromisoformat(self.usage_date).replace(tzinfo=timezone.utc)
+        return (day + timedelta(days=1)).isoformat()
 
 
 @dataclass(frozen=True)
@@ -520,6 +526,7 @@ class AccessRegistry:
             "plan": str(entitlement["plan"]),
             "status": "active",
             "usage_date": usage_date,
+            "resets_at": UsageDecision(True, usage_date, limit, used, 0).resets_at,
             "daily_limit": limit,
             "used": used,
             "remaining": max(0, limit - used),
