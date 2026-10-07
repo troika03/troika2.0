@@ -70,7 +70,6 @@ object PhoneCommands {
     private val OPEN_VERBS = listOf("открой", "открыть", "запусти", "запустить", "включи", "включить", "загрузи", "покажи")
     private val CALL_VERBS = listOf("позвони", "позвонить", "набери", "набрать")
     private val NAVIGATE_VERBS = listOf("проложи маршрут", "построй маршрут", "маршрут", "поехали", "навигация")
-    private val SEARCH_VERBS = listOf("найди", "поищи", "загугли", "погугли", "поиск")
 
     /**
      * Главная точка входа. norm — lowercase-версия фразы (для матчинга), raw — исходник (для подсказок).
@@ -140,14 +139,6 @@ object PhoneCommands {
             }
             if (dest.isNotEmpty()) {
                 return openMaps(ctx, dest)
-            }
-        }
-
-        // Поиск в браузере
-        SEARCH_VERBS.firstOrNull { norm.contains(it) }?.let { verb ->
-            val q = norm.substringAfter(verb).trim().trim('.', '!', '?', ',', ' ')
-            if (q.isNotEmpty() && q.length <= 100) {
-                return webSearch(ctx, q)
             }
         }
 
@@ -561,15 +552,6 @@ object PhoneCommands {
         }
         ctx.startActivity(intent)
         return "Прокладываю маршрут до $destination"
-    }
-
-    private fun webSearch(ctx: Context, query: String): String {
-        val uri = Uri.parse("https://www.google.com/search?q=${Uri.encode(query)}")
-        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        ctx.startActivity(intent)
-        return "Ищу: $query"
     }
 
     private fun adjustVolume(ctx: Context, phrase: String): String {

@@ -45,8 +45,9 @@ hosted DOCX/PDF/PPTX и downloadable text/HTML artifacts. HTML artifact не
 
 Reminders: owner-scoped schedule, quiet hours/opt-in, snapshot и Android
 AlarmManager. Нужны permissions и успешная предварительная синхронизация;
-Windows background notifications и FCM/push отсутствуют. Native Android
-voice service пока не обновляет истёкший access token самостоятельно.
+Windows background delivery и native Android refresh добавлены в отдельной
+незавершённой работе с напоминаниями; их E2E и commit принадлежат той сессии.
+FCM/push отсутствуют. Наличие кода refresh не закрывает проверки expiry/standby.
 
 Одноразовый Android screen snapshot имеет прежний Samsung E2E и threat review.
 Нужны beta build и два server flags; оба flags выключены по умолчанию.
@@ -54,7 +55,7 @@ voice service пока не обновляет истёкший access token с�
 
 ## Реальная среда на 2026-10-07
 
-Production API использует `troika-production:web-sources-20261007`, STT —
+Production API использует `troika-production:source-install-20261007`, STT —
 `troika-production:bf92c78`; API healthy;
 `https://api.zhulebino-teahouse.ru/health` отвечает 200. Deployment path:
 `deploy/production/compose.yaml`. API опубликован через loopback 8765/Nginx;
@@ -81,16 +82,37 @@ SearXNG Docker logs не сохраняются; API informational logs пода
 реальных tool results, до 20 уникальных ссылок на ответ, без содержимого страниц
 и скрытых рассуждений. SSE и восстановление источников из owner-scoped истории
 проверены на production; защитная оболочка внешнего результата сохраняется.
-Фоновый native voice показывает источники после загрузки истории, а не live SSE.
-Клиент собран отдельно от незавершённых native/reminder/file/development правок.
-Для установленного клиента нужен согласованный общий выпуск этих изменений.
+Фоновый native voice запрашивает источники сразу после ответа через историю,
+с проверкой текущей сессии и сохранением более новых сообщений; live SSE этого
+канала пока нет. На Android и Windows удалён локальный перехват «найди/поищи»
+для открытия Google. Поиск передаётся агенту; явное открытие браузера сохранено.
 
-Проверка Samsung SM-A225F 2026-10-07: ADB видит устройство; установлена
-APK 1.0.0 с SHA-256
-`a52bfe5fedde15efcbb12818a658decd63adf625bc7562a90b70a071e1b041ed`,
-lastUpdateTime 2026-10-07 08:51:39. Её точный source revision в этой задаче
-не установлен. Отдельная сборка источников не заменяет новую APK другой
-сессии. Полный fresh voice/reminder/file-save E2E здесь не подтверждён.
+Windows установлен в `C:\Users\kiqu\Troika` из объединённой сборки
+`_logs/source-install-20261007`. Предыдущий каталог сохранён локально для
+отката; account preferences не сбрасывались. SHA-256 EXE:
+`86c3cd6fcda3a35f58de4b53b68a43822b2963c583d1ee165a83ca48b91e3f06`.
+В установленной странице «Текст» подтверждена строка «Найдено 7 страниц»
+из реальной истории. Свежий поиск/голосовой E2E Windows ещё не завершён.
+Проверки объединённого клиента: 74 Flutter tests passed; analyze — 0
+errors/warnings, 38 info; Android/Windows release builds прошли. В сборках
+сохранены native изменения напоминаний, но они не включены в commit поиска.
+
+APK с поисковыми исправлениями готова в
+`_logs/source-install-20261007/hermes-android/build/app/outputs/flutter-apk/app-release.apk`;
+SHA-256 `c02066100495302ffc7ff464647735c6c5eff88cf19fff58f30c2961bba7a900`.
+Установка на Samsung отложена: после прежней проверки ADB перестал видеть
+телефон. Последняя проверенная установленная APK 1.0.0 имела SHA-256
+`85e1a5ece1e1306da8cfa304814876a00bc7a850549ce3e7e7a26ac663d2f7cc`
+и lastUpdateTime 2026-10-07 09:04:48; блок источников в ней отсутствовал.
+Новая APK не считается установленной по факту успешной сборки.
+
+API обновлён слоем девяти committed runtime files `e0254f5` поверх
+`reminder-voice-20261007`, сохраняя существующую серверную правку напоминаний.
+Это требуется для проверки `features.device_file_delivery` новым клиентом.
+Свежий disposable-account smoke подтвердил 10 source rows в SSE и 9 уникальных
+ссылок в history; чужой run/history дают 404/403. Оба аккаунта удалены.
+Передача просьбы другой сессии объединить сборки разрешена владельцем и выполнена.
+Полный fresh voice/reminder/file-save E2E здесь не подтверждён.
 
 Локальный порт 8765 ответил HTTP 404; это не здоровый product gateway.
 Нельзя считать localhost health проверенным по одному факту открытого порта.
@@ -112,8 +134,8 @@ Inherited developer website собирается, но Windows generators/Skills
 список файлов и восстановление пропущенной передачи в пределах TTL 10 минут.
 Обновлённый Flutter запрашивает device delivery; native voice подготавливает
 файл, для сохранения нужно открыть «Файлы» до expiry. Старые cloud artifacts
-остаются доступны. Это требует обновления сервера и клиента; текущую production
-и установленную APK по наличию source считать обновлёнными нельзя.
+остаются доступны. Runtime `e0254f5` включён в текущий API, клиент Windows
+обновлён; установленная APK ещё требует обновления. Device-file E2E не закрыт.
 
 Первый режим «Разработка» создаёт ZIP с текстовыми исходниками/README/тестами,
 распаковывает в новую папку и запускает на Windows Python syntax/unittest или
@@ -146,7 +168,7 @@ Android/Windows/dashboard/TUI/website builds и живой account/tool smoke.
 
 ## Следующий шаг
 
-Согласованно обновить API и клиент, затем проверить на устройстве сохранение
+Подключить Samsung и установить общую APK, затем проверить на устройстве сохранение
 и открытие документа, создание проекта, запуск проверки и получение исправленной
 версии. Для native voice открыть «Файлы» в пределах TTL. Продолжать P0 по
 основному плану: чтение веб-страниц, background refresh, голос и напоминания.

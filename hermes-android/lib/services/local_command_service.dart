@@ -575,16 +575,6 @@ class LocalCommandService {
       );
     }
 
-    final search = _searchQuery(norm);
-    if (search != null) {
-      final uri = Uri.https('www.google.com', '/search', {'q': search});
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-      return LocalCommandResult(
-        handled: true,
-        response: 'Ищу: $search',
-      );
-    }
-
     final app = _requestedApp(norm);
     if (app != null) {
       if (app.startsWith('http') ||
@@ -628,17 +618,6 @@ class LocalCommandService {
     for (final entry in _windowsApps.entries) {
       if (requested == entry.key || requested.contains(entry.key)) {
         return entry.value;
-      }
-    }
-    return null;
-  }
-
-  static String? _searchQuery(String norm) {
-    for (final verb in ['найди ', 'поищи ', 'загугли ', 'погугли ']) {
-      final index = norm.indexOf(verb);
-      if (index >= 0) {
-        final query = norm.substring(index + verb.length).trim();
-        if (query.isNotEmpty && query.length <= 200) return query;
       }
     }
     return null;

@@ -294,6 +294,8 @@ class AssistantService extends ChangeNotifier {
         _messages[idx]
           ..text = text
           ..pending = false;
+        _webSources = _messages[idx].webSources;
+        unawaited(_loadVoiceSources(_messages[idx]));
         notifyListeners();
         return;
       }
@@ -301,15 +303,45 @@ class AssistantService extends ChangeNotifier {
     final dup = _messages.isNotEmpty &&
         _messages.last.role == role &&
         _messages.last.text.trim() == text;
-    if (dup) return;
+    if (dup) {
+      if (role == 'assistant') unawaited(_loadVoiceSources(_messages.last));
+      return;
+    }
     _messages.add(ChatMessage(role: role, text: text, fromVoice: true));
     if (role == 'assistant') {
+      _webSources = _messages.last.webSources;
+      unawaited(_loadVoiceSources(_messages.last));
       _lastTroikaText = text;
       _setLastResult(AssistantResult.forTurn(response: text));
     } else {
+      _webSources = WebSourceTrace();
       _lastUserText = text;
     }
     notifyListeners();
+  }
+
+  /// Native background replies arrive without tool metadata. Hydrate only
+  /// their sources, preserving newer messages and the active account.
+  Future<void> _loadVoiceSources(ChatMessage target) async {
+    final sessionId = TroikaConfig.sessionId;
+    try {
+      final history = await _troika.loadSessionHistory();
+      if (!TroikaConfig.signedIn ||
+          TroikaConfig.sessionId != sessionId ||
+          !_messages.contains(target)) {
+        return;
+      }
+      final reply = history.where((message) =>
+          !message.isUser &&
+          _stripEmoTag(message.text) == _stripEmoTag(target.text)).lastOrNull;
+      if (reply == null || reply.webSources.isEmpty) return;
+      target.webSources.apply(
+          WebSourceActivity(reply.webSources.phase, reply.webSources.sources));
+      if (_messages.last == target) _webSources = target.webSources;
+      notifyListeners();
+    } catch (_) {
+      // Periodic history sync can retry after a transient connection failure.
+    }
   }
 
   /// Wake-word "Гермес" подтверждён Kotlin'ом → начинаем диалог
