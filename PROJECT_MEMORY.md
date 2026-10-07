@@ -55,7 +55,8 @@ FCM/push отсутствуют. Наличие кода refresh не закры
 
 ## Реальная среда на 2026-10-07
 
-Production API использует `troika-production:source-install-20261007`, STT —
+Production API использует `troika-production:reminder-voice-20261007-v2`
+(поверх `source-install-20261007`), STT —
 `troika-production:bf92c78`; API healthy;
 `https://api.zhulebino-teahouse.ru/health` отвечает 200. Deployment path:
 `deploy/production/compose.yaml`. API опубликован через loopback 8765/Nginx;
