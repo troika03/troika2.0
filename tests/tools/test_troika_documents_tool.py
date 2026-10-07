@@ -8,6 +8,51 @@ from gateway.session_context import clear_session_override, set_session_override
 from tools import troika_documents_tool
 from troika_product.access import AccessRegistry
 from troika_product.artifacts import ArtifactStore
+from troika_product.device_delivery import DeviceDeliveryStore
+
+
+@pytest.mark.parametrize("handler,args", [
+    ("_handle_docx", {"title": "Локальный", "content": "Содержимое"}),
+    ("_handle_project", {"title": "Код", "files": [{"path": "main.py", "content": "print(1)"}]}),
+])
+def test_device_mode_never_writes_artifact_store(tmp_path, monkeypatch, handler, args):
+    store = DeviceDeliveryStore()
+    monkeypatch.setattr(troika_documents_tool, "device_deliveries", store)
+    monkeypatch.setattr(troika_documents_tool, "_artifact_store", lambda: pytest.fail("permanent file store accessed"))
+    overrides = {"TROIKA_PRODUCT_MODE": "1", "TROIKA_PRODUCT_DELIVERY_MODE": "device",
+                 "TROIKA_PRODUCT_USER_ID": "one", "TROIKA_PRODUCT_DEVICE_ID": "phone",
+                 "TROIKA_PRODUCT_TOKEN_ID": "token", "TROIKA_PRODUCT_ARTIFACTS_AVAILABLE": "0"}
+    try:
+        for name, value in overrides.items():
+            set_session_override(name, value)
+        payload = json.loads(getattr(troika_documents_tool, handler)(args))
+    finally:
+        for name in overrides:
+            clear_session_override(name)
+    assert payload["ok"]
+    artifact = payload["artifact"]
+    assert artifact["storage"] == "device"
+    assert "data" not in artifact and "content" not in artifact
+    assert store.get(artifact["id"], "one", "phone").data
+    store.acknowledge(artifact["id"], "one", "phone")
+
+
+def test_device_workspace_write_is_delivered_without_a_server_directory(monkeypatch):
+    from tools import troika_workspace_tool
+    store = DeviceDeliveryStore()
+    monkeypatch.setattr(troika_documents_tool, "device_deliveries", store)
+    monkeypatch.setattr(troika_workspace_tool, "_store", lambda: pytest.fail("server workspace accessed"))
+    overrides = {"TROIKA_PRODUCT_MODE": "1", "TROIKA_PRODUCT_DELIVERY_MODE": "device",
+                 "TROIKA_PRODUCT_USER_ID": "one", "TROIKA_PRODUCT_DEVICE_ID": "phone",
+                 "TROIKA_PRODUCT_TOKEN_ID": "token"}
+    try:
+        for name, value in overrides.items(): set_session_override(name, value)
+        payload = json.loads(troika_workspace_tool._handle_files({"action": "write", "path": "index.html", "content": "<h1>Site</h1>"}))
+        assert payload["ok"] and payload["artifact"]["storage"] == "device"
+        assert json.loads(troika_workspace_tool._handle_terminal({"command": "touch x.txt"}))["ok"] is False
+    finally:
+        for name in overrides: clear_session_override(name)
+    store.acknowledge(payload["artifact"]["id"], "one", "phone")
 
 
 def test_document_tool_requires_authenticated_product_context() -> None:

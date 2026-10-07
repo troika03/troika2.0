@@ -3,6 +3,17 @@ import pytest
 from troika_product.completion import CompletionEvidence
 
 
+def test_ram_project_cannot_claim_device_save_or_executed_tests():
+    evidence = CompletionEvidence()
+    evidence.record("troika_create_project", {"title": "Код"}, {
+        "ok": True, "artifact": {"id": "delivery_x", "filename": "code.zip", "storage": "device"}})
+    assert evidence.unsupported("Файл сохранён на устройстве.")
+    assert evidence.unsupported("Тесты прошли.")
+    assert not evidence.unsupported("Файл подготовлен.")
+    assert not evidence.unsupported("Проект подготовлен.")
+    assert not evidence.may_retry()
+
+
 @pytest.mark.parametrize("text", [
     "Готово!", "Я создала документ.", "Файл сохранён.",
     "Напоминание установлено.", "Я запомнила это в памяти.",

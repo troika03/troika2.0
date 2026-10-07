@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/troika_theme.dart';
 import 'files_screen.dart';
 import 'local_documents_screen.dart';
+import 'development_screen.dart';
 
 class FilesHubScreen extends StatelessWidget {
   const FilesHubScreen({super.key});
@@ -41,9 +42,12 @@ class FilesHubScreen extends StatelessWidget {
           _FileAction(
             icon: Icons.cloud_outlined,
             title: 'Личные файлы',
-            subtitle: 'Открыть, экспортировать или сохранить на телефон',
+            subtitle: 'Файлы устройства и прежние облачные документы',
             onTap: () => _open(context, const FilesScreen()),
           ),
+          _FileAction(icon: Icons.code, title: 'Разработка',
+            subtitle: 'Создать проект, проверить и исправить код',
+            onTap: () => _open(context, const DevelopmentScreen())),
         ],
       ),
     );

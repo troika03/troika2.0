@@ -57,12 +57,15 @@ def generate_docx(args: dict[str, Any]) -> bytes:
     styles["Normal"].font.name = "Arial"
     styles["Normal"].font.size = Pt(11)
     styles["Title"].font.name = "Arial"
-    styles["Title"].font.color.rgb = RGBColor(46, 38, 24)
+    styles["Title"].font.color.rgb = RGBColor(38, 38, 38)
+    styles["Title"].font.size = Pt(22)
     styles["Heading 1"].font.name = "Arial"
-    styles["Heading 1"].font.color.rgb = RGBColor(171, 112, 25)
+    styles["Heading 1"].font.color.rgb = RGBColor(38, 38, 38)
+    styles["Heading 1"].font.size = Pt(14)
+    styles["Heading 1"].paragraph_format.keep_with_next = True
 
     heading = document.add_heading(title, level=0)
-    heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    heading.alignment = WD_ALIGN_PARAGRAPH.LEFT
     for section_title, body in sections:
         if section_title:
             document.add_heading(section_title, level=1)
@@ -130,7 +133,8 @@ def generate_pdf(args: dict[str, Any]) -> bytes:
         fontName=font_name,
         fontSize=22,
         leading=27,
-        textColor=colors.HexColor("#2E2618"),
+        textColor=colors.HexColor("#262626"),
+        alignment=0,
         spaceAfter=18,
     )
     section_style = ParagraphStyle(
@@ -139,7 +143,8 @@ def generate_pdf(args: dict[str, Any]) -> bytes:
         fontName=font_name,
         fontSize=15,
         leading=19,
-        textColor=colors.HexColor("#AB7019"),
+        textColor=colors.HexColor("#262626"),
+        keepWithNext=True,
         spaceBefore=10,
         spaceAfter=7,
     )
@@ -166,7 +171,7 @@ def generate_pdf(args: dict[str, Any]) -> bytes:
 
 
 def generate_pptx(args: dict[str, Any]) -> bytes:
-    """Create a readable 16:9 branded presentation entirely in memory."""
+    """Create a restrained 16:9 presentation entirely in memory."""
     from pptx import Presentation
     from pptx.dml.color import RGBColor
     from pptx.enum.text import PP_ALIGN
@@ -182,10 +187,11 @@ def generate_pptx(args: dict[str, Any]) -> bytes:
     presentation = Presentation()
     presentation.slide_width = Inches(13.333)
     presentation.slide_height = Inches(7.5)
-    background_color = RGBColor(18, 16, 13)
-    accent = RGBColor(245, 166, 35)
-    text_color = RGBColor(247, 243, 234)
-    muted = RGBColor(190, 181, 165)
+    background_color = RGBColor(255, 255, 255)
+    text_color = RGBColor(38, 38, 38)
+    muted = RGBColor(64, 64, 64)
+    if len(title) > 160:
+        raise ValueError("presentation title is too long; use a concise title")
 
     cover = presentation.slides.add_slide(presentation.slide_layouts[6])
     cover.background.fill.solid()
@@ -198,12 +204,6 @@ def generate_pptx(args: dict[str, Any]) -> bytes:
     cover_paragraph.font.size = Pt(34)
     cover_paragraph.font.bold = True
     cover_paragraph.font.color.rgb = text_color
-    cover_accent = cover.shapes.add_shape(
-        1, Inches(5.4), Inches(4.25), Inches(2.5), Inches(0.07)
-    )
-    cover_accent.fill.solid()
-    cover_accent.fill.fore_color.rgb = accent
-    cover_accent.line.fill.background()
 
     for index, raw in enumerate(raw_slides, start=1):
         if not isinstance(raw, dict):
@@ -218,13 +218,13 @@ def generate_pptx(args: dict[str, Any]) -> bytes:
             content = _clean_text(raw.get("content"), max_chars=30_000)
             body_lines = [line.strip() for line in content.splitlines() if line.strip()]
 
+        estimated_lines = sum(max(1, (len(part) + 64) // 65)
+                              for line in body_lines for part in line.splitlines())
+        if len(slide_title) > 120 or len(body_lines) > 6 or estimated_lines > 8:
+            raise ValueError("slide has too much text; split it into multiple slides")
         slide = presentation.slides.add_slide(presentation.slide_layouts[6])
         slide.background.fill.solid()
         slide.background.fill.fore_color.rgb = background_color
-        bar = slide.shapes.add_shape(1, Inches(0.7), Inches(0.7), Inches(0.09), Inches(1.0))
-        bar.fill.solid()
-        bar.fill.fore_color.rgb = accent
-        bar.line.fill.background()
 
         title_box = slide.shapes.add_textbox(Inches(1), Inches(0.62), Inches(11.4), Inches(1.2))
         title_paragraph = title_box.text_frame.paragraphs[0]

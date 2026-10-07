@@ -1489,8 +1489,19 @@ class HermesListenerService : Service() {
         val url = "$serverUrl/v1/chat/completions"
 
         return try {
+            val capabilityConnection = java.net.URL("$serverUrl/v1/capabilities").openConnection() as java.net.HttpURLConnection
+            val supportsLocalFiles = try {
+                capabilityConnection.connectTimeout = 15000
+                capabilityConnection.readTimeout = 15000
+                capabilityConnection.setRequestProperty("Authorization", "Bearer $apiKey")
+                capabilityConnection.responseCode == 200 && JSONObject(
+                    capabilityConnection.inputStream.bufferedReader(Charsets.UTF_8).readText()
+                ).optJSONObject("features")?.optBoolean("device_file_delivery") == true
+            } finally { capabilityConnection.disconnect() }
+            if (!supportsLocalFiles) return "Сервер Тройки нужно обновить для локальных файлов и разработки."
             val body = JSONObject().apply {
                 put("model", "troika-agent")
+                put("artifact_delivery", "device")
                 put("messages", JSONArray().apply {
                     put(JSONObject().apply {
                         put("role", "system")

@@ -24,6 +24,7 @@
 
 - [Документация](docs/README.md): один вход во все планы, runbooks и reviews.
 - [Главный план](docs/Troika_1.0_Launch_Plan_Final_Updated.docx): требования и Definition of Done.
+- [Основной план ремонта](PRODUCTIZATION_PLAN.md): 8 этапов, локальные документы и разработка кода по решению 6 октября.
 - [Трекер](docs/TROIKA_1_0_EXECUTION_TRACKER.md): прогресс разделов 1–20.
 - [Память проекта](PROJECT_MEMORY.md): краткое текущее состояние.
 - [Карта репозитория](docs/REPOSITORY_MAP.md): назначение всех каталогов и выполненная очистка.
@@ -35,6 +36,20 @@ hosted agent/tool loop, индивидуальные аккаунты/устро
 owner-scoped память, проекты/задачи/inbox, создание DOCX/PDF/PPTX и личные
 artifacts. Локально создаются DOCX/PPTX. Напоминания на Android требуют
 синхронизации и системных permissions; Windows background delivery отсутствует.
+
+В обновлённом source готовые новые DOCX/PDF/PPTX и проекты с кодом передаются
+из временной RAM-копии на устройство. После локального сохранения приложение
+подтверждает получение; сервер удаляет копию, иначе TTL — 10 минут. Старые
+облачные файлы остаются доступны. Новые локальные файлы автоматически не
+синхронизируются и не восстанавливаются после удаления приложения.
+
+«Файлы / Разработка» создаёт проект с кодом и тестами. Windows может распаковать
+его в новую папку, запустить Python syntax/unittest или JS syntax, показать
+отчёт и передать текущие исходники ИИ для новой версии. Нужен установленный
+Python/Node.js. Запуск требует локального подтверждения, имеет тайм-аут и Stop;
+отдельного sandbox нет. Existing repository editing, dependencies/builds и
+phone-to-PC Companion пока остаются планом. Production и установленный клиент
+требуют отдельного обновления и E2E.
 
 Нет password recovery, email verification, billing/checkout/credits,
 production backup/restore и полного offline-first sync. Live screen/camera,
@@ -101,3 +116,9 @@ default configuration может исключить все tests даже при
 Copyright и notices сохраняются. Исторические имена Python, CLI, каталога
 клиента, Android package/headers/preferences пока являются зависимостями
 и совместимостью; их удаление требует [миграции](docs/TROIKA_NATIVE_REBRAND_MIGRATION.md).
+
+Обновлённый клиент перед облачным запросом проверяет `features.device_file_delivery`
+в `/v1/capabilities`. Без поддержки просит обновить сервер, чтобы старый
+backend не проигнорировал локальный режим и не сохранил файл постоянно.
+Сначала обновляется API, затем клиент; исторические клиенты сохраняют legacy
+совместимость до отдельной миграции.

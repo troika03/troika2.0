@@ -1,0 +1,1237 @@
+path	status	passed	failed	skipped	errors	xfailed	seconds	source	runner_summary
+tests/acp/test_approval_isolation.py	passed	7	0	0	0	0	9.4	oct6-full-python.log	7✓, 9.4s
+tests/acp/test_auth.py	passed	10	0	0	0	0	9.7	oct6-full-python.log	10✓, 9.7s
+tests/acp/test_edit_approval.py	failed	7	1	0	0	0	26.8	oct6-full-python.log	7✓ 1✗, 26.8s
+tests/acp/test_entry.py	passed	10	0	0	0	0	13.8	oct6-full-python.log	10✓, 13.8s
+tests/acp/test_events.py	passed	19	0	0	0	0	11.4	oct6-full-python.log	19✓, 11.4s
+tests/acp/test_mcp_e2e.py	passed	8	0	0	0	0	22.3	oct6-full-python.log	8✓, 22.3s
+tests/acp/test_permissions.py	passed	9	0	0	0	0	12.4	oct6-full-python.log	9✓, 12.4s
+tests/acp/test_ping_suppression.py	failed	8	1	0	0	0	13.2	oct6-full-python.log	8✓ 1✗, 13.2s
+tests/acp/test_registry_manifest.py	passed	6	0	0	0	0	10.8	oct6-full-python.log	6✓, 10.8s
+tests/acp/test_server.py	passed	78	0	0	0	0	33.9	oct6-full-python.log	78✓, 33.9s
+tests/acp/test_session.py	passed	41	0	0	0	0	19.8	oct6-full-python.log	41✓, 19.8s
+tests/acp/test_tools.py	passed	70	0	0	0	0	10.8	oct6-full-python.log	70✓, 10.8s
+tests/acp_adapter/test_acp_commands.py	passed	6	0	0	0	0	8.1	oct6-full-python.log	6✓, 8.1s
+tests/acp_adapter/test_acp_images.py	failed	5	3	0	0	0	9.8	oct6-full-python.log	5✓ 3✗, 9.8s
+tests/acp_adapter/test_detect_provider_entra.py	passed	5	0	0	0	0	7.0	oct6-full-python.log	5✓, 7.0s
+tests/agent/lsp/test_backend_gate.py	passed	5	0	0	0	0	16.8	oct6-full-python.log	5✓, 16.8s
+tests/agent/lsp/test_broken_set.py	passed	7	0	0	0	0	11.9	oct6-full-python.log	7✓, 11.9s
+tests/agent/lsp/test_client_e2e.py	passed	6	0	0	0	0	15.9	oct6-full-python.log	6✓, 15.9s
+tests/agent/lsp/test_delta_key.py	passed	18	0	0	0	0	13.2	oct6-full-python.log	18✓, 13.2s
+tests/agent/lsp/test_diagnostics_field.py	passed	11	0	0	0	0	50.5	oct6-full-python.log	11✓, 50.5s
+tests/agent/lsp/test_eventlog.py	passed	18	0	0	0	0	9.9	oct6-full-python.log	18✓, 9.9s
+tests/agent/lsp/test_install_and_lint_fixes.py	passed	12	0	0	0	0	14.6	oct6-full-python.log	12✓, 14.6s
+tests/agent/lsp/test_lifecycle.py	passed	8	0	0	0	0	8.7	oct6-full-python.log	8✓, 8.7s
+tests/agent/lsp/test_protocol.py	passed	18	0	0	0	0	9.2	oct6-full-python.log	18✓, 9.2s
+tests/agent/lsp/test_reporter.py	passed	10	0	0	0	0	9.1	oct6-full-python.log	10✓, 9.1s
+tests/agent/lsp/test_service.py	passed	5	0	0	0	0	12.8	oct6-full-python.log	5✓, 12.8s
+tests/agent/lsp/test_shell_linter_lsp_skip.py	passed	13	0	0	0	0	66.4	oct6-full-python.log	13✓, 66.4s
+tests/agent/lsp/test_workspace.py	failed	11	1	0	0	0	13.0	oct6-full-python.log	11✓ 1✗, 13.0s
+tests/agent/test_anthropic_adapter.py	passed	152	0	1	0	0	22.7	oct6-full-python.log	152✓ 1s, 22.7s
+tests/agent/test_anthropic_keychain.py	passed	12	0	0	0	0	10.3	oct6-full-python.log	12✓, 10.3s
+tests/agent/test_anthropic_mcp_prefix_strip.py	passed	11	0	0	0	0	11.4	oct6-full-python.log	11✓, 11.4s
+tests/agent/test_anthropic_oauth_pkce.py	passed	2	0	0	0	0	10.0	oct6-full-python.log	2✓, 10.0s
+tests/agent/test_arcee_trinity_overrides.py	passed	17	0	0	0	0	12.7	oct6-full-python.log	17✓, 12.7s
+tests/agent/test_async_utils.py	passed	6	0	0	0	0	12.8	oct6-full-python.log	6✓, 12.8s
+tests/agent/test_auxiliary_client.py	passed	176	0	0	0	0	61.7	oct6-full-python.log	176✓, 61.7s
+tests/agent/test_auxiliary_client_anthropic_custom.py	passed	3	0	0	0	0	17.0	oct6-full-python.log	3✓, 17.0s
+tests/agent/test_auxiliary_client_azure_foundry.py	passed	9	0	0	0	0	24.2	oct6-full-python.log	9✓, 24.2s
+tests/agent/test_auxiliary_config_bridge.py	passed	19	0	0	0	0	15.3	oct6-full-python.log	19✓, 15.3s
+tests/agent/test_auxiliary_main_first.py	passed	15	0	0	0	0	19.5	oct6-full-python.log	15✓, 19.5s
+tests/agent/test_auxiliary_named_custom_providers.py	passed	29	0	0	0	0	47.5	oct6-full-python.log	29✓, 47.5s
+tests/agent/test_auxiliary_transport_autodetect.py	passed	21	0	0	0	0	32.0	oct6-full-python.log	21✓, 32.0s
+tests/agent/test_azure_identity_adapter.py	passed	39	0	0	0	0	23.8	oct6-full-python.log	39✓, 23.8s
+tests/agent/test_bedrock_1m_context.py	passed	2	0	0	0	0	13.2	oct6-full-python.log	2✓, 13.2s
+tests/agent/test_bedrock_adapter.py	passed	118	0	0	0	0	29.5	oct6-full-python.log	118✓, 29.5s
+tests/agent/test_bedrock_integration.py	passed	55	0	0	0	0	37.5	oct6-full-python.log	55✓, 37.5s
+tests/agent/test_codex_cloudflare_headers.py	passed	13	0	0	0	0	45.6	oct6-full-python.log	13✓, 45.6s
+tests/agent/test_codex_ttfb_watchdog.py	failed	0	0	0	0	0	46.4	oct6-full-python.log	46.4s
+tests/agent/test_compress_focus.py	passed	4	0	0	0	0	19.2	oct6-full-python.log	4✓, 19.2s
+tests/agent/test_compressor_historical_media.py	passed	27	0	0	0	0	18.7	oct6-full-python.log	27✓, 18.7s
+tests/agent/test_compressor_image_tokens.py	passed	12	0	0	0	0	15.4	oct6-full-python.log	12✓, 15.4s
+tests/agent/test_context_compressor.py	passed	83	0	0	0	0	85.5	oct6-full-python.log	83✓, 85.5s
+tests/agent/test_context_compressor_summary_continuity.py	passed	2	0	0	0	0	15.5	oct6-full-python.log	2✓, 15.5s
+tests/agent/test_context_engine.py	passed	19	0	0	0	0	23.8	oct6-full-python.log	19✓, 23.8s
+tests/agent/test_context_references.py	failed	13	1	0	0	0	31.9	oct6-full-python.log	13✓ 1✗, 31.9s
+tests/agent/test_copilot_acp_client.py	passed	7	0	0	0	0	17.1	oct6-full-python.log	7✓, 17.1s
+tests/agent/test_copilot_acp_deprecation.py	passed	14	0	0	0	0	17.9	oct6-full-python.log	14✓, 17.9s
+tests/agent/test_credential_pool.py	passed	70	0	0	0	0	30.0	oct6-full-python.log	70✓, 30.0s
+tests/agent/test_credential_pool_routing.py	passed	10	0	0	0	0	23.8	oct6-full-python.log	10✓, 23.8s
+tests/agent/test_crossloop_client_cache.py	passed	5	0	0	0	0	11.5	oct6-full-python.log	5✓, 11.5s
+tests/agent/test_curator.py	passed	48	0	0	0	0	19.9	oct6-full-python.log	48✓, 19.9s
+tests/agent/test_curator_activity.py	passed	1	0	0	0	0	12.8	oct6-full-python.log	1✓, 12.8s
+tests/agent/test_curator_backup.py	passed	25	0	0	0	0	18.8	oct6-full-python.log	25✓, 18.8s
+tests/agent/test_curator_classification.py	passed	46	0	0	0	0	19.1	oct6-full-python.log	46✓, 19.1s
+tests/agent/test_curator_reports.py	passed	10	0	0	0	0	17.3	oct6-full-python.log	10✓, 17.3s
+tests/agent/test_custom_provider_extra_body.py	passed	3	0	0	0	0	32.4	oct6-full-python.log	3✓, 32.4s
+tests/agent/test_deepseek_anthropic_thinking.py	passed	9	0	0	0	0	16.8	oct6-full-python.log	9✓, 16.8s
+tests/agent/test_direct_provider_url_detection.py	passed	3	0	0	0	0	32.8	oct6-full-python.log	3✓, 32.8s
+tests/agent/test_display.py	passed	31	0	0	0	0	23.8	oct6-full-python.log	31✓, 23.8s
+tests/agent/test_display_emoji.py	passed	10	0	0	0	0	20.0	oct6-full-python.log	10✓, 20.0s
+tests/agent/test_display_todo_progress.py	passed	24	0	0	0	0	19.8	oct6-full-python.log	24✓, 19.8s
+tests/agent/test_display_tool_failure.py	passed	24	0	0	0	0	16.8	oct6-full-python.log	24✓, 16.8s
+tests/agent/test_error_classifier.py	passed	140	0	0	0	0	30.6	oct6-full-python.log	140✓, 30.6s
+tests/agent/test_external_skills.py	passed	11	0	0	0	0	15.9	oct6-full-python.log	11✓, 15.9s
+tests/agent/test_external_skills_dirs_cache.py	passed	6	0	0	0	0	16.2	oct6-full-python.log	6✓, 16.2s
+tests/agent/test_file_safety.py	passed	18	0	0	0	0	15.2	oct6-full-python.log	18✓, 15.2s
+tests/agent/test_file_safety_credentials.py	passed	20	0	0	0	0	17.8	oct6-full-python.log	20✓, 17.8s
+tests/agent/test_file_safety_cross_profile.py	passed	16	0	0	0	0	18.7	oct6-full-python.log	16✓, 18.7s
+tests/agent/test_gemini_cloudcode.py	failed	87	1	0	0	0	38.2	oct6-full-python.log	87✓ 1✗, 38.2s
+tests/agent/test_gemini_fast_fallback.py	passed	7	0	0	0	0	25.3	oct6-full-python.log	7✓, 25.3s
+tests/agent/test_gemini_free_tier_gate.py	passed	22	0	0	0	0	17.2	oct6-full-python.log	22✓, 17.2s
+tests/agent/test_gemini_native_adapter.py	passed	11	0	0	0	0	16.6	oct6-full-python.log	11✓, 16.6s
+tests/agent/test_gemini_schema.py	passed	11	0	0	0	0	17.1	oct6-full-python.log	11✓, 17.1s
+tests/agent/test_i18n.py	passed	43	0	0	0	0	27.6	oct6-full-python.log	43✓, 27.6s
+tests/agent/test_image_gen_registry.py	passed	10	0	0	0	0	17.1	oct6-full-python.log	10✓, 17.1s
+tests/agent/test_image_routing.py	passed	57	0	0	0	0	21.8	oct6-full-python.log	57✓, 21.8s
+tests/agent/test_insights.py	passed	56	0	0	0	0	31.9	oct6-full-python.log	56✓, 31.9s
+tests/agent/test_kimi_coding_anthropic_thinking.py	passed	17	0	0	0	0	17.7	oct6-full-python.log	17✓, 17.7s
+tests/agent/test_last_total_tokens.py	passed	2	0	0	0	0	15.3	oct6-full-python.log	2✓, 15.3s
+tests/agent/test_local_stream_timeout.py	passed	39	0	0	0	0	22.0	oct6-full-python.log	39✓, 22.0s
+tests/agent/test_markdown_tables.py	passed	15	0	0	0	0	17.8	oct6-full-python.log	15✓, 17.8s
+tests/agent/test_memory_provider.py	passed	74	0	0	0	0	32.2	oct6-full-python.log	74✓, 32.2s
+tests/agent/test_memory_session_switch.py	passed	12	0	0	0	0	19.4	oct6-full-python.log	12✓, 19.4s
+tests/agent/test_memory_user_id.py	passed	14	0	0	0	0	29.1	oct6-full-python.log	14✓, 29.1s
+tests/agent/test_minimax_auxiliary_url.py	passed	9	0	0	0	0	21.4	oct6-full-python.log	9✓, 21.4s
+tests/agent/test_minimax_provider.py	passed	42	0	0	0	0	38.5	oct6-full-python.log	42✓, 38.5s
+tests/agent/test_model_metadata.py	passed	102	0	0	0	0	38.3	oct6-full-python.log	102✓, 38.3s
+tests/agent/test_model_metadata_local_ctx.py	passed	22	0	0	0	0	26.7	oct6-full-python.log	22✓, 26.7s
+tests/agent/test_model_metadata_ssl.py	passed	9	0	0	0	0	15.5	oct6-full-python.log	9✓, 15.5s
+tests/agent/test_models_dev.py	passed	32	0	0	0	0	17.2	oct6-full-python.log	32✓, 17.2s
+tests/agent/test_moonshot_schema.py	passed	42	0	0	0	0	18.5	oct6-full-python.log	42✓, 18.5s
+tests/agent/test_non_stream_stale_timeout.py	failed	0	0	0	0	0	44.0	oct6-full-python.log	44.0s
+tests/agent/test_nous_oauth_401_guidance.py	passed	3	0	0	0	0	14.5	oct6-full-python.log	3✓, 14.5s
+tests/agent/test_nous_rate_guard.py	passed	32	0	0	0	0	19.5	oct6-full-python.log	32✓, 19.5s
+tests/agent/test_onboarding.py	passed	33	0	0	0	0	19.2	oct6-full-python.log	33✓, 19.2s
+tests/agent/test_openrouter_response_cache.py	passed	46	0	0	0	0	30.9	oct6-full-python.log	46✓, 30.9s
+tests/agent/test_plugin_llm.py	passed	56	0	0	0	0	21.5	oct6-full-python.log	56✓, 21.5s
+tests/agent/test_portal_tags.py	passed	6	0	0	0	0	20.1	oct6-full-python.log	6✓, 20.1s
+tests/agent/test_product_completion_guard.py	passed	5	0	0	0	0	50.2	oct6-full-python.log	5✓, 50.2s
+tests/agent/test_prompt_builder.py	passed	123	0	1	0	0	34.0	oct6-full-python.log	123✓ 1s, 34.0s
+tests/agent/test_prompt_caching.py	passed	14	0	0	0	0	15.0	oct6-full-python.log	14✓, 15.0s
+tests/agent/test_proxy_and_url_validation.py	failed	12	3	0	0	0	17.0	oct6-full-python.log	12✓ 3✗, 17.0s
+tests/agent/test_rate_limit_tracker.py	passed	24	0	0	0	0	14.9	oct6-full-python.log	24✓, 14.9s
+tests/agent/test_redact.py	passed	82	0	0	0	0	21.1	oct6-full-python.log	82✓, 21.1s
+tests/agent/test_save_url_image.py	failed	7	1	0	0	0	18.5	oct6-full-python.log	7✓ 1✗, 18.5s
+tests/agent/test_shell_hooks.py	failed	46	7	0	0	0	26.5	oct6-full-python.log	46✓ 7✗, 26.5s
+tests/agent/test_shell_hooks_consent.py	failed	21	2	0	0	0	22.4	oct6-full-python.log	21✓ 2✗, 22.4s
+tests/agent/test_skill_bundles.py	passed	33	0	0	0	0	25.8	oct6-full-python.log	33✓, 25.8s
+tests/agent/test_skill_commands.py	failed	39	2	0	0	0	47.0	oct6-full-python.log	39✓ 2✗, 47.0s
+tests/agent/test_skill_commands_reload.py	passed	6	0	0	0	0	22.7	oct6-full-python.log	6✓, 22.7s
+tests/agent/test_skill_utils.py	passed	15	0	0	0	0	24.8	oct6-full-python.log	15✓, 24.8s
+tests/agent/test_streaming_context_scrubber.py	passed	21	0	0	0	0	23.5	oct6-full-python.log	21✓, 23.5s
+tests/agent/test_subagent_progress.py	passed	21	0	0	0	0	26.7	oct6-full-python.log	21✓, 26.7s
+tests/agent/test_subagent_stop_hook.py	passed	7	0	0	0	0	41.8	oct6-full-python.log	7✓, 41.8s
+tests/agent/test_subdirectory_hints.py	failed	23	2	0	0	0	32.0	oct6-full-python.log	23✓ 2✗, 32.0s
+tests/agent/test_system_prompt_restore.py	passed	12	0	0	0	0	25.2	oct6-full-python.log	12✓, 25.2s
+tests/agent/test_think_scrubber.py	passed	31	0	0	0	0	28.7	oct6-full-python.log	31✓, 28.7s
+tests/agent/test_title_generator.py	passed	20	0	0	0	0	24.5	oct6-full-python.log	20✓, 24.5s
+tests/agent/test_tool_dispatch_helpers.py	passed	27	0	0	0	0	23.7	oct6-full-python.log	27✓, 23.7s
+tests/agent/test_tool_guardrails.py	passed	13	0	0	0	0	21.8	oct6-full-python.log	13✓, 21.8s
+tests/agent/test_tool_result_classification.py	passed	3	0	0	0	0	18.7	oct6-full-python.log	3✓, 18.7s
+tests/agent/test_transcription_registry.py	passed	27	0	0	0	0	20.6	oct6-full-python.log	27✓, 20.6s
+tests/agent/test_troika_product_persona.py	passed	1	0	0	0	0	51.2	oct6-full-python.log	1✓, 51.2s
+tests/agent/test_tts_registry.py	passed	47	0	0	0	0	21.9	oct6-full-python.log	47✓, 21.9s
+tests/agent/test_unsupported_parameter_retry.py	passed	16	0	0	0	0	29.3	oct6-full-python.log	16✓, 29.3s
+tests/agent/test_unsupported_temperature_retry.py	passed	19	0	0	0	0	30.7	oct6-full-python.log	19✓, 30.7s
+tests/agent/test_usage_pricing.py	passed	11	0	0	0	0	15.2	oct6-full-python.log	11✓, 15.2s
+tests/agent/test_video_gen_registry.py	passed	10	0	0	0	0	14.9	oct6-full-python.log	10✓, 14.9s
+tests/agent/test_vision_resolved_args.py	passed	2	0	0	0	0	18.2	oct6-full-python.log	2✓, 18.2s
+tests/agent/test_vision_routing_31179.py	passed	12	0	0	0	0	54.5	oct6-full-python.log	12✓, 54.5s
+tests/agent/transports/test_bedrock_transport.py	passed	19	0	0	0	0	16.2	oct6-full-python.log	19✓, 16.2s
+tests/agent/transports/test_chat_completions.py	passed	69	0	0	0	0	23.2	oct6-full-python.log	69✓, 23.2s
+tests/agent/transports/test_codex_app_server_runtime.py	passed	27	0	0	0	0	18.7	oct6-full-python.log	27✓, 18.7s
+tests/agent/transports/test_codex_app_server_session.py	passed	57	0	0	0	0	36.7	oct6-full-python.log	57✓, 36.7s
+tests/agent/transports/test_codex_event_projector.py	passed	23	0	0	0	0	17.8	oct6-full-python.log	23✓, 17.8s
+tests/agent/transports/test_codex_transport.py	passed	45	0	0	0	0	30.3	oct6-full-python.log	45✓, 30.3s
+tests/agent/transports/test_hermes_tools_mcp_server.py	passed	9	0	0	0	0	16.5	oct6-full-python.log	9✓, 16.5s
+tests/agent/transports/test_transport.py	passed	23	0	0	0	0	19.4	oct6-full-python.log	23✓, 19.4s
+tests/agent/transports/test_types.py	passed	37	0	0	0	0	21.6	oct6-full-python.log	37✓, 21.6s
+tests/cli/test_bracketed_paste_timeout.py	passed	8	0	0	0	0	28.5	oct6-full-python.log	8✓, 28.5s
+tests/cli/test_branch_command.py	passed	16	0	0	0	0	19.1	oct6-full-python.log	16✓, 19.1s
+tests/cli/test_busy_input_mode_command.py	passed	8	0	0	0	0	16.0	oct6-full-python.log	8✓, 16.0s
+tests/cli/test_cli_approval_ui.py	failed	10	1	0	0	0	20.0	oct6-full-python.log	10✓ 1✗, 20.0s
+tests/cli/test_cli_background_status_indicator.py	passed	16	0	0	0	0	17.2	oct6-full-python.log	16✓, 17.2s
+tests/cli/test_cli_background_tui_refresh.py	passed	4	0	0	0	0	15.3	oct6-full-python.log	4✓, 15.3s
+tests/cli/test_cli_bracketed_paste_sanitizer.py	passed	11	0	0	0	0	16.6	oct6-full-python.log	11✓, 16.6s
+tests/cli/test_cli_browser_connect.py	failed	15	1	0	0	0	16.4	oct6-full-python.log	15✓ 1✗, 16.4s
+tests/cli/test_cli_context_warning.py	passed	10	0	0	0	0	41.4	oct6-full-python.log	10✓, 41.4s
+tests/cli/test_cli_copy_command.py	passed	4	0	0	0	0	16.2	oct6-full-python.log	4✓, 16.2s
+tests/cli/test_cli_extension_hooks.py	passed	5	0	0	0	0	17.1	oct6-full-python.log	5✓, 17.1s
+tests/cli/test_cli_external_editor.py	passed	7	0	0	0	0	16.0	oct6-full-python.log	7✓, 16.0s
+tests/cli/test_cli_file_drop.py	failed	34	1	0	0	0	25.0	oct6-full-python.log	34✓ 1✗, 25.0s
+tests/cli/test_cli_force_redraw.py	passed	9	0	0	0	0	19.0	oct6-full-python.log	9✓, 19.0s
+tests/cli/test_cli_goal_interrupt.py	passed	7	0	0	0	0	17.4	oct6-full-python.log	7✓, 17.4s
+tests/cli/test_cli_image_command.py	failed	7	2	0	0	0	22.0	oct6-full-python.log	7✓ 2✗, 22.0s
+tests/cli/test_cli_init.py	passed	42	0	0	0	0	39.7	oct6-full-python.log	42✓, 39.7s
+tests/cli/test_cli_insights_command.py	passed	2	0	0	0	0	18.7	oct6-full-python.log	2✓, 18.7s
+tests/cli/test_cli_interrupt_subagent.py	passed	1	0	0	0	0	34.6	oct6-full-python.log	1✓, 34.6s
+tests/cli/test_cli_light_mode.py	passed	16	0	0	0	0	25.0	oct6-full-python.log	16✓, 25.0s
+tests/cli/test_cli_loading_indicator.py	passed	2	0	0	0	0	21.9	oct6-full-python.log	2✓, 21.9s
+tests/cli/test_cli_markdown_rendering.py	passed	14	0	0	0	0	26.0	oct6-full-python.log	14✓, 26.0s
+tests/cli/test_cli_mcp_config_watch.py	passed	6	0	0	0	0	25.8	oct6-full-python.log	6✓, 25.8s
+tests/cli/test_cli_new_session.py	passed	7	0	0	0	0	30.0	oct6-full-python.log	7✓, 30.0s
+tests/cli/test_cli_prefix_matching.py	passed	11	0	0	0	0	44.6	oct6-full-python.log	11✓, 44.6s
+tests/cli/test_cli_preloaded_skills.py	passed	3	0	0	0	0	50.8	oct6-full-python.log	3✓, 50.8s
+tests/cli/test_cli_provider_resolution.py	passed	20	0	0	0	0	53.3	oct6-full-python.log	20✓, 53.3s
+tests/cli/test_cli_reload_skills.py	passed	3	0	0	0	0	32.0	oct6-full-python.log	3✓, 32.0s
+tests/cli/test_cli_resume_command.py	passed	5	0	0	0	0	30.5	oct6-full-python.log	5✓, 30.5s
+tests/cli/test_cli_retry.py	passed	2	0	0	0	0	26.9	oct6-full-python.log	2✓, 26.9s
+tests/cli/test_cli_save_config_value.py	passed	8	0	0	0	0	26.7	oct6-full-python.log	8✓, 26.7s
+tests/cli/test_cli_secret_capture.py	failed	2	3	0	0	0	21.3	oct6-full-python.log	2✓ 3✗, 21.3s
+tests/cli/test_cli_shift_enter_newline.py	passed	6	0	0	0	0	21.2	oct6-full-python.log	6✓, 21.2s
+tests/cli/test_cli_shutdown_memory_messages.py	passed	4	0	0	0	0	26.8	oct6-full-python.log	4✓, 26.8s
+tests/cli/test_cli_skin_integration.py	passed	11	0	0	0	0	23.4	oct6-full-python.log	11✓, 23.4s
+tests/cli/test_cli_status_bar.py	passed	36	0	0	0	0	35.9	oct6-full-python.log	36✓, 35.9s
+tests/cli/test_cli_status_command.py	passed	6	0	0	0	0	26.5	oct6-full-python.log	6✓, 26.5s
+tests/cli/test_cli_steer_busy_path.py	passed	7	0	0	0	0	25.7	oct6-full-python.log	7✓, 25.7s
+tests/cli/test_cli_terminal_response_sanitizer.py	passed	16	0	0	0	0	25.1	oct6-full-python.log	16✓, 25.1s
+tests/cli/test_cli_tools_command.py	passed	10	0	0	0	0	29.5	oct6-full-python.log	10✓, 29.5s
+tests/cli/test_cli_user_message_preview.py	passed	3	0	0	0	0	21.4	oct6-full-python.log	3✓, 21.4s
+tests/cli/test_compress_focus.py	passed	5	0	0	0	0	16.6	oct6-full-python.log	5✓, 16.6s
+tests/cli/test_cprint_bg_thread.py	passed	13	0	0	0	0	16.4	oct6-full-python.log	13✓, 16.4s
+tests/cli/test_ctrl_enter_newline.py	passed	9	0	0	0	0	15.2	oct6-full-python.log	9✓, 15.2s
+tests/cli/test_cwd_env_respect.py	passed	9	0	0	0	0	12.0	oct6-full-python.log	9✓, 12.0s
+tests/cli/test_destructive_slash_confirm.py	passed	16	0	0	0	0	16.5	oct6-full-python.log	16✓, 16.5s
+tests/cli/test_destructive_slash_inline_skip_e2e.py	passed	3	0	0	0	0	28.2	oct6-full-python.log	3✓, 28.2s
+tests/cli/test_exit_delete_session.py	passed	12	0	0	0	0	19.1	oct6-full-python.log	12✓, 19.1s
+tests/cli/test_exit_summary_resume_hint.py	passed	5	0	0	0	0	17.2	oct6-full-python.log	5✓, 17.2s
+tests/cli/test_fast_command.py	passed	35	0	0	0	0	29.5	oct6-full-python.log	35✓, 29.5s
+tests/cli/test_gquota_command.py	passed	1	0	0	0	0	17.1	oct6-full-python.log	1✓, 17.1s
+tests/cli/test_manual_compress.py	passed	6	0	0	0	0	28.6	oct6-full-python.log	6✓, 28.6s
+tests/cli/test_personality_none.py	passed	19	0	0	0	0	29.7	oct6-full-python.log	19✓, 29.7s
+tests/cli/test_prompt_text_input_thread_safety.py	passed	5	0	0	0	0	26.6	oct6-full-python.log	5✓, 26.6s
+tests/cli/test_quick_commands.py	passed	18	0	0	0	0	48.1	oct6-full-python.log	18✓, 48.1s
+tests/cli/test_reasoning_command.py	passed	55	0	0	0	0	43.6	oct6-full-python.log	55✓, 43.6s
+tests/cli/test_resume_display.py	passed	40	0	0	0	0	34.8	oct6-full-python.log	40✓, 34.8s
+tests/cli/test_resume_quiet_stderr.py	passed	4	0	0	0	0	27.0	oct6-full-python.log	4✓, 27.0s
+tests/cli/test_save_conversation_location.py	passed	2	0	0	0	0	23.6	oct6-full-python.log	2✓, 23.6s
+tests/cli/test_session_boundary_hooks.py	passed	4	0	0	0	0	26.3	oct6-full-python.log	4✓, 26.3s
+tests/cli/test_slash_command_interrupt.py	passed	4	0	0	0	0	14.2	oct6-full-python.log	4✓, 14.2s
+tests/cli/test_slash_confirm_windows.py	passed	9	0	0	0	0	16.0	oct6-full-python.log	9✓, 16.0s
+tests/cli/test_stream_delta_think_tag.py	passed	8	0	0	0	0	15.8	oct6-full-python.log	8✓, 15.8s
+tests/cli/test_surrogate_sanitization.py	failed	0	0	0	0	0	54.7	oct6-full-python.log	54.7s
+tests/cli/test_tool_progress_scrollback.py	passed	15	0	0	0	0	23.8	oct6-full-python.log	15✓, 23.8s
+tests/cli/test_update_command.py	passed	20	0	0	0	0	19.6	oct6-full-python.log	20✓, 19.6s
+tests/cli/test_worktree.py	passed	41	0	0	0	0	93.1	oct6-full-python.log	41✓, 93.1s
+tests/cli/test_worktree_security.py	passed	5	0	0	0	0	24.4	oct6-full-python.log	5✓, 24.4s
+tests/cron/test_codex_execution_paths.py	passed	2	0	0	0	0	28.0	oct6-full-python.log	2✓, 28.0s
+tests/cron/test_compute_next_run_last_run_at.py	passed	3	0	0	0	0	9.5	oct6-full-python.log	3✓, 9.5s
+tests/cron/test_cron_context_from.py	passed	21	0	0	0	0	10.6	oct6-full-python.log	21✓, 10.6s
+tests/cron/test_cron_inactivity_timeout.py	passed	11	0	0	0	0	14.7	oct6-full-python.log	11✓, 14.7s
+tests/cron/test_cron_no_agent.py	passed	18	0	0	0	0	18.0	oct6-full-python.log	18✓, 18.0s
+tests/cron/test_cron_profile.py	passed	20	0	0	0	0	13.3	oct6-full-python.log	20✓, 13.3s
+tests/cron/test_cron_prompt_injection_skill.py	passed	11	0	0	0	0	10.6	oct6-full-python.log	11✓, 10.6s
+tests/cron/test_cron_script.py	passed	35	0	1	0	0	23.5	oct6-full-python.log	35✓ 1s, 23.5s
+tests/cron/test_cron_workdir.py	failed	20	1	0	0	0	11.8	oct6-full-python.log	20✓ 1✗, 11.8s
+tests/cron/test_file_permissions.py	failed	2	6	0	0	0	9.3	oct6-full-python.log	2✓ 6✗, 9.3s
+tests/cron/test_jobs.py	passed	87	0	0	0	0	15.4	oct6-full-python.log	87✓, 15.4s
+tests/cron/test_rewrite_skill_refs.py	passed	16	0	0	0	0	9.3	oct6-full-python.log	16✓, 9.3s
+tests/cron/test_scheduler.py	failed	124	4	0	0	0	44.2	oct6-full-python.log	124✓ 4✗, 44.2s
+tests/cron/test_scheduler_mcp_init.py	passed	1	0	0	0	0	8.9	oct6-full-python.log	1✓, 8.9s
+tests/gateway/platforms/test_yuanbao_recall_db_only.py	passed	2	0	0	0	0	7.3	oct6-full-python.log	2✓, 7.3s
+tests/gateway/test_7100_transient_failure_transcript.py	passed	9	0	0	0	0	12.2	oct6-full-python.log	9✓, 12.2s
+tests/gateway/test_active_session_text_merge.py	passed	15	0	0	0	0	15.8	oct6-full-python.log	15✓, 15.8s
+tests/gateway/test_agent_cache.py	failed	0	0	0	0	0	104.4	oct6-full-python.log	104.4s
+tests/gateway/test_allowed_channels_widening.py	passed	27	0	0	0	0	19.3	oct6-full-python.log	27✓, 19.3s
+tests/gateway/test_allowlist_startup_check.py	passed	4	0	0	0	0	11.4	oct6-full-python.log	4✓, 11.4s
+tests/gateway/test_api_server.py	passed	152	0	1	0	0	32.5	oct6-full-python.log	152✓ 1s, 32.5s
+tests/gateway/test_api_server_bind_guard.py	passed	17	0	0	0	0	14.6	oct6-full-python.log	17✓, 14.6s
+tests/gateway/test_api_server_jobs.py	passed	36	0	0	0	0	15.7	oct6-full-python.log	36✓, 15.7s
+tests/gateway/test_api_server_multimodal.py	passed	23	0	0	0	0	9.8	oct6-full-python.log	23✓, 9.8s
+tests/gateway/test_api_server_normalize.py	passed	17	0	0	0	0	7.8	oct6-full-python.log	17✓, 7.8s
+tests/gateway/test_api_server_runs.py	passed	26	0	0	0	0	15.7	oct6-full-python.log	26✓, 15.7s
+tests/gateway/test_api_server_toolset.py	passed	12	0	0	0	0	12.7	oct6-full-python.log	12✓, 12.7s
+tests/gateway/test_approve_deny_commands.py	passed	21	0	0	0	0	10.5	oct6-full-python.log	21✓, 10.5s
+tests/gateway/test_auth_fallback.py	passed	3	0	0	0	0	7.7	oct6-full-python.log	3✓, 7.7s
+tests/gateway/test_auto_continue.py	passed	6	0	0	0	0	6.8	oct6-full-python.log	6✓, 6.8s
+tests/gateway/test_background_command.py	passed	21	0	0	0	0	14.4	oct6-full-python.log	21✓, 14.4s
+tests/gateway/test_background_process_notifications.py	passed	31	0	0	0	0	8.9	oct6-full-python.log	31✓, 8.9s
+tests/gateway/test_base_topic_sessions.py	passed	10	0	0	0	0	7.4	oct6-full-python.log	10✓, 7.4s
+tests/gateway/test_bluebubbles.py	passed	50	0	0	0	0	10.6	oct6-full-python.log	50✓, 10.6s
+tests/gateway/test_bundles_command.py	passed	4	0	0	0	0	7.7	oct6-full-python.log	4✓, 7.7s
+tests/gateway/test_busy_session_ack.py	passed	16	0	0	0	0	8.1	oct6-full-python.log	16✓, 8.1s
+tests/gateway/test_busy_session_auth_bypass.py	passed	4	0	0	0	0	6.6	oct6-full-python.log	4✓, 6.6s
+tests/gateway/test_cancel_background_drain.py	passed	3	0	0	0	0	6.4	oct6-full-python.log	3✓, 6.4s
+tests/gateway/test_channel_directory.py	passed	33	0	0	0	0	7.8	oct6-full-python.log	33✓, 7.8s
+tests/gateway/test_clean_shutdown_marker.py	passed	7	0	0	0	0	6.5	oct6-full-python.log	7✓, 6.5s
+tests/gateway/test_command_bypass_active_session.py	passed	40	0	0	0	0	7.7	oct6-full-python.log	40✓, 7.7s
+tests/gateway/test_complete_path_at_filter.py	passed	15	0	0	0	0	8.1	oct6-full-python.log	15✓, 8.1s
+tests/gateway/test_compress_command.py	passed	4	0	0	0	0	11.6	oct6-full-python.log	4✓, 11.6s
+tests/gateway/test_compress_focus.py	passed	2	0	0	0	0	11.1	oct6-full-python.log	2✓, 11.1s
+tests/gateway/test_compress_plugin_engine.py	passed	2	0	0	0	0	11.0	oct6-full-python.log	2✓, 11.0s
+tests/gateway/test_compression_session_id_persistence.py	passed	1	0	0	0	0	8.1	oct6-full-python.log	1✓, 8.1s
+tests/gateway/test_config.py	passed	48	0	0	0	0	16.3	oct6-full-python.log	48✓, 16.3s
+tests/gateway/test_config_cwd_bridge.py	passed	24	0	0	0	0	6.7	oct6-full-python.log	24✓, 6.7s
+tests/gateway/test_config_env_bridge_authority.py	failed	0	6	0	0	0	12.8	oct6-full-python.log	6✗, 12.8s
+tests/gateway/test_debug_command.py	passed	2	0	0	0	0	5.7	oct6-full-python.log	2✓, 5.7s
+tests/gateway/test_delivery.py	passed	23	0	0	0	0	6.9	oct6-full-python.log	23✓, 6.9s
+tests/gateway/test_destructive_slash_confirm.py	passed	6	0	0	0	0	7.9	oct6-full-python.log	6✓, 7.9s
+tests/gateway/test_device_files.py	passed	3	0	0	0	0	5.1	oct7-final-product-tests.log	3✓, 5.1s
+tests/gateway/test_dingtalk.py	passed	68	0	0	0	0	18.4	oct6-full-python.log	68✓, 18.4s
+tests/gateway/test_discord_allowed_channels.py	passed	15	0	0	0	0	15.3	oct6-full-python.log	15✓, 15.3s
+tests/gateway/test_discord_allowed_mentions.py	passed	19	0	0	0	0	16.0	oct6-full-python.log	19✓, 16.0s
+tests/gateway/test_discord_attachment_download.py	passed	14	0	0	0	0	16.1	oct6-full-python.log	14✓, 16.1s
+tests/gateway/test_discord_bot_auth_bypass.py	passed	9	0	0	0	0	15.8	oct6-full-python.log	9✓, 15.8s
+tests/gateway/test_discord_bot_filter.py	passed	8	0	0	0	0	8.1	oct6-full-python.log	8✓, 8.1s
+tests/gateway/test_discord_channel_controls.py	passed	14	0	0	0	0	12.8	oct6-full-python.log	14✓, 12.8s
+tests/gateway/test_discord_channel_prompts.py	passed	10	0	0	0	0	11.2	oct6-full-python.log	10✓, 11.2s
+tests/gateway/test_discord_channel_skills.py	passed	6	0	0	0	0	9.0	oct6-full-python.log	6✓, 9.0s
+tests/gateway/test_discord_clarify_buttons.py	passed	14	0	0	0	0	9.9	oct6-full-python.log	14✓, 9.9s
+tests/gateway/test_discord_component_auth.py	passed	19	0	0	0	0	10.5	oct6-full-python.log	19✓, 10.5s
+tests/gateway/test_discord_connect.py	passed	16	0	0	0	0	14.5	oct6-full-python.log	16✓, 14.5s
+tests/gateway/test_discord_document_handling.py	passed	20	0	0	0	0	9.7	oct6-full-python.log	20✓, 9.7s
+tests/gateway/test_discord_free_response.py	passed	34	0	0	0	0	8.7	oct6-full-python.log	34✓, 8.7s
+tests/gateway/test_discord_imports.py	passed	1	0	0	0	0	7.5	oct6-full-python.log	1✓, 7.5s
+tests/gateway/test_discord_lazy_install_views.py	passed	2	0	0	0	0	8.0	oct6-full-python.log	2✓, 8.0s
+tests/gateway/test_discord_media_metadata.py	passed	1	0	0	0	0	8.3	oct6-full-python.log	1✓, 8.3s
+tests/gateway/test_discord_model_picker.py	passed	1	0	0	0	0	7.1	oct6-full-python.log	1✓, 7.1s
+tests/gateway/test_discord_opus.py	passed	3	0	0	0	0	7.5	oct6-full-python.log	3✓, 7.5s
+tests/gateway/test_discord_race_polish.py	passed	1	0	0	0	0	7.0	oct6-full-python.log	1✓, 7.0s
+tests/gateway/test_discord_reactions.py	passed	7	0	0	0	0	7.8	oct6-full-python.log	7✓, 7.8s
+tests/gateway/test_discord_reply_mode.py	passed	33	0	0	0	0	15.4	oct6-full-python.log	33✓, 15.4s
+tests/gateway/test_discord_roles_dm_scope.py	passed	12	0	0	0	0	9.2	oct6-full-python.log	12✓, 9.2s
+tests/gateway/test_discord_send.py	passed	18	0	0	0	0	9.3	oct6-full-python.log	18✓, 9.3s
+tests/gateway/test_discord_slash_auth.py	passed	32	0	0	0	0	10.5	oct6-full-python.log	32✓, 10.5s
+tests/gateway/test_discord_slash_commands.py	passed	33	0	0	0	0	16.5	oct6-full-python.log	33✓, 16.5s
+tests/gateway/test_discord_system_messages.py	passed	8	0	0	0	0	7.2	oct6-full-python.log	8✓, 7.2s
+tests/gateway/test_discord_thread_persistence.py	passed	8	0	0	0	0	7.4	oct6-full-python.log	8✓, 7.4s
+tests/gateway/test_display_config.py	passed	32	0	0	0	0	9.3	oct6-full-python.log	32✓, 9.3s
+tests/gateway/test_dm_topics.py	passed	36	0	0	0	0	9.3	oct6-full-python.log	36✓, 9.3s
+tests/gateway/test_document_cache.py	passed	22	0	0	0	0	7.7	oct6-full-python.log	22✓, 7.7s
+tests/gateway/test_duplicate_reply_suppression.py	passed	24	0	0	0	0	7.8	oct6-full-python.log	24✓, 7.8s
+tests/gateway/test_email.py	failed	59	1	0	0	0	15.3	oct6-full-python.log	59✓ 1✗, 15.3s
+tests/gateway/test_ephemeral_reply.py	passed	13	0	0	0	0	9.1	oct6-full-python.log	13✓, 9.1s
+tests/gateway/test_extract_local_files.py	passed	44	0	0	0	0	10.0	oct6-full-python.log	44✓, 10.0s
+tests/gateway/test_fallback_eviction.py	passed	4	0	0	0	0	7.7	oct6-full-python.log	4✓, 7.7s
+tests/gateway/test_fast_command.py	passed	4	0	0	0	0	8.1	oct6-full-python.log	4✓, 8.1s
+tests/gateway/test_feishu.py	failed	85	71	45	0	0	59.1	oct6-full-python.log	85✓ 71✗ 45s, 59.1s
+tests/gateway/test_feishu_approval_buttons.py	passed	35	0	0	0	0	10.2	oct6-full-python.log	35✓, 10.2s
+tests/gateway/test_feishu_bot_admission.py	passed	60	0	0	0	0	10.8	oct6-full-python.log	60✓, 10.8s
+tests/gateway/test_feishu_bot_auth_bypass.py	passed	6	0	0	0	0	8.6	oct6-full-python.log	6✓, 8.6s
+tests/gateway/test_feishu_comment.py	passed	20	0	0	0	0	8.3	oct6-full-python.log	20✓, 8.3s
+tests/gateway/test_feishu_comment_rules.py	passed	30	0	0	0	0	9.1	oct6-full-python.log	30✓, 9.1s
+tests/gateway/test_feishu_onboard.py	passed	27	0	0	0	0	10.3	oct6-full-python.log	27✓, 10.3s
+tests/gateway/test_fresh_reset_skill_injection.py	passed	9	0	0	0	0	7.8	oct6-full-python.log	9✓, 7.8s
+tests/gateway/test_gateway_command_help.py	passed	3	0	0	0	0	7.9	oct6-full-python.log	3✓, 7.9s
+tests/gateway/test_gateway_inactivity_timeout.py	passed	8	0	0	0	0	27.8	oct6-full-python.log	8✓, 27.8s
+tests/gateway/test_gateway_shutdown.py	passed	9	0	0	0	0	24.5	oct6-full-python.log	9✓, 24.5s
+tests/gateway/test_goal_max_turns_config.py	passed	1	0	0	0	0	8.0	oct6-full-python.log	1✓, 8.0s
+tests/gateway/test_goal_status_notice.py	passed	3	0	0	0	0	7.7	oct6-full-python.log	3✓, 7.7s
+tests/gateway/test_goal_verdict_send.py	passed	5	0	0	0	0	7.3	oct6-full-python.log	5✓, 7.3s
+tests/gateway/test_google_chat.py	passed	160	0	0	0	0	24.0	oct6-full-python.log	160✓, 24.0s
+tests/gateway/test_home_target_env_var.py	passed	7	0	0	0	0	13.1	oct6-full-python.log	7✓, 13.1s
+tests/gateway/test_homeassistant.py	passed	45	0	0	0	0	11.5	oct6-full-python.log	45✓, 11.5s
+tests/gateway/test_hooks.py	passed	21	0	0	0	0	10.2	oct6-full-python.log	21✓, 10.2s
+tests/gateway/test_insights_unicode_flags.py	passed	12	0	0	0	0	7.6	oct6-full-python.log	12✓, 7.6s
+tests/gateway/test_internal_event_bypass_pairing.py	passed	8	0	0	0	0	9.4	oct6-full-python.log	8✓, 9.4s
+tests/gateway/test_interrupt_key_match.py	passed	6	0	0	0	0	7.8	oct6-full-python.log	6✓, 7.8s
+tests/gateway/test_irc_adapter.py	passed	44	0	0	0	0	12.6	oct6-full-python.log	44✓, 12.6s
+tests/gateway/test_kanban_notifier.py	passed	6	0	0	0	0	9.6	oct6-full-python.log	6✓, 9.6s
+tests/gateway/test_keep_typing_timeout.py	passed	4	0	0	0	0	14.5	oct6-full-python.log	4✓, 14.5s
+tests/gateway/test_line_plugin.py	passed	73	0	0	0	0	11.0	oct6-full-python.log	73✓, 11.0s
+tests/gateway/test_load_transcript_db_only.py	passed	1	0	0	0	0	6.5	oct6-full-python.log	1✓, 6.5s
+tests/gateway/test_loop_exception_handler.py	passed	14	0	0	0	0	6.8	oct6-full-python.log	14✓, 6.8s
+tests/gateway/test_matrix.py	passed	150	0	0	0	0	23.3	oct6-full-python.log	150✓, 23.3s
+tests/gateway/test_matrix_exec_approval.py	passed	2	0	0	0	0	6.8	oct6-full-python.log	2✓, 6.8s
+tests/gateway/test_matrix_mention.py	passed	52	0	0	0	0	10.6	oct6-full-python.log	52✓, 10.6s
+tests/gateway/test_matrix_voice.py	passed	0	0	1	0	0	5.5	oct6-full-python.log	1s, 5.5s
+tests/gateway/test_mattermost.py	passed	43	0	0	0	0	13.6	oct6-full-python.log	43✓, 13.6s
+tests/gateway/test_media_download_retry.py	passed	36	0	0	0	0	12.7	oct6-full-python.log	36✓, 12.7s
+tests/gateway/test_media_extraction.py	passed	4	0	0	0	0	9.6	oct6-full-python.log	4✓, 9.6s
+tests/gateway/test_memory_monitor.py	passed	10	0	0	0	0	11.4	oct6-full-python.log	10✓, 11.4s
+tests/gateway/test_message_deduplicator.py	passed	8	0	0	0	0	8.5	oct6-full-python.log	8✓, 8.5s
+tests/gateway/test_mirror.py	passed	15	0	0	0	0	8.7	oct6-full-python.log	15✓, 8.7s
+tests/gateway/test_model_command_custom_providers.py	passed	1	0	0	0	0	11.8	oct6-full-python.log	1✓, 11.8s
+tests/gateway/test_model_command_flat_string_config.py	passed	3	0	0	0	0	15.8	oct6-full-python.log	3✓, 15.8s
+tests/gateway/test_model_switch_persistence.py	passed	9	0	0	0	0	5.6	oct6-full-python.log	9✓, 5.6s
+tests/gateway/test_msgraph_webhook.py	failed	35	9	0	0	0	8.9	oct6-full-python.log	35✓ 9✗, 8.9s
+tests/gateway/test_native_image_buffer_isolation.py	passed	2	0	0	0	0	5.7	oct6-full-python.log	2✓, 5.7s
+tests/gateway/test_notice_delivery.py	passed	3	0	0	0	0	5.0	oct6-full-python.log	3✓, 5.0s
+tests/gateway/test_ntfy_plugin.py	passed	78	0	0	0	0	7.0	oct6-full-python.log	78✓, 7.0s
+tests/gateway/test_pairing.py	passed	42	0	1	0	0	8.0	oct6-full-python.log	42✓ 1s, 8.0s
+tests/gateway/test_pending_drain_no_recursion.py	passed	5	0	0	0	0	4.7	oct6-full-python.log	5✓, 4.7s
+tests/gateway/test_pending_drain_race.py	passed	3	0	0	0	0	4.6	oct6-full-python.log	3✓, 4.6s
+tests/gateway/test_pending_event_none.py	passed	6	0	0	0	0	4.7	oct6-full-python.log	6✓, 4.7s
+tests/gateway/test_pii_redaction.py	passed	16	0	0	0	0	5.8	oct6-full-python.log	16✓, 5.8s
+tests/gateway/test_platform_base.py	failed	100	1	2	0	0	10.6	oct6-full-python.log	100✓ 1✗ 2s, 10.6s
+tests/gateway/test_platform_connected_checkers.py	passed	31	0	0	0	0	6.3	oct6-full-python.log	31✓, 6.3s
+tests/gateway/test_platform_http_client_limits.py	passed	7	0	0	0	0	7.0	oct6-full-python.log	7✓, 7.0s
+tests/gateway/test_platform_reconnect.py	passed	29	0	0	0	0	8.5	oct6-full-python.log	29✓, 8.5s
+tests/gateway/test_platform_registry.py	passed	50	0	0	0	0	15.0	oct6-full-python.log	50✓, 15.0s
+tests/gateway/test_plugin_platform_interface.py	passed	0	0	7	0	0	6.0	oct6-full-python.log	7s, 6.0s
+tests/gateway/test_post_delivery_callback_chaining.py	passed	9	0	0	0	0	7.6	oct6-full-python.log	9✓, 7.6s
+tests/gateway/test_pre_gateway_dispatch.py	passed	5	0	0	0	0	7.6	oct6-full-python.log	5✓, 7.6s
+tests/gateway/test_product_assistant.py	passed	4	0	0	0	0	10.0	oct6-full-python.log	4✓, 10.0s
+tests/gateway/test_product_auth.py	passed	21	0	0	0	0	17.6	oct7-final-product-tests.log	21✓, 17.6s
+tests/gateway/test_product_completion_stream.py	passed	2	0	0	0	0	8.8	oct6-full-python.log	2✓, 8.8s
+tests/gateway/test_product_notification_preferences.py	passed	2	0	0	0	0	8.9	oct6-full-python.log	2✓, 8.9s
+tests/gateway/test_product_phone_bridge.py	passed	5	0	0	0	0	13.0	oct6-full-python.log	5✓, 13.0s
+tests/gateway/test_proxy_mode.py	passed	22	0	0	0	0	12.0	oct6-full-python.log	22✓, 12.0s
+tests/gateway/test_qqbot.py	passed	159	0	0	0	0	17.0	oct6-full-python.log	159✓, 17.0s
+tests/gateway/test_queue_consumption.py	passed	11	0	0	0	0	6.9	oct6-full-python.log	11✓, 6.9s
+tests/gateway/test_reasoning_command.py	failed	17	1	0	0	0	13.1	oct6-full-python.log	17✓ 1✗, 13.1s
+tests/gateway/test_reload_skills_command.py	passed	4	0	0	0	0	7.9	oct6-full-python.log	4✓, 7.9s
+tests/gateway/test_reload_skills_discord_resync.py	passed	5	0	0	0	0	8.3	oct6-full-python.log	5✓, 8.3s
+tests/gateway/test_replay_entry_fields.py	passed	16	0	0	0	0	7.5	oct6-full-python.log	16✓, 7.5s
+tests/gateway/test_reply_to_injection.py	passed	5	0	0	0	0	7.0	oct6-full-python.log	5✓, 7.0s
+tests/gateway/test_restart_drain.py	failed	16	1	0	0	0	9.7	oct6-full-python.log	16✓ 1✗, 9.7s
+tests/gateway/test_restart_notification.py	passed	25	0	0	0	0	8.1	oct6-full-python.log	25✓, 8.1s
+tests/gateway/test_restart_redelivery_dedup.py	passed	9	0	0	0	0	8.0	oct6-full-python.log	9✓, 8.0s
+tests/gateway/test_restart_resume_pending.py	passed	65	0	0	0	0	26.6	oct6-full-python.log	65✓, 26.6s
+tests/gateway/test_resume_command.py	passed	14	0	0	0	0	8.6	oct6-full-python.log	14✓, 8.6s
+tests/gateway/test_retry_replacement.py	passed	2	0	0	0	0	7.1	oct6-full-python.log	2✓, 7.1s
+tests/gateway/test_retry_response.py	passed	2	0	0	0	0	5.8	oct6-full-python.log	2✓, 5.8s
+tests/gateway/test_run_cleanup_progress.py	passed	5	0	0	0	0	11.2	oct6-full-python.log	5✓, 11.2s
+tests/gateway/test_run_progress_interrupt.py	passed	2	0	0	0	0	8.8	oct6-full-python.log	2✓, 8.8s
+tests/gateway/test_run_progress_topics.py	passed	28	0	0	0	0	24.0	oct6-full-python.log	28✓, 24.0s
+tests/gateway/test_runner_fatal_adapter.py	passed	2	0	0	0	0	8.2	oct6-full-python.log	2✓, 8.2s
+tests/gateway/test_runner_startup_failures.py	passed	9	0	0	0	0	10.3	oct6-full-python.log	9✓, 10.3s
+tests/gateway/test_running_agent_session_toggles.py	passed	5	0	0	0	0	5.2	oct6-full-python.log	5✓, 5.2s
+tests/gateway/test_runtime_config_env_expansion.py	passed	7	0	0	0	0	4.2	oct6-full-python.log	7✓, 4.2s
+tests/gateway/test_runtime_env_reload_config_authority.py	passed	2	0	0	0	0	5.1	oct6-full-python.log	2✓, 5.1s
+tests/gateway/test_runtime_footer.py	failed	21	4	0	0	0	6.7	oct6-full-python.log	21✓ 4✗, 6.7s
+tests/gateway/test_safe_adapter_disconnect.py	passed	4	0	0	0	0	5.5	oct6-full-python.log	4✓, 5.5s
+tests/gateway/test_send_image_file.py	passed	23	0	0	0	0	6.7	oct6-full-python.log	23✓, 6.7s
+tests/gateway/test_send_multiple_images.py	passed	19	0	0	0	0	8.6	oct6-full-python.log	19✓, 8.6s
+tests/gateway/test_send_retry.py	passed	35	0	0	0	0	5.9	oct6-full-python.log	35✓, 5.9s
+tests/gateway/test_send_voice_reply_notify.py	passed	2	0	0	0	0	5.0	oct6-full-python.log	2✓, 5.0s
+tests/gateway/test_session.py	passed	74	0	0	0	0	8.9	oct6-full-python.log	74✓, 8.9s
+tests/gateway/test_session_boundary_hooks.py	passed	6	0	0	0	0	11.4	oct6-full-python.log	6✓, 11.4s
+tests/gateway/test_session_boundary_security_state.py	passed	5	0	0	0	0	6.2	oct6-full-python.log	5✓, 6.2s
+tests/gateway/test_session_dm_thread_seeding.py	passed	10	0	0	0	0	6.8	oct6-full-python.log	10✓, 6.8s
+tests/gateway/test_session_env.py	passed	12	0	0	0	0	6.1	oct6-full-python.log	12✓, 6.1s
+tests/gateway/test_session_hygiene.py	passed	23	0	0	0	0	6.8	oct6-full-python.log	23✓, 6.8s
+tests/gateway/test_session_info.py	passed	9	0	0	0	0	25.1	oct6-full-python.log	9✓, 25.1s
+tests/gateway/test_session_list_allowed_sources.py	passed	4	0	0	0	0	5.4	oct6-full-python.log	4✓, 5.4s
+tests/gateway/test_session_model_override_routing.py	passed	4	0	0	0	0	6.1	oct6-full-python.log	4✓, 6.1s
+tests/gateway/test_session_model_reset.py	passed	3	0	0	0	0	4.8	oct6-full-python.log	3✓, 4.8s
+tests/gateway/test_session_race_guard.py	passed	17	0	0	0	0	10.5	oct6-full-python.log	17✓, 10.5s
+tests/gateway/test_session_reset_notify.py	passed	16	0	0	0	0	4.8	oct6-full-python.log	16✓, 4.8s
+tests/gateway/test_session_split_brain_11016.py	passed	13	0	0	0	0	6.0	oct6-full-python.log	13✓, 6.0s
+tests/gateway/test_session_state_cleanup.py	passed	10	0	0	0	0	3.5	oct6-full-python.log	10✓, 3.5s
+tests/gateway/test_session_store_prune.py	passed	18	0	0	0	0	4.8	oct6-full-python.log	18✓, 4.8s
+tests/gateway/test_setup_feishu.py	failed	11	3	0	0	0	5.5	oct6-full-python.log	11✓ 3✗, 5.5s
+tests/gateway/test_shared_group_sender_prefix.py	passed	2	0	0	0	0	3.9	oct6-full-python.log	2✓, 3.9s
+tests/gateway/test_shutdown_cache_cleanup.py	passed	8	0	0	0	0	4.6	oct6-full-python.log	8✓, 4.6s
+tests/gateway/test_shutdown_forensics.py	passed	26	0	4	0	0	5.3	oct6-full-python.log	26✓ 4s, 5.3s
+tests/gateway/test_shutdown_memory_provider_messages.py	passed	7	0	0	0	0	4.2	oct6-full-python.log	7✓, 4.2s
+tests/gateway/test_signal.py	passed	109	0	0	0	0	9.4	oct6-full-python.log	109✓, 9.4s
+tests/gateway/test_signal_format.py	passed	50	0	0	0	0	5.9	oct6-full-python.log	50✓, 5.9s
+tests/gateway/test_signal_rate_limit.py	passed	18	0	0	0	0	4.8	oct6-full-python.log	18✓, 4.8s
+tests/gateway/test_simplex_plugin.py	passed	27	0	0	0	0	6.9	oct6-full-python.log	27✓, 6.9s
+tests/gateway/test_slack.py	passed	186	0	0	0	0	15.7	oct6-full-python.log	186✓, 15.7s
+tests/gateway/test_slack_approval_buttons.py	passed	23	0	0	0	0	4.7	oct6-full-python.log	23✓, 4.7s
+tests/gateway/test_slack_channel_skills.py	passed	11	0	0	0	0	4.2	oct6-full-python.log	11✓, 4.2s
+tests/gateway/test_slack_mention.py	passed	55	0	0	0	0	9.2	oct6-full-python.log	55✓, 9.2s
+tests/gateway/test_slash_access.py	passed	21	0	0	0	0	5.1	oct6-full-python.log	21✓, 5.1s
+tests/gateway/test_slash_access_dispatch.py	passed	18	0	0	0	0	8.3	oct6-full-python.log	18✓, 8.3s
+tests/gateway/test_sms.py	passed	39	0	0	0	0	7.2	oct6-full-python.log	39✓, 7.2s
+tests/gateway/test_sse_agent_cancel.py	passed	6	0	0	0	0	5.4	oct6-full-python.log	6✓, 5.4s
+tests/gateway/test_ssl_certs.py	passed	3	0	0	0	0	5.9	oct6-full-python.log	3✓, 5.9s
+tests/gateway/test_status.py	passed	50	0	0	0	0	7.3	oct6-full-python.log	50✓, 7.3s
+tests/gateway/test_status_command.py	passed	14	0	0	0	0	6.2	oct6-full-python.log	14✓, 6.2s
+tests/gateway/test_steer_command.py	passed	5	0	0	0	0	5.8	oct6-full-python.log	5✓, 5.8s
+tests/gateway/test_step_callback_compat.py	passed	4	0	0	0	0	5.2	oct6-full-python.log	4✓, 5.2s
+tests/gateway/test_sticker_cache.py	passed	17	0	0	0	0	5.8	oct6-full-python.log	17✓, 5.8s
+tests/gateway/test_stream_consumer.py	failed	88	1	0	0	0	11.9	oct6-full-python.log	88✓ 1✗, 11.9s
+tests/gateway/test_stream_consumer_draft.py	passed	12	0	0	0	0	5.7	oct6-full-python.log	12✓, 5.7s
+tests/gateway/test_stream_consumer_fresh_final.py	passed	15	0	0	0	0	5.0	oct6-full-python.log	15✓, 5.0s
+tests/gateway/test_stream_consumer_thread_routing.py	passed	7	0	0	0	0	6.1	oct6-full-python.log	7✓, 6.1s
+tests/gateway/test_stt_config.py	failed	4	2	0	0	0	7.5	oct6-full-python.log	4✓ 2✗, 7.5s
+tests/gateway/test_stuck_loop.py	passed	9	0	0	0	0	5.6	oct6-full-python.log	9✓, 5.6s
+tests/gateway/test_subagent_protection_30170.py	passed	17	0	0	0	0	6.2	oct6-full-python.log	17✓, 6.2s
+tests/gateway/test_teams.py	passed	64	0	0	0	0	8.4	oct6-full-python.log	64✓, 8.4s
+tests/gateway/test_teams_pipeline_runtime_wiring.py	passed	7	0	0	0	0	5.7	oct6-full-python.log	7✓, 5.7s
+tests/gateway/test_telegram_approval_buttons.py	passed	20	0	0	0	0	5.8	oct6-full-python.log	20✓, 5.8s
+tests/gateway/test_telegram_audio_vs_voice.py	passed	5	0	0	0	0	4.3	oct6-full-python.log	5✓, 4.3s
+tests/gateway/test_telegram_callback_auth_fail_closed.py	passed	5	0	0	0	0	4.0	oct6-full-python.log	5✓, 4.0s
+tests/gateway/test_telegram_caption_merge.py	passed	13	0	0	0	0	4.2	oct6-full-python.log	13✓, 4.2s
+tests/gateway/test_telegram_channel_posts.py	passed	3	0	0	0	0	4.4	oct6-full-python.log	3✓, 4.4s
+tests/gateway/test_telegram_clarify_buttons.py	passed	12	0	0	0	0	4.3	oct6-full-python.log	12✓, 4.3s
+tests/gateway/test_telegram_conflict.py	passed	6	0	0	0	0	6.0	oct6-full-python.log	6✓, 6.0s
+tests/gateway/test_telegram_documents.py	passed	41	0	0	0	0	9.0	oct6-full-python.log	41✓, 9.0s
+tests/gateway/test_telegram_format.py	passed	101	0	0	0	0	7.7	oct6-full-python.log	101✓, 7.7s
+tests/gateway/test_telegram_forum_commands.py	passed	5	0	0	0	0	4.6	oct6-full-python.log	5✓, 4.6s
+tests/gateway/test_telegram_group_gating.py	passed	40	0	0	0	0	8.4	oct6-full-python.log	40✓, 8.4s
+tests/gateway/test_telegram_max_doc_bytes.py	passed	3	0	0	0	0	4.8	oct6-full-python.log	3✓, 4.8s
+tests/gateway/test_telegram_mention_boundaries.py	passed	19	0	0	0	0	5.4	oct6-full-python.log	19✓, 5.4s
+tests/gateway/test_telegram_model_picker.py	passed	4	0	0	0	0	13.0	oct6-full-python.log	4✓, 13.0s
+tests/gateway/test_telegram_network.py	passed	46	0	0	0	0	7.1	oct6-full-python.log	46✓, 7.1s
+tests/gateway/test_telegram_network_reconnect.py	passed	15	0	0	0	0	5.5	oct6-full-python.log	15✓, 5.5s
+tests/gateway/test_telegram_noise_filter.py	passed	6	0	0	0	0	4.8	oct6-full-python.log	6✓, 4.8s
+tests/gateway/test_telegram_photo_interrupts.py	passed	1	0	0	0	0	4.8	oct6-full-python.log	1✓, 4.8s
+tests/gateway/test_telegram_progress_edit_transient.py	passed	22	0	0	0	0	5.0	oct6-full-python.log	22✓, 5.0s
+tests/gateway/test_telegram_reactions.py	passed	21	0	0	0	0	6.5	oct6-full-python.log	21✓, 6.5s
+tests/gateway/test_telegram_reply_mode.py	passed	40	0	0	0	0	9.1	oct6-full-python.log	40✓, 9.1s
+tests/gateway/test_telegram_reply_quote.py	passed	4	0	0	0	0	4.3	oct6-full-python.log	4✓, 4.3s
+tests/gateway/test_telegram_send_path_health.py	passed	3	0	0	0	0	9.4	oct6-full-python.log	3✓, 9.4s
+tests/gateway/test_telegram_slash_confirm.py	passed	3	0	0	0	0	4.4	oct6-full-python.log	3✓, 4.4s
+tests/gateway/test_telegram_status_update.py	passed	5	0	0	0	0	4.5	oct6-full-python.log	5✓, 4.5s
+tests/gateway/test_telegram_text_batch_perf.py	passed	12	0	0	0	0	4.3	oct6-full-python.log	12✓, 4.3s
+tests/gateway/test_telegram_text_batching.py	passed	5	0	0	0	0	5.4	oct6-full-python.log	5✓, 5.4s
+tests/gateway/test_telegram_thread_fallback.py	passed	43	0	0	0	0	19.9	oct6-full-python.log	43✓, 19.9s
+tests/gateway/test_telegram_topic_mode.py	passed	43	0	0	0	0	10.5	oct6-full-python.log	43✓, 10.5s
+tests/gateway/test_telegram_webhook_secret.py	passed	5	0	0	0	0	12.4	oct6-full-python.log	5✓, 12.4s
+tests/gateway/test_text_batching.py	passed	23	0	0	0	0	12.2	oct6-full-python.log	23✓, 12.2s
+tests/gateway/test_title_command.py	passed	14	0	0	0	0	6.9	oct6-full-python.log	14✓, 6.9s
+tests/gateway/test_transcript_offset.py	passed	8	0	0	0	0	5.3	oct6-full-python.log	8✓, 5.3s
+tests/gateway/test_tts_media_routing.py	failed	1	6	0	0	0	4.2	oct6-full-python.log	1✓ 6✗, 4.2s
+tests/gateway/test_unauthorized_dm_behavior.py	passed	30	0	0	0	0	4.6	oct6-full-python.log	30✓, 4.6s
+tests/gateway/test_unavailable_skill_hint.py	passed	5	0	0	0	0	4.2	oct6-full-python.log	5✓, 4.2s
+tests/gateway/test_unknown_command.py	passed	11	0	0	0	0	7.2	oct6-full-python.log	11✓, 7.2s
+tests/gateway/test_update_command.py	failed	26	2	0	0	0	6.6	oct6-full-python.log	26✓ 2✗, 6.6s
+tests/gateway/test_update_streaming.py	failed	20	1	0	0	0	14.1	oct6-full-python.log	20✓ 1✗, 14.1s
+tests/gateway/test_usage_command.py	passed	8	0	0	0	0	5.1	oct6-full-python.log	8✓, 5.1s
+tests/gateway/test_verbose_command.py	passed	8	0	0	0	0	5.3	oct6-full-python.log	8✓, 5.3s
+tests/gateway/test_vision_memory_leak.py	passed	3	0	0	0	0	4.7	oct6-full-python.log	3✓, 4.7s
+tests/gateway/test_voice_command.py	passed	181	0	0	0	0	15.9	oct6-full-python.log	181✓, 15.9s
+tests/gateway/test_voice_mode_platform_isolation.py	passed	10	0	0	0	0	4.9	oct6-full-python.log	10✓, 4.9s
+tests/gateway/test_weak_credential_guard.py	passed	11	0	0	0	0	5.9	oct6-full-python.log	11✓, 5.9s
+tests/gateway/test_webhook_adapter.py	passed	65	0	0	0	0	8.7	oct6-full-python.log	65✓, 8.7s
+tests/gateway/test_webhook_deliver_only.py	passed	14	0	0	0	0	6.8	oct6-full-python.log	14✓, 6.8s
+tests/gateway/test_webhook_dynamic_routes.py	passed	13	0	0	0	0	6.9	oct6-full-python.log	13✓, 6.9s
+tests/gateway/test_webhook_integration.py	passed	4	0	0	0	0	6.8	oct6-full-python.log	4✓, 6.8s
+tests/gateway/test_webhook_signature_rate_limit.py	passed	3	0	0	0	0	5.9	oct6-full-python.log	3✓, 5.9s
+tests/gateway/test_wecom.py	passed	44	0	0	0	0	7.1	oct6-full-python.log	44✓, 7.1s
+tests/gateway/test_wecom_callback.py	passed	12	0	0	0	0	6.3	oct6-full-python.log	12✓, 6.3s
+tests/gateway/test_weixin.py	passed	54	0	0	0	0	9.6	oct6-full-python.log	54✓, 9.6s
+tests/gateway/test_whatsapp_connect.py	passed	27	0	0	0	0	11.3	oct6-full-python.log	27✓, 11.3s
+tests/gateway/test_whatsapp_formatting.py	passed	26	0	0	0	0	8.0	oct6-full-python.log	26✓, 8.0s
+tests/gateway/test_whatsapp_group_gating.py	passed	26	0	0	0	0	7.0	oct6-full-python.log	26✓, 7.0s
+tests/gateway/test_whatsapp_reply_prefix.py	passed	8	0	0	0	0	6.7	oct6-full-python.log	8✓, 6.7s
+tests/gateway/test_ws_auth_retry.py	passed	6	0	0	0	0	5.1	oct6-full-python.log	6✓, 5.1s
+tests/gateway/test_yolo_command.py	passed	1	0	0	0	0	4.9	oct6-full-python.log	1✓, 4.9s
+tests/hermes_cli/test_ai_gateway_models.py	passed	9	0	0	0	0	5.0	oct6-full-python.log	9✓, 5.0s
+tests/hermes_cli/test_anthropic_model_flow_stale_oauth.py	passed	6	0	0	0	0	5.7	oct6-full-python.log	6✓, 5.7s
+tests/hermes_cli/test_anthropic_oauth_flow.py	passed	2	0	0	0	0	4.9	oct6-full-python.log	2✓, 4.9s
+tests/hermes_cli/test_anthropic_provider_persistence.py	passed	3	0	0	0	0	4.9	oct6-full-python.log	3✓, 4.9s
+tests/hermes_cli/test_api_key_providers.py	failed	0	0	0	0	0	55.2	oct6-full-python.log	55.2s
+tests/hermes_cli/test_apply_model_switch_result_context.py	passed	3	0	0	0	0	6.9	oct6-full-python.log	3✓, 6.9s
+tests/hermes_cli/test_apply_profile_override.py	passed	4	0	0	0	0	6.3	oct6-full-python.log	4✓, 6.3s
+tests/hermes_cli/test_arcee_provider.py	passed	27	0	0	0	0	8.1	oct6-full-python.log	27✓, 8.1s
+tests/hermes_cli/test_argparse_flag_propagation.py	passed	17	0	0	0	0	26.5	oct6-full-python.log	17✓, 26.5s
+tests/hermes_cli/test_at_context_completion_filter.py	passed	5	0	0	0	0	7.7	oct6-full-python.log	5✓, 7.7s
+tests/hermes_cli/test_atomic_json_write.py	passed	14	0	0	0	0	5.8	oct6-full-python.log	14✓, 5.8s
+tests/hermes_cli/test_atomic_yaml_write.py	passed	3	0	0	0	0	5.5	oct6-full-python.log	3✓, 5.5s
+tests/hermes_cli/test_auth_codex_provider.py	passed	16	0	0	0	0	5.0	oct6-full-python.log	16✓, 5.0s
+tests/hermes_cli/test_auth_commands.py	passed	46	0	0	0	0	12.3	oct6-full-python.log	46✓, 12.3s
+tests/hermes_cli/test_auth_loopback_ssh_hint.py	passed	14	0	0	0	0	4.7	oct6-full-python.log	14✓, 4.7s
+tests/hermes_cli/test_auth_manual_paste.py	passed	25	0	0	0	0	4.9	oct6-full-python.log	25✓, 4.9s
+tests/hermes_cli/test_auth_nous_provider.py	failed	57	1	0	0	0	35.2	oct6-full-python.log	57✓ 1✗, 35.2s
+tests/hermes_cli/test_auth_profile_fallback.py	passed	11	0	0	0	0	6.5	oct6-full-python.log	11✓, 6.5s
+tests/hermes_cli/test_auth_provider_gate.py	passed	6	0	0	0	0	6.1	oct6-full-python.log	6✓, 6.1s
+tests/hermes_cli/test_auth_qwen_provider.py	failed	31	1	0	0	0	6.7	oct6-full-python.log	31✓ 1✗, 6.7s
+tests/hermes_cli/test_auth_ssl_macos.py	passed	9	0	0	0	0	5.8	oct6-full-python.log	9✓, 5.8s
+tests/hermes_cli/test_auth_toctou_file_modes.py	passed	0	0	4	0	0	3.9	oct6-full-python.log	4s, 3.9s
+tests/hermes_cli/test_auth_usable_secret.py	passed	3	0	0	0	0	4.0	oct6-full-python.log	3✓, 4.0s
+tests/hermes_cli/test_auth_xai_oauth_provider.py	passed	82	0	0	0	0	11.4	oct6-full-python.log	82✓, 11.4s
+tests/hermes_cli/test_aux_config.py	passed	21	0	0	0	0	8.3	oct6-full-python.log	21✓, 8.3s
+tests/hermes_cli/test_azure_detect.py	passed	19	0	0	0	0	4.6	oct6-full-python.log	19✓, 4.6s
+tests/hermes_cli/test_azure_foundry_entra.py	passed	16	0	0	0	0	5.1	oct6-full-python.log	16✓, 5.1s
+tests/hermes_cli/test_backup.py	passed	98	0	1	0	0	39.0	oct6-full-python.log	98✓ 1s, 39.0s
+tests/hermes_cli/test_banner.py	failed	5	1	0	0	0	8.2	oct6-full-python.log	5✓ 1✗, 8.2s
+tests/hermes_cli/test_banner_git_state.py	passed	4	0	0	0	0	4.3	oct6-full-python.log	4✓, 4.3s
+tests/hermes_cli/test_banner_pip_update.py	passed	4	0	0	0	0	4.6	oct6-full-python.log	4✓, 4.6s
+tests/hermes_cli/test_banner_skills.py	passed	5	0	0	0	0	3.8	oct6-full-python.log	5✓, 3.8s
+tests/hermes_cli/test_bedrock_model_picker.py	failed	0	0	0	0	0	44.2	oct6-full-python.log	44.2s
+tests/hermes_cli/test_bundles.py	passed	8	0	0	0	0	3.4	oct6-full-python.log	8✓, 3.4s
+tests/hermes_cli/test_chat_skills_flag.py	passed	4	0	0	0	0	6.9	oct6-full-python.log	4✓, 6.9s
+tests/hermes_cli/test_claw.py	passed	48	0	0	0	0	3.5	oct6-full-python.log	48✓, 3.5s
+tests/hermes_cli/test_clear_stale_base_url.py	passed	4	0	0	0	0	3.4	oct6-full-python.log	4✓, 3.4s
+tests/hermes_cli/test_cli_output.py	passed	2	0	0	0	0	3.0	oct6-full-python.log	2✓, 3.0s
+tests/hermes_cli/test_cmd_update.py	failed	0	0	0	0	0	39.1	oct6-full-python.log	39.1s
+tests/hermes_cli/test_coalesce_session_args.py	passed	17	0	0	0	0	3.6	oct6-full-python.log	17✓, 3.6s
+tests/hermes_cli/test_codex_cli_model_picker.py	failed	0	0	0	0	0	32.9	oct6-full-python.log	32.9s
+tests/hermes_cli/test_codex_models.py	passed	19	0	0	0	0	4.2	oct6-full-python.log	19✓, 4.2s
+tests/hermes_cli/test_codex_runtime_plugin_migration.py	passed	67	0	0	0	0	10.5	oct6-full-python.log	67✓, 10.5s
+tests/hermes_cli/test_codex_runtime_switch.py	passed	30	0	0	0	0	4.7	oct6-full-python.log	30✓, 4.7s
+tests/hermes_cli/test_commands.py	passed	144	0	0	0	0	19.4	oct6-full-python.log	144✓, 19.4s
+tests/hermes_cli/test_completion.py	passed	28	0	3	0	0	6.9	oct6-full-python.log	28✓ 3s, 6.9s
+tests/hermes_cli/test_config.py	passed	87	0	0	0	0	7.5	oct6-full-python.log	87✓, 7.5s
+tests/hermes_cli/test_config_drift.py	passed	1	0	0	0	0	3.5	oct6-full-python.log	1✓, 3.5s
+tests/hermes_cli/test_config_env_expansion.py	passed	13	0	0	0	0	4.3	oct6-full-python.log	13✓, 4.3s
+tests/hermes_cli/test_config_env_refs.py	passed	6	0	0	0	0	5.5	oct6-full-python.log	6✓, 5.5s
+tests/hermes_cli/test_config_validation.py	passed	21	0	0	0	0	4.3	oct6-full-python.log	21✓, 4.3s
+tests/hermes_cli/test_container_aware_cli.py	passed	14	0	0	0	0	4.2	oct6-full-python.log	14✓, 4.2s
+tests/hermes_cli/test_container_boot.py	failed	1	25	0	0	0	5.2	oct6-full-python.log	1✓ 25✗, 5.2s
+tests/hermes_cli/test_copilot_auth.py	passed	25	0	0	0	0	4.6	oct6-full-python.log	25✓, 4.6s
+tests/hermes_cli/test_copilot_catalog_oauth_fallback.py	passed	9	0	0	0	0	4.2	oct6-full-python.log	9✓, 4.2s
+tests/hermes_cli/test_copilot_context.py	passed	11	0	0	0	0	8.0	oct6-full-python.log	11✓, 8.0s
+tests/hermes_cli/test_copilot_in_model_list.py	passed	2	0	0	0	0	11.4	oct6-full-python.log	2✓, 11.4s
+tests/hermes_cli/test_copilot_token_exchange.py	passed	12	0	0	0	0	4.4	oct6-full-python.log	12✓, 4.4s
+tests/hermes_cli/test_cron.py	passed	3	0	0	0	0	4.4	oct6-full-python.log	3✓, 4.4s
+tests/hermes_cli/test_curator_archive_prune.py	passed	13	0	0	0	0	4.3	oct6-full-python.log	13✓, 4.3s
+tests/hermes_cli/test_curator_recent_run_notice.py	passed	6	0	0	0	0	4.2	oct6-full-python.log	6✓, 4.2s
+tests/hermes_cli/test_curator_run.py	passed	4	0	0	0	0	3.9	oct6-full-python.log	4✓, 3.9s
+tests/hermes_cli/test_curator_status.py	passed	5	0	0	0	0	5.8	oct6-full-python.log	5✓, 5.8s
+tests/hermes_cli/test_curses_color_compat.py	failed	0	0	0	1	0	4.3	oct6-full-python.log	1e, 4.3s
+tests/hermes_cli/test_custom_provider_context_length.py	passed	12	0	0	0	0	16.8	oct6-full-python.log	12✓, 16.8s
+tests/hermes_cli/test_custom_provider_model_switch.py	passed	13	0	0	0	0	18.5	oct6-full-python.log	13✓, 18.5s
+tests/hermes_cli/test_dashboard_browser_safe_imports.py	passed	1	0	0	0	0	5.1	oct6-full-python.log	1✓, 5.1s
+tests/hermes_cli/test_dashboard_lifecycle_flags.py	passed	10	0	0	0	0	4.2	oct6-full-python.log	10✓, 4.2s
+tests/hermes_cli/test_dashboard_profiles_nav_label.py	passed	1	0	0	0	0	4.1	oct6-full-python.log	1✓, 4.1s
+tests/hermes_cli/test_debug.py	failed	67	1	0	0	0	11.3	oct6-full-python.log	67✓ 1✗, 11.3s
+tests/hermes_cli/test_dep_ensure.py	passed	14	0	0	0	0	3.8	oct6-full-python.log	14✓, 3.8s
+tests/hermes_cli/test_deprecated_cwd_warning.py	passed	5	0	0	0	0	3.6	oct6-full-python.log	5✓, 3.6s
+tests/hermes_cli/test_destructive_slash_confirm_gate.py	passed	5	0	0	0	0	3.7	oct6-full-python.log	5✓, 3.7s
+tests/hermes_cli/test_detect_api_mode_for_url.py	passed	16	0	0	0	0	6.5	oct6-full-python.log	16✓, 6.5s
+tests/hermes_cli/test_determine_api_mode_hostname.py	failed	0	0	0	0	0	70.0	oct6-full-python.log	70.0s
+tests/hermes_cli/test_dingtalk_auth.py	passed	15	0	0	0	0	6.0	oct6-full-python.log	15✓, 6.0s
+tests/hermes_cli/test_discord_skill_clamp_warning.py	passed	4	0	0	0	0	5.6	oct6-full-python.log	4✓, 5.6s
+tests/hermes_cli/test_doctor.py	passed	61	0	0	0	0	98.7	oct6-full-python.log	61✓, 98.7s
+tests/hermes_cli/test_doctor_command_install.py	passed	1	0	9	0	0	6.9	oct6-full-python.log	1✓ 9s, 6.9s
+tests/hermes_cli/test_doctor_dedicated_provider_skip.py	passed	2	0	0	0	0	4.8	oct6-full-python.log	2✓, 4.8s
+tests/hermes_cli/test_env_load_cache.py	passed	6	0	0	0	0	5.1	oct6-full-python.log	6✓, 5.1s
+tests/hermes_cli/test_env_loader.py	passed	6	0	0	0	0	5.4	oct6-full-python.log	6✓, 5.4s
+tests/hermes_cli/test_env_sanitize_on_load.py	passed	3	0	0	0	0	5.7	oct6-full-python.log	3✓, 5.7s
+tests/hermes_cli/test_fallback_cmd.py	passed	32	0	0	0	0	10.4	oct6-full-python.log	32✓, 10.4s
+tests/hermes_cli/test_gateway.py	failed	27	6	0	0	0	7.4	oct6-full-python.log	27✓ 6✗, 7.4s
+tests/hermes_cli/test_gateway_linger.py	failed	5	1	0	0	0	5.2	oct6-full-python.log	5✓ 1✗, 5.2s
+tests/hermes_cli/test_gateway_platform_gating.py	passed	4	0	0	0	0	6.7	oct6-full-python.log	4✓, 6.7s
+tests/hermes_cli/test_gateway_proc_fallback.py	passed	4	0	0	0	0	4.3	oct6-full-python.log	4✓, 4.3s
+tests/hermes_cli/test_gateway_runtime_health.py	passed	1	0	0	0	0	4.2	oct6-full-python.log	1✓, 4.2s
+tests/hermes_cli/test_gateway_s6_dispatch.py	passed	15	0	0	0	0	5.5	oct6-full-python.log	15✓, 5.5s
+tests/hermes_cli/test_gateway_service.py	passed	0	0	1	0	0	4.0	oct6-full-python.log	1s, 4.0s
+tests/hermes_cli/test_gateway_service_paths.py	passed	3	0	0	0	0	5.1	oct6-full-python.log	3✓, 5.1s
+tests/hermes_cli/test_gateway_windows.py	passed	21	0	0	0	0	5.5	oct6-full-python.log	21✓, 5.5s
+tests/hermes_cli/test_gateway_wsl.py	failed	15	4	0	0	0	7.1	oct6-full-python.log	15✓ 4✗, 7.1s
+tests/hermes_cli/test_gemini_free_tier_setup_block.py	failed	0	0	0	0	0	50.5	oct6-full-python.log	50.5s
+tests/hermes_cli/test_gemini_provider.py	passed	46	0	0	0	0	57.8	oct6-full-python.log	46✓, 57.8s
+tests/hermes_cli/test_gmi_provider.py	passed	25	0	0	0	0	9.5	oct6-full-python.log	25✓, 9.5s
+tests/hermes_cli/test_goals.py	passed	50	0	0	0	0	5.4	oct6-full-python.log	50✓, 5.4s
+tests/hermes_cli/test_hooks_cli.py	failed	9	5	0	0	0	3.9	oct6-full-python.log	9✓ 5✗, 3.9s
+tests/hermes_cli/test_ignore_user_config_flags.py	passed	11	0	0	0	0	3.5	oct6-full-python.log	11✓, 3.5s
+tests/hermes_cli/test_image_gen_picker.py	passed	14	0	0	0	0	5.7	oct6-full-python.log	14✓, 5.7s
+tests/hermes_cli/test_install_cua_driver.py	passed	12	0	0	0	0	3.6	oct6-full-python.log	12✓, 3.6s
+tests/hermes_cli/test_inventory.py	failed	0	0	0	0	0	33.5	oct6-full-python.log	33.5s
+tests/hermes_cli/test_kanban_blocked_sticky.py	passed	6	0	0	0	0	2.9	oct6-full-python.log	6✓, 2.9s
+tests/hermes_cli/test_kanban_boards.py	failed	54	2	0	0	0	20.1	oct6-full-python.log	54✓ 2✗, 20.1s
+tests/hermes_cli/test_kanban_cli.py	passed	46	0	0	0	0	9.1	oct6-full-python.log	46✓, 9.1s
+tests/hermes_cli/test_kanban_core_functionality.py	failed	163	1	1	0	0	21.9	oct6-full-python.log	163✓ 1✗ 1s, 21.9s
+tests/hermes_cli/test_kanban_db.py	failed	170	2	0	0	0	39.8	oct6-full-python.log	170✓ 2✗, 39.8s
+tests/hermes_cli/test_kanban_db_init.py	passed	1	0	0	0	0	13.3	oct6-full-python.log	1✓, 13.3s
+tests/hermes_cli/test_kanban_decompose.py	passed	9	0	0	0	0	4.9	oct6-full-python.log	9✓, 4.9s
+tests/hermes_cli/test_kanban_decompose_db.py	passed	8	0	0	0	0	4.8	oct6-full-python.log	8✓, 4.8s
+tests/hermes_cli/test_kanban_diagnostics.py	passed	46	0	0	0	0	5.6	oct6-full-python.log	46✓, 5.6s
+tests/hermes_cli/test_kanban_notify.py	passed	12	0	0	0	0	7.5	oct6-full-python.log	12✓, 7.5s
+tests/hermes_cli/test_kanban_promote.py	passed	16	0	0	0	0	6.2	oct6-full-python.log	16✓, 6.2s
+tests/hermes_cli/test_kanban_specify.py	passed	20	0	0	0	0	8.8	oct6-full-python.log	20✓, 8.8s
+tests/hermes_cli/test_kanban_specify_db.py	passed	10	0	0	0	0	6.5	oct6-full-python.log	10✓, 6.5s
+tests/hermes_cli/test_kanban_swarm.py	passed	3	0	0	0	0	5.3	oct6-full-python.log	3✓, 5.3s
+tests/hermes_cli/test_launcher.py	passed	1	0	0	0	0	5.0	oct6-full-python.log	1✓, 5.0s
+tests/hermes_cli/test_list_picker_providers.py	passed	10	0	0	0	0	9.5	oct6-full-python.log	10✓, 9.5s
+tests/hermes_cli/test_logs.py	passed	37	0	0	0	0	6.2	oct6-full-python.log	37✓, 6.2s
+tests/hermes_cli/test_managed_installs.py	passed	5	0	0	0	0	5.2	oct6-full-python.log	5✓, 5.2s
+tests/hermes_cli/test_mcp_add_command_dest.py	passed	3	0	0	0	0	5.2	oct6-full-python.log	3✓, 5.2s
+tests/hermes_cli/test_mcp_catalog.py	passed	34	0	0	0	0	12.7	oct6-full-python.log	34✓, 12.7s
+tests/hermes_cli/test_mcp_config.py	passed	32	0	0	0	0	10.2	oct6-full-python.log	32✓, 10.2s
+tests/hermes_cli/test_mcp_reload_confirm_gate.py	passed	5	0	0	0	0	5.1	oct6-full-python.log	5✓, 5.1s
+tests/hermes_cli/test_mcp_tools_config.py	passed	14	0	0	0	0	7.5	oct6-full-python.log	14✓, 7.5s
+tests/hermes_cli/test_memory_reset.py	passed	9	0	0	0	0	6.0	oct6-full-python.log	9✓, 6.0s
+tests/hermes_cli/test_migrate_xai.py	passed	17	0	0	0	0	7.2	oct6-full-python.log	17✓, 7.2s
+tests/hermes_cli/test_model_catalog.py	failed	22	1	0	0	0	13.7	oct6-full-python.log	22✓ 1✗, 13.7s
+tests/hermes_cli/test_model_normalize.py	passed	77	0	0	0	0	8.7	oct6-full-python.log	77✓, 8.7s
+tests/hermes_cli/test_model_picker_viewport.py	passed	8	0	0	0	0	6.6	oct6-full-python.log	8✓, 6.6s
+tests/hermes_cli/test_model_provider_persistence.py	failed	0	0	0	0	0	103.0	oct6-full-python.log	103.0s
+tests/hermes_cli/test_model_switch_context_display.py	passed	7	0	0	0	0	6.0	oct6-full-python.log	7✓, 6.0s
+tests/hermes_cli/test_model_switch_copilot_api_mode.py	failed	0	0	0	0	0	34.5	oct6-full-python.log	34.5s
+tests/hermes_cli/test_model_switch_custom_providers.py	failed	0	0	0	0	0	44.7	oct6-full-python.log	44.7s
+tests/hermes_cli/test_model_switch_opencode_anthropic.py	failed	0	0	0	0	0	75.8	oct6-full-python.log	75.8s
+tests/hermes_cli/test_model_switch_variant_tags.py	passed	7	0	0	0	0	122.7	oct6-full-python.log	7✓, 122.7s
+tests/hermes_cli/test_model_validation.py	passed	81	0	0	0	0	5.6	oct6-full-python.log	81✓, 5.6s
+tests/hermes_cli/test_models.py	passed	73	0	0	0	0	5.9	oct6-full-python.log	73✓, 5.9s
+tests/hermes_cli/test_models_dev_preferred_merge.py	passed	11	0	0	0	0	14.6	oct6-full-python.log	11✓, 14.6s
+tests/hermes_cli/test_non_ascii_credential.py	passed	12	0	0	0	0	3.6	oct6-full-python.log	12✓, 3.6s
+tests/hermes_cli/test_nous_auth_status_cache.py	passed	4	0	0	0	0	3.5	oct6-full-python.log	4✓, 3.5s
+tests/hermes_cli/test_nous_hermes_non_agentic.py	passed	31	0	0	0	0	5.2	oct6-full-python.log	31✓, 5.2s
+tests/hermes_cli/test_nous_inference_url_validation.py	passed	18	0	0	0	0	5.1	oct6-full-python.log	18✓, 5.1s
+tests/hermes_cli/test_nous_subscription.py	passed	8	0	0	0	0	4.8	oct6-full-python.log	8✓, 4.8s
+tests/hermes_cli/test_ollama_cloud_auth.py	passed	31	0	0	0	0	59.6	oct6-full-python.log	31✓, 59.6s
+tests/hermes_cli/test_ollama_cloud_provider.py	passed	45	0	0	0	0	62.9	oct6-full-python.log	45✓, 62.9s
+tests/hermes_cli/test_openai_codex_model_validation_fallback.py	failed	0	0	0	0	0	35.0	oct6-full-python.log	35.0s
+tests/hermes_cli/test_opencode_go_flat_namespace.py	failed	0	0	0	0	0	59.5	oct6-full-python.log	59.5s
+tests/hermes_cli/test_opencode_go_in_model_list.py	passed	2	0	0	0	0	31.8	oct6-full-python.log	2✓, 31.8s
+tests/hermes_cli/test_opencode_go_validation_fallback.py	passed	7	0	0	0	0	53.8	oct6-full-python.log	7✓, 53.8s
+tests/hermes_cli/test_overlay_slug_resolution.py	failed	0	0	0	0	0	32.7	oct6-full-python.log	32.7s
+tests/hermes_cli/test_path_completion.py	failed	24	2	0	0	0	4.3	oct6-full-python.log	24✓ 2✗, 4.3s
+tests/hermes_cli/test_pin_kanban_board_env.py	passed	3	0	0	0	0	3.3	oct6-full-python.log	3✓, 3.3s
+tests/hermes_cli/test_pip_install_detection.py	passed	7	0	0	0	0	2.9	oct6-full-python.log	7✓, 2.9s
+tests/hermes_cli/test_placeholder_usage.py	passed	4	0	0	0	0	4.3	oct6-full-python.log	4✓, 4.3s
+tests/hermes_cli/test_plugin_auxiliary_tasks.py	passed	15	0	0	0	0	3.8	oct6-full-python.log	15✓, 3.8s
+tests/hermes_cli/test_plugin_cli_registration.py	passed	8	0	0	0	0	3.7	oct6-full-python.log	8✓, 3.7s
+tests/hermes_cli/test_plugin_scanner_recursion.py	passed	15	0	0	0	0	7.8	oct6-full-python.log	15✓, 7.8s
+tests/hermes_cli/test_plugins.py	passed	72	0	0	0	0	18.1	oct6-full-python.log	72✓, 18.1s
+tests/hermes_cli/test_plugins_cmd.py	failed	70	1	0	0	0	8.1	oct6-full-python.log	70✓ 1✗, 8.1s
+tests/hermes_cli/test_plugins_transcription_registration.py	passed	3	0	0	0	0	5.2	oct6-full-python.log	3✓, 5.2s
+tests/hermes_cli/test_plugins_tts_registration.py	passed	3	0	0	0	0	5.3	oct6-full-python.log	3✓, 5.3s
+tests/hermes_cli/test_post_setup_gating.py	passed	5	0	0	0	0	3.7	oct6-full-python.log	5✓, 3.7s
+tests/hermes_cli/test_profile_describer.py	passed	10	0	0	0	0	3.8	oct6-full-python.log	10✓, 3.8s
+tests/hermes_cli/test_profile_distribution.py	passed	64	0	0	0	0	6.8	oct6-full-python.log	64✓, 6.8s
+tests/hermes_cli/test_profile_export_credentials.py	passed	3	0	0	0	0	3.5	oct6-full-python.log	3✓, 3.5s
+tests/hermes_cli/test_profiles.py	passed	107	0	0	0	0	9.0	oct6-full-python.log	107✓, 9.0s
+tests/hermes_cli/test_profiles_s6_hooks.py	passed	9	0	0	0	0	3.9	oct6-full-python.log	9✓, 3.9s
+tests/hermes_cli/test_project_plugin_rce_bypass.py	passed	35	0	0	0	0	6.9	oct6-full-python.log	35✓, 6.9s
+tests/hermes_cli/test_prompt_api_key.py	passed	11	0	0	0	0	5.6	oct6-full-python.log	11✓, 5.6s
+tests/hermes_cli/test_provider_config_validation.py	passed	17	0	0	0	0	4.9	oct6-full-python.log	17✓, 4.9s
+tests/hermes_cli/test_proxy.py	passed	36	0	0	0	0	6.2	oct6-full-python.log	36✓, 6.2s
+tests/hermes_cli/test_pty_bridge.py	passed	0	0	1	0	0	4.5	oct6-full-python.log	1s, 4.5s
+tests/hermes_cli/test_reasoning_effort_menu.py	passed	1	0	0	0	0	4.8	oct6-full-python.log	1✓, 4.8s
+tests/hermes_cli/test_redact_config_bridge.py	passed	4	0	0	0	0	8.2	oct6-full-python.log	4✓, 8.2s
+tests/hermes_cli/test_regression_16767.py	passed	3	0	0	0	0	10.5	oct6-full-python.log	3✓, 10.5s
+tests/hermes_cli/test_relaunch.py	failed	24	1	1	0	0	5.8	oct6-full-python.log	24✓ 1✗ 1s, 5.8s
+tests/hermes_cli/test_resolve_last_session.py	passed	6	0	0	0	0	5.1	oct6-full-python.log	6✓, 5.1s
+tests/hermes_cli/test_runtime_provider_resolution.py	passed	128	0	0	0	0	18.5	oct6-full-python.log	128✓, 18.5s
+tests/hermes_cli/test_secret_prompt.py	passed	4	0	0	0	0	4.7	oct6-full-python.log	4✓, 4.7s
+tests/hermes_cli/test_security_advisories.py	passed	20	0	0	0	0	5.1	oct6-full-python.log	20✓, 5.1s
+tests/hermes_cli/test_security_audit.py	passed	26	0	0	0	0	5.4	oct6-full-python.log	26✓, 5.4s
+tests/hermes_cli/test_send_cmd.py	passed	21	0	0	0	0	6.1	oct6-full-python.log	21✓, 6.1s
+tests/hermes_cli/test_service_manager.py	failed	43	8	0	0	0	8.5	oct6-full-python.log	43✓ 8✗, 8.5s
+tests/hermes_cli/test_session_browse.py	failed	19	14	0	0	0	7.3	oct6-full-python.log	19✓ 14✗, 7.3s
+tests/hermes_cli/test_session_handoff.py	passed	13	0	0	0	0	6.5	oct6-full-python.log	13✓, 6.5s
+tests/hermes_cli/test_session_recap.py	passed	13	0	0	0	0	5.0	oct6-full-python.log	13✓, 5.0s
+tests/hermes_cli/test_sessions_delete.py	passed	4	0	0	0	0	6.3	oct6-full-python.log	4✓, 6.3s
+tests/hermes_cli/test_set_config_value.py	passed	33	0	0	0	0	6.7	oct6-full-python.log	33✓, 6.7s
+tests/hermes_cli/test_setup.py	failed	0	0	0	0	0	44.5	oct6-full-python.log	44.5s
+tests/hermes_cli/test_setup_agent_settings.py	passed	2	0	0	0	0	5.7	oct6-full-python.log	2✓, 5.7s
+tests/hermes_cli/test_setup_hermes_script.py	passed	2	0	0	0	0	5.3	oct6-full-python.log	2✓, 5.3s
+tests/hermes_cli/test_setup_irc.py	passed	8	0	0	0	0	7.7	oct6-full-python.log	8✓, 7.7s
+tests/hermes_cli/test_setup_matrix_e2ee.py	passed	1	0	0	0	0	4.6	oct6-full-python.log	1✓, 4.6s
+tests/hermes_cli/test_setup_model_provider.py	passed	15	0	0	0	0	15.7	oct6-full-python.log	15✓, 15.7s
+tests/hermes_cli/test_setup_noninteractive.py	passed	7	0	0	0	0	5.4	oct6-full-python.log	7✓, 5.4s
+tests/hermes_cli/test_setup_ollama_cloud_force_refresh.py	passed	1	0	0	0	0	5.0	oct6-full-python.log	1✓, 5.0s
+tests/hermes_cli/test_setup_openclaw_migration.py	failed	32	1	0	0	0	9.8	oct6-full-python.log	32✓ 1✗, 9.8s
+tests/hermes_cli/test_setup_prompt_menus.py	passed	5	0	0	0	0	4.7	oct6-full-python.log	5✓, 4.7s
+tests/hermes_cli/test_setup_reconfigure.py	passed	9	0	0	0	0	6.2	oct6-full-python.log	9✓, 6.2s
+tests/hermes_cli/test_skills_config.py	passed	28	0	0	0	0	5.6	oct6-full-python.log	28✓, 5.6s
+tests/hermes_cli/test_skills_hub.py	passed	24	0	0	0	0	6.0	oct6-full-python.log	24✓, 6.0s
+tests/hermes_cli/test_skills_install_flags.py	passed	5	0	0	0	0	6.3	oct6-full-python.log	5✓, 6.3s
+tests/hermes_cli/test_skills_skip_confirm.py	passed	15	0	0	0	0	5.2	oct6-full-python.log	15✓, 5.2s
+tests/hermes_cli/test_skills_subparser.py	passed	1	0	0	0	0	4.3	oct6-full-python.log	1✓, 4.3s
+tests/hermes_cli/test_skin_engine.py	passed	33	0	0	0	0	4.9	oct6-full-python.log	33✓, 4.9s
+tests/hermes_cli/test_slack_cli.py	passed	3	0	0	0	0	6.0	oct6-full-python.log	3✓, 6.0s
+tests/hermes_cli/test_spotify_auth.py	passed	6	0	0	0	0	4.9	oct6-full-python.log	6✓, 4.9s
+tests/hermes_cli/test_startup_plugin_gating.py	passed	37	0	0	0	0	5.3	oct6-full-python.log	37✓, 5.3s
+tests/hermes_cli/test_status.py	passed	17	0	0	0	0	6.6	oct6-full-python.log	17✓, 6.6s
+tests/hermes_cli/test_status_model_provider.py	passed	5	0	0	0	0	5.6	oct6-full-python.log	5✓, 5.6s
+tests/hermes_cli/test_subparser_routing_fallback.py	passed	0	0	0	0	0	3.6	oct6-full-python.log	3.6s
+tests/hermes_cli/test_subprocess_timeouts.py	passed	4	0	0	0	0	4.2	oct6-full-python.log	4✓, 4.2s
+tests/hermes_cli/test_suppress_eio_on_interrupt.py	passed	15	0	0	0	0	4.2	oct6-full-python.log	15✓, 4.2s
+tests/hermes_cli/test_teams_pipeline_plugin_cli.py	passed	8	0	0	0	0	4.8	oct6-full-python.log	8✓, 4.8s
+tests/hermes_cli/test_tencent_tokenhub_provider.py	passed	61	0	0	0	0	37.5	oct6-full-python.log	61✓, 37.5s
+tests/hermes_cli/test_terminal_menu_fallbacks.py	passed	4	0	0	0	0	5.4	oct6-full-python.log	4✓, 5.4s
+tests/hermes_cli/test_timeouts.py	passed	12	0	0	0	0	38.6	oct6-full-python.log	12✓, 38.6s
+tests/hermes_cli/test_tips.py	passed	11	0	0	0	0	4.7	oct6-full-python.log	11✓, 4.7s
+tests/hermes_cli/test_tool_token_estimation.py	passed	12	0	0	0	0	9.8	oct6-full-python.log	12✓, 9.8s
+tests/hermes_cli/test_tools_config.py	failed	63	15	0	0	0	18.0	oct6-full-python.log	63✓ 15✗, 18.0s
+tests/hermes_cli/test_tools_disable_enable.py	passed	17	0	0	0	0	8.9	oct6-full-python.log	17✓, 8.9s
+tests/hermes_cli/test_tts_picker.py	passed	10	0	0	0	0	7.0	oct6-full-python.log	10✓, 7.0s
+tests/hermes_cli/test_tui_bundled.py	passed	2	0	0	0	0	4.3	oct6-full-python.log	2✓, 4.3s
+tests/hermes_cli/test_tui_npm_install.py	passed	15	0	0	0	0	4.3	oct6-full-python.log	15✓, 4.3s
+tests/hermes_cli/test_tui_resume_flow.py	failed	0	0	0	0	0	35.1	oct6-full-python.log	35.1s
+tests/hermes_cli/test_update_autostash.py	failed	0	0	0	0	0	40.9	oct6-full-python.log	40.9s
+tests/hermes_cli/test_update_check.py	passed	8	0	0	0	0	4.6	oct6-full-python.log	8✓, 4.6s
+tests/hermes_cli/test_update_concurrent_quarantine.py	passed	18	0	0	0	0	4.3	oct6-full-python.log	18✓, 4.3s
+tests/hermes_cli/test_update_config_clears_custom_fields.py	passed	3	0	0	0	0	3.9	oct6-full-python.log	3✓, 3.9s
+tests/hermes_cli/test_update_hangup_protection.py	passed	15	0	1	0	0	3.7	oct6-full-python.log	15✓ 1s, 3.7s
+tests/hermes_cli/test_update_post_pull_syntax_guard.py	failed	6	2	0	0	0	3.8	oct6-full-python.log	6✓ 2✗, 3.8s
+tests/hermes_cli/test_update_stale_dashboard.py	failed	8	6	5	0	0	4.3	oct6-full-python.log	8✓ 6✗ 5s, 4.3s
+tests/hermes_cli/test_update_yes_flag.py	failed	0	0	0	0	0	40.2	oct6-full-python.log	40.2s
+tests/hermes_cli/test_update_zip_symlink_reject.py	passed	2	0	0	0	0	5.3	oct6-full-python.log	2✓, 5.3s
+tests/hermes_cli/test_user_providers_model_switch.py	passed	29	0	0	0	0	171.0	oct6-full-python.log	29✓, 171.0s
+tests/hermes_cli/test_video_gen_picker.py	passed	8	0	0	0	0	7.0	oct6-full-python.log	8✓, 7.0s
+tests/hermes_cli/test_voice_wrapper.py	passed	44	0	0	0	0	5.6	oct6-full-python.log	44✓, 5.6s
+tests/hermes_cli/test_web_oauth_dispatch.py	passed	7	0	0	0	0	6.1	oct6-full-python.log	7✓, 6.1s
+tests/hermes_cli/test_web_server.py	passed	138	0	12	0	0	39.4	oct6-full-python.log	138✓ 12s, 39.4s
+tests/hermes_cli/test_web_server_cron_profiles.py	passed	7	0	0	0	0	5.8	oct6-full-python.log	7✓, 5.8s
+tests/hermes_cli/test_web_server_host_header.py	passed	11	0	0	0	0	6.7	oct6-full-python.log	11✓, 6.7s
+tests/hermes_cli/test_web_server_oauth_write.py	failed	1	1	0	0	0	4.7	oct6-full-python.log	1✓ 1✗, 4.7s
+tests/hermes_cli/test_web_ui_build.py	passed	16	0	0	0	0	4.6	oct6-full-python.log	16✓, 4.6s
+tests/hermes_cli/test_webhook_cli.py	passed	18	0	2	0	0	4.6	oct6-full-python.log	18✓ 2s, 4.6s
+tests/hermes_cli/test_whatsapp_setup_ordering.py	passed	2	0	0	0	0	3.5	oct6-full-python.log	2✓, 3.5s
+tests/hermes_cli/test_xai_oauth_pkce_token_exchange.py	passed	14	0	0	0	0	4.0	oct6-full-python.log	14✓, 4.0s
+tests/hermes_cli/test_xai_provider_labels.py	failed	1	1	0	0	0	8.2	oct6-full-python.log	1✓ 1✗, 8.2s
+tests/hermes_cli/test_xai_retirement.py	passed	33	0	0	0	0	3.6	oct6-full-python.log	33✓, 3.6s
+tests/hermes_cli/test_xiaomi_provider.py	passed	52	0	0	0	0	13.1	oct6-full-python.log	52✓, 13.1s
+tests/hermes_state/test_get_anchored_view.py	passed	11	0	0	0	0	6.0	oct6-full-python.log	11✓, 6.0s
+tests/hermes_state/test_get_messages_around.py	passed	12	0	0	0	0	5.5	oct6-full-python.log	12✓, 5.5s
+tests/hermes_state/test_resolve_resume_session_id.py	passed	8	0	0	0	0	4.6	oct6-full-python.log	8✓, 4.6s
+tests/honcho_plugin/test_async_memory.py	passed	40	0	0	0	0	5.2	oct6-full-python.log	40✓, 5.2s
+tests/honcho_plugin/test_cli.py	passed	10	0	0	0	0	4.3	oct6-full-python.log	10✓, 4.3s
+tests/honcho_plugin/test_client.py	passed	82	0	0	0	0	8.4	oct6-full-python.log	82✓, 8.4s
+tests/honcho_plugin/test_empty_profile_hint.py	passed	7	0	0	0	0	4.7	oct6-full-python.log	7✓, 4.7s
+tests/honcho_plugin/test_pin_peer_name.py	passed	13	0	0	0	0	5.0	oct6-full-python.log	13✓, 5.0s
+tests/honcho_plugin/test_session.py	passed	115	0	0	0	0	9.1	oct6-full-python.log	115✓, 9.1s
+tests/openviking_plugin/test_openviking.py	passed	9	0	0	0	0	5.6	oct6-full-python.log	9✓, 5.6s
+tests/plugins/browser/test_browser_provider_plugins.py	passed	31	0	0	0	0	13.1	oct6-full-python.log	31✓, 13.1s
+tests/plugins/image_gen/test_fal_provider.py	passed	14	0	0	0	0	5.3	oct6-full-python.log	14✓, 5.3s
+tests/plugins/image_gen/test_openai_codex_provider.py	passed	18	0	0	0	0	6.9	oct6-full-python.log	18✓, 6.9s
+tests/plugins/image_gen/test_openai_provider.py	failed	24	1	0	0	0	7.6	oct6-full-python.log	24✓ 1✗, 7.6s
+tests/plugins/image_gen/test_xai_provider.py	failed	20	1	0	0	0	113.4	oct6-full-python.log	20✓ 1✗, 113.4s
+tests/plugins/memory/test_hindsight_provider.py	failed	93	3	0	0	0	20.9	oct6-full-python.log	93✓ 3✗, 20.9s
+tests/plugins/memory/test_mem0_v2.py	passed	15	0	0	0	0	4.9	oct6-full-python.log	15✓, 4.9s
+tests/plugins/memory/test_openviking_provider.py	passed	21	0	0	0	0	4.5	oct6-full-python.log	21✓, 4.5s
+tests/plugins/memory/test_supermemory_provider.py	passed	29	0	0	0	0	4.5	oct6-full-python.log	29✓, 4.5s
+tests/plugins/model_providers/test_deepseek_profile.py	passed	29	0	0	0	0	6.2	oct6-full-python.log	29✓, 6.2s
+tests/plugins/model_providers/test_opencode_go_profile.py	passed	21	0	0	0	0	6.5	oct6-full-python.log	21✓, 6.5s
+tests/plugins/test_achievements_plugin.py	passed	9	0	0	0	0	6.7	oct6-full-python.log	9✓, 6.7s
+tests/plugins/test_disk_cleanup_plugin.py	failed	37	1	0	0	0	7.9	oct6-full-python.log	37✓ 1✗, 7.9s
+tests/plugins/test_google_meet_audio.py	passed	11	0	0	0	0	4.6	oct6-full-python.log	11✓, 4.6s
+tests/plugins/test_google_meet_node.py	passed	42	0	0	0	0	6.5	oct6-full-python.log	42✓, 6.5s
+tests/plugins/test_google_meet_plugin.py	passed	51	0	0	0	0	92.5	oct6-full-python.log	51✓, 92.5s
+tests/plugins/test_google_meet_realtime.py	passed	9	0	0	0	0	5.0	oct6-full-python.log	9✓, 5.0s
+tests/plugins/test_kanban_dashboard_plugin.py	failed	94	0	0	0	0	1224.1	oct6-full-python.log	94✓, 1224.1s
+tests/plugins/test_kanban_worker_runs.py	failed	11	0	0	0	0	1174.2	oct6-full-python.log	11✓, 1174.2s
+tests/plugins/test_langfuse_plugin.py	failed	37	0	0	0	0	1177.3	oct6-full-python.log	37✓, 1177.3s
+tests/plugins/test_retaindb_plugin.py	passed	67	0	0	0	0	1095.4	oct6-full-python.log	67✓, 1095.4s
+tests/plugins/test_teams_pipeline_plugin.py	failed	15	2	0	0	0	1091.3	oct6-full-python.log	15✓ 2✗, 1091.3s
+tests/plugins/video_gen/test_fal_plugin.py	failed	18	0	0	0	0	1088.8	oct6-full-python.log	18✓, 1088.8s
+tests/plugins/video_gen/test_xai_plugin.py	passed	7	0	0	0	0	7.7	oct6-full-python.log	7✓, 7.7s
+tests/plugins/video_gen/test_xai_plugin_integration.py	passed	11	0	0	0	0	10.3	oct6-full-python.log	11✓, 10.3s
+tests/plugins/web/test_web_search_provider_plugins.py	passed	50	0	0	0	0	31.9	oct6-full-python.log	50✓, 31.9s
+tests/product/test_product_positioning.py	passed	2	0	0	0	0	8.7	oct6-full-python.log	2✓, 8.7s
+tests/providers/test_e2e_wiring.py	passed	6	0	0	0	0	8.1	oct6-full-python.log	6✓, 8.1s
+tests/providers/test_plugin_discovery.py	passed	4	0	0	0	0	10.0	oct6-full-python.log	4✓, 10.0s
+tests/providers/test_profile_wiring.py	passed	22	0	0	0	0	9.3	oct6-full-python.log	22✓, 9.3s
+tests/providers/test_provider_profiles.py	passed	42	0	0	0	0	9.7	oct6-full-python.log	42✓, 9.7s
+tests/providers/test_transport_parity.py	passed	19	0	0	0	0	7.9	oct6-full-python.log	19✓, 7.9s
+tests/run_agent/test_1630_context_overflow_loop.py	passed	16	0	0	0	0	14.9	oct6-full-python.log	16✓, 14.9s
+tests/run_agent/test_31273_402_not_retried.py	passed	5	0	0	0	0	12.6	oct6-full-python.log	5✓, 12.6s
+tests/run_agent/test_413_compression.py	passed	16	0	0	0	0	139.3	oct6-full-python.log	16✓, 139.3s
+tests/run_agent/test_860_dedup.py	failed	4	4	0	0	0	60.2	oct6-full-python.log	4✓ 4✗, 60.2s
+tests/run_agent/test_agent_guardrails.py	passed	35	0	0	0	0	12.5	oct6-full-python.log	35✓, 12.5s
+tests/run_agent/test_anthropic_prompt_cache_policy.py	passed	24	0	0	0	0	10.9	oct6-full-python.log	24✓, 10.9s
+tests/run_agent/test_anthropic_third_party_oauth_guard.py	passed	7	0	0	0	0	43.0	oct6-full-python.log	7✓, 43.0s
+tests/run_agent/test_anthropic_truncation_continuation.py	passed	7	0	0	0	0	8.0	oct6-full-python.log	7✓, 8.0s
+tests/run_agent/test_api_max_retries_config.py	passed	4	0	0	0	0	70.9	oct6-full-python.log	4✓, 70.9s
+tests/run_agent/test_async_httpx_del_neuter.py	passed	9	0	0	0	0	8.7	oct6-full-python.log	9✓, 8.7s
+tests/run_agent/test_background_review.py	passed	4	0	0	0	0	7.3	oct6-full-python.log	4✓, 7.3s
+tests/run_agent/test_background_review_cache_parity.py	passed	3	0	0	0	0	6.5	oct6-full-python.log	3✓, 6.5s
+tests/run_agent/test_background_review_summary.py	passed	8	0	0	0	0	6.3	oct6-full-python.log	8✓, 6.3s
+tests/run_agent/test_background_review_toolset_restriction.py	passed	3	0	0	0	0	5.7	oct6-full-python.log	3✓, 5.7s
+tests/run_agent/test_callable_api_key.py	passed	16	0	0	0	0	7.6	oct6-full-python.log	16✓, 7.6s
+tests/run_agent/test_codex_app_server_integration.py	failed	0	0	0	0	0	35.8	oct6-full-python.log	35.8s
+tests/run_agent/test_codex_multimodal_tool_result.py	passed	7	0	0	0	0	6.4	oct6-full-python.log	7✓, 6.4s
+tests/run_agent/test_codex_silent_hang_hint.py	passed	10	0	0	0	0	59.2	oct6-full-python.log	10✓, 59.2s
+tests/run_agent/test_codex_xai_oauth_recovery.py	passed	37	0	0	0	0	85.9	oct6-full-python.log	37✓, 85.9s
+tests/run_agent/test_commit_memory_session_context_engine.py	passed	6	0	0	0	0	5.2	oct6-full-python.log	6✓, 5.2s
+tests/run_agent/test_compress_focus_plugin_fallback.py	passed	1	0	0	0	0	7.0	oct6-full-python.log	1✓, 7.0s
+tests/run_agent/test_compression_boundary.py	passed	6	0	0	0	0	6.2	oct6-full-python.log	6✓, 6.2s
+tests/run_agent/test_compression_boundary_hook.py	failed	1	2	0	0	0	37.8	oct6-full-python.log	1✓ 2✗, 37.8s
+tests/run_agent/test_compression_feasibility.py	passed	16	0	0	0	0	13.3	oct6-full-python.log	16✓, 13.3s
+tests/run_agent/test_compression_persistence.py	failed	4	2	0	0	0	27.8	oct6-full-python.log	4✓ 2✗, 27.8s
+tests/run_agent/test_compression_trigger_excludes_reasoning.py	passed	3	0	0	0	0	6.8	oct6-full-python.log	3✓, 6.8s
+tests/run_agent/test_compressor_fallback_update.py	passed	2	0	0	0	0	20.2	oct6-full-python.log	2✓, 20.2s
+tests/run_agent/test_concurrent_interrupt.py	passed	2	0	0	0	0	8.0	oct6-full-python.log	2✓, 8.0s
+tests/run_agent/test_context_token_tracking.py	failed	0	0	0	0	0	37.0	oct6-full-python.log	37.0s
+tests/run_agent/test_copilot_native_vision_headers.py	passed	3	0	0	0	0	37.0	oct6-full-python.log	3✓, 37.0s
+tests/run_agent/test_create_openai_client_kwargs_isolation.py	passed	1	0	0	0	0	19.1	oct6-full-python.log	1✓, 19.1s
+tests/run_agent/test_create_openai_client_proxy_env.py	passed	9	0	0	0	0	34.9	oct6-full-python.log	9✓, 34.9s
+tests/run_agent/test_create_openai_client_reuse.py	passed	3	0	0	0	0	23.8	oct6-full-python.log	3✓, 23.8s
+tests/run_agent/test_credential_pool_interrupt.py	passed	3	0	0	0	0	7.2	oct6-full-python.log	3✓, 7.2s
+tests/run_agent/test_deepseek_reasoning_content_echo.py	passed	36	0	0	0	0	8.9	oct6-full-python.log	36✓, 8.9s
+tests/run_agent/test_deepseek_v4_thinking_live.py	passed	0	0	2	0	0	2.9	oct6-full-python.log	2s, 2.9s
+tests/run_agent/test_dict_tool_call_args.py	failed	0	0	0	0	0	33.2	oct6-full-python.log	33.2s
+tests/run_agent/test_empty_response_recovery_persistence.py	passed	3	0	0	0	0	10.6	oct6-full-python.log	3✓, 10.6s
+tests/run_agent/test_exit_cleanup_interrupt.py	passed	2	0	0	0	0	13.3	oct6-full-python.log	2✓, 13.3s
+tests/run_agent/test_file_mutation_verifier.py	passed	33	0	0	0	0	11.6	oct6-full-python.log	33✓, 11.6s
+tests/run_agent/test_image_rejection_fallback.py	passed	15	0	0	0	0	10.9	oct6-full-python.log	15✓, 10.9s
+tests/run_agent/test_image_shrink_recovery.py	passed	13	0	0	0	0	10.1	oct6-full-python.log	13✓, 10.1s
+tests/run_agent/test_init_fallback_on_exhausted_pool.py	passed	2	0	0	0	0	10.9	oct6-full-python.log	2✓, 10.9s
+tests/run_agent/test_interactive_interrupt.py	passed	0	0	0	0	0	8.8	oct6-full-python.log	8.8s
+tests/run_agent/test_interrupt_propagation.py	passed	7	0	0	0	0	10.3	oct6-full-python.log	7✓, 10.3s
+tests/run_agent/test_invalid_context_length_warning.py	failed	0	0	0	0	0	48.0	oct6-full-python.log	48.0s
+tests/run_agent/test_iteration_budget_race.py	passed	5	0	0	0	0	9.2	oct6-full-python.log	5✓, 9.2s
+tests/run_agent/test_jsondecodeerror_retryable.py	passed	5	0	0	0	0	8.9	oct6-full-python.log	5✓, 8.9s
+tests/run_agent/test_last_reasoning_per_turn.py	passed	6	0	0	0	0	8.9	oct6-full-python.log	6✓, 8.9s
+tests/run_agent/test_long_context_tier_429.py	passed	15	0	0	0	0	9.0	oct6-full-python.log	15✓, 9.0s
+tests/run_agent/test_materialize_data_url_cleanup.py	passed	2	0	0	0	0	9.4	oct6-full-python.log	2✓, 9.4s
+tests/run_agent/test_memory_nudge_counter_hydration.py	passed	7	0	0	0	0	9.4	oct6-full-python.log	7✓, 9.4s
+tests/run_agent/test_memory_provider_init.py	passed	1	0	0	0	0	13.7	oct6-full-python.log	1✓, 13.7s
+tests/run_agent/test_memory_sync_interrupted.py	passed	16	0	0	0	0	9.7	oct6-full-python.log	16✓, 9.7s
+tests/run_agent/test_message_sequence_repair.py	passed	11	0	0	0	0	8.0	oct6-full-python.log	11✓, 8.0s
+tests/run_agent/test_multimodal_tool_content_recovery.py	passed	15	0	0	0	0	9.4	oct6-full-python.log	15✓, 9.4s
+tests/run_agent/test_openai_client_lifecycle.py	passed	5	0	0	0	0	22.0	oct6-full-python.log	5✓, 22.0s
+tests/run_agent/test_partial_stream_finish_reason.py	failed	0	0	0	0	0	36.2	oct6-full-python.log	36.2s
+tests/run_agent/test_percentage_clamp.py	passed	11	0	0	0	0	17.5	oct6-full-python.log	11✓, 17.5s
+tests/run_agent/test_plugin_context_engine_init.py	passed	2	0	0	0	0	19.0	oct6-full-python.log	2✓, 19.0s
+tests/run_agent/test_primary_runtime_restore.py	failed	0	0	0	0	0	125.2	oct6-full-python.log	125.2s
+tests/run_agent/test_provider_attribution_headers.py	failed	0	0	0	0	0	94.9	oct6-full-python.log	94.9s
+tests/run_agent/test_provider_fallback.py	failed	0	0	0	0	0	153.9	oct6-full-python.log	153.9s
+tests/run_agent/test_provider_parity.py	failed	0	0	0	0	0	211.0	oct6-full-python.log	211.0s
+tests/run_agent/test_real_interrupt_subagent.py	failed	0	1	0	0	0	47.2	oct6-full-python.log	1✗, 47.2s
+tests/run_agent/test_redirect_stdout_issue.py	passed	1	0	0	0	0	28.1	oct6-full-python.log	1✓, 28.1s
+tests/run_agent/test_repair_tool_call_arguments.py	passed	21	0	0	0	0	19.5	oct6-full-python.log	21✓, 19.5s
+tests/run_agent/test_repair_tool_call_name.py	passed	18	0	0	0	0	19.6	oct6-full-python.log	18✓, 19.6s
+tests/run_agent/test_review_prompt_class_first.py	passed	19	0	0	0	0	18.3	oct6-full-python.log	19✓, 18.3s
+tests/run_agent/test_run_agent.py	failed	0	0	0	0	0	280.9	oct6-full-python.log	280.9s
+tests/run_agent/test_run_agent_codex_responses.py	failed	0	0	0	0	0	296.2	oct6-full-python.log	296.2s
+tests/run_agent/test_run_agent_multimodal_prologue.py	passed	15	0	0	0	0	27.1	oct6-full-python.log	15✓, 27.1s
+tests/run_agent/test_sequential_chats_live.py	passed	0	0	1	0	0	8.5	oct6-full-python.log	1s, 8.5s
+tests/run_agent/test_session_id_env.py	passed	3	0	0	0	0	39.6	oct6-full-python.log	3✓, 39.6s
+tests/run_agent/test_session_meta_filtering.py	passed	5	0	0	0	0	11.3	oct6-full-python.log	5✓, 11.3s
+tests/run_agent/test_session_reset_fix.py	passed	4	0	0	0	0	12.3	oct6-full-python.log	4✓, 12.3s
+tests/run_agent/test_steer.py	passed	21	0	0	0	0	33.2	oct6-full-python.log	21✓, 33.2s
+tests/run_agent/test_stream_drop_logging.py	passed	10	0	0	0	0	68.1	oct6-full-python.log	10✓, 68.1s
+tests/run_agent/test_stream_interrupt_retry.py	passed	3	0	0	0	0	49.6	oct6-full-python.log	3✓, 49.6s
+tests/run_agent/test_streaming.py	passed	40	0	0	0	0	148.1	oct6-full-python.log	40✓, 148.1s
+tests/run_agent/test_streaming_tool_call_repair.py	passed	12	0	0	0	0	11.7	oct6-full-python.log	12✓, 11.7s
+tests/run_agent/test_strict_api_validation.py	passed	4	0	0	0	0	23.1	oct6-full-python.log	4✓, 23.1s
+tests/run_agent/test_strip_reasoning_tags_cli.py	passed	9	0	0	0	0	10.2	oct6-full-python.log	9✓, 10.2s
+tests/run_agent/test_switch_model_context.py	passed	2	0	0	0	0	16.8	oct6-full-python.log	2✓, 16.8s
+tests/run_agent/test_switch_model_fallback_prune.py	passed	4	0	0	0	0	14.4	oct6-full-python.log	4✓, 14.4s
+tests/run_agent/test_thinking_only_sanitizer.py	passed	25	0	0	0	0	9.9	oct6-full-python.log	25✓, 9.9s
+tests/run_agent/test_tls_fd_recycle_corruption.py	passed	10	0	0	0	0	8.7	oct6-full-python.log	10✓, 8.7s
+tests/run_agent/test_token_persistence_non_cli.py	passed	3	0	0	0	0	17.6	oct6-full-python.log	3✓, 17.6s
+tests/run_agent/test_tool_arg_coercion.py	passed	61	0	0	0	0	11.2	oct6-full-python.log	61✓, 11.2s
+tests/run_agent/test_tool_call_args_sanitizer.py	passed	7	0	0	0	0	9.5	oct6-full-python.log	7✓, 9.5s
+tests/run_agent/test_tool_call_guardrail_runtime.py	passed	9	0	0	0	0	29.7	oct6-full-python.log	9✓, 29.7s
+tests/run_agent/test_tool_executor_contextvar_propagation.py	passed	5	0	0	0	0	9.1	oct6-full-python.log	5✓, 9.1s
+tests/run_agent/test_tool_name_db_persistence.py	passed	1	0	0	0	0	13.7	oct6-full-python.log	1✓, 13.7s
+tests/run_agent/test_unicode_ascii_codec.py	passed	29	0	0	0	0	9.4	oct6-full-python.log	29✓, 9.4s
+tests/run_agent/test_vision_aware_preprocessing.py	passed	15	0	0	0	0	11.2	oct6-full-python.log	15✓, 11.2s
+tests/scripts/test_release_acp_registry.py	passed	3	0	0	0	0	5.9	oct6-full-python.log	3✓, 5.9s
+tests/skills/test_darwinian_evolver_skill.py	passed	14	0	0	0	0	7.0	oct6-full-python.log	14✓, 7.0s
+tests/skills/test_fetch_transcript.py	passed	13	0	0	0	0	6.3	oct6-full-python.log	13✓, 6.3s
+tests/skills/test_google_oauth_setup.py	failed	13	2	0	0	0	6.9	oct6-full-python.log	13✓ 2✗, 6.9s
+tests/skills/test_google_workspace_api.py	passed	9	0	0	0	0	5.4	oct6-full-python.log	9✓, 5.4s
+tests/skills/test_google_workspace_credential_files.py	passed	3	0	0	0	0	5.0	oct6-full-python.log	3✓, 5.0s
+tests/skills/test_hyperliquid_skill.py	passed	13	0	0	0	0	5.9	oct6-full-python.log	13✓, 5.9s
+tests/skills/test_memento_cards.py	passed	38	0	0	0	0	10.0	oct6-full-python.log	38✓, 10.0s
+tests/skills/test_openclaw_migration.py	failed	38	3	0	0	0	12.3	oct6-full-python.log	38✓ 3✗, 12.3s
+tests/skills/test_openclaw_migration_hardening.py	passed	26	0	0	0	0	6.5	oct6-full-python.log	26✓, 6.5s
+tests/skills/test_telephony_skill.py	passed	7	0	0	0	0	5.2	oct6-full-python.log	7✓, 5.2s
+tests/skills/test_youtube_quiz.py	passed	9	0	0	0	0	5.7	oct6-full-python.log	9✓, 5.7s
+tests/stress/test_atypical_scenarios.py	passed	0	0	0	0	0	5.6	oct6-full-python.log	5.6s
+tests/stress/test_benchmarks.py	passed	0	0	0	0	0	5.4	oct6-full-python.log	5.4s
+tests/stress/test_concurrency.py	passed	0	0	0	0	0	5.3	oct6-full-python.log	5.3s
+tests/stress/test_concurrency_mixed.py	passed	0	0	0	0	0	4.7	oct6-full-python.log	4.7s
+tests/stress/test_concurrency_parent_gate.py	passed	0	0	0	0	0	4.7	oct6-full-python.log	4.7s
+tests/stress/test_concurrency_reclaim_race.py	passed	0	0	0	0	0	4.5	oct6-full-python.log	4.5s
+tests/stress/test_property_fuzzing.py	passed	0	0	0	0	0	4.6	oct6-full-python.log	4.6s
+tests/stress/test_subprocess_e2e.py	passed	0	0	0	0	0	4.5	oct6-full-python.log	4.5s
+tests/test_account_usage.py	passed	4	0	0	0	0	5.4	oct6-full-python.log	4✓, 5.4s
+tests/test_atomic_replace_symlinks.py	passed	7	0	1	0	0	5.5	oct6-full-python.log	7✓ 1s, 5.5s
+tests/test_base_url_hostname.py	passed	25	0	0	0	0	5.8	oct6-full-python.log	25✓, 5.8s
+tests/test_batch_runner_checkpoint.py	passed	16	0	0	0	0	9.6	oct6-full-python.log	16✓, 9.6s
+tests/test_bitwarden_secrets.py	failed	34	2	0	0	0	6.5	oct6-full-python.log	34✓ 2✗, 6.5s
+tests/test_cli_file_drop.py	passed	31	0	0	0	0	6.0	oct6-full-python.log	31✓, 6.0s
+tests/test_cli_manual_compress.py	passed	1	0	0	0	0	5.0	oct6-full-python.log	1✓, 5.0s
+tests/test_cli_skin_integration.py	passed	13	0	0	0	0	6.6	oct6-full-python.log	13✓, 6.6s
+tests/test_ctx_halving_fix.py	passed	24	0	0	0	0	12.2	oct6-full-python.log	24✓, 12.2s
+tests/test_empty_model_fallback.py	passed	12	0	0	0	0	6.9	oct6-full-python.log	12✓, 6.9s
+tests/test_env_loader_secret_sources.py	passed	8	0	0	0	0	6.5	oct6-full-python.log	8✓, 6.5s
+tests/test_evidence_store.py	passed	12	0	0	0	0	7.0	oct6-full-python.log	12✓, 7.0s
+tests/test_gateway_streaming_nested_config.py	passed	3	0	0	0	0	7.6	oct6-full-python.log	3✓, 7.6s
+tests/test_get_tool_definitions_cache_isolation.py	passed	5	0	0	0	0	18.1	oct6-full-python.log	5✓, 18.1s
+tests/test_hermes_bootstrap.py	passed	16	0	1	0	0	10.6	oct6-full-python.log	16✓ 1s, 10.6s
+tests/test_hermes_constants.py	passed	40	0	0	0	0	10.2	oct6-full-python.log	40✓, 10.2s
+tests/test_hermes_home_profile_warning.py	passed	6	0	0	0	0	8.0	oct6-full-python.log	6✓, 8.0s
+tests/test_hermes_logging.py	failed	48	2	0	0	0	12.2	oct6-full-python.log	48✓ 2✗, 12.2s
+tests/test_hermes_state.py	passed	216	0	0	0	0	33.5	oct7-resumed-1.log	216✓, 33.5s
+tests/test_hermes_state_wal_fallback.py	passed	15	0	0	0	0	10.0	oct6-full-python.log	15✓, 10.0s
+tests/test_honcho_client_config.py	passed	7	0	0	0	0	9.5	oct6-full-python.log	7✓, 9.5s
+tests/test_install_sh_browser_install.py	passed	5	0	0	0	0	9.5	oct6-full-python.log	5✓, 9.5s
+tests/test_install_sh_pythonpath_sanitization.py	passed	2	0	0	0	0	9.4	oct6-full-python.log	2✓, 9.4s
+tests/test_install_sh_setup_wizard_tty_probe.py	passed	6	0	0	0	0	8.9	oct6-full-python.log	6✓, 8.9s
+tests/test_install_sh_symlink_stomp.py	failed	1	1	0	0	0	9.9	oct6-full-python.log	1✓ 1✗, 9.9s
+tests/test_install_sh_termux_network_prereqs.py	passed	2	0	0	0	0	8.6	oct6-full-python.log	2✓, 8.6s
+tests/test_ipv4_preference.py	passed	7	0	0	0	0	9.6	oct6-full-python.log	7✓, 9.6s
+tests/test_lazy_session_regressions.py	passed	17	0	0	0	0	14.1	oct6-full-python.log	17✓, 14.1s
+tests/test_lint_config.py	passed	5	0	0	0	0	10.3	oct6-full-python.log	5✓, 10.3s
+tests/test_live_system_guard_self_test.py	failed	26	7	1	0	0	12.0	oct7-resumed-1.log	26✓ 7✗ 1s, 12.0s
+tests/test_mcp_serve.py	passed	85	0	0	0	0	18.2	oct7-resumed-1.log	85✓, 18.2s
+tests/test_mini_swe_runner.py	passed	2	0	0	0	0	10.7	oct7-resumed-1.log	2✓, 10.7s
+tests/test_minimax_model_validation.py	passed	7	0	0	0	0	9.6	oct7-resumed-1.log	7✓, 9.6s
+tests/test_minimax_oauth.py	passed	28	0	0	0	0	10.8	oct7-resumed-1.log	28✓, 10.8s
+tests/test_minisweagent_path.py	passed	0	0	0	0	0	6.6	oct7-resumed-1.log	6.6s
+tests/test_model_picker_scroll.py	passed	11	0	0	0	0	6.9	oct7-resumed-1.log	11✓, 6.9s
+tests/test_model_tools.py	failed	22	2	0	0	0	12.6	oct7-resumed-1.log	22✓ 2✗, 12.6s
+tests/test_model_tools_async_bridge.py	passed	12	0	0	0	0	12.5	oct7-resumed-1.log	12✓, 12.5s
+tests/test_ollama_num_ctx.py	passed	8	0	0	0	0	7.1	oct7-resumed-1.log	8✓, 7.1s
+tests/test_package_json_lazy_deps.py	passed	3	0	0	0	0	5.9	oct7-resumed-1.log	3✓, 5.9s
+tests/test_packaging_metadata.py	passed	2	0	0	0	0	5.9	oct7-resumed-1.log	2✓, 5.9s
+tests/test_plugin_skills.py	passed	28	0	0	0	0	13.5	oct7-resumed-1.log	28✓, 13.5s
+tests/test_process_loop_event_loop_warning.py	passed	5	0	0	0	0	6.5	oct7-resumed-1.log	5✓, 6.5s
+tests/test_project_metadata.py	passed	6	0	0	0	0	6.7	oct7-resumed-1.log	6✓, 6.7s
+tests/test_retry_utils.py	passed	9	0	0	0	0	6.8	oct7-resumed-1.log	9✓, 6.8s
+tests/test_run_tests_parallel.py	passed	0	0	1	0	0	6.0	oct7-resumed-1.log	1s, 6.0s
+tests/test_sanitize_tool_error.py	passed	16	0	0	0	0	13.4	oct7-resumed-1.log	16✓, 13.4s
+tests/test_sql_injection.py	passed	4	0	0	0	0	6.3	oct7-resumed-1.log	4✓, 6.3s
+tests/test_subprocess_home_isolation.py	failed	15	1	0	0	0	8.0	oct7-resumed-1.log	15✓ 1✗, 8.0s
+tests/test_termux_all_extra_compat.py	passed	2	0	0	0	0	7.1	oct7-resumed-1.log	2✓, 7.1s
+tests/test_timezone.py	passed	18	0	2	0	0	8.1	oct7-resumed-1.log	18✓ 2s, 8.1s
+tests/test_toolset_distributions.py	passed	15	0	0	0	0	8.6	oct7-resumed-1.log	15✓, 8.6s
+tests/test_toolsets.py	failed	24	3	0	0	0	9.9	oct7-resumed-1.log	24✓ 3✗, 9.9s
+tests/test_trajectory_compressor.py	passed	31	0	0	0	0	9.8	oct7-resumed-1.log	31✓, 9.8s
+tests/test_trajectory_compressor_async.py	passed	8	0	0	0	0	13.0	oct7-resumed-1.log	8✓, 13.0s
+tests/test_transform_llm_output_hook.py	passed	6	0	0	0	0	10.6	oct7-resumed-1.log	6✓, 10.6s
+tests/test_transform_tool_result_hook.py	failed	8	1	0	0	0	14.5	oct7-resumed-1.log	8✓ 1✗, 14.5s
+tests/test_tui_gateway_server.py	passed	182	0	0	0	0	34.3	oct7-resumed-1.log	182✓, 34.3s
+tests/test_utils_truthy_values.py	passed	4	0	0	0	0	6.8	oct7-resumed-1.log	4✓, 6.8s
+tests/test_yuanbao_integration.py	passed	32	0	0	0	0	9.0	oct7-resumed-1.log	32✓, 9.0s
+tests/test_yuanbao_markdown.py	passed	49	0	0	0	0	11.0	oct7-resumed-1.log	49✓, 11.0s
+tests/test_yuanbao_pipeline.py	passed	94	0	0	0	0	14.1	oct7-resumed-1.log	94✓, 14.1s
+tests/test_yuanbao_proto.py	passed	40	0	0	0	0	10.6	oct7-resumed-1.log	40✓, 10.6s
+tests/tools/test_accretion_caps.py	passed	9	0	0	0	0	23.8	oct7-resumed-1.log	9✓, 23.8s
+tests/tools/test_ansi_strip.py	passed	30	0	0	0	0	9.1	oct7-resumed-1.log	30✓, 9.1s
+tests/tools/test_approval.py	passed	188	0	0	0	0	20.3	oct7-resumed-1.log	188✓, 20.3s
+tests/tools/test_approval_heartbeat.py	passed	0	0	0	0	0	8.8	oct7-resumed-1.log	8.8s
+tests/tools/test_approval_plugin_hooks.py	passed	3	0	0	0	0	8.5	oct7-resumed-1.log	3✓, 8.5s
+tests/tools/test_base_environment.py	passed	18	0	0	0	0	8.5	oct7-resumed-1.log	18✓, 8.5s
+tests/tools/test_browser_camofox.py	passed	23	0	0	0	0	57.6	oct7-resumed-1.log	23✓, 57.6s
+tests/tools/test_browser_camofox_persistence.py	passed	27	0	0	0	0	20.1	oct7-resumed-1.log	27✓, 20.1s
+tests/tools/test_browser_camofox_state.py	passed	6	0	0	0	0	5.1	oct7-resumed-1.log	6✓, 5.1s
+tests/tools/test_browser_cdp_override.py	passed	7	0	0	0	0	8.0	oct7-resumed-1.log	7✓, 8.0s
+tests/tools/test_browser_cdp_tool.py	passed	19	0	0	0	0	15.4	oct7-resumed-1.log	19✓, 15.4s
+tests/tools/test_browser_chromium_check.py	passed	10	0	0	0	0	6.3	oct7-resumed-1.log	10✓, 6.3s
+tests/tools/test_browser_cleanup.py	passed	6	0	0	0	0	5.4	oct7-resumed-1.log	6✓, 5.4s
+tests/tools/test_browser_cloud_fallback.py	passed	8	0	0	0	0	6.9	oct7-resumed-1.log	8✓, 6.9s
+tests/tools/test_browser_cloud_provider_cache.py	passed	5	0	0	0	0	4.0	oct7-resumed-1.log	5✓, 4.0s
+tests/tools/test_browser_console.py	passed	27	0	0	0	0	9.5	oct7-resumed-1.log	27✓, 9.5s
+tests/tools/test_browser_content_none_guard.py	passed	7	0	0	0	0	6.1	oct7-resumed-1.log	7✓, 6.1s
+tests/tools/test_browser_eval_supervisor_path.py	passed	14	0	0	0	0	7.0	oct7-resumed-1.log	14✓, 7.0s
+tests/tools/test_browser_hardening.py	passed	20	0	0	0	0	6.0	oct7-resumed-1.log	20✓, 6.0s
+tests/tools/test_browser_homebrew_paths.py	failed	18	4	0	0	0	6.5	oct7-resumed-1.log	18✓ 4✗, 6.5s
+tests/tools/test_browser_hybrid_routing.py	passed	20	0	0	0	0	6.6	oct7-resumed-1.log	20✓, 6.6s
+tests/tools/test_browser_lightpanda.py	passed	42	0	0	0	0	7.8	oct7-resumed-1.log	42✓, 7.8s
+tests/tools/test_browser_orphan_reaper.py	passed	18	0	0	0	0	8.1	oct7-resumed-1.log	18✓, 8.1s
+tests/tools/test_browser_secret_exfil.py	passed	10	0	0	0	0	7.0	oct7-resumed-1.log	10✓, 7.0s
+tests/tools/test_browser_ssrf_local.py	passed	20	0	0	0	0	21.0	oct7-resumed-1.log	20✓, 21.0s
+tests/tools/test_browser_supervisor.py	passed	0	0	22	0	0	5.3	oct7-resumed-1.log	22s, 5.3s
+tests/tools/test_browser_supervisor_healthcheck.py	passed	4	0	0	0	0	6.2	oct7-resumed-1.log	4✓, 6.2s
+tests/tools/test_budget_config.py	passed	20	0	0	0	0	5.2	oct7-resumed-1.log	20✓, 5.2s
+tests/tools/test_build_gate.py	passed	4	0	0	0	0	4.6	oct7-resumed-1.log	4✓, 4.6s
+tests/tools/test_checkpoint_manager.py	failed	75	2	0	0	0	59.4	oct7-resumed-1.log	75✓ 2✗, 59.4s
+tests/tools/test_clarify_gateway.py	passed	15	0	0	0	0	6.2	oct7-resumed-1.log	15✓, 6.2s
+tests/tools/test_clarify_tool.py	passed	20	0	0	0	0	7.5	oct7-resumed-1.log	20✓, 7.5s
+tests/tools/test_clipboard.py	passed	107	0	0	0	0	16.2	oct7-resumed-1.log	107✓, 16.2s
+tests/tools/test_code_execution.py	passed	36	0	31	0	0	20.4	oct7-resumed-1.log	36✓ 31s, 20.4s
+tests/tools/test_code_execution_modes.py	passed	24	0	12	0	0	11.0	oct7-resumed-1.log	24✓ 12s, 11.0s
+tests/tools/test_code_execution_windows_env.py	passed	28	0	1	0	0	13.7	oct7-resumed-1.log	28✓ 1s, 13.7s
+tests/tools/test_command_guards.py	passed	19	0	0	0	0	10.5	oct7-resumed-1.log	19✓, 10.5s
+tests/tools/test_computer_use.py	passed	74	0	0	0	0	20.2	oct7-resumed-1.log	74✓, 20.2s
+tests/tools/test_computer_use_capture_routing.py	passed	13	0	0	0	0	11.6	oct7-resumed-1.log	13✓, 11.6s
+tests/tools/test_computer_use_vision_routing.py	passed	28	0	0	0	0	11.3	oct7-resumed-1.log	28✓, 11.3s
+tests/tools/test_config_null_guard.py	passed	10	0	0	0	0	10.0	oct7-resumed-1.log	10✓, 10.0s
+tests/tools/test_credential_files.py	failed	27	2	0	0	0	11.9	oct7-resumed-1.log	27✓ 2✗, 11.9s
+tests/tools/test_credential_pool_env_fallback.py	passed	8	0	0	0	0	12.3	oct7-resumed-1.log	8✓, 12.3s
+tests/tools/test_cron_approval_mode.py	passed	24	0	0	0	0	7.3	oct7-resumed-1.log	24✓, 7.3s
+tests/tools/test_cron_prompt_injection.py	passed	8	0	0	0	0	7.0	oct7-resumed-1.log	8✓, 7.0s
+tests/tools/test_cronjob_tools.py	passed	56	0	0	0	0	5.9	oct7-resumed-2.log	56✓, 5.9s
+tests/tools/test_cross_profile_guard.py	passed	12	0	0	0	0	9.9	oct7-resumed-2.log	12✓, 9.9s
+tests/tools/test_daytona_environment.py	passed	26	0	0	0	0	7.2	oct7-resumed-2.log	26✓, 7.2s
+tests/tools/test_debug_helpers.py	passed	13	0	0	0	0	4.4	oct7-resumed-2.log	13✓, 4.4s
+tests/tools/test_delegate.py	passed	135	0	0	0	0	35.4	oct7-resumed-2.log	135✓, 35.4s
+tests/tools/test_delegate_composite_toolsets.py	passed	5	0	0	0	0	4.7	oct7-resumed-2.log	5✓, 4.7s
+tests/tools/test_delegate_subagent_timeout_diagnostic.py	passed	7	0	0	0	0	8.4	oct7-resumed-2.log	7✓, 8.4s
+tests/tools/test_delegate_toolset_scope.py	passed	5	0	0	0	0	4.8	oct7-resumed-2.log	5✓, 4.8s
+tests/tools/test_discord_tool.py	passed	90	0	0	0	0	11.4	oct7-resumed-2.log	90✓, 11.4s
+tests/tools/test_docker_environment.py	passed	23	0	0	0	0	7.9	oct7-resumed-2.log	23✓, 7.9s
+tests/tools/test_docker_find.py	failed	8	1	0	0	0	5.2	oct7-resumed-2.log	8✓ 1✗, 5.2s
+tests/tools/test_dockerfile_node_modules_perms.py	passed	1	0	0	0	0	4.7	oct7-resumed-2.log	1✓, 4.7s
+tests/tools/test_dockerfile_pid1_reaping.py	passed	7	0	0	0	0	4.1	oct7-resumed-2.log	7✓, 4.1s
+tests/tools/test_env_passthrough.py	passed	17	0	0	0	0	4.2	oct7-resumed-2.log	17✓, 4.2s
+tests/tools/test_feishu_tools.py	passed	5	0	0	0	0	3.8	oct7-resumed-2.log	5✓, 3.8s
+tests/tools/test_file_operations.py	failed	75	2	0	0	0	6.4	oct7-resumed-2.log	75✓ 2✗, 6.4s
+tests/tools/test_file_operations_edge_cases.py	passed	35	0	0	0	0	4.3	oct7-resumed-2.log	35✓, 4.3s
+tests/tools/test_file_ops_cwd_tracking.py	passed	5	0	0	0	0	4.6	oct7-resumed-2.log	5✓, 4.6s
+tests/tools/test_file_read_guards.py	passed	39	0	0	0	0	5.2	oct7-resumed-2.log	39✓, 5.2s
+tests/tools/test_file_staleness.py	passed	11	0	0	0	0	4.1	oct7-resumed-2.log	11✓, 4.1s
+tests/tools/test_file_state_registry.py	passed	16	0	0	0	0	14.0	oct7-resumed-2.log	16✓, 14.0s
+tests/tools/test_file_sync.py	passed	15	0	0	0	0	4.0	oct7-resumed-2.log	15✓, 4.0s
+tests/tools/test_file_sync_back.py	passed	0	0	1	0	0	3.3	oct7-resumed-2.log	1s, 3.3s
+tests/tools/test_file_sync_perf.py	passed	1	0	3	0	0	8.1	oct7-resumed-2.log	1✓ 3s, 8.1s
+tests/tools/test_file_tools.py	passed	31	0	0	0	0	5.2	oct7-resumed-2.log	31✓, 5.2s
+tests/tools/test_file_tools_container_config.py	passed	4	0	0	0	0	4.5	oct7-resumed-2.log	4✓, 4.5s
+tests/tools/test_file_tools_live.py	failed	0	0	0	0	0	90.7	oct7-resumed-2.log	51 tests, 90.7s
+tests/tools/test_file_write_safety.py	failed	11	5	0	0	0	5.4	oct7-resumed-2.log	11✓ 5✗, 5.4s
+tests/tools/test_force_dangerous_override.py	passed	8	0	0	0	0	4.3	oct7-resumed-2.log	8✓, 4.3s
+tests/tools/test_fuzzy_match.py	passed	40	0	0	0	0	5.3	oct7-resumed-2.log	40✓, 5.3s
+tests/tools/test_gemini_resilient.py	passed	5	0	0	0	0	16.4	oct7-resumed-2.log	5✓, 16.4s
+tests/tools/test_hardline_blocklist.py	passed	100	0	0	0	0	6.5	oct7-resumed-2.log	100✓, 6.5s
+tests/tools/test_heartbeat_stale_thresholds.py	passed	5	0	0	0	0	4.4	oct7-resumed-2.log	5✓, 4.4s
+tests/tools/test_hidden_dir_filter.py	passed	11	0	0	0	0	4.4	oct7-resumed-2.log	11✓, 4.4s
+tests/tools/test_homeassistant_tool.py	passed	68	0	0	0	0	34.6	oct7-resumed-2.log	68✓, 34.6s
+tests/tools/test_image_generation.py	passed	55	0	0	0	0	4.8	oct7-resumed-2.log	55✓, 4.8s
+tests/tools/test_image_generation_env.py	passed	6	0	0	0	0	3.4	oct7-resumed-2.log	6✓, 3.4s
+tests/tools/test_image_generation_plugin_dispatch.py	passed	3	0	0	0	0	3.5	oct7-resumed-2.log	3✓, 3.5s
+tests/tools/test_init_session_cwd_respect.py	passed	4	0	0	0	0	3.3	oct7-resumed-2.log	4✓, 3.3s
+tests/tools/test_interrupt.py	passed	6	0	0	0	0	8.4	oct7-resumed-2.log	6✓, 8.4s
+tests/tools/test_kanban_codex_lane_skill.py	failed	2	1	0	0	0	7.7	oct7-resumed-2.log	2✓ 1✗, 7.7s
+tests/tools/test_kanban_tools.py	passed	81	0	0	0	0	26.2	oct7-resumed-2.log	81✓, 26.2s
+tests/tools/test_lazy_deps.py	passed	61	0	0	0	0	6.0	oct7-resumed-2.log	61✓, 6.0s
+tests/tools/test_line_ending_preservation.py	passed	12	0	0	0	0	21.8	oct7-resumed-2.log	12✓, 21.8s
+tests/tools/test_llm_content_none_guard.py	passed	28	0	0	0	0	4.4	oct7-resumed-2.log	28✓, 4.4s
+tests/tools/test_local_background_child_hang.py	failed	5	3	0	0	0	36.9	oct7-resumed-2.log	5✓ 3✗, 36.9s
+tests/tools/test_local_env_blocklist.py	failed	17	1	0	0	0	16.5	oct7-resumed-2.log	17✓ 1✗, 16.5s
+tests/tools/test_local_env_cwd_recovery.py	failed	8	1	0	0	0	8.5	oct7-resumed-2.log	8✓ 1✗, 8.5s
+tests/tools/test_local_env_windows_msys.py	passed	10	0	0	0	0	6.9	oct7-resumed-2.log	10✓, 6.9s
+tests/tools/test_local_interrupt_cleanup.py	failed	0	2	0	0	0	8.8	oct7-resumed-2.log	2✗, 8.8s
+tests/tools/test_local_shell_init.py	failed	9	5	0	0	0	17.0	oct7-resumed-2.log	9✓ 5✗, 17.0s
+tests/tools/test_local_tempdir.py	failed	0	3	0	0	0	10.3	oct7-resumed-2.log	3✗, 10.3s
+tests/tools/test_location_scope.py	passed	4	0	0	0	0	10.0	oct7-resumed-2.log	4✓, 10.0s
+tests/tools/test_managed_browserbase_and_modal.py	passed	10	0	0	0	0	11.1	oct7-resumed-2.log	10✓, 11.1s
+tests/tools/test_managed_media_gateways.py	passed	5	0	0	0	0	5.7	oct7-resumed-2.log	5✓, 5.7s
+tests/tools/test_managed_modal_environment.py	passed	7	0	0	0	0	5.6	oct7-resumed-2.log	7✓, 5.6s
+tests/tools/test_managed_tool_gateway.py	passed	5	0	0	0	0	6.0	oct7-resumed-2.log	5✓, 6.0s
+tests/tools/test_mcp_cancelled_error_propagation.py	passed	2	0	0	0	0	7.1	oct7-resumed-2.log	2✓, 7.1s
+tests/tools/test_mcp_circuit_breaker.py	passed	3	0	0	0	0	7.0	oct7-resumed-2.log	3✓, 7.0s
+tests/tools/test_mcp_dynamic_discovery.py	passed	10	0	0	0	0	7.0	oct7-resumed-2.log	10✓, 7.0s
+tests/tools/test_mcp_empty_error_message.py	passed	6	0	0	0	0	6.8	oct7-resumed-2.log	6✓, 6.8s
+tests/tools/test_mcp_image_content.py	passed	9	0	0	0	0	6.9	oct7-resumed-2.log	9✓, 6.9s
+tests/tools/test_mcp_invalid_url.py	passed	21	0	0	0	0	6.6	oct7-resumed-2.log	21✓, 6.6s
+tests/tools/test_mcp_oauth.py	failed	0	0	0	0	0	6.8	oct7-resumed-2.log	67 tests, 6.8s
+tests/tools/test_mcp_oauth_bidirectional.py	passed	2	0	0	0	0	10.2	oct7-resumed-2.log	2✓, 10.2s
+tests/tools/test_mcp_oauth_cold_load_expiry.py	passed	9	0	0	0	0	10.0	oct7-resumed-2.log	9✓, 10.0s
+tests/tools/test_mcp_oauth_integration.py	passed	5	0	0	0	0	10.6	oct7-resumed-2.log	5✓, 10.6s
+tests/tools/test_mcp_oauth_manager.py	passed	7	0	0	0	0	7.5	oct7-resumed-2.log	7✓, 7.5s
+tests/tools/test_mcp_oauth_metadata.py	passed	9	0	0	0	0	7.5	oct7-resumed-2.log	9✓, 7.5s
+tests/tools/test_mcp_probe.py	passed	8	0	0	0	0	7.1	oct7-resumed-2.log	8✓, 7.1s
+tests/tools/test_mcp_reconnect_signal.py	passed	4	0	0	0	0	7.0	oct7-resumed-2.log	4✓, 7.0s
+tests/tools/test_mcp_sse_transport.py	passed	4	0	0	0	0	9.6	oct7-resumed-2.log	4✓, 9.6s
+tests/tools/test_mcp_stability.py	passed	16	0	0	0	0	20.9	oct7-resumed-2.log	16✓, 20.9s
+tests/tools/test_mcp_structured_content.py	passed	5	0	0	0	0	8.3	oct7-resumed-2.log	5✓, 8.3s
+tests/tools/test_mcp_tool.py	passed	196	0	0	0	0	42.0	oct7-resumed-2.log	196✓, 42.0s
+tests/tools/test_mcp_tool_401_handling.py	passed	7	0	0	0	0	10.9	oct7-resumed-2.log	7✓, 10.9s
+tests/tools/test_mcp_tool_issue_948.py	passed	4	0	0	0	0	21.4	oct7-resumed-2.log	4✓, 21.4s
+tests/tools/test_mcp_tool_session_expired.py	passed	18	0	0	0	0	9.5	oct7-resumed-2.log	18✓, 9.5s
+tests/tools/test_mcp_utility_capability_gating.py	passed	8	0	0	0	0	7.6	oct7-resumed-2.log	8✓, 7.6s
+tests/tools/test_memory_semantic.py	passed	4	0	0	0	0	4.2	oct7-resumed-2.log	4✓, 4.2s
+tests/tools/test_memory_tool.py	passed	68	0	0	0	0	7.3	oct7-resumed-3.log	68✓, 7.3s
+tests/tools/test_memory_tool_import_fallback.py	passed	1	0	0	0	0	4.9	oct7-resumed-3.log	1✓, 4.9s
+tests/tools/test_memory_tool_schema.py	passed	3	0	0	0	0	4.9	oct7-resumed-3.log	3✓, 4.9s
+tests/tools/test_microsoft_graph_auth.py	failed	14	1	0	0	0	6.2	oct7-resumed-3.log	14✓ 1✗, 6.2s
+tests/tools/test_microsoft_graph_client.py	passed	18	0	0	0	0	5.4	oct7-resumed-3.log	18✓, 5.4s
+tests/tools/test_mixture_of_agents_tool.py	passed	3	0	0	0	0	6.6	oct7-resumed-3.log	3✓, 6.6s
+tests/tools/test_modal_bulk_upload.py	failed	8	1	0	0	0	5.9	oct7-resumed-3.log	8✓ 1✗, 5.9s
+tests/tools/test_modal_sandbox_fixes.py	failed	20	2	0	0	0	9.5	oct7-resumed-3.log	20✓ 2✗, 9.5s
+tests/tools/test_modal_snapshot_isolation.py	passed	4	0	0	0	0	5.4	oct7-resumed-3.log	4✓, 5.4s
+tests/tools/test_notify_on_complete.py	passed	25	0	0	0	0	5.6	oct7-resumed-3.log	25✓, 5.6s
+tests/tools/test_osv_check.py	passed	24	0	0	0	0	6.8	oct7-resumed-3.log	24✓, 6.8s
+tests/tools/test_parse_env_var.py	passed	12	0	0	0	0	5.9	oct7-resumed-3.log	12✓, 5.9s
+tests/tools/test_patch_failure_tracking.py	passed	5	0	0	0	0	19.2	oct7-resumed-3.log	5✓, 19.2s
+tests/tools/test_patch_parser.py	passed	25	0	0	0	0	6.0	oct7-resumed-3.log	25✓, 6.0s
+tests/tools/test_pr_6656_regressions.py	failed	9	1	0	0	0	6.0	oct7-resumed-3.log	9✓ 1✗, 6.0s
+tests/tools/test_process_registry.py	failed	57	2	5	0	0	10.3	oct7-resumed-3.log	57✓ 2✗ 5s, 10.3s
+tests/tools/test_product_action_approval.py	passed	2	0	0	0	0	4.0	oct7-resumed-3.log	2✓, 4.0s
+tests/tools/test_project_state.py	passed	3	0	0	0	0	5.0	oct7-resumed-3.log	3✓, 5.0s
+tests/tools/test_read_loop_detection.py	passed	25	0	0	0	0	6.8	oct7-resumed-3.log	25✓, 6.8s
+tests/tools/test_registry.py	passed	31	0	0	0	0	11.6	oct7-resumed-3.log	31✓, 11.6s
+tests/tools/test_resolve_path.py	passed	6	0	0	0	0	5.7	oct7-resumed-3.log	6✓, 5.7s
+tests/tools/test_schema_sanitizer.py	passed	40	0	0	0	0	5.8	oct7-resumed-3.log	40✓, 5.8s
+tests/tools/test_search_hidden_dirs.py	passed	9	0	0	0	0	5.2	oct7-resumed-3.log	9✓, 5.2s
+tests/tools/test_self_improve_verify.py	passed	29	0	0	0	0	5.2	oct7-resumed-3.log	29✓, 5.2s
+tests/tools/test_send_message_missing_platforms.py	passed	19	0	0	0	0	5.8	oct7-resumed-3.log	19✓, 5.8s
+tests/tools/test_send_message_telegram_proxy.py	passed	2	0	0	0	0	4.8	oct7-resumed-3.log	2✓, 4.8s
+tests/tools/test_send_message_tool.py	passed	0	0	1	0	0	4.0	oct7-resumed-3.log	1s, 4.0s
+tests/tools/test_session_search.py	passed	38	0	0	0	0	9.6	oct7-resumed-3.log	38✓, 9.6s
+tests/tools/test_shared_container_task_id.py	passed	9	0	0	0	0	5.2	oct7-resumed-3.log	9✓, 5.2s
+tests/tools/test_signal_media.py	passed	5	0	3	0	0	4.9	oct7-resumed-3.log	5✓ 3s, 4.9s
+tests/tools/test_singularity_preflight.py	passed	7	0	0	0	0	5.0	oct7-resumed-3.log	7✓, 5.0s
+tests/tools/test_skill_env_passthrough.py	passed	4	0	0	0	0	5.0	oct7-resumed-3.log	4✓, 5.0s
+tests/tools/test_skill_improvements.py	passed	9	0	0	0	0	5.7	oct7-resumed-3.log	9✓, 5.7s
+tests/tools/test_skill_manager_tool.py	passed	86	0	0	0	0	11.3	oct7-resumed-3.log	86✓, 11.3s
+tests/tools/test_skill_provenance.py	passed	5	0	0	0	0	5.0	oct7-resumed-3.log	5✓, 5.0s
+tests/tools/test_skill_size_limits.py	passed	14	0	0	0	0	7.8	oct7-resumed-3.log	14✓, 7.8s
+tests/tools/test_skill_usage.py	passed	41	0	0	0	0	16.4	oct7-resumed-3.log	41✓, 16.4s
+tests/tools/test_skill_view_path_check.py	passed	6	0	0	0	0	8.4	oct7-resumed-3.log	6✓, 8.4s
+tests/tools/test_skill_view_traversal.py	passed	6	0	0	0	0	8.8	oct7-resumed-3.log	6✓, 8.8s
+tests/tools/test_skills_ast_audit.py	passed	11	0	0	0	0	9.1	oct7-resumed-3.log	11✓, 9.1s
+tests/tools/test_skills_guard.py	passed	63	0	0	0	0	11.3	oct7-resumed-3.log	63✓, 11.3s
+tests/tools/test_skills_hub.py	failed	122	3	0	0	0	38.5	oct7-resumed-3.log	122✓ 3✗, 38.5s
+tests/tools/test_skills_hub_browse_sh.py	passed	7	0	0	0	0	7.2	oct7-resumed-3.log	7✓, 7.2s
+tests/tools/test_skills_hub_clawhub.py	passed	9	0	0	0	0	7.3	oct7-resumed-3.log	9✓, 7.3s
+tests/tools/test_skills_sync.py	passed	45	0	0	0	0	10.4	oct7-resumed-3.log	45✓, 10.4s
+tests/tools/test_skills_tool.py	failed	86	1	0	0	0	12.3	oct7-resumed-3.log	86✓ 1✗, 12.3s
+tests/tools/test_slash_confirm.py	passed	16	0	0	0	0	6.6	oct7-resumed-3.log	16✓, 6.6s
+tests/tools/test_spotify_client.py	passed	14	0	0	0	0	6.3	oct7-resumed-3.log	14✓, 6.3s
+tests/tools/test_ssh_bulk_upload.py	failed	16	5	0	0	0	7.6	oct7-resumed-3.log	16✓ 5✗, 7.6s
+tests/tools/test_ssh_environment.py	passed	14	0	11	0	0	7.1	oct7-resumed-3.log	14✓ 11s, 7.1s
+tests/tools/test_symlink_prefix_confusion.py	passed	8	0	0	0	0	5.9	oct7-resumed-3.log	8✓, 5.9s
+tests/tools/test_sync_back_backends.py	passed	18	0	0	0	0	6.6	oct7-resumed-3.log	18✓, 6.6s
+tests/tools/test_terminal_compound_background.py	passed	34	0	0	0	0	6.8	oct7-resumed-3.log	34✓, 6.8s
+tests/tools/test_terminal_config_env_sync.py	passed	5	0	0	0	0	8.1	oct7-resumed-3.log	5✓, 8.1s
+tests/tools/test_terminal_exit_semantics.py	passed	31	0	0	0	0	6.0	oct7-resumed-3.log	31✓, 6.0s
+tests/tools/test_terminal_foreground_timeout_cap.py	passed	11	0	0	0	0	5.6	oct7-resumed-3.log	11✓, 5.6s
+tests/tools/test_terminal_none_command_guard.py	passed	2	0	0	0	0	4.8	oct7-resumed-3.log	2✓, 4.8s
+tests/tools/test_terminal_output_transform_hook.py	passed	9	0	0	0	0	7.0	oct7-resumed-3.log	9✓, 7.0s
+tests/tools/test_terminal_requirements.py	passed	20	0	0	0	0	5.4	oct7-resumed-3.log	20✓, 5.4s
+tests/tools/test_terminal_task_cwd.py	passed	2	0	0	0	0	5.6	oct7-resumed-3.log	2✓, 5.6s
+tests/tools/test_terminal_timeout_output.py	passed	2	0	0	0	0	14.6	oct7-resumed-3.log	2✓, 14.6s
+tests/tools/test_terminal_tool.py	passed	14	0	0	0	0	5.0	oct7-resumed-3.log	14✓, 5.0s
+tests/tools/test_terminal_tool_pty_fallback.py	passed	3	0	0	0	0	4.8	oct7-resumed-3.log	3✓, 4.8s
+tests/tools/test_terminal_tool_requirements.py	passed	6	0	0	0	0	9.0	oct7-resumed-3.log	6✓, 9.0s
+tests/tools/test_threaded_process_handle.py	passed	12	0	0	0	0	5.0	oct7-resumed-3.log	12✓, 5.0s
+tests/tools/test_threat_patterns.py	passed	37	0	0	0	0	6.0	oct7-resumed-3.log	37✓, 6.0s
+tests/tools/test_tirith_security.py	failed	50	40	0	0	0	12.9	oct7-resumed-3.log	50✓ 40✗, 12.9s
+tests/tools/test_todo_tool.py	passed	12	0	0	0	0	5.5	oct7-resumed-3.log	12✓, 5.5s
+tests/tools/test_tool_backend_helpers.py	passed	47	0	0	0	0	7.2	oct7-resumed-3.log	47✓, 7.2s
+tests/tools/test_tool_output_limits.py	passed	18	0	0	0	0	5.9	oct7-resumed-3.log	18✓, 5.9s
+tests/tools/test_tool_result_storage.py	passed	49	0	0	0	0	8.0	oct7-resumed-3.log	49✓, 8.0s
+tests/tools/test_transcription.py	passed	26	0	0	0	0	9.8	oct7-resumed-3.log	26✓, 9.8s
+tests/tools/test_transcription_command_providers.py	passed	50	0	0	0	0	14.9	oct7-resumed-3.log	50✓, 14.9s
+tests/tools/test_transcription_dotenv_fallback.py	passed	10	0	0	0	0	6.5	oct7-resumed-3.log	10✓, 6.5s
+tests/tools/test_transcription_plugin_dispatch.py	passed	28	0	0	0	0	12.6	oct7-resumed-3.log	28✓, 12.6s
+tests/tools/test_transcription_tools.py	passed	96	0	0	0	0	11.4	oct7-resumed-3.log	96✓, 11.4s
+tests/tools/test_troika_assistant_tool.py	passed	5	0	0	0	0	6.8	oct7-resumed-3.log	5✓, 6.8s
+tests/tools/test_troika_documents_tool.py	passed	6	0	0	0	0	5.1	oct7-final-product-tests.log	6✓, 5.1s
+tests/tools/test_troika_screen_tool.py	passed	5	0	0	0	0	6.6	oct7-resumed-3.log	5✓, 6.6s
+tests/tools/test_tts_command_providers.py	passed	51	0	1	0	0	12.2	oct7-resumed-3.log	51✓ 1s, 12.2s
+tests/tools/test_tts_dotenv_fallback.py	passed	8	0	0	0	0	6.1	oct7-resumed-4.log	8✓, 6.1s
+tests/tools/test_tts_gemini.py	passed	15	0	0	0	0	12.6	oct7-resumed-4.log	15✓, 12.6s
+tests/tools/test_tts_kittentts.py	passed	10	0	0	0	0	6.7	oct7-resumed-4.log	10✓, 6.7s
+tests/tools/test_tts_max_text_length.py	passed	27	0	0	0	0	8.5	oct7-resumed-4.log	27✓, 8.5s
+tests/tools/test_tts_mistral.py	passed	16	0	0	0	0	6.9	oct7-resumed-4.log	16✓, 6.9s
+tests/tools/test_tts_opus_routing.py	passed	2	0	0	0	0	6.0	oct7-resumed-4.log	2✓, 6.0s
+tests/tools/test_tts_path_traversal.py	passed	4	0	0	0	0	11.8	oct7-resumed-4.log	4✓, 11.8s
+tests/tools/test_tts_piper.py	passed	16	0	0	0	0	5.5	oct7-resumed-4.log	16✓, 5.5s
+tests/tools/test_tts_plugin_dispatch.py	passed	35	0	0	0	0	8.7	oct7-resumed-4.log	35✓, 8.7s
+tests/tools/test_tts_speed.py	passed	19	0	0	0	0	5.5	oct7-resumed-4.log	19✓, 5.5s
+tests/tools/test_tts_xai_speech_tags.py	passed	8	0	0	0	0	5.3	oct7-resumed-4.log	8✓, 5.3s
+tests/tools/test_url_safety.py	passed	112	0	0	0	0	10.5	oct7-resumed-4.log	112✓, 10.5s
+tests/tools/test_vercel_sandbox_environment.py	failed	15	1	0	0	0	20.4	oct7-resumed-4.log	15✓ 1✗, 20.4s
+tests/tools/test_video_analyze.py	passed	29	0	0	0	0	7.9	oct7-resumed-4.log	29✓, 7.9s
+tests/tools/test_video_generation_dispatch.py	passed	7	0	0	0	0	6.7	oct7-resumed-4.log	7✓, 6.7s
+tests/tools/test_video_generation_dynamic_schema.py	passed	5	0	0	0	0	10.6	oct7-resumed-4.log	5✓, 10.6s
+tests/tools/test_video_generation_tool_surface_matrix.py	passed	16	0	0	0	0	18.6	oct7-resumed-4.log	16✓, 18.6s
+tests/tools/test_vision_native_fast_path.py	passed	18	0	0	0	0	11.3	oct7-resumed-4.log	18✓, 11.3s
+tests/tools/test_vision_tools.py	failed	69	1	0	0	0	21.5	oct7-resumed-4.log	69✓ 1✗, 21.5s
+tests/tools/test_voice_cli_integration.py	passed	84	0	0	0	0	12.8	oct7-resumed-4.log	84✓, 12.8s
+tests/tools/test_voice_mode.py	passed	62	0	0	0	0	13.1	oct7-resumed-4.log	62✓, 13.1s
+tests/tools/test_watch_patterns.py	passed	29	0	0	0	0	6.7	oct7-resumed-4.log	29✓, 6.7s
+tests/tools/test_web_providers.py	failed	12	2	0	0	0	18.6	oct7-resumed-4.log	12✓ 2✗, 18.6s
+tests/tools/test_web_providers_brave_free.py	passed	22	0	0	0	0	9.7	oct7-resumed-4.log	22✓, 9.7s
+tests/tools/test_web_providers_ddgs.py	passed	18	0	0	0	0	9.8	oct7-resumed-4.log	18✓, 9.8s
+tests/tools/test_web_providers_searxng.py	failed	24	1	0	0	0	11.6	oct7-resumed-4.log	24✓ 1✗, 11.6s
+tests/tools/test_web_providers_xai.py	passed	39	0	0	0	0	7.6	oct7-resumed-4.log	39✓, 7.6s
+tests/tools/test_web_research.py	passed	7	0	0	0	0	7.0	oct7-resumed-4.log	7✓, 7.0s
+tests/tools/test_web_tools_config.py	failed	47	2	0	0	0	9.7	oct7-resumed-4.log	47✓ 2✗, 9.7s
+tests/tools/test_web_tools_tavily.py	passed	15	0	0	0	0	17.6	oct7-resumed-4.log	15✓, 17.6s
+tests/tools/test_website_policy.py	passed	22	0	0	0	0	21.3	oct7-resumed-4.log	22✓, 21.3s
+tests/tools/test_windows_compat.py	passed	12	0	0	0	0	8.1	oct7-resumed-4.log	12✓, 8.1s
+tests/tools/test_windows_native_support.py	failed	55	3	0	0	0	13.7	oct7-resumed-4.log	55✓ 3✗, 13.7s
+tests/tools/test_write_deny.py	passed	20	0	0	0	0	8.2	oct7-resumed-4.log	20✓, 8.2s
+tests/tools/test_x_search_tool.py	passed	25	0	0	0	0	10.0	oct7-resumed-4.log	25✓, 10.0s
+tests/tools/test_yolo_mode.py	passed	19	0	0	0	0	8.1	oct7-resumed-4.log	19✓, 8.1s
+tests/tools/test_zombie_process_cleanup.py	failed	8	1	0	0	0	21.5	oct7-resumed-4.log	8✓ 1✗, 21.5s
+tests/troika_product/test_access.py	passed	15	0	0	0	0	11.0	oct7-resumed-4.log	15✓, 11.0s
+tests/troika_product/test_artifacts.py	passed	5	0	0	0	0	9.0	oct7-resumed-4.log	5✓, 9.0s
+tests/troika_product/test_completion.py	passed	42	0	0	0	0	4.1	oct7-final-product-tests.log	42✓, 4.1s
+tests/troika_product/test_device_delivery.py	passed	16	0	0	0	0	3.6	oct7-final-product-tests.log	16✓, 3.6s
+tests/troika_product/test_feature_policy.py	passed	4	0	0	0	0	5.9	oct7-resumed-4.log	4✓, 5.9s
+tests/troika_product/test_memory.py	passed	3	0	0	0	0	7.8	oct7-resumed-4.log	3✓, 7.8s
+tests/troika_product/test_notifications.py	passed	32	0	0	0	0	8.6	oct7-resumed-4.log	32✓, 8.6s
+tests/troika_product/test_proactive.py	passed	9	0	0	0	0	11.9	oct7-resumed-4.log	9✓, 11.9s
+tests/troika_product/test_retention.py	passed	3	0	0	0	0	10.0	oct7-resumed-4.log	3✓, 10.0s
+tests/troika_product/test_vision_sessions.py	passed	2	0	0	0	0	7.3	oct7-resumed-4.log	2✓, 7.3s
+tests/troika_product/test_voice.py	passed	15	0	0	0	0	13.0	oct7-resumed-4.log	15✓, 13.0s
+tests/troika_product/test_web_sources.py	passed	15	0	0	0	0	6.3	oct7-resumed-4.log	15✓, 6.3s
+tests/troika_product/test_workspace.py	passed	7	0	0	0	0	10.2	oct7-resumed-4.log	7✓, 10.2s
+tests/tui_gateway/test_entry_sys_path.py	passed	4	0	0	0	0	4.9	oct7-resumed-4.log	4✓, 4.9s
+tests/tui_gateway/test_goal_command.py	passed	11	0	0	0	0	17.6	oct7-resumed-4.log	11✓, 17.6s
+tests/tui_gateway/test_make_agent_provider.py	passed	7	0	0	0	0	9.2	oct7-resumed-4.log	7✓, 9.2s
+tests/tui_gateway/test_protocol.py	passed	53	0	0	0	0	15.9	oct7-resumed-4.log	53✓, 15.9s
+tests/tui_gateway/test_render.py	passed	7	0	0	0	0	4.5	oct7-resumed-4.log	7✓, 4.5s
+tests/tui_gateway/test_review_summary_callback.py	passed	2	0	0	0	0	4.4	oct7-resumed-4.log	2✓, 4.4s
+tests/website/test_generate_skill_docs.py	passed	7	0	0	0	0	4.2	oct7-resumed-4.log	7✓, 4.2s

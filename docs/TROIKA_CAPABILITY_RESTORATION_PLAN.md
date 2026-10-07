@@ -1,6 +1,7 @@
 # Восстановление возможностей Troika
 
-Обновлено 2026-10-05. Подчиняется [Word-плану](Troika_1.0_Launch_Plan_Final_Updated.docx).
+Обновлено 2026-10-07. Подчиняется [Word-плану](Troika_1.0_Launch_Plan_Final_Updated.docx)
+и согласованным дополнениям в [основном плане](../PRODUCTIZATION_PLAN.md).
 Текущие результаты и поломки находятся в [аудите функций](TROIKA_FUNCTIONAL_AUDIT.md).
 Этот документ описывает границы и условия восстановления, без второй очереди статусов.
 
@@ -17,6 +18,14 @@
 | Windows | Локальные allowlist actions, Compact/Command Center, hotkey, approved screenshot. | Installed-client E2E и отдельный Companion для расширенного управления. |
 
 ## Неподключённые возможности
+
+Владелец согласовал режим разработки 6 октября. Первый объём: создание ZIP
+с исходниками/README/тестами, локальное сохранение, отдельный запуск Python
+синтаксиса/unittest или JavaScript синтаксиса на Windows, передача текущих
+исходников и отчёта ИИ для новой версии. Это отдельное разрешение на локальные
+проверки, а не unrestricted hosted shell. Работа с существующим repository,
+произвольные сборки, зависимости и управление ПК с телефона остаются этапом 4
+основного плана. Установленный клиент и production ещё требуют обновления/E2E.
 
 Live WebRTC screen assist, live CameraX vision, полный Accessibility control,
 автономный PC-agent, GROUND, legacy DAEMON, Kali, self-improvement, video

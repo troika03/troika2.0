@@ -79,6 +79,7 @@ def _safe_product_action_result(tool_name: str, raw_result: Any) -> Optional[Dic
     """Expose only owner-safe product result metadata to first-party clients."""
     if tool_name not in {
         "troika_create_docx", "troika_create_pdf", "troika_create_pptx",
+        "troika_create_project",
         "troika_assistant", "troika_reminder", "troika_files",
     }:
         return None
@@ -96,10 +97,14 @@ def _safe_product_action_result(tool_name: str, raw_result: Any) -> Optional[Dic
         if not isinstance(artifact, dict) or not artifact.get("id") or not artifact.get("filename"):
             return None
         return {
-            "kind": "file",
+            "kind": "file_pending" if artifact.get("storage") == "device" else "file",
             "id": str(artifact.get("id") or "")[:128],
             "title": str(artifact.get("filename") or "Файл создан")[:240],
             "file_type": str(artifact.get("kind") or "")[:32],
+            **({"artifact": {k: v for k, v in artifact.items() if k in {
+                "id", "filename", "kind", "mime_type", "size", "sha256", "created_at",
+                "storage", "status", "expires_at", "download_url",
+            } and isinstance(v, (str, int, float))}} if artifact.get("storage") == "device" else {}),
         }
 
     action = str(payload.get("action") or "")
@@ -1873,6 +1878,8 @@ class APIServerAdapter(BasePlatformAdapter):
 
     def _purge_account_data_sync(self, user_id: str) -> None:
         """Purge external local stores, then atomically remove product rows."""
+        from troika_product.device_delivery import device_deliveries
+        device_deliveries.purge_owner(user_id)
         if self._access_registry is None:
             raise RuntimeError("product access registry is unavailable")
         manifest = self._access_registry.account_deletion_manifest(user_id)
@@ -1982,6 +1989,8 @@ class APIServerAdapter(BasePlatformAdapter):
 
     async def _revoke_device_activity(self, user_id: str, device_id: str) -> None:
         """Close live channels and stop transient work for one revoked device."""
+        from troika_product.device_delivery import device_deliveries
+        device_deliveries.purge_owner(user_id, device_id)
         from gateway.platforms.phone_bridge import product_bridge
 
         await product_bridge.disconnect_devices({device_id})
@@ -2378,6 +2387,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 "tool_progress_events": True,
                 "approval_events": True,
                 "private_artifacts": self._artifact_store is not None,
+                "device_file_delivery": self._access_registry is not None,
                 "private_workspace": self._workspace_store is not None,
                 "notification_preferences": self._access_registry is not None,
                 "assistant_projects": self._proactive_store is not None,
@@ -2875,6 +2885,28 @@ class APIServerAdapter(BasePlatformAdapter):
             )
         return self._artifact_store, principal
 
+    async def _handle_device_file(self, request: "web.Request") -> "web.Response":
+        """Owner/device-bound RAM download and acknowledgement after durable local save."""
+        error = self._check_auth(request)
+        if error:
+            return error
+        principal = self._product_principal(request)
+        if principal is None:
+            return web.json_response(_openai_error("Product account required"), status=403)
+        from troika_product.device_delivery import device_deliveries
+        item_id = request.match_info.get("delivery_id", "")
+        if not item_id and request.method == "GET":
+            return web.json_response({"data": device_deliveries.list_pending(principal.user_id, principal.device_id)},
+                                     headers={"Cache-Control": "no-store"})
+        item = device_deliveries.get(item_id, principal.user_id, principal.device_id)
+        if item is None:
+            return web.json_response(_openai_error("File expired or unavailable"), status=404)
+        if request.method == "POST":
+            device_deliveries.acknowledge(item_id, principal.user_id, principal.device_id)
+            return web.json_response({"ok": True})
+        return web.Response(body=item.data, content_type=item.mime_type,
+                            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
     async def _handle_list_artifacts(self, request: "web.Request") -> "web.Response":
         """GET /v1/artifacts — list only the authenticated user's files."""
         resolved = self._require_artifact_principal(request)
@@ -3355,6 +3387,10 @@ class APIServerAdapter(BasePlatformAdapter):
         except (json.JSONDecodeError, Exception):
             return web.json_response(_openai_error("Invalid JSON in request body"), status=400)
 
+        delivery_mode = body.get("artifact_delivery", "server")
+        if not isinstance(delivery_mode, str) or delivery_mode not in {"device", "server"}:
+            return web.json_response(_openai_error("Invalid artifact_delivery"), status=400)
+
         messages = body.get("messages")
         if not messages or not isinstance(messages, list):
             return web.json_response(
@@ -3667,6 +3703,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 agent_ref=agent_ref,
                 gateway_session_key=gateway_session_key,
                 product_principal=product_principal,
+                delivery_mode=delivery_mode,
             ))
             # Ensure SSE drain loops can terminate without relying on polling
             # agent_task.done(), which can race with queue timeout checks.
@@ -3687,11 +3724,12 @@ class APIServerAdapter(BasePlatformAdapter):
                 session_id=session_id,
                 gateway_session_key=gateway_session_key,
                 product_principal=product_principal,
+                delivery_mode=delivery_mode,
             )
 
         idempotency_key = request.headers.get("Idempotency-Key")
         if idempotency_key:
-            fp = _make_request_fingerprint(body, keys=["model", "messages", "tools", "tool_choice", "stream"])
+            fp = _make_request_fingerprint(body, keys=["model", "messages", "tools", "tool_choice", "stream", "artifact_delivery"])
             try:
                 result, usage = await _idem_cache.get_or_set(idempotency_key, fp, _compute_completion)
             except Exception as e:
@@ -5222,6 +5260,7 @@ class APIServerAdapter(BasePlatformAdapter):
         agent_ref: Optional[list] = None,
         gateway_session_key: Optional[str] = None,
         product_principal: Optional[Any] = None,
+        delivery_mode: str = "server",
     ) -> tuple:
         """
         Create an agent and run a conversation in a thread executor.
@@ -5248,6 +5287,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 # never from model arguments or caller-controlled headers.
                 # ContextVars propagate into parallel tool workers.
                 set_session_override("TROIKA_PRODUCT_MODE", "1")
+                set_session_override("TROIKA_PRODUCT_DELIVERY_MODE", delivery_mode)
                 set_session_override(
                     "TROIKA_PRODUCT_USER_ID", product_principal.user_id
                 )
@@ -5276,6 +5316,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 product_override_names.extend(
                     [
                         "TROIKA_PRODUCT_MODE",
+                        "TROIKA_PRODUCT_DELIVERY_MODE",
                         "TROIKA_PRODUCT_USER_ID",
                         "TROIKA_PRODUCT_DEVICE_ID",
                         "TROIKA_PRODUCT_TOKEN_ID",
@@ -5464,6 +5505,9 @@ class APIServerAdapter(BasePlatformAdapter):
         except Exception:
             return web.json_response(_openai_error("Invalid JSON"), status=400)
 
+        delivery_mode = body.get("artifact_delivery", "server")
+        if not isinstance(delivery_mode, str) or delivery_mode not in {"device", "server"}:
+            return web.json_response(_openai_error("Invalid artifact_delivery"), status=400)
         raw_input = body.get("input")
         if not raw_input:
             return web.json_response(_openai_error("Missing 'input' field"), status=400)
@@ -5673,6 +5717,7 @@ class APIServerAdapter(BasePlatformAdapter):
                             set_session_override(
                                 "TROIKA_PRODUCT_TOKEN_ID", principal.token_id
                             )
+                            set_session_override("TROIKA_PRODUCT_DELIVERY_MODE", delivery_mode)
                             set_session_override(
                                 "TROIKA_PRODUCT_ARTIFACTS_AVAILABLE",
                                 "1" if self._artifact_store is not None else "0",
@@ -5695,6 +5740,7 @@ class APIServerAdapter(BasePlatformAdapter):
                                     "TROIKA_PRODUCT_USER_ID",
                                     "TROIKA_PRODUCT_DEVICE_ID",
                                     "TROIKA_PRODUCT_TOKEN_ID",
+                                    "TROIKA_PRODUCT_DELIVERY_MODE",
                                     "TROIKA_PRODUCT_ARTIFACTS_AVAILABLE",
                                     "TROIKA_PRODUCT_WORKSPACE_AVAILABLE",
                                     "TROIKA_PRODUCT_SCREEN_SNAPSHOT_ENABLED",
@@ -6323,6 +6369,9 @@ class APIServerAdapter(BasePlatformAdapter):
             self._app.router.add_get("/v1/phone/commands", self._handle_phone_ws)
             self._app.router.add_get("/v1/phone/status", self._handle_phone_status)
             self._app.router.add_get("/v1/artifacts", self._handle_list_artifacts)
+            self._app.router.add_get("/v1/device-files", self._handle_device_file)
+            self._app.router.add_get("/v1/device-files/{delivery_id}", self._handle_device_file)
+            self._app.router.add_post("/v1/device-files/{delivery_id}/received", self._handle_device_file)
             self._app.router.add_get(
                 "/v1/artifacts/{artifact_id}/download",
                 self._handle_download_artifact,

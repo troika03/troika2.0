@@ -112,6 +112,14 @@ def _handle_files(args: dict[str, Any], **kwargs: Any) -> str:
     user_id = identity[0]
     action = str(args.get("action") or "").strip().lower()
     path = str(args.get("path") or "")
+    if get_session_env("TROIKA_PRODUCT_DELIVERY_MODE", "server") == "device":
+        if action == "write":
+            from tools.troika_documents_tool import _handle_project
+            return _handle_project({"title": Path(path).stem or "project",
+                                    "files": [{"path": path, "content": str(args.get("content") or "")}]}, **kwargs)
+        if action in {"replace", "mkdir", "copy", "move"}:
+            return _result(False, error="device_project_required",
+                           message="Use troika_create_project to prepare a new local version; no server workspace writes.")
     store = _store()
     try:
         if action == "list":
@@ -325,6 +333,9 @@ def _handle_terminal(args: dict[str, Any], **kwargs: Any) -> str:
     command_text = str(args.get("command") or "")
     try:
         tokens = _terminal_tokens(command_text)
+        if get_session_env("TROIKA_PRODUCT_DELIVERY_MODE", "server") == "device" and tokens[0] in {"touch", "mkdir", "cp", "mv"}:
+            return _result(False, error="device_project_required",
+                           message="Create source files with troika_create_project; checks run on the user's PC.")
         output = _terminal_run(
             _store(),
             identity[0],

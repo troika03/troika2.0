@@ -13,6 +13,8 @@ from tools.registry import registry
 from troika_product.access import AccessPrincipal, AccessRegistry
 from troika_product.artifacts import ArtifactStore, safe_artifact_filename
 from troika_product.document_generation import generate_docx, generate_pdf, generate_pptx
+from troika_product.device_delivery import device_deliveries
+from troika_product.development import build_project
 
 
 logger = logging.getLogger(__name__)
@@ -78,6 +80,7 @@ def _create_artifact(
 ) -> str:
     if (
         get_session_env("TROIKA_PRODUCT_MODE", "") == "1"
+        and get_session_env("TROIKA_PRODUCT_DELIVERY_MODE", "server") != "device"
         and get_session_env("TROIKA_PRODUCT_ARTIFACTS_AVAILABLE", "") != "1"
     ):
         return json.dumps(
@@ -107,6 +110,14 @@ def _create_artifact(
         )
 
     try:
+        if get_session_env("TROIKA_PRODUCT_DELIVERY_MODE", "server") == "device":
+            mime = {"docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    "pdf": "application/pdf"}[kind]
+            artifact = device_deliveries.create(user_id, device_id, filename, kind, mime, data)
+            return json.dumps({"ok": True, "artifact": artifact,
+                               "message": "File prepared for device download; not yet saved on device."},
+                              ensure_ascii=False)
         artifact = _artifact_store().create(
             user_id=user_id,
             device_id=device_id,
@@ -147,6 +158,22 @@ def _handle_pptx(args: dict[str, Any], **kwargs: Any) -> str:
     )
 
 
+def _handle_project(args: dict[str, Any], **kwargs: Any) -> str:
+    identity = _product_identity()
+    if identity is None:
+        return json.dumps({"ok": False, "error": "product_identity_required"})
+    if get_session_env("TROIKA_PRODUCT_DELIVERY_MODE", "server") != "device":
+        return json.dumps({"ok": False, "error": "device_delivery_client_required"})
+    try:
+        data, checks = build_project(args)
+        name = str(args.get("title") or "project")
+        artifact = device_deliveries.create(identity[0], identity[1], name, "zip", "application/zip", data)
+        return json.dumps({"ok": True, "artifact": artifact, "checks": checks,
+                           "execution": "not_run", "message": "Source project prepared. Only syntax checks ran; tests must run on the user's PC."}, ensure_ascii=False)
+    except ValueError as error:
+        return json.dumps({"ok": False, "error": "project_generation_failed", "message": str(error)})
+
+
 _SECTIONS = {
     "type": "array",
     "description": "Structured sections with heading and body fields.",
@@ -161,7 +188,7 @@ _SECTIONS = {
 
 DOCX_SCHEMA = {
     "name": "troika_create_docx",
-    "description": "Create a polished Word document in the user's private Troika files.",
+    "description": "Prepare a professional Word document. Updated clients save it locally; a tool receipt alone does not prove device delivery.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -176,7 +203,7 @@ DOCX_SCHEMA = {
 
 PDF_SCHEMA = {
     "name": "troika_create_pdf",
-    "description": "Create a polished PDF in the user's private Troika files.",
+    "description": "Prepare a professional PDF. Updated clients save it locally; a tool receipt alone does not prove device delivery.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -191,7 +218,7 @@ PDF_SCHEMA = {
 
 PPTX_SCHEMA = {
     "name": "troika_create_pptx",
-    "description": "Create a styled PowerPoint in the user's private Troika files.",
+    "description": "Prepare a professional PowerPoint. Updated clients save it locally; a tool receipt alone does not prove device delivery.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -236,4 +263,17 @@ registry.register(
     handler=_handle_pptx,
     check_fn=_documents_available,
     emoji="📊",
+)
+
+registry.register(
+    name="troika_create_project", toolset="troika_documents", handler=_handle_project,
+    schema={"name": "troika_create_project",
+            "description": "Develop a source project with code, tests and README, or provide a revised project after check output. Delivered only to the user's device as ZIP. Python/JSON syntax is checked; this does NOT execute code or prove tests passed. Include test files and clear run instructions. Never claim deployment or test success without actual local execution results.",
+            "parameters": {"type": "object", "properties": {
+                "title": {"type": "string"}, "instructions": {"type": "string"},
+                "files": {"type": "array", "items": {"type": "object", "properties": {
+                    "path": {"type": "string", "description": "Relative project path; no absolute paths or .."},
+                    "content": {"type": "string"}}, "required": ["path", "content"]}}},
+                "required": ["title", "files"]}},
+    check_fn=_documents_available,
 )

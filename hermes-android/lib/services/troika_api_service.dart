@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
+import 'files_service.dart';
 import '../config/troika_config.dart';
 import 'account_service.dart';
 
@@ -63,11 +64,13 @@ class RunActionResult {
   final String kind;
   final String id;
   final String title;
+  final Map<String, dynamic>? artifact;
 
   const RunActionResult({
     required this.kind,
     required this.id,
     required this.title,
+    this.artifact,
   });
 
   factory RunActionResult.fromJson(Map<String, dynamic> json) {
@@ -75,6 +78,8 @@ class RunActionResult {
       kind: (json['kind'] ?? '').toString(),
       id: (json['id'] ?? '').toString(),
       title: (json['title'] ?? '').toString(),
+      artifact: json['artifact'] is Map<String, dynamic>
+          ? json['artifact'] as Map<String, dynamic> : null,
     );
   }
 }
@@ -457,6 +462,17 @@ class TroikaApiService {
     }
   }
 
+  Future<void> _ensureDeviceDeliverySupport([http.Client? client]) async {
+    final uri = Uri.parse('${TroikaConfig.serverUrl}/v1/capabilities');
+    final response = await (client?.get(uri, headers: TroikaConfig.headers) ??
+        http.get(uri, headers: TroikaConfig.headers)).timeout(const Duration(seconds: 20));
+    final advertised = response.statusCode == 200
+        ? json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic> : <String, dynamic>{};
+    if ((advertised['features'] as Map?)?['device_file_delivery'] != true) {
+      throw TroikaApiException('Сервер Тройки нужно обновить для локальных файлов и разработки.');
+    }
+  }
+
   /// Отправить сообщение (текст + опционально картинки) в общую сессию.
   ///
   /// История на сервере (state.db) ведётся по session-id, поэтому мы НЕ
@@ -472,7 +488,7 @@ class TroikaApiService {
       message.toApiMessage(),
     ];
 
-    final bodyMap = <String, dynamic>{'messages': messages, 'stream': false};
+    final bodyMap = <String, dynamic>{'messages': messages, 'stream': false, 'artifact_delivery': 'device'};
     if (TroikaConfig.model.isNotEmpty) {
       bodyMap['model'] = TroikaConfig.model;
     }
@@ -480,6 +496,7 @@ class TroikaApiService {
     try {
       await AccountService().ensureFreshSession();
       final uri = Uri.parse(TroikaConfig.chatCompletionsUrl);
+      await _ensureDeviceDeliverySupport();
       // Async headers: legacy X-Hermes-Device-Context (GPS/wifi/bt) уходит с каждым
       // запросом. Иначе Тройка не знает координат Миши пока не пройдёт
       // wake-word диалог (Kotlin шлёт header только оттуда).
@@ -497,6 +514,7 @@ class TroikaApiService {
       final data = json.decode(utf8.decode(response.bodyBytes));
       final assistantMessage =
           data['choices'][0]['message']['content'] as String? ?? '';
+      await FilesService().recoverPending();
       return assistantMessage;
     } on SocketException {
       throw TroikaApiException(
@@ -524,7 +542,7 @@ class TroikaApiService {
     void Function(WebSourceActivity activity)? onWebActivity,
     void Function(String tool)? onToolStart,
     void Function(String tool, bool isError)? onToolDone,
-    void Function(RunActionResult result)? onResult,
+    FutureOr<void> Function(RunActionResult result)? onResult,
     void Function(String delta)? onDelta,
     Future<String> Function(RunApprovalRequest request)? onApproval,
   }) async {
@@ -537,12 +555,14 @@ class TroikaApiService {
     final startBody = <String, dynamic>{
       'input': inputContent is String ? inputContent : [message.toApiMessage()],
       'session_id': TroikaConfig.sessionId,
+      'artifact_delivery': 'device',
       if (history.isNotEmpty) 'conversation_history': history,
     };
 
     final client = http.Client();
     try {
       await AccountService().ensureFreshSession();
+      await _ensureDeviceDeliverySupport(client);
       // Async headers — с device_context (GPS) для streaming-пути тоже.
       final chatHdrs = await TroikaConfig.chatHeadersAsync();
       final startResp = await retryTlsHandshake(() {
@@ -613,7 +633,7 @@ class TroikaApiService {
             );
             final rawResult = ev['result'];
             if (rawResult is Map<String, dynamic>) {
-              onResult?.call(RunActionResult.fromJson(rawResult));
+              await onResult?.call(RunActionResult.fromJson(rawResult));
             }
             break;
           case 'message.delta':

@@ -49,4 +49,18 @@ def load_troika_persona() -> str:
     # identity. The fallback is deliberately self-contained and short.
     if not text or "Тройка" not in text or "You are Hermes Agent" in text:
         text = TROIKA_PERSONA_FALLBACK
+    from gateway.session_context import get_session_env
+    if get_session_env("TROIKA_PRODUCT_DELIVERY_MODE", "server") == "device":
+        text += """
+
+Для этого клиента готовые файлы сохраняются на устройстве. DOCX/PDF/PPTX
+создавай через troika_create_docx/troika_create_pdf/troika_create_pptx.
+Код, сайт и другие текстовые файлы создавай как проект через troika_create_project,
+а не troika_files.write или troika_terminal: постоянная серверная копия не нужна.
+Включай README и проверяемые тесты. Проверка синтаксиса не доказывает запуск
+программы или прохождение тестов. Не запускай код на сервере.
+После успешного инструмента говори «файл подготовлен». Только приложение
+может подтвердить фактическое сохранение на устройстве. Для фонового голоса
+попроси открыть «Файлы» в течение 10 минут, чтобы завершить передачу.
+"""
     return text + "\n\n" + TROIKA_PERSONA_MARKER

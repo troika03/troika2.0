@@ -99,6 +99,8 @@ class CompletionEvidence:
     disabled_reminders: bool = False
     filenames: set[str] = field(default_factory=set)
     phone_file_saved: bool = False
+    device_file_pending: bool = False
+    code_project_prepared: bool = False
     saved_reminders: dict[str, dict] = field(default_factory=dict)
 
     def record(self, name: str, args: Any, raw_result: Any) -> None:
@@ -112,6 +114,8 @@ class CompletionEvidence:
             proved = proved and bool(artifact.get("id") and artifact.get("filename"))
             if proved:
                 self.filenames.add(str(artifact["filename"]).casefold())
+                self.device_file_pending |= artifact.get("storage") == "device"
+                self.code_project_prepared |= name == "troika_create_project"
         elif name in {"troika_assistant", "troika_reminder"}:
             if name == "troika_reminder":
                 action = "reminder_schedule"
@@ -130,7 +134,10 @@ class CompletionEvidence:
             operation = {"write": "create", "mkdir": "create", "copy": "create",
                          "replace": "update", "move": "update", "delete": "delete",
                          "read": "read", "stat": "read", "list": "read"}.get(action, "")
-            if proved and operation in {"create", "update"}:
+            if proved and _object(payload.get("artifact")).get("storage") == "device":
+                self.device_file_pending = True
+                self.filenames.add(str(payload["artifact"]["filename"]).casefold())
+            elif proved and operation in {"create", "update"}:
                 path = str(_object(payload.get("entry")).get("path") or args.get("destination") or args.get("path") or "")
                 self.filenames.add(path.replace("\\", "/").rsplit("/", 1)[-1].casefold())
         elif name == "troika_terminal":
@@ -179,10 +186,19 @@ class CompletionEvidence:
             clean = re.sub(r"\b(?:не|not|never)\s+(?:\w+\s+){0,2}(?:" + "|".join(_VERBS.values()) + r")\b", "", clean, flags=re.I)
             if re.search(r"\b(?:если|когда|чтобы|if|when)\b", clean, re.I):
                 continue
+            if self.code_project_prepared and re.search(r"tests? passed|тесты прошли", clean, re.I):
+                return True
             operations = [op for op, pattern in _CLAIMS.items() if pattern.search(clean)]
             if not operations:
                 continue
             domains = [domain for domain, pattern in _DOMAINS.items() if pattern.search(clean)]
+            if self.device_file_pending and (
+                re.search(r"сохранил[аи]?|сохран[её]н[аоы]?|записал[аи]?|saved", clean, re.I)
+                and ("file" in domains or "project" in domains or not domains)
+            ):
+                return True
+            if self.code_project_prepared and "create" in operations:
+                domains = ["file" if domain == "project" else domain for domain in domains]
             if "information" in domains and "create" in operations and any(name.endswith(".html") for name in self.filenames):
                 domains = ["file" if domain == "information" else domain for domain in domains]
             # A location or purpose is not a second performed action:
@@ -232,6 +248,8 @@ class CompletionEvidence:
         return all(operation == "read" for _, operation, _ in self.receipts.values())
 
     def fallback(self) -> str:
+        if self.device_file_pending:
+            return "Файл подготовлен. Приложение подтвердит сохранение на устройстве. Проверки кода на ПК ещё не выполнялись."
         successful_actions = any(ok and operation != "read" for _, operation, ok in self.receipts.values())
         if self.disabled_reminders:
             return "Напоминание сохранено, но доставка отключена. Включи напоминания в настройках, чтобы получать их."

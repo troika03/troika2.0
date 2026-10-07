@@ -575,6 +575,7 @@ TOOLSETS = {
             "troika_create_docx",
             "troika_create_pdf",
             "troika_create_pptx",
+            "troika_create_project",
         ],
         "includes": [],
     },

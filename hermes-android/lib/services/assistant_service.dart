@@ -13,6 +13,7 @@ import 'tts_service.dart';
 import 'troika_api_service.dart';
 import 'wake_word_service.dart';
 import 'local_command_service.dart';
+import 'files_service.dart';
 import '../config/troika_config.dart';
 import 'account_service.dart';
 import 'reminder_delivery_service.dart';
@@ -589,7 +590,15 @@ class AssistantService extends ChangeNotifier {
           if (!isErr && tool.trim().isNotEmpty) successfulTools.add(tool);
           notifyListeners();
         },
-        onResult: (result) => structuredResult = result,
+        onResult: (result) async {
+          if (result.kind == 'file_pending' && result.artifact != null) {
+            final file = await FilesService().receiveDeviceFile(result.artifact!);
+            structuredResult = RunActionResult(kind: 'file', id: file.id,
+                title: '${file.name} — сохранён на устройстве');
+          } else {
+            structuredResult = result;
+          }
+        },
         onDelta: (d) {
           // Чистим накопленный текст от тега на каждом апдейте, чтобы
           // [emo:...] не мелькал в пузыре пока идёт стрим.
