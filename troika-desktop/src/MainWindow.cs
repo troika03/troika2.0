@@ -77,7 +77,7 @@ namespace Troika.Desktop {
             player.MediaEnded += delegate { StopPlayback(); Idle(); };
             player.MediaFailed += delegate { StopPlayback(); SetStatus("Ответ получен. Windows не смогла воспроизвести звук.", true); Idle(); };
             PreviewKeyDown += async delegate(object sender, KeyEventArgs e) {
-                if (e.Key == Key.Escape) { e.Handled = true; if (busy || recorder.Recording || speaking) await Stop(); else if (openPanel.Length > 0) ClosePanel(); else if (compact) ToggleCompact(); }
+                if (e.Key == Key.Escape) { e.Handled = true; if (busy || recorder.Recording || speaking || localCheck != null || developmentConsent != null) await Stop(); else if (openPanel.Length > 0) ClosePanel(); else if (compact) ToggleCompact(); }
                 if (e.Key == Key.N && Keyboard.Modifiers == ModifierKeys.Control) { e.Handled = true; NewConversation(); }
             };
             Closing += async delegate(object sender, System.ComponentModel.CancelEventArgs e) {
@@ -224,7 +224,7 @@ namespace Troika.Desktop {
             await ReceiveFiles();
         }
         private async Task Send() {
-            if (busy || recorder.Recording) return;
+            if (busy || recorder.Recording || localCheck != null || developmentRelay != null && developmentRelay.Checking) return;
             StopPlayback(); var input = composer.Text.Trim(); if (input.Length == 0) { composer.Focus(); return; }
             try { var local = TryLocalAction(input); if (local != null) { composer.Clear(); AddMessage("user", input); AddMessage("assistant", local); SetStatus("Готово на этом ПК", false); return; } } catch (Exception error) { SetStatus(error.Message, true); return; }
             if (!api.Account.SignedIn) { await OpenPanelTask("Аккаунт"); SetStatus("Войдите, чтобы отправить задачу.", false); return; }
@@ -274,6 +274,9 @@ namespace Troika.Desktop {
         }
         private void StopPlayback() { player.Stop(); player.Close(); speaking = false; if (audioFile.Length > 0) { try { File.Delete(audioFile); } catch { } audioFile = ""; } }
         private async Task Stop() {
+            if (localCheck != null) localCheck.Cancel();
+            if (developmentConsent != null) developmentConsent.TrySetResult(false);
+            if (developmentRelay != null) await developmentRelay.Disable();
             recordingLimit.Stop(); recorder.Dispose(); StopPlayback(); if (localCheck != null) localCheck.Cancel(); if (pendingApproval != null) pendingApproval.TrySetResult("deny");
             var active = operation;
             if (active != null) {
@@ -302,6 +305,7 @@ namespace Troika.Desktop {
         private async void OpenPanel(string title) { await OpenPanelTask(title); }
         private async Task OpenPanelTask(string title) {
             if (pendingApproval != null && title != "Подтверждение") return;
+            if (title != "Разработка" && developmentRelay != null && developmentRelay.Enabled) await developmentRelay.Disable();
             if (compact) { compact = false; MinWidth = 780; MinHeight = 540; Width = Math.Max(780, expandedWidth); Height = Math.Max(540, expandedHeight); ApplyCompact(); }
             openPanel = title; panelRevision++; int revision = panelRevision;
             panelTitle.Text = title; panelContent.Children.Clear(); panelContent.Children.Add(Label("Загружаю…", 13, muted)); inspector.Visibility = Visibility.Visible;
@@ -320,6 +324,8 @@ namespace Troika.Desktop {
             });
         }
         private void ClosePanel() {
+            if (developmentConsent != null) developmentConsent.TrySetResult(false);
+            if (developmentRelay != null && developmentRelay.Enabled) { var task = developmentRelay.Disable(); }
             if (pendingApproval != null) pendingApproval.TrySetResult("deny");
             openPanel = ""; panelRevision++; inspector.Visibility = Visibility.Collapsed; body.ColumnDefinitions[2].Width = new GridLength(0);
             if (!compact) { sidebar.Visibility = Visibility.Visible; body.ColumnDefinitions[0].Width = new GridLength(180); }
@@ -369,7 +375,7 @@ namespace Troika.Desktop {
                 var current = Json.Rows(devices, "devices").FirstOrDefault(item => Json.Flag(item, "current"));
                 if (current == null) throw new InvalidDataException("Сервер не определил текущее устройство. Выход не подтверждён.");
                 await api.Call("DELETE", "/v1/account/devices/" + Uri.EscapeDataString(Json.Text(current, "id")), null, CancellationToken.None);
-                store.ForgetSession(); api.Account = new AccountSession(); api.SessionId = ""; transcript.Children.Clear(); sessions.Clear(); ShowHero(); RenderHistory(); profile.Content = "Войти"; await RenderAccount(); SetStatus("Вы вышли на этом ПК", false);
+                ResetDevelopmentState(); store.ForgetSession(); api.Account = new AccountSession(); api.SessionId = ""; transcript.Children.Clear(); sessions.Clear(); ShowHero(); RenderHistory(); profile.Content = "Войти"; await RenderAccount(); SetStatus("Вы вышли на этом ПК", false);
             });
         }
         private void RenderTasks(Dictionary<string, object> value, Dictionary<string, object> projects) {
@@ -459,7 +465,7 @@ namespace Troika.Desktop {
             if (render) {
                 var index = Array.IndexOf(args, "--render"); var path = Path.GetFullPath(args[index + 1]);
                 window.ShowActivated = false; window.ShowInTaskbar = false;
-                window.Loaded += delegate { var pending = window.Dispatcher.BeginInvoke(new Action(async delegate { try { double width = args.Contains("--small") ? 780 : args.Contains("--compact") ? 480 : 960; double height = args.Contains("--small") ? 540 : args.Contains("--compact") ? 600 : 680; await window.PreviewLayout(path, width, height, args.Contains("--light"), args.Contains("--compact"), args.Contains("--capabilities") ? "Возможности" : ""); window.Close(); } catch (Exception error) { File.WriteAllText(path + ".error.txt", error.Message); app.Shutdown(1); } })); };
+                window.Loaded += delegate { var pending = window.Dispatcher.BeginInvoke(new Action(async delegate { try { double width = args.Contains("--small") ? 780 : args.Contains("--compact") ? 480 : 960; double height = args.Contains("--small") ? 540 : args.Contains("--compact") ? 600 : 680; await window.PreviewLayout(path, width, height, args.Contains("--light"), args.Contains("--compact"), args.Contains("--development") ? "Разработка" : args.Contains("--capabilities") ? "Возможности" : ""); window.Close(); } catch (Exception error) { File.WriteAllText(path + ".error.txt", error.Message); app.Shutdown(1); } })); };
             }
             app.DispatcherUnhandledException += delegate(object sender, DispatcherUnhandledExceptionEventArgs error) { error.Handled = true; window.Title = "Тройка — ошибка, перезапустите приложение"; };
             return app.Run(window);

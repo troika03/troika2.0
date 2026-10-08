@@ -83,8 +83,7 @@ object PhoneCommands {
         commonReply(norm)?.let { return it }
 
         // Открыть приложение
-        OPEN_VERBS.firstOrNull { norm.contains(it) }?.let { verb ->
-            val rest = norm.substringAfter(verb).trim().trim('.', '!', '?', ',', ' ')
+        AppCommandMatcher.target(norm)?.let { rest ->
             if (rest.isNotEmpty()) {
                 val pkg = findAppPackage(ctx, rest)
                 if (pkg != null) {
@@ -417,7 +416,7 @@ object PhoneCommands {
         val q = query.lowercase()
         val matches = mutableListOf<String>()
         for ((pkg, aliases) in APP_ALIASES) {
-            if (aliases.any { alias -> q == alias || q.contains(alias) || alias.contains(q) }) {
+            if (aliases.any { alias -> AppCommandMatcher.matchesAlias(q, alias) }) {
                 matches.add(pkg)
             }
         }
@@ -469,7 +468,7 @@ object PhoneCommands {
         val q = query.lowercase()
         for (info in apps) {
             val label = info.loadLabel(pm).toString().lowercase()
-            if (label == q || label.contains(q) || q.contains(label)) {
+            if (AppCommandMatcher.matchesAlias(q, label)) {
                 val pkg = info.activityInfo.packageName
                 val intent = pm.getLaunchIntentForPackage(pkg) ?: continue
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

@@ -119,6 +119,53 @@ namespace Troika.Desktop {
             await Test("repair context blocks secrets and redacts reports", () => {
                 var root = Temporary(); try { var report = new CheckReport { Output = "token=trk_live_secret" }; File.WriteAllText(Path.Combine(root, "main.py"), "print('ok')"); Assert(!Development.RepairContext(root, report).Contains("trk_live_secret"), "report secret sent"); File.WriteAllText(Path.Combine(root, "main.py"), "api_key = 'private'"); bool blocked = false; try { Development.RepairContext(root, report); } catch (InvalidDataException) { blocked = true; } Assert(blocked, "source secret sent"); } finally { Directory.Delete(root, true); } return Task.FromResult(0);
             });
+            await Test("autonomous workflow repairs imported source and verifies new version", async () => {
+                var root = Temporary(); int generated = 0; CheckReport final = null; var versions = new List<string>();
+                try {
+                    await DevelopmentWorkflow.Run("build", "Python: тесты", true, (prompt, token) => {
+                        if (generated > 0) Assert(prompt.Contains("AssertionError") && prompt.Contains("def add"), "repair has no real errors or sources");
+                        var folder = Path.Combine(root, "v" + generated++); Directory.CreateDirectory(folder);
+                        File.WriteAllText(Path.Combine(folder, "calc.py"), "def add(a,b): return " + (generated == 1 ? "0" : "a+b"));
+                        File.WriteAllText(Path.Combine(folder, "test_calc.py"), "import unittest\nfrom calc import add\nclass Calc(unittest.TestCase):\n def test_add(self): self.assertEqual(add(2,3),5)\n"); return Task.FromResult(folder);
+                    }, Development.Check, (folder, report) => { versions.Add(folder); final = report; }, CancellationToken.None);
+                    Assert(generated == 2 && final.Verified && File.ReadAllText(Path.Combine(root, "v0", "calc.py")).Contains("return 0"), "workflow did not repair or overwrote original");
+                } finally { Directory.Delete(root, true); }
+            });
+            await Test("unchanged repair clears proof and stops autonomous loop", async () => {
+                var root = Temporary(); CheckReport visible = null; int count = 0;
+                try { File.WriteAllText(Path.Combine(root, "main.py"), "x=1"); await ExpectError(async () => await DevelopmentWorkflow.Run("build", "Python: тесты", true,
+                    (prompt, token) => { count++; return Task.FromResult(root); }, (folder, kind, token) => Task.FromResult(new CheckReport { Kind = kind, Output = "Ran 0 tests", NoTests = true }),
+                    (folder, report) => visible = report, CancellationToken.None), "те же исходники"); Assert(count == 2 && visible == null, "stale verification retained"); } finally { Directory.Delete(root, true); }
+            });
+            await Test("selected PC receives exact source and mode; cancelled report never passes", async () => {
+                var root = Temporary(); try { File.WriteAllText(Path.Combine(root, "main.py"), "x=1"); var handler = new FakeHandler { Route = async request => {
+                    if (request.Method == HttpMethod.Post) { var body = Json.Parse(await request.Content.ReadAsStringAsync()); Assert(Json.Text(body,"target_device_id") == "pc" && Json.Text(body,"mode") == "python_tests" && Json.Text(Json.Map(Json.Get(body,"files")), "main.py") == "x=1", "wrong relay payload"); return FakeHandler.Reply("{\"id\":\"check_test\"}",202); }
+                    if (request.Method == HttpMethod.Delete) return FakeHandler.Reply("{}",200);
+                    return FakeHandler.Reply("{\"state\":\"completed\",\"report\":{\"exit_code\":0,\"output\":\"cancelled\",\"cancelled\":true}}",200);
+                }}; using (var api = Client(handler)) { var report = await new DevelopmentRelay(api).Remote(root, "Python: тесты", "pc", "flow", CancellationToken.None); Assert(!report.Verified && report.Stopped, "cancelled remote check passed"); } } finally { Directory.Delete(root,true); }
+            });
+            await Test("real CommonJS test imports source and reports failure then pass", async () => {
+                var root = Temporary(); try { File.WriteAllText(Path.Combine(root,"index.js"),"exports.add = (a,b) => 0;"); File.WriteAllText(Path.Combine(root,"test_calc.js"),"const test=require('node:test'); const assert=require('node:assert/strict'); const {add}=require('./index'); test('sum',()=>assert.equal(add(2,3),5));");
+                    Assert(!(await Development.Check(root,"JavaScript: тесты",CancellationToken.None)).Verified,"broken JS passed"); File.WriteAllText(Path.Combine(root,"index.js"),"exports.add = (a,b) => a+b;"); Assert((await Development.Check(root,"JavaScript: тесты",CancellationToken.None)).Verified,"fixed JS failed");
+                } finally { Directory.Delete(root,true); }
+            });
+            await Test("consenting PC worker executes delivered sources and returns an actual test report", async () => {
+                var root = Temporary(); bool claimed = false, allowed = false, reported = false; DevelopmentRelay relay = null;
+                try { var handler = new FakeHandler { Route = async request => {
+                    var path = request.RequestUri.AbsolutePath;
+                    if (path.EndsWith("/report")) { var body = Json.Parse(await request.Content.ReadAsStringAsync()); var report = Json.Map(Json.Get(body, "report")); Assert(Json.Text(body,"lease") == "lease" && Json.Number(report,"exit_code") == 0 && Json.Text(report,"output").Contains("Ran 1 test"), "not an actual report"); reported = true; return FakeHandler.Reply("{}",200); }
+                    if (path.EndsWith("/worker")) {
+                        var body = Json.Parse(await request.Content.ReadAsStringAsync()); if (!Json.Flag(body,"enabled")) return FakeHandler.Reply("{}",200);
+                        if (!claimed) { claimed = true; return FakeHandler.Reply(Json.Encode(new { job = new { id="check_in", requester_device_id="phone", workflow_id="flow", mode="python_tests", lease="lease", files = new Dictionary<string,string> { {"calc.py","def add(a,b): return a+b"}, {"test_calc.py","import unittest\nfrom calc import add\nclass Calc(unittest.TestCase):\n def test_sum(self): self.assertEqual(add(2,3),5)\n"} } } }),200); }
+                        return FakeHandler.Reply("{}",200);
+                    }
+                    return FakeHandler.Reply("{\"state\":\"running\"}",200);
+                }};
+                using (var api = Client(handler)) { relay = new DevelopmentRelay(api); var run = relay.Enable(root, (job, token) => { allowed = true; return Task.FromResult(true); }, () => true, message => {});
+                    var deadline = DateTime.UtcNow.AddSeconds(15); while (!reported && !run.IsCompleted && DateTime.UtcNow < deadline) await Task.Delay(100); await relay.Disable(); await run;
+                    Assert(allowed && reported && !relay.Enabled, "PC worker did not finish or stop"); }
+                } finally { Directory.Delete(root,true); }
+            });
             Console.WriteLine(passed + " desktop tests passed.");
         }
         static async Task Live() {

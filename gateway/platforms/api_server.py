@@ -1898,6 +1898,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         """Purge external local stores, then atomically remove product rows."""
         from troika_product.device_delivery import device_deliveries
         device_deliveries.purge_owner(user_id)
+        from troika_product.development_checks import development_checks
+        development_checks.purge(user_id)
         if self._access_registry is None:
             raise RuntimeError("product access registry is unavailable")
         manifest = self._access_registry.account_deletion_manifest(user_id)
@@ -2009,6 +2011,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         """Close live channels and stop transient work for one revoked device."""
         from troika_product.device_delivery import device_deliveries
         device_deliveries.purge_owner(user_id, device_id)
+        from troika_product.development_checks import development_checks
+        development_checks.purge(user_id, device_id)
         from gateway.platforms.phone_bridge import product_bridge
 
         await product_bridge.disconnect_devices({device_id})
@@ -2408,6 +2412,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 "device_file_delivery": self._access_registry is not None,
                 "capability_preferences": self._access_registry is not None,
                 "deferred_product_tools": self._access_registry is not None,
+                "remote_development_checks": self._access_registry is not None,
                 "private_workspace": self._workspace_store is not None,
                 "notification_preferences": self._access_registry is not None,
                 "assistant_projects": self._proactive_store is not None,
@@ -6433,6 +6438,9 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             self._app.router.add_get("/v1/runs/{run_id}/events", self._handle_run_events)
             self._app.router.add_post("/v1/runs/{run_id}/approval", self._handle_run_approval)
             self._app.router.add_post("/v1/runs/{run_id}/stop", self._handle_stop_run)
+            if self._access_registry is not None:
+                from troika_product.development_api import register_development_routes
+                register_development_routes(self._app, self)
             # Start background sweep to clean up orphaned (unconsumed) run streams
             sweep_task = asyncio.create_task(self._sweep_orphaned_runs())
             try:

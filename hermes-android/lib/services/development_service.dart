@@ -1,29 +1,57 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:flutter/services.dart';
 
 class ProjectCheck {
   final int exitCode;
   final String output;
   final String command;
   final bool timedOut;
-  bool get noTests => RegExp(r'Ran 0 tests?').hasMatch(output);
+  final bool cancelled;
+  final bool? _noTests;
+  bool get noTests =>
+      _noTests == true || RegExp(r'Ran 0 tests?|# tests 0(?:\s|$)').hasMatch(output);
+  bool get passed => exitCode == 0 && !timedOut && !cancelled && !noTests;
   const ProjectCheck(this.exitCode, this.output, this.command,
-      {this.timedOut = false});
+      {this.timedOut = false, this.cancelled = false, bool? noTests})
+      : _noTests = noTests;
+
+  Map<String, dynamic> toJson() => {
+        'exit_code': exitCode,
+        'output': output,
+        'timed_out': timedOut,
+        'cancelled': cancelled,
+        'no_tests': noTests,
+      };
+
+  factory ProjectCheck.fromJson(Map<String, dynamic> value, String command) =>
+      ProjectCheck(
+          value['exit_code'] as int, value['output'] as String, command,
+          timedOut: value['timed_out'] == true,
+          cancelled: value['cancelled'] == true,
+          noTests: value['no_tests'] == true);
 }
 
 /// Generated projects are unpacked into a new directory, never over an existing project.
 class DevelopmentService {
+  static const _native = MethodChannel('troika/development');
   Process? _activeProcess;
+  bool _cancelled = false;
+  bool _checking = false;
   final String pythonExecutable;
   final String nodeExecutable;
   DevelopmentService(
       {this.pythonExecutable = 'python', this.nodeExecutable = 'node'});
 
   Future<void> stop() async {
+    _cancelled = true;
+    if (Platform.isAndroid) {
+      await _native.invokeMethod<void>('stop');
+      return;
+    }
     final process = _activeProcess;
     if (process == null) return;
     if (Platform.isWindows) {
@@ -40,11 +68,13 @@ class DevelopmentService {
   }
 
   static Map<String, Uint8List> decodeProject(Uint8List bytes) {
-    if (bytes.length > 3 * 1024 * 1024)
+    if (bytes.length > 3 * 1024 * 1024) {
       throw const FormatException('Проект слишком большой.');
+    }
     final archive = ZipDecoder().decodeBytes(bytes, verify: true);
-    if (archive.length > 101)
+    if (archive.length > 101) {
       throw const FormatException('Слишком много файлов.');
+    }
     final result = <String, Uint8List>{};
     var size = 0;
     final names = <String>{};
@@ -75,11 +105,13 @@ class DevelopmentService {
         throw const FormatException('Небезопасный путь в проекте.');
       }
       size += file.size;
-      if (size > 3 * 1024 * 1024)
+      if (size > 3 * 1024 * 1024) {
         throw const FormatException('Проект слишком большой.');
+      }
       final content = Uint8List.fromList(file.content);
-      if (content.length != file.size)
+      if (content.length != file.size) {
         throw const FormatException('Размер файла не совпадает.');
+      }
       utf8.decode(
           content); // Project files must be text, not executable binaries.
       result[name] = content;
@@ -106,6 +138,20 @@ class DevelopmentService {
     final result = <String, String>{};
     var size = 0;
     for (final path in paths) {
+      final parts = path.split('/');
+      if (path.isEmpty ||
+          path.length > 240 ||
+          RegExp(r'[\\<>:"|?*\x00-\x1f]').hasMatch(path) ||
+          parts.any((part) =>
+              part.isEmpty ||
+              part == '.' ||
+              part == '..' ||
+              {'.env', '.git', 'id_rsa', 'id_ed25519'}
+                  .contains(part.toLowerCase()) ||
+              part.endsWith('.') ||
+              part.endsWith(' '))) {
+        throw const FormatException('Небезопасный путь исходника.');
+      }
       var current = root.path;
       for (final part in path.split('/')) {
         current = '$current/$part';
@@ -116,10 +162,18 @@ class DevelopmentService {
       }
       final file = File(current);
       size += await file.length();
-      if (size > 120000)
+      if (size > 120000) {
         throw const FormatException(
             'Проект слишком большой для одного запроса.');
-      result[path] = await file.readAsString();
+      }
+      final source = await file.readAsString();
+      if (RegExp(
+              r'trk_live_[A-Za-z0-9_-]{16,}|sk-[A-Za-z0-9_-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----')
+          .hasMatch(source)) {
+        throw const FormatException(
+            'Исходники содержат секрет. Удали секрет перед передачей ИИ.');
+      }
+      result[path] = source;
     }
     return result;
   }
@@ -128,8 +182,9 @@ class DevelopmentService {
     final files = decodeProject(bytes);
     final project = Directory(
         '${parent.path}/Troika-project-${DateTime.now().microsecondsSinceEpoch}');
-    if (await project.exists())
+    if (await project.exists()) {
       throw const FileSystemException('Папка проекта уже существует.');
+    }
     await project.create(recursive: true);
     for (final entry in files.entries) {
       final file = File('${project.path}/${entry.key}');
@@ -142,15 +197,65 @@ class DevelopmentService {
   /// Fixed commands only; execution still has the user's OS permissions, not a sandbox.
   Future<ProjectCheck> check(Directory project, String mode,
       {Duration timeout = const Duration(seconds: 60)}) async {
-    final executable = mode == 'javascript' ? nodeExecutable : pythonExecutable;
+    if (_checking) throw StateError('Проверка уже выполняется.');
+    _checking = true;
+    _cancelled = false;
+    try {
+      return await _check(project, mode, timeout);
+    } finally {
+      _checking = false;
+    }
+  }
+
+  Future<ProjectCheck> _check(
+      Directory project, String mode, Duration timeout) async {
+    if (Platform.isAndroid) {
+      final manifest = json.decode(
+              await File('${project.path}/troika-project.json').readAsString())
+          as Map<String, dynamic>;
+      final paths = (manifest['files'] as List).cast<String>();
+      final sources = await readCurrentSources(project, paths);
+      if (_cancelled)
+        return const ProjectCheck(-1, 'Проверка остановлена.', 'Android',
+            cancelled: true);
+      final report = await _native.invokeMapMethod<String, dynamic>('check', {
+        'mode': mode,
+        'files': sources,
+        'timeout_ms': timeout.inMilliseconds,
+      });
+      if (report == null) {
+        throw StateError('Телефон не вернул результат проверки.');
+      }
+      return ProjectCheck.fromJson(report, 'Android: $mode');
+    }
+    final executable =
+        mode.startsWith('javascript') ? nodeExecutable : pythonExecutable;
+    final testPaths = <String>[];
+    if (mode == 'javascript_tests') {
+      await for (final entry
+          in project.list(recursive: true, followLinks: false)) {
+        if (entry is File &&
+            (entry.path.endsWith('.test.js') ||
+                entry.uri.pathSegments.last.startsWith('test_') &&
+                    entry.path.endsWith('.js'))) {
+          testPaths.add(entry.path);
+        }
+      }
+      if (testPaths.isEmpty) {
+        return const ProjectCheck(
+            2, 'JavaScript-тесты не найдены.', 'node --test',
+            noTests: true);
+      }
+    }
     final baseArgs = switch (mode) {
       'python_syntax' => ['-I', '-m', 'compileall', '-q', '.'],
       'python_tests' => ['-I', '-m', 'unittest', 'discover', '-s', '.', '-v'],
       'javascript' => ['--check', 'index.js'],
+      'javascript_tests' => ['--test', ...testPaths],
       _ => throw ArgumentError('Unknown check mode'),
     };
     // Avoid stale project .pyc files after edits with identical size/timestamp.
-    final cache = mode == 'javascript'
+    final cache = mode.startsWith('javascript')
         ? null
         : await Directory.systemTemp.createTemp('troika-check-cache-');
     final args = cache == null
@@ -162,6 +267,11 @@ class DevelopmentService {
             'pycache_prefix=${cache.path}',
             ...baseArgs.skip(1)
           ];
+    if (_cancelled) {
+      if (cache != null) await cache.delete(recursive: true);
+      return const ProjectCheck(-1, 'Проверка остановлена.', 'PC',
+          cancelled: true);
+    }
     final process = await Process.start(executable, args,
         workingDirectory: project.path,
         runInShell: false,
@@ -182,10 +292,12 @@ class DevelopmentService {
         });
     final output = StringBuffer();
     _activeProcess = process;
+    if (_cancelled) unawaited(stop());
     void collect(String text) {
-      if (output.length < 64000)
+      if (output.length < 64000) {
         output.write(
             text.substring(0, text.length.clamp(0, 64000 - output.length)));
+      }
     }
 
     final drains = [process.stdout, process.stderr].map((s) async {
@@ -209,6 +321,6 @@ class DevelopmentService {
     }
     return ProjectCheck(
         code, output.toString(), '$executable ${args.join(' ')}',
-        timedOut: timedOut);
+        timedOut: timedOut, cancelled: _cancelled);
   }
 }

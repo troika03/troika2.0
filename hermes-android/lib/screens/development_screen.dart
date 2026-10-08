@@ -1,56 +1,117 @@
-import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
-import '../services/assistant_service.dart';
+import '../services/development_agent_service.dart';
+import '../services/development_remote_service.dart';
 import '../services/development_service.dart';
+import '../services/development_workflow.dart';
 import '../services/files_service.dart';
+import '../config/troika_config.dart';
 
 class DevelopmentScreen extends StatefulWidget {
-  const DevelopmentScreen({super.key});
+  final DevelopmentAgentService? agent;
+  final FilesService? files;
+  final DevelopmentService? runner;
+  final DevelopmentRemoteService? remote;
+  final bool? windowsForTesting;
+  final bool? androidForTesting;
+  const DevelopmentScreen(
+      {super.key,
+      this.agent,
+      this.files,
+      this.runner,
+      this.remote,
+      this.windowsForTesting,
+      this.androidForTesting});
   @override
   State<DevelopmentScreen> createState() => _DevelopmentScreenState();
 }
 
 class _DevelopmentScreenState extends State<DevelopmentScreen> {
   final _task = TextEditingController();
-  final _runner = DevelopmentService();
+  late final DevelopmentAgentService _agent;
+  late final FilesService _files;
+  late final DevelopmentService _runner;
+  late final DevelopmentRemoteService _remote;
+  DevelopmentWorkflow? _workflow;
   List<TroikaFile> _projects = [];
   TroikaFile? _selected;
   Directory? _directory;
-  String _status = '';
-  String _mode = 'python_syntax';
   ProjectCheck? _check;
+  String _status = '';
+  String _mode = 'python_tests';
   bool _busy = false;
+  bool _closing = false;
+  int _operation = 0;
+  late final String _owner;
+  bool get _windows => widget.windowsForTesting ?? Platform.isWindows;
+  bool get _android => widget.androidForTesting ?? Platform.isAndroid;
 
   @override
   void initState() {
     super.initState();
-    _perform(_load);
+    _owner = TroikaConfig.accountEmail;
+    _agent = widget.agent ?? DevelopmentAgentService();
+    _files = widget.files ?? FilesService();
+    _runner = widget.runner ?? DevelopmentService();
+    _remote = (widget.remote ?? DevelopmentRemoteService(approve: _approveRemote))
+      ..addListener(_remoteChanged);
+    unawaited(_perform(_load));
+  }
+
+  void _remoteChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    _runner.stop();
+    _closing = true;
+    unawaited(_stop());
+    _remote.removeListener(_remoteChanged);
+    _remote.dispose();
     _task.dispose();
     super.dispose();
   }
 
+  Future<void> _stop() async {
+    _operation++;
+    if (mounted && !_closing)
+      setState(() => _status = 'Останавливаю разработку…');
+    final operations = <Future<void>>[
+      _agent.stop(),
+      _runner.stop(),
+      _remote.stopOutgoing(),
+      if (_workflow != null) _workflow!.stop(),
+    ];
+    final results = await Future.wait(operations.map((operation) async {
+      try {
+        await operation;
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }));
+    if (mounted && !_closing && results.contains(false)) {
+      setState(() => _status =
+          'Не удалось подтвердить остановку всех действий. Повтори остановку.');
+    }
+  }
+
   Future<void> _load() async {
     try {
-      await FilesService().recoverPending();
+      await _files.recoverPending();
     } catch (_) {}
-    final files = await FilesService().localFiles();
+    final files = await _files.localFiles();
     if (mounted)
-      setState(() {
-        _projects = files.where((f) => f.ext == 'zip').toList();
-      });
+      setState(
+          () => _projects = files.where((file) => file.ext == 'zip').toList());
   }
 
   Future<void> _perform(Future<void> Function() action) async {
+    if (_busy) return;
     setState(() {
       _busy = true;
       _status = '';
@@ -59,206 +120,343 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
       await action();
     } catch (error) {
       if (mounted)
-        setState(() {
-          _status = 'Не удалось выполнить: $error';
-        });
+        setState(
+            () => _status = error.toString().replaceFirst('Bad state: ', ''));
     } finally {
-      if (mounted)
-        setState(() {
-          _busy = false;
-        });
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _generate() async {
-    if (_task.text.trim().isEmpty) return;
-    final assistant = context.read<AssistantService>();
-    final previousIds = _projects.map((project) => project.id).toSet();
-    await assistant.sendTextQuery('Разработай проект: ${_task.text.trim()}. '
-        'Используй troika_create_project. Включи исходники, README и тесты. '
-        'Python unittest-тесты положи в корень как test_*.py. '
-        'Для JavaScript основной файл index.js. Не утверждай, что тесты запускались.');
-    await _load();
-    final newProjects =
-        _projects.where((project) => !previousIds.contains(project.id));
-    if (mounted && assistant.errorMessage.isEmpty && newProjects.isNotEmpty) {
-      setState(() {
-        _selected = newProjects.first;
-        _directory = null;
-        _check = null;
-      });
+  void _showVersion(DevelopmentOutcome version) {
+    if (!mounted) return;
+    setState(() {
+      _selected = version.project.file;
+      _directory = version.directory;
+      _check = version.check;
+      if (!_projects.any((project) => project.id == version.project.file.id)) {
+        _projects.insert(0, version.project.file);
+      }
+    });
+  }
+
+  Future<String?> _chooseLocation() async {
+    var targets = <DevelopmentTarget>[];
+    String? error;
+    try {
+      targets = await _remote.targets();
+    } catch (_) {
+      error =
+          'Подключённые ПК пока недоступны. На ПК открой «Разработка» и разреши приём проверок.';
     }
+    if (!mounted) return null;
+    return showModalBottomSheet<String>(
+        context: context,
+        isScrollControlled: true,
+        builder: (context) => SafeArea(
+            child: SingleChildScrollView(child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('Где проверять код?',
+                          style: Theme.of(context).textTheme.titleLarge),
+                      const SizedBox(height: 16),
+                      if (_windows || _android)
+                        ListTile(
+                            leading: Icon(_windows
+                                ? Icons.computer
+                                : Icons.phone_android),
+                            title: Text(
+                                _windows ? 'На этом ПК' : 'На этом телефоне'),
+                            subtitle: Text(_windows
+                                ? 'Python или Node.js должны быть установлены'
+                                : 'Python и переносимый JavaScript, локально и без сети'),
+                            onTap: () => Navigator.pop(context, 'local')),
+                      for (final target in targets)
+                        ListTile(
+                            leading: const Icon(Icons.computer),
+                            title: Text(target.name),
+                            subtitle: const Text(
+                                'ПК попросит разрешение на проверку'),
+                            onTap: () => Navigator.pop(context, target.id)),
+                      if (targets.isEmpty)
+                        Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Text(error ??
+                                'Нет ПК, готовых принимать проверки.')),
+                      ListTile(
+                          title: const Text('Только создать код'),
+                          subtitle:
+                              const Text('Сохранить проект без запуска тестов'),
+                          onTap: () => Navigator.pop(context, 'none')),
+                    ])))));
+  }
+
+  Future<bool> _approveLocal(String location) async {
+    if (!mounted) return false;
+    return await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+                  title: const Text('Разрешить проверку и исправление?'),
+                  content: Text(location == 'local' && _windows
+                      ? 'Тройка запустит выбранную проверку и до трёх исправленных версий проекта в новой папке. Код работает с правами твоей учётной записи. Сначала просмотри исходники. Каждый AI-запрос учитывается в тарифе.'
+                      : location == 'local'
+                          ? 'Тройка проверит проект в локальной среде телефона и выполнит до трёх исправлений. Файлы телефона не доступны коду. Синтаксис отдельно от тестов. Каждый AI-запрос учитывается в тарифе.'
+                          : 'Исходники временно передаются выбранному ПК. После его разрешения Тройка проверит проект и до трёх исправленных версий. Постоянная серверная копия не создаётся. Каждый AI-запрос учитывается в тарифе.'),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Отмена')),
+                    FilledButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Разрешить'))
+                  ],
+                )) ??
+        false;
+  }
+
+  Future<bool> _approveRemote(Map<String, dynamic> job) async {
+    if (!mounted) return false;
+    return await showDialog<bool>(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => AlertDialog(
+                  title: const Text('Проверить проект с телефона?'),
+                  content: const Text(
+                      'Разрешение действует на этот проект и до трёх исправлений в течение 10 минут. Код запускается с правами твоей учётной записи в выбранной папке. Отчёт вернётся на телефон.'),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Отклонить')),
+                    FilledButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Разрешить'))
+                  ],
+                )) ??
+        false;
+  }
+
+  Future<void> _run({bool selected = false}) async {
+    _verifyOwner();
+    final operation = ++_operation;
+    if (!selected && _task.text.trim().isEmpty) {
+      setState(() => _status = 'Опиши, что разработать.');
+      return;
+    }
+    final location = await _chooseLocation();
+    if (location == null || !mounted || operation != _operation) return;
+    if (location != 'none' && !await _approveLocal(location)) return;
+    Directory? parent;
+    if (location != 'none') {
+      if (_windows && location == 'local') {
+        final folder = await FilePicker.platform
+            .getDirectoryPath(dialogTitle: 'Папка для версий проекта');
+        if (folder == null) return;
+        parent = Directory(folder);
+      } else {
+        parent = Directory('${(await _files.localRoot()).path}/projects');
+        await parent.create(recursive: true);
+      }
+    }
+    GeneratedProject? initial;
+    if (selected && _selected?.localPath != null) {
+      initial = GeneratedProject(
+          _selected!, await File(_selected!.localPath!).readAsBytes());
+    }
+    if (!mounted || operation != _operation) return;
+    _verifyOwner();
+    final workflowId = DevelopmentRemoteService.newWorkflowId();
+    _workflow = DevelopmentWorkflow(
+      generate: (prompt) => _agent.generate(prompt, onStatus: (status) {
+        if (mounted) setState(() => _status = status);
+      }),
+      check: (directory, sources, mode) => location == 'local'
+          ? _runner.check(directory, mode)
+          : _remote.checkOnPC(sources, mode, location, workflowId),
+      stopWork: () async {
+        await _runner.stop();
+        await _agent.stop();
+        await _remote.stopOutgoing();
+      },
+    );
+    final outcome = await _workflow!.run(
+      task: _task.text.trim().isEmpty
+          ? 'Сохрани требования выбранного проекта и исправь ошибки.'
+          : _task.text.trim(),
+      mode: _mode,
+      parent: parent,
+      initial: initial,
+      onStatus: (status) {
+        if (mounted) setState(() => _status = status);
+      },
+      onVersion: _showVersion,
+    );
+    _showVersion(outcome);
     if (mounted)
       setState(() {
-        _status = assistant.errorMessage.isNotEmpty
-            ? assistant.errorMessage
-            : assistant.lastResult?.summary ??
-                'Проверь ответ Тройки на главном экране.';
+        _status = outcome.stopped || outcome.check?.cancelled == true
+            ? 'Разработка остановлена. Сохранённые версии доступны.'
+            : outcome.check == null
+                ? 'Проект сохранён. Проверка этой версии не выполнена.'
+                : outcome.check!.passed
+                    ? (_mode.endsWith('_tests')
+                        ? 'Тесты прошли. Проект сохранён.'
+                        : 'Синтаксис проверен. Тесты не запускались.')
+                    : outcome.check!.timedOut
+                        ? 'Проверка остановлена по времени. Проект требует проверки.'
+                        : outcome.check!.noTests
+                            ? 'Тесты не найдены. Качество кода не подтверждено.'
+                            : 'После ${outcome.repairs} исправлений проверка ещё содержит ошибки. Версии сохранены.';
       });
   }
 
-  Future<void> _unpack() async {
-    if (_selected == null) return;
+  Future<void> _export() async {
+    _verifyOwner();
+    if (_selected?.localPath == null) return;
     final folder = await FilePicker.platform
-        .getDirectoryPath(dialogTitle: 'Выбери папку для нового проекта');
+        .getDirectoryPath(dialogTitle: 'Куда сохранить исходники?');
     if (folder == null) return;
-    final bytes = await File(_selected!.localPath!).readAsBytes();
-    final directory =
-        await DevelopmentService().unpack(bytes, Directory(folder));
+    _verifyOwner();
+    final directory = await _runner.unpack(
+        await File(_selected!.localPath!).readAsBytes(), Directory(folder));
     if (mounted)
       setState(() {
         _directory = directory;
-        _check = null;
-        _status = 'Проект сохранён: ${directory.path}';
+        _status = 'Исходники сохранены: ${directory.path}';
       });
   }
 
-  Future<void> _runCheck() async {
-    if (_directory == null) return;
-    final approved = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-              title: const Text('Запустить проверку на этом ПК?'),
-              content: Text(_mode == 'python_tests'
-                  ? 'Тесты запускают код проекта с правами твоей учётной записи. Сначала просмотри исходники. Это не изолированная среда.'
-                  : 'Будет запущена проверка синтаксиса файлов проекта. Содержимое программы не выполняется.'),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(ctx, false),
-                    child: const Text('Отмена')),
-                FilledButton(
-                    onPressed: () => Navigator.pop(ctx, true),
-                    child: const Text('Запустить'))
-              ],
-            ));
-    if (approved != true) return;
-    final check = await _runner.check(_directory!, _mode);
-    if (mounted)
-      setState(() {
-        _check = check;
-        _status = check.timedOut
-            ? 'Проверка остановлена по времени.'
-            : check.noTests
-                ? 'Тесты не найдены. Качество кода не подтверждено.'
-                : 'Код завершения: ${check.exitCode}';
-      });
+  void _verifyOwner() {
+    if (_owner == TroikaConfig.accountEmail) return;
+    _selected = null; _projects = []; _check = null; _directory = null;
+    throw StateError('Аккаунт изменился. Открой «Разработка» заново.');
   }
 
-  Future<void> _fix() async {
-    if (_directory == null || _check == null || _selected == null) return;
-    final paths = DevelopmentService.decodeProject(
-            await File(_selected!.localPath!).readAsBytes())
-        .keys;
-    final files =
-        await DevelopmentService.readCurrentSources(_directory!, paths);
-    final source = json.encode(files);
-    if (source.length > 120000)
-      throw const FormatException(
-          'Проект слишком большой для одного запроса исправления.');
-    if (!mounted) return;
-    final assistant = context.read<AssistantService>();
-    final previousIds = _projects.map((project) => project.id).toSet();
-    await assistant.sendTextQuery(
-        'Исправь проект по реальному результату проверки. '
-        'Верни новую полную версию через troika_create_project; исходную не перезаписывай. '
-        'Команда: ${_check!.command}; exit=${_check!.exitCode}; timeout=${_check!.timedOut}. '
-        'Вывод: ${_check!.output}\nИсходники: $source');
-    await _load();
-    final newProjects =
-        _projects.where((project) => !previousIds.contains(project.id));
-    if (mounted)
-      setState(() {
-        if (assistant.errorMessage.isNotEmpty) {
-          _status = assistant.errorMessage;
-        } else if (newProjects.isNotEmpty) {
-          _selected = newProjects.first;
-          _directory = null;
-          _check = null;
-          _status =
-              'Новая версия сохранена. Распакуй её в новую папку и повтори проверку.';
-        } else {
-          _status =
-              'Новый проект не получен. Проверь ответ Тройки на главном экране.';
-        }
-      });
+  Future<void> _toggleRemote() async {
+    if (_remote.enabled) {
+      await _remote.disable();
+      return;
+    }
+    final folder = await FilePicker.platform
+        .getDirectoryPath(dialogTitle: 'Папка для проектов с телефона');
+    if (folder == null || !mounted) return;
+    await _remote.enable(Directory(folder));
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Разработка')),
-        body: ListView(padding: const EdgeInsets.all(20), children: [
-          const Text(
-              'Опиши задачу. Тройка подготовит код, тесты и инструкцию. Проект сохранится на этом устройстве.'),
-          const SizedBox(height: 16),
-          TextField(
-              controller: _task,
-              maxLines: 4,
-              decoration: const InputDecoration(labelText: 'Что разработать?')),
-          const SizedBox(height: 12),
-          FilledButton(
-              onPressed: _busy ? null : () => _perform(_generate),
-              child: const Text('Создать проект через AI')),
-          const SizedBox(height: 20),
-          for (final project in _projects)
-            RadioListTile<TroikaFile>(
-                title: Text(project.name),
-                value: project,
-                groupValue: _selected,
-                onChanged: _busy
-                    ? null
-                    : (v) => setState(() {
-                          _selected = v;
-                          _directory = null;
-                          _check = null;
-                        })),
-          if (_selected != null)
-            OutlinedButton(
-                onPressed: _busy ? null : () => _perform(_unpack),
-                child: const Text('Сохранить исходники в папку')),
-          if (_directory != null) SelectableText(_directory!.path),
-          if (!Platform.isWindows)
-            const Text(
-                'Создание и сохранение проектов доступны здесь. Запуск Python/JS проверок в этой версии доступен на Windows.'),
-          if (Platform.isWindows && _directory != null) ...[
-            DropdownButton<String>(
-                value: _mode,
-                items: const [
-                  DropdownMenuItem(
-                      value: 'python_syntax', child: Text('Python: синтаксис')),
-                  DropdownMenuItem(
-                      value: 'python_tests',
-                      child: Text('Python: unittest-тесты')),
-                  DropdownMenuItem(
-                      value: 'javascript',
-                      child: Text('JavaScript: синтаксис index.js')),
-                ],
-                onChanged: _busy
-                    ? null
-                    : (v) => setState(() {
-                          _mode = v!;
-                          _check = null;
-                        })),
-            FilledButton(
-                onPressed: _busy ? null : () => _perform(_runCheck),
-                child: const Text('Проверить на этом ПК')),
-          ],
-          if (_check != null) ...[
-            SelectableText(
-                _check!.output.isEmpty ? 'Вывод отсутствует.' : _check!.output),
-            OutlinedButton(
-                onPressed: _busy ? null : () => _perform(_fix),
-                child:
-                    const Text('Передать код и результат AI для исправления')),
-          ],
-          if (_busy) const LinearProgressIndicator(),
-          if (_busy && _directory != null)
-            TextButton(
-                onPressed: _runner.stop,
-                child: const Text('Остановить проверку')),
-          if (_status.isNotEmpty)
-            Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: SelectableText(_status)),
-        ]),
+        body: Center(
+            child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 640),
+                child: ListView(padding: const EdgeInsets.all(24), children: [
+                  const Text(
+                      'Опиши задачу. Тройка составит план, создаст код и тесты. Выбери место проверки — ошибки она исправит сама.'),
+                  const SizedBox(height: 16),
+                  TextField(
+                      controller: _task,
+                      enabled: !_busy,
+                      minLines: 3,
+                      maxLines: 6,
+                      decoration: const InputDecoration(
+                          labelText: 'Что разработать?',
+                          hintText:
+                              'Например, калькулятор расходов с тестами')),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                      value: _mode,
+                      isExpanded: true,
+                      decoration:
+                          const InputDecoration(labelText: 'Проверка проекта'),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'python_tests',
+                            child: Text('Python: тесты unittest')),
+                        DropdownMenuItem(
+                            value: 'javascript_tests',
+                            child: Text('JavaScript: тесты')),
+                        DropdownMenuItem(
+                            value: 'python_syntax',
+                            child: Text('Python: только синтаксис')),
+                        DropdownMenuItem(
+                            value: 'javascript',
+                            child: Text('JavaScript: только синтаксис')),
+                      ],
+                      onChanged: _busy
+                          ? null
+                          : (value) => setState(() => _mode = value!)),
+                  const SizedBox(height: 16),
+                  FilledButton(
+                      onPressed: _busy ? null : () => _perform(_run),
+                      child: const Text('Разработать проект')),
+                  if (_busy) ...[
+                    const SizedBox(height: 16),
+                    const LinearProgressIndicator(),
+                    TextButton(
+                        onPressed: _stop, child: const Text('Остановить')),
+                  ],
+                  if (_status.isNotEmpty)
+                    Padding(
+                        padding: const EdgeInsets.only(top: 16),
+                        child: SelectableText(_status)),
+                  if (_directory != null)
+                    Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: SelectableText(_directory!.path)),
+                  if (_check != null)
+                    ExpansionTile(
+                        title: const Text('Результат проверки'),
+                        subtitle: Text('Код завершения: ${_check!.exitCode}'),
+                        children: [
+                          Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: SelectableText(_check!.output.isEmpty
+                                  ? 'Вывод отсутствует.'
+                                  : _check!.output))
+                        ]),
+                  const SizedBox(height: 24),
+                  Text('Сохранённые проекты',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  if (_projects.isEmpty)
+                    const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Text(
+                            'Здесь появятся исходники и версии твоих проектов.')),
+                  for (final project in _projects)
+                    RadioListTile<TroikaFile>(
+                        title: Text(project.name),
+                        value: project,
+                        groupValue: _selected,
+                        onChanged: _busy
+                            ? null
+                            : (value) => setState(() {
+                                  _selected = value;
+                                  _directory = null;
+                                  _check = null;
+                                })),
+                  if (_selected != null) ...[
+                    OutlinedButton(
+                        onPressed: _busy
+                            ? null
+                            : () => _perform(() => _run(selected: true)),
+                        child: const Text('Проверить и исправить проект')),
+                    TextButton(
+                        onPressed: _busy ? null : () => _perform(_export),
+                        child: const Text('Сохранить исходники в папку')),
+                  ],
+                  if (_windows) ...[
+                    const SizedBox(height: 24),
+                    SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Принимать проверки с телефона'),
+                        subtitle: Text(_remote.enabled
+                            ? _remote.status
+                            : 'Выбери папку и оставь эту страницу открытой. Каждый новый проект требует разрешения.'),
+                        value: _remote.enabled,
+                        onChanged:
+                            _busy ? null : (_) => _perform(_toggleRemote)),
+                  ],
+                ]))),
       );
 }

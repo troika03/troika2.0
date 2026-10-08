@@ -553,6 +553,7 @@ class TroikaApiService {
     FutureOr<void> Function(RunActionResult result)? onResult,
     void Function(String delta)? onDelta,
     Future<String> Function(RunApprovalRequest request)? onApproval,
+    FutureOr<void> Function(String runId)? onRunStarted,
   }) async {
     // 1) Стартуем run. input = только новое сообщение; историю сервер берёт
     //    из общей сессии. recent шлём как conversation_history для надёжности.
@@ -593,6 +594,7 @@ class TroikaApiService {
       if (runId == null || runId.isEmpty) {
         throw TroikaApiException('Сервер не вернул run_id.');
       }
+      await onRunStarted?.call(runId);
 
       // 2) Слушаем поток событий.
       final evUri = Uri.parse('${TroikaConfig.runsUrl}/$runId/events');
@@ -711,6 +713,17 @@ class TroikaApiService {
       throw TroikaApiException('Сервер не ответил вовремя.');
     } finally {
       client.close();
+    }
+  }
+
+  /// Stop an owner-scoped run; closing the event stream alone does not stop AI work.
+  Future<void> stopRun(String runId) async {
+    final response = await http.post(
+      Uri.parse('${TroikaConfig.runsUrl}/${Uri.encodeComponent(runId)}/stop'),
+      headers: TroikaConfig.headers,
+    ).timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200 && response.statusCode != 404) {
+      throw TroikaApiException('Не удалось остановить запрос. Повтори остановку.');
     }
   }
 

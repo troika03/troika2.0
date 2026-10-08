@@ -12,7 +12,7 @@ $sources = Get-ChildItem -LiteralPath (Join-Path $root 'src') -Filter '*.cs' | F
 if ($LASTEXITCODE -ne 0) { throw 'Desktop build failed.' }
 Copy-Item -LiteralPath (Join-Path $root 'TroikaDesktop.exe.config') -Destination $output -Force
 if ($Test) {
-    $testSources = @('Json.cs','ApiClient.cs','LocalStore.cs','Voice.cs','Development.cs') | ForEach-Object { Join-Path $root ('src\' + $_) }
+    $testSources = @('Json.cs','ApiClient.cs','LocalStore.cs','Voice.cs','Development.cs','DevelopmentRelay.cs','DevelopmentWorkflow.cs') | ForEach-Object { Join-Path $root ('src\' + $_) }
     $testSources += Join-Path $root 'tests\DesktopTests.cs'
     & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'DesktopTests.exe')) $references $testSources
     if ($LASTEXITCODE -ne 0) { throw 'Test build failed.' }

@@ -70,7 +70,7 @@ namespace Troika.Desktop {
             panelContent.Children.Clear(); panelContent.Children.Add(Label("Удалить аккаунт на всех устройствах?", 19, text)); Gap();
             panelContent.Children.Add(Label("История, память и дела будут удалены с сервера. Устройства потеряют доступ. Восстановить удалённые данные нельзя. Локальные готовые файлы останутся на ПК.", 13, muted)); Gap();
             panelContent.Children.Add(Label("Введите «УДАЛИТЬ»", 12, muted)); var confirmation = Field("Подтверждение удаления аккаунта", false); panelContent.Children.Add(confirmation);
-            AddPanelButton("Удалить аккаунт", () => { var task = Safe(async () => { if (confirmation.Text != "УДАЛИТЬ") throw new InvalidOperationException("Для удаления введите «УДАЛИТЬ»."); await api.Call("DELETE", "/v1/account", new { confirmation = "DELETE_MY_ACCOUNT" }, CancellationToken.None); store.ForgetSession(); api.Account = new AccountSession(); api.SessionId = ""; transcript.Children.Clear(); sessions.Clear(); ShowHero(); RenderHistory(); profile.Content = "Войти"; await RenderAccount(); SetStatus("Аккаунт удалён или поставлен в очередь удаления. Доступ отозван.", false); }); }, true);
+            AddPanelButton("Удалить аккаунт", () => { var task = Safe(async () => { if (confirmation.Text != "УДАЛИТЬ") throw new InvalidOperationException("Для удаления введите «УДАЛИТЬ»."); await api.Call("DELETE", "/v1/account", new { confirmation = "DELETE_MY_ACCOUNT" }, CancellationToken.None); ResetDevelopmentState(); store.ForgetSession(); api.Account = new AccountSession(); api.SessionId = ""; transcript.Children.Clear(); sessions.Clear(); ShowHero(); RenderHistory(); profile.Content = "Войти"; await RenderAccount(); SetStatus("Аккаунт удалён или поставлен в очередь удаления. Доступ отозван.", false); }); }, true);
             AddPanelButton("Отмена", () => OpenPanel("Аккаунт"), false);
         }
         private void ConfirmDeviceRevocation(string id, string name) {
@@ -121,25 +121,33 @@ namespace Troika.Desktop {
         }
         private void RenderDevelopment() {
             panelContent.Children.Clear(); panelContent.Children.Add(Label("От идеи до проверенного проекта", 18, text)); Gap();
-            AddPanelButton("Создать проект с кодом", () => Prepare("Создай ZIP-проект с исходниками, README и тестами. Задача: "), true);
+            if (localCheck != null || developmentRelay != null && developmentRelay.Checking) { panelContent.Children.Add(Label("Разработка или проверка выполняется…", 13, muted)); AddPanelButton("Остановить", () => { var task = Stop(); }, true); return; }
+            panelContent.Children.Add(Label("Что разработать?", 12, muted));
+            var request = Field("Какой проект создать", true); request.Text = developmentRequest; request.TextChanged += delegate { developmentRequest = request.Text; }; request.MinHeight = 84; panelContent.Children.Add(request);
+            var kinds = new ComboBox { Foreground = Brushes.Black, MinHeight = 34, Margin = new Thickness(0, 8, 0, 8) };
+            foreach (var kind in new[] { "Python: тесты", "JavaScript: тесты", "Python: синтаксис", "JavaScript: синтаксис" }) kinds.Items.Add(kind); kinds.SelectedIndex = 0; panelContent.Children.Add(kinds);
+            AddPanelButton("Разработать проект", () => { var task = ChooseDevelopmentTarget(developmentRequest, Convert.ToString(kinds.SelectedItem), false); }, true);
+            Check("Принимать проверки с телефона", developmentRelay != null && developmentRelay.Enabled, enabled => { var task = ToggleDevelopmentWorker(enabled); });
+            panelContent.Children.Add(Label("ПК появится на телефоне, пока этот раздел открыт и приём включён. Первый запуск подтверждается здесь.", 11, muted));
             AddPanelButton("Открыть ZIP с исходниками…", () => {
+                if (developmentRelay != null && developmentRelay.Checking) return;
                 var picker = new Microsoft.Win32.OpenFileDialog { Filter = "Проект ZIP|*.zip", InitialDirectory = api.Account.Email.Length == 0 ? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) : store.FilesFolder(api.Account.Email) };
                 if (picker.ShowDialog(this) == true) { try { projectFolder = Development.Extract(picker.FileName, Path.Combine(store.FilesFolder(api.Account.Email), "projects")); checkReport = null; RenderDevelopment(); } catch (Exception error) { SetStatus(error.Message, true); } }
             }, false); Gap();
             if (projectFolder.Length == 0) { panelContent.Children.Add(Label("Получите ZIP от Тройки и откройте его здесь. Проверки выполняются на вашем ПК.", 13, muted)); return; }
             panelContent.Children.Add(Label(Path.GetFileName(projectFolder), 14, text)); panelContent.Children.Add(Label("Исходники распакованы в новую папку. Оригинал сохранён.", 11, muted));
             AddPanelButton("Открыть папку проекта", () => { try { Process.Start(new ProcessStartInfo(projectFolder) { UseShellExecute = true }); } catch { SetStatus("Не удалось открыть папку.", true); } }, false); Gap();
-            foreach (var kind in new[] { "Python: синтаксис", "Python: тесты", "JavaScript: синтаксис" }) {
+            foreach (var kind in new[] { "Python: синтаксис", "Python: тесты", "JavaScript: синтаксис", "JavaScript: тесты" }) {
                 var selectedKind = kind; AddPanelButton(kind, () => ConfirmCheck(selectedKind), false);
             }
             if (checkReport != null) {
                 Gap(); panelContent.Children.Add(Label(checkReport.Verified ? "Проверка прошла" : "Проверка не подтвердила результат", 15, text)); panelContent.Children.Add(Label("Код завершения: " + checkReport.ExitCode, 12, muted));
                 var report = Field("Отчёт проверки", true); report.IsReadOnly = true; report.Text = checkReport.Output; report.MaxHeight = 180; report.FontSize = 12; panelContent.Children.Add(report);
-                AddPanelButton("Исправить с Тройкой", () => { try { var context = Development.RepairContext(projectFolder, checkReport); panelContent.Children.Clear(); panelContent.Children.Add(Label("Передать текущие исходники и отчёт в облачный ИИ?", 17, text)); Gap(); panelContent.Children.Add(Label("Папка: " + Path.GetFileName(projectFolder) + ". Объём: " + context.Length + " символов. Секреты и скрытые файлы исключены; возможные секреты блокируют отправку.", 12, muted)); AddPanelButton("Передать и исправить", () => { Prepare(context); var task = Send(); }, true); AddPanelButton("Отмена", () => OpenPanel("Разработка"), false); } catch (Exception error) { SetStatus(error.Message, true); } }, true);
+                AddPanelButton("Исправить и проверить", () => { var task = ChooseDevelopmentTarget(Development.RepairContext(projectFolder, checkReport), checkReport.Kind, true); }, true);
             }
         }
         private void ConfirmCheck(string kind) {
-            if (localCheck != null) return;
+            if (localCheck != null || developmentRelay != null && developmentRelay.Checking) return;
             panelContent.Children.Clear(); panelContent.Children.Add(Label("Запустить «" + kind + "»?", 18, text)); Gap();
             panelContent.Children.Add(Label("Папка: " + Path.GetFileName(projectFolder) + ". Проверка запускает код с вашими правами Windows. Выполняйте только доверенные проекты. Лимит — 90 секунд.", 13, muted)); Gap();
             AddPanelButton("Разрешить запуск", () => { var task = ExecuteCheck(kind); }, true); AddPanelButton("Отмена", () => OpenPanel("Разработка"), false);

@@ -10,3 +10,6 @@ docker/s6-rc.d/** text eol=lf
 docker/cont-init.d/** text eol=lf
 docker/**/run     text eol=lf
 docker/**/finish  text eol=lf
+
+# Preserve the byte-pinned offline Python bundle across Windows checkouts.
+hermes-android/android/app/src/main/assets/development/** -text whitespace=cr-at-eol

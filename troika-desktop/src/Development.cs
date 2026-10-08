@@ -16,6 +16,8 @@ namespace Troika.Desktop {
         public int ExitCode = -1;
         public bool Verified;
         public bool Stopped;
+        public bool TimedOut;
+        public bool NoTests;
     }
     public static class Development {
         private static readonly HashSet<string> Extensions = new HashSet<string>(new[] { ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".json", ".md", ".txt", ".css", ".html", ".yaml", ".yml", ".toml", ".csv", ".dart", ".cs", ".xml" });
@@ -60,12 +62,18 @@ namespace Troika.Desktop {
         public static async Task<CheckReport> Check(string folder, string kind, CancellationToken cancellation) {
             folder = Path.GetFullPath(folder);
             if (!Directory.Exists(folder) || (File.GetAttributes(folder) & FileAttributes.ReparsePoint) != 0) throw new InvalidDataException("Папка проекта недоступна.");
+            RejectLinks(folder);
             var files = Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).Where(f => Path.GetFileName(f) != "check-report.txt" && !f.Contains(Path.DirectorySeparatorChar + "__pycache__" + Path.DirectorySeparatorChar)).ToList();
             if (files.Any(f => (File.GetAttributes(f) & FileAttributes.ReparsePoint) != 0)) throw new InvalidDataException("Файлы проекта не должны быть ссылками.");
             var report = new CheckReport { Kind = kind };
             string interpreter; List<string> arguments = new List<string>();
             if (kind == "Python: тесты") { interpreter = Interpreter("python.exe"); arguments.Add("-I -B -m unittest discover -s \"" + folder + "\""); }
-            else {
+            else if (kind == "JavaScript: тесты") {
+                interpreter = Interpreter("node.exe");
+                var tests = files.Where(f => f.EndsWith(".test.js", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(f).StartsWith("test_") && f.EndsWith(".js", StringComparison.OrdinalIgnoreCase)).ToList();
+                if (tests.Count == 0) { report.NoTests = true; report.Output = "Тесты не найдены."; return report; }
+                arguments.Add("--test " + string.Join(" ", tests.Select(f => "\"" + f + "\"")));
+            } else {
                 string extension = kind == "Python: синтаксис" ? ".py" : ".js";
                 interpreter = Interpreter(extension == ".py" ? "python.exe" : "node.exe");
                 foreach (var file in files.Where(f => Path.GetExtension(f).ToLowerInvariant() == extension)) arguments.Add((extension == ".py" ? "-I -B -c \"import ast,sys; ast.parse(open(sys.argv[1], encoding='utf-8-sig').read(), filename=sys.argv[1])\" " : "--check ") + "\"" + file + "\"");
@@ -76,23 +84,27 @@ namespace Troika.Desktop {
                 deadline.CancelAfter(TimeSpan.FromSeconds(90));
                 foreach (var argument in arguments) {
                     var start = new ProcessStartInfo(interpreter, argument) { WorkingDirectory = folder, UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8 };
+                    var environment = new Dictionary<string, string>();
+                    foreach (var key in new[] { "PATH", "SystemRoot", "WINDIR", "TEMP", "TMP", "COMSPEC", "PATHEXT" }) { var value = Environment.GetEnvironmentVariable(key); if (value != null) environment[key] = value; }
+                    start.EnvironmentVariables.Clear(); foreach (var item in environment) start.EnvironmentVariables[item.Key] = item.Value;
                     start.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8"; start.EnvironmentVariables["PYTHONDONTWRITEBYTECODE"] = "1";
                     using (var job = new ProcessJob())
                     using (var process = new Process { StartInfo = start }) {
                         process.OutputDataReceived += delegate(object sender, DataReceivedEventArgs ev) { if (ev.Data != null) lock (output) { if (output.Length < 64000) output.AppendLine(ev.Data); } };
                         process.ErrorDataReceived += delegate(object sender, DataReceivedEventArgs ev) { if (ev.Data != null) lock (output) { if (output.Length < 64000) output.AppendLine(ev.Data); } };
-                        process.Start();
+                        cancellation.ThrowIfCancellationRequested(); process.Start();
                         if (!job.Assign(process)) { process.Kill(); throw new InvalidOperationException("Windows не создала группу для остановки проверки. Запуск прерван."); }
                         process.BeginOutputReadLine(); process.BeginErrorReadLine();
                         while (!process.HasExited && !deadline.IsCancellationRequested) await Task.Delay(100);
-                        if (!process.HasExited) { job.Dispose(); await Task.Run(() => process.WaitForExit()); report.Stopped = true; output.AppendLine("Проверка остановлена или истекли 90 секунд."); exit = -1; break; }
+                        if (!process.HasExited) { job.Dispose(); await Task.Run(() => process.WaitForExit()); report.Stopped = true; report.TimedOut = !cancellation.IsCancellationRequested; output.AppendLine("Проверка остановлена или истекли 90 секунд."); exit = -1; break; }
                         await Task.Run(() => process.WaitForExit()); exit = process.ExitCode;
                     }
                     if (exit != 0) break;
                 }
             }
             report.ExitCode = exit; report.Output = output.ToString();
-            report.Verified = exit == 0 && !report.Stopped && (kind != "Python: тесты" || Regex.IsMatch(report.Output, @"Ran [1-9][0-9]* tests?"));
+            report.NoTests = kind == "Python: тесты" && !Regex.IsMatch(report.Output, @"Ran [1-9][0-9]* tests?") || kind == "JavaScript: тесты" && !Regex.IsMatch(report.Output, @"# tests [1-9][0-9]*");
+            report.Verified = exit == 0 && !report.Stopped && !report.NoTests;
             if (exit == 0 && !report.Verified) report.Output += "\nНулевое число тестов не подтверждает качество проекта.";
             if (report.Output.Length == 0) report.Output = report.Verified ? "Проверка синтаксиса выполнена. Программа и её поведение не проверялись." : "Нет результата проверки.";
             return report;
@@ -111,6 +123,31 @@ namespace Troika.Desktop {
             }
             return context.ToString();
         }
+        public static Dictionary<string, string> Sources(string folder) {
+            folder = Path.GetFullPath(folder); var result = new Dictionary<string, string>(); int bytes = 0;
+            RejectLinks(folder);
+            foreach (var file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)) {
+                if (file.Contains(Path.DirectorySeparatorChar + "__pycache__" + Path.DirectorySeparatorChar) || Path.GetFileName(file) == "check-report.txt") continue;
+                if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0) throw new InvalidDataException("Файл является ссылкой.");
+                var name = file.Substring(folder.Length).TrimStart(Path.DirectorySeparatorChar).Replace('\\', '/');
+                ValidateSource(name, File.ReadAllText(file)); var content = File.ReadAllText(file); bytes += Encoding.UTF8.GetByteCount(content);
+                if (bytes > 120000 || result.Count >= 100) throw new InvalidDataException("Проект больше 120 КБ или 100 файлов."); result.Add(name, content);
+            }
+            return result;
+        }
+        private static void RejectLinks(string folder) {
+            var pending = new Stack<string>(); pending.Push(folder);
+            while (pending.Count > 0) { var current = pending.Pop(); if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) throw new InvalidDataException("Папка проекта является ссылкой."); foreach (var directory in Directory.EnumerateDirectories(current)) pending.Push(directory); }
+        }
+        public static void ValidateSource(string name, string content) {
+            if (string.IsNullOrEmpty(name) || name.Contains('\\') || name.Split('/').Any(p => p.Length == 0 || p == "." || p == ".." || p.StartsWith(".")) || !Extensions.Contains(Path.GetExtension(name).ToLowerInvariant())) throw new InvalidDataException("Недопустимый путь исходника.");
+            foreach (var part in name.Split('/')) LocalStore.SafeName(part);
+            if (Regex.IsMatch(content, @"trk_(live|refresh)_|sk-[A-Za-z0-9_-]{20,}|-----BEGIN .*PRIVATE KEY|(?i)(api[_-]?key|secret|password|token)\s*[:=]\s*['""].+?['""]")) throw new InvalidDataException("В исходниках найдены возможные секреты.");
+        }
+        public static string Kind(string mode) {
+            switch (mode) { case "python_tests": return "Python: тесты"; case "python_syntax": return "Python: синтаксис"; case "javascript_tests": return "JavaScript: тесты"; case "javascript": return "JavaScript: синтаксис"; default: throw new InvalidDataException("Неизвестная проверка."); }
+        }
+        public static string Mode(string kind) { switch (kind) { case "Python: тесты": return "python_tests"; case "Python: синтаксис": return "python_syntax"; case "JavaScript: тесты": return "javascript_tests"; case "JavaScript: синтаксис": return "javascript"; default: throw new InvalidDataException("Неизвестная проверка."); } }
         private static string Redact(string text) { return Regex.Replace(text, @"trk_(live|refresh)_[A-Za-z0-9_-]+|(?i)(api[_-]?key|secret|password|token)\s*[:=]\s*\S+", "[скрыто]"); }
     }
     internal sealed class ProcessJob : IDisposable {
