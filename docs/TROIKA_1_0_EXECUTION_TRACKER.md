@@ -1,6 +1,6 @@
 # Troika 1.0: трекер реализации
 
-Обновлено 2026-10-07. Требования: [главный Word-план](Troika_1.0_Launch_Plan_Final_Updated.docx)
+Обновлено 2026-10-08. Требования: [главный Word-план](Troika_1.0_Launch_Plan_Final_Updated.docx)
 и решение владельца от 6 октября в [основном плане ремонта](../PRODUCTIZATION_PLAN.md).
 Проверки и дефекты: [аудит функций](TROIKA_FUNCTIONAL_AUDIT.md).
 
@@ -23,7 +23,7 @@ installed-client E2E или релизной готовности. `[-]` — ч�
 | 3. Границы 1.0 | [x] | Product allowlist/default-off policy реализованы. Незавершённые обязательные области остаются в следующих разделах. |
 | 4. Voice-first дизайн | [x] | Orb states, secondary text, result cards, approval modal и темы покрыты Flutter tests. |
 | 5. Android | [-] | UI и голос реализованы, прежние Samsung проверки сохранены. Фоновый native refresh access token и свежий reminder/standby E2E не закрыты. |
-| 6. Windows | [-] | Compact/Command Center/hotkey/allowlist реализованы. Свежий installed-client voice/file/screenshot E2E и background reminders не закрыты. |
+| 6. Windows | [-] | По решению владельца создан отдельный неоновый WPF-клиент: одно окно, compact/hotkey/allowlist, видимые функции, локальные файлы и проверки кода. Установлен, 25 tests и ограниченный live smoke прошли. Микрофон/воспроизведение, полный installed-client E2E, background reminders после закрытия и signed installer не закрыты. |
 | 7. Сайт и аккаунт | [-] | Статический приватный сайт есть. Account form — demo; публичные download/registration/support/status/legal и activation funnel не готовы. |
 | 8. Billing/credits | [ ] | Дневной счётчик включён и проверен на production; профиль показывает тариф/расход/остаток/обновление. Предложена экономика Free/Plus/Pro; месячный cost engine, checkout/webhook/cancel/refund отсутствуют. |
 | 9. Backend | [ ] | Auth, owner stores, runs и tools существуют; весь раздел ещё не принят. |
