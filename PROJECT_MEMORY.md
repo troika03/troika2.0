@@ -66,6 +66,15 @@ tools с общим phone bridge исключены из ordinary product; пр�
 возможности сохранены. Детали и проверки: `docs/TROIKA_CAPABILITIES_AUDIT_20261008.md`.
 Функция пока не развёрнута на production и не установлена на устройствах.
 
+2026-10-08 по запросу владельца собрана отдельная release APK из чистого
+коммита `11a3cc8`, без незавершённых изменений других сессий:
+`_logs/artifacts/Troika-capabilities-1.0.0-11a3cc8.apk` (107 116 376 байт).
+Версия 1.0.0+1, Android API 24+, ARM64/ARM32/x86_64; адрес API —
+`https://api.zhulebino-teahouse.ru`. Подпись APK v2 проверена; используется
+прежний Android Debug key. SHA-256 и параметры сборки сохранены рядом в JSON.
+Сборка успешна; ошибка исчезнувшего/повреждённого кэша устранена отдельным
+Gradle cache на D. Установка, обновление сервера и установленный E2E не выполнены.
+
 ## Реальная среда на 2026-10-07
 
 Production API использует `troika-production:subscription-limits-20261007`
