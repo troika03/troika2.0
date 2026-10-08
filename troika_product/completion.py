@@ -104,6 +104,9 @@ class CompletionEvidence:
     saved_reminders: dict[str, dict] = field(default_factory=dict)
 
     def record(self, name: str, args: Any, raw_result: Any) -> None:
+        from troika_product.capabilities import routed_result
+
+        name, args, raw_result = routed_result(name, args, raw_result)
         args, payload = _object(args), _object(raw_result)
         action = str(args.get("action") or "")
         domain, operation = "", ""

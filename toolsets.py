@@ -555,8 +555,13 @@ TOOLSETS = {
 
     "troika-product": {
         "description": "Hosted Troika toolkit with private files and paired-phone controls.",
-        "tools": ["troika_assistant", "troika_reminder"],
-        "includes": ["safe", "troika-phone", "troika-documents", "troika-workspace"],
+        # Keep the reviewed media names explicit. The legacy `safe` composite
+        # expands every registered image_gen tool, including global-phone
+        # delivery and experimental video tools without product ownership.
+        "tools": ["troika_assistant", "troika_reminder", "web_search",
+                  "web_extract", "web_research", "vision_analyze",
+                  "image_generate", "image_pollinations_url"],
+        "includes": ["troika-phone", "troika-documents", "troika-workspace"],
     },
 
     "troika-workspace": {

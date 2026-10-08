@@ -204,6 +204,12 @@ class AccessRegistry:
                     details_json TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS troika_capability_preferences (
+                    user_id TEXT PRIMARY KEY REFERENCES troika_users(id) ON DELETE CASCADE,
+                    preferences_json TEXT NOT NULL,
+                    updated_at REAL NOT NULL
+                );
+
                 CREATE TABLE IF NOT EXISTS troika_notification_preferences (
                     user_id TEXT PRIMARY KEY REFERENCES troika_users(id),
                     preferences_json TEXT NOT NULL,
@@ -1190,6 +1196,11 @@ class AccessRegistry:
             )
 
             optional_queries = {
+                "capability_preferences": (
+                    "troika_capability_preferences",
+                    "SELECT preferences_json, updated_at FROM troika_capability_preferences "
+                    "WHERE user_id = ?",
+                ),
                 "memories": (
                     "troika_memories",
                     "SELECT id, kind, title, content, created_at, updated_at "
@@ -1344,6 +1355,7 @@ class AccessRegistry:
     def finalize_account_deletion(self, user_id: str) -> None:
         """Delete every product SQLite row for a prepared account atomically."""
         child_tables = (
+            "troika_capability_preferences",
             "troika_memories",
             "troika_inbox_messages",
             "troika_project_notes",

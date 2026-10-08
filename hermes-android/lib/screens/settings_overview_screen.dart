@@ -9,6 +9,7 @@ import 'memory_screen.dart';
 import 'settings_screen.dart';
 import 'voice_screen.dart';
 import 'interface_settings_screen.dart';
+import 'capabilities_screen.dart';
 
 class SettingsOverviewScreen extends StatelessWidget {
   final VoidCallback? onSignedOut;
@@ -126,6 +127,19 @@ class SettingsOverviewScreen extends StatelessWidget {
                         section: SettingsSection.permissions,
                       ),
                     ),
+                  ),
+                ],
+              ),
+              _SettingsCard(
+                title: 'Возможности',
+                children: [
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.extension_outlined),
+                    title: const Text('Плагины, навыки и инструменты'),
+                    subtitle: const Text('Тройка подключает нужное для задачи'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _open(context, const CapabilitiesScreen()),
                   ),
                 ],
               ),

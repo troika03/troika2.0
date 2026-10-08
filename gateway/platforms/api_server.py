@@ -48,6 +48,7 @@ from urllib.parse import quote
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from hermes_constants import get_hermes_home
+from troika_product.capability_api import CapabilityAPI
 
 try:
     from aiohttp import web
@@ -77,6 +78,11 @@ MAX_CONTENT_LIST_SIZE = 1_000  # Max items when content is an array
 
 def _safe_product_action_result(tool_name: str, raw_result: Any) -> Optional[Dict[str, Any]]:
     """Expose only owner-safe product result metadata to first-party clients."""
+    from troika_product.capabilities import routed_result
+
+    tool_name, _, raw_result = routed_result(tool_name, None, raw_result)
+    if isinstance(raw_result, dict):
+        raw_result = json.dumps(raw_result, ensure_ascii=False)
     if tool_name not in {
         "troika_create_docx", "troika_create_pdf", "troika_create_pptx",
         "troika_create_project",
@@ -909,7 +915,7 @@ except ImportError:
     _cron_trigger = None
 
 
-class APIServerAdapter(BasePlatformAdapter):
+class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
     """
     OpenAI-compatible HTTP API server adapter.
 
@@ -1824,12 +1830,10 @@ class APIServerAdapter(BasePlatformAdapter):
             # Product API must never inherit a local operator's broad toolset.
             # Device/PC/server actions need a separately paired companion and
             # explicit product approval model before product exposure.
-            from troika_product.feature_policy import product_toolsets
+            from troika_product.capabilities import ROUTER_TOOLSET, wrap_progress
 
-            enabled_toolsets = product_toolsets(
-                screen_snapshot_enabled=self._product_screen_snapshot_enabled,
-                external_vision_enabled=self._product_screen_external_vision_enabled,
-            )
+            enabled_toolsets = [ROUTER_TOOLSET]
+            tool_progress_callback = wrap_progress(tool_progress_callback)
 
         max_iterations = int(os.getenv("HERMES_MAX_ITERATIONS", "90"))
 
@@ -2402,6 +2406,8 @@ class APIServerAdapter(BasePlatformAdapter):
                 "approval_events": True,
                 "private_artifacts": self._artifact_store is not None,
                 "device_file_delivery": self._access_registry is not None,
+                "capability_preferences": self._access_registry is not None,
+                "deferred_product_tools": self._access_registry is not None,
                 "private_workspace": self._workspace_store is not None,
                 "notification_preferences": self._access_registry is not None,
                 "assistant_projects": self._proactive_store is not None,
@@ -6299,6 +6305,12 @@ class APIServerAdapter(BasePlatformAdapter):
             self._app.router.add_get("/v1/models", self._handle_models)
             self._app.router.add_get("/v1/capabilities", self._handle_capabilities)
             if self._access_registry is not None:
+                self._app.router.add_get(
+                    "/v1/account/capabilities", self._handle_product_capabilities
+                )
+                self._app.router.add_patch(
+                    "/v1/account/capabilities", self._handle_product_capabilities
+                )
                 self._app.router.add_post(
                     "/v1/auth/register", self._handle_product_register
                 )

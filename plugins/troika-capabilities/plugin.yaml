@@ -1,0 +1,4 @@
+name: troika-capabilities
+version: 1.0.0
+description: "Deferred, account-scoped access to the reviewed Troika product tools."
+kind: backend

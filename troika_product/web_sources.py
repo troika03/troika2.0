@@ -28,6 +28,12 @@ def _source(url, title="", status="found"):
 
 def web_source_activity(tool_name, *, args=None, result=None, started=False, is_error=False):
     """Describe found/opening/read sources without forwarding page contents."""
+    from troika_product.capabilities import routed_call, routed_result
+
+    if started:
+        tool_name, args = routed_call(tool_name, args)
+    else:
+        tool_name, args, result = routed_result(tool_name, args, result)
     if tool_name not in {"web_search", "web_extract", "web_research"}:
         return None
     if started:

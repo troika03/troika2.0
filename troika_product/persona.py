@@ -63,4 +63,6 @@ def load_troika_persona() -> str:
 может подтвердить фактическое сохранение на устройстве. Для фонового голоса
 попроси открыть «Файлы» в течение 10 минут, чтобы завершить передачу.
 """
+    from troika_product.capabilities import ROUTING_GUIDANCE
+    text += "\n\n" + ROUTING_GUIDANCE
     return text + "\n\n" + TROIKA_PERSONA_MARKER

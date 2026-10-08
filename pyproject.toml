@@ -76,6 +76,8 @@ dependencies = [
   # libraries work entirely in memory; no office process or remote renderer.
   "python-docx>=1.2.0,<2",
   "reportlab>=4.4.10,<5",
+  # Validate deferred product tool arguments against the original JSON schema.
+  "jsonschema>=4.26.0,<5",
   # Pillow нужен python-pptx для обработки картинок (add_picture) и
   # напрямую кодеру когда он ресайзит фото под слайд.
   "pillow>=10.4,<12",

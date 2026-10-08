@@ -31,6 +31,7 @@ namespace Troika.Desktop {
         private void Prepare(string prompt) { ClosePanel(); composer.Text = prompt; composer.Focus(); composer.CaretIndex = composer.Text.Length; }
         private void RenderCapabilities() {
             panelContent.Children.Clear();
+            AddPanelButton("Плагины, навыки и инструменты", () => OpenPanel("Каталог возможностей"), false); Gap();
             panelContent.Children.Add(Label("Скажите задачу — или начните здесь", 17, text)); Gap();
             AddPanelButton("Поиск и сравнение", () => Prepare("Найди через веб-поиск и сравни "), false);
             AddPanelButton("Документ DOCX", () => Prepare("Создай DOCX: "), false);

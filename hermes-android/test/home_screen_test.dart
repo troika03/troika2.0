@@ -237,6 +237,8 @@ void main() {
     expect(find.text('Голос'), findsOneWidget);
     expect(find.text('Аккаунт'), findsOneWidget);
     expect(find.text('Устройства'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Память и приватность'), 160,
+        scrollable: find.byType(Scrollable).first);
     expect(find.text('Память и приватность'), findsOneWidget);
     expect(find.text('Фоновое пробуждение'), findsOneWidget);
     expect(find.text('Выключено'), findsOneWidget);

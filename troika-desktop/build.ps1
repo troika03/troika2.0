@@ -18,5 +18,11 @@ if ($Test) {
     if ($LASTEXITCODE -ne 0) { throw 'Test build failed.' }
     & (Join-Path $output 'DesktopTests.exe')
     if ($LASTEXITCODE -ne 0) { throw 'Desktop tests failed.' }
+    $capabilityTestSources = @('Json.cs','ApiClient.cs','CapabilityCatalogueService.cs') | ForEach-Object { Join-Path $root ('src\' + $_) }
+    $capabilityTestSources += Join-Path $root 'tests\CapabilityCatalogueTests.cs'
+    & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'CapabilityCatalogueTests.exe')) $references $capabilityTestSources
+    if ($LASTEXITCODE -ne 0) { throw 'Capability catalogue test build failed.' }
+    & (Join-Path $output 'CapabilityCatalogueTests.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'Capability catalogue tests failed.' }
 }
 Write-Output ('Built: ' + (Join-Path $output 'TroikaDesktop.exe'))

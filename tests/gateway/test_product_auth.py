@@ -709,7 +709,7 @@ def test_product_mode_ignores_operator_toolset_override(tmp_path, monkeypatch) -
     monkeypatch.setattr(adapter, "_ensure_session_db", lambda: None)
 
     adapter._create_agent()
-    assert captured["enabled_toolsets"] == ["troika-product"]
+    assert captured["enabled_toolsets"] == ["troika-capabilities"]
     assert captured["skip_memory"] is True
 
 
@@ -1135,8 +1135,7 @@ def test_product_screen_toolset_requires_explicit_external_vision_opt_in(
 
     adapter._create_agent()
     assert captured["enabled_toolsets"] == [
-        "troika-product",
-        "troika-screen-snapshot",
+        "troika-capabilities",
     ]
 
 

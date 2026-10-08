@@ -29,3 +29,6 @@ data/
 # Compose/profile runtime state (bind-mounted; avoid ownership/secret issues)
 hermes-config/
 runtime/
+
+# Local diagnostics, isolated review checkouts, and temporary build caches.
+_logs/

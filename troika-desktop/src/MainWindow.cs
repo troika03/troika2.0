@@ -308,6 +308,7 @@ namespace Troika.Desktop {
             body.ColumnDefinitions[0].Width = new GridLength(0); sidebar.Visibility = Visibility.Collapsed; body.ColumnDefinitions[2].Width = new GridLength(Math.Min(310, ActualWidth * .42));
             await Safe(async () => {
                 if (title == "Возможности") { RenderCapabilities(); return; }
+                if (title == "Каталог возможностей") { await LoadCapabilityCatalogue(); return; }
                 if (title == "Разработка") { RenderDevelopment(); return; }
                 if (title == "Аккаунт") { await RenderAccount(); return; }
                 if (title == "Файлы") { await RenderFiles(); return; }
