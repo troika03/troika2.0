@@ -64,7 +64,8 @@ FCM/push отсутствуют. Наличие кода refresh не закры
 approval, sources, receipts и device file delivery сохранены. Legacy media
 tools с общим phone bridge исключены из ordinary product; проверенные
 возможности сохранены. Детали и проверки: `docs/TROIKA_CAPABILITIES_AUDIT_20261008.md`.
-Функция пока не развёрнута на production и не установлена на устройствах.
+Серверная часть функции пока не развёрнута на production; WPF-клиент
+с каталогом не установлен.
 
 2026-10-08 по запросу владельца собрана отдельная release APK из чистого
 коммита `11a3cc8`, без незавершённых изменений других сессий:
@@ -73,7 +74,11 @@ tools с общим phone bridge исключены из ordinary product; пр�
 `https://api.zhulebino-teahouse.ru`. Подпись APK v2 проверена; используется
 прежний Android Debug key. SHA-256 и параметры сборки сохранены рядом в JSON.
 Сборка успешна; ошибка исчезнувшего/повреждённого кэша устранена отдельным
-Gradle cache на D. Установка, обновление сервера и установленный E2E не выполнены.
+Gradle cache на D. APK установлена поверх прежней версии на Samsung Galaxy A22
+(SM-A225F) 2026-10-08: `adb install -r` — Success, version/update time подтверждены.
+Activity находится в resumed state, процесс работает; первый `am start -W`
+завершился с timeout. Это ограниченная проверка запуска, не E2E каталога или
+голоса. Сервер не обновлён.
 
 ## Реальная среда на 2026-10-07
 
