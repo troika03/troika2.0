@@ -1,3 +1,4 @@
+import '../widgets/troika_page.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -57,7 +58,8 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
     _agent = widget.agent ?? DevelopmentAgentService();
     _files = widget.files ?? FilesService();
     _runner = widget.runner ?? DevelopmentService();
-    _remote = (widget.remote ?? DevelopmentRemoteService(approve: _approveRemote))
+    _remote = (widget.remote ??
+        DevelopmentRemoteService(approve: _approveRemote))
       ..addListener(_remoteChanged);
     unawaited(_perform(_load));
   }
@@ -153,44 +155,47 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
         context: context,
         isScrollControlled: true,
         builder: (context) => SafeArea(
-            child: SingleChildScrollView(child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text('Где проверять код?',
-                          style: Theme.of(context).textTheme.titleLarge),
-                      const SizedBox(height: 16),
-                      if (_windows || _android)
-                        ListTile(
-                            leading: Icon(_windows
-                                ? Icons.computer
-                                : Icons.phone_android),
-                            title: Text(
-                                _windows ? 'На этом ПК' : 'На этом телефоне'),
-                            subtitle: Text(_windows
-                                ? 'Python или Node.js должны быть установлены'
-                                : 'Python и переносимый JavaScript, локально и без сети'),
-                            onTap: () => Navigator.pop(context, 'local')),
-                      for (final target in targets)
-                        ListTile(
-                            leading: const Icon(Icons.computer),
-                            title: Text(target.name),
-                            subtitle: const Text(
-                                'ПК попросит разрешение на проверку'),
-                            onTap: () => Navigator.pop(context, target.id)),
-                      if (targets.isEmpty)
-                        Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            child: Text(error ??
-                                'Нет ПК, готовых принимать проверки.')),
-                      ListTile(
-                          title: const Text('Только создать код'),
-                          subtitle:
-                              const Text('Сохранить проект без запуска тестов'),
-                          onTap: () => Navigator.pop(context, 'none')),
-                    ])))));
+            child: SingleChildScrollView(
+                child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text('Где проверять код?',
+                              style: Theme.of(context).textTheme.titleLarge),
+                          const SizedBox(height: 16),
+                          if (_windows || _android)
+                            ListTile(
+                                leading: Icon(_windows
+                                    ? Icons.computer
+                                    : Icons.phone_android),
+                                title: Text(_windows
+                                    ? 'На этом ПК'
+                                    : 'На этом телефоне'),
+                                subtitle: Text(_windows
+                                    ? 'Python или Node.js должны быть установлены'
+                                    : 'Python и переносимый JavaScript, локально и без сети'),
+                                onTap: () => Navigator.pop(context, 'local')),
+                          for (final target in targets)
+                            ListTile(
+                                leading: const Icon(Icons.computer),
+                                title: Text(target.name),
+                                subtitle: const Text(
+                                    'ПК попросит разрешение на проверку'),
+                                onTap: () => Navigator.pop(context, target.id)),
+                          if (targets.isEmpty)
+                            Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 8),
+                                child: Text(error ??
+                                    'Нет ПК, готовых принимать проверки.')),
+                          ListTile(
+                              title: const Text('Только создать код'),
+                              subtitle: const Text(
+                                  'Сохранить проект без запуска тестов'),
+                              onTap: () => Navigator.pop(context, 'none')),
+                        ])))));
   }
 
   Future<bool> _approveLocal(String location) async {
@@ -329,7 +334,10 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
 
   void _verifyOwner() {
     if (_owner == TroikaConfig.accountEmail) return;
-    _selected = null; _projects = []; _check = null; _directory = null;
+    _selected = null;
+    _projects = [];
+    _check = null;
+    _directory = null;
     throw StateError('Аккаунт изменился. Открой «Разработка» заново.');
   }
 
@@ -345,15 +353,17 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => TroikaPage(
         appBar: AppBar(title: const Text('Разработка')),
         body: Center(
             child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 640),
                 child: ListView(padding: const EdgeInsets.all(24), children: [
-                  const Text(
-                      'Опиши задачу. Тройка составит план, создаст код и тесты. Выбери место проверки — ошибки она исправит сама.'),
-                  const SizedBox(height: 16),
+                  const TroikaIntro(
+                      icon: Icons.code_rounded,
+                      title: 'Дай идее форму',
+                      subtitle:
+                          'Опиши проект. Тройка создаст код и тесты; место проверки выберешь перед запуском.'),
                   TextField(
                       controller: _task,
                       enabled: !_busy,

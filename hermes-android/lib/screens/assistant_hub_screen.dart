@@ -5,6 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../config/troika_config.dart';
 import '../services/troika_api_service.dart';
 import '../services/reminder_delivery_service.dart';
+import '../widgets/troika_page.dart';
 import '../theme/troika_theme.dart';
 import 'memory_screen.dart';
 
@@ -24,6 +25,7 @@ class _AssistantHubScreenState extends State<AssistantHubScreen> {
   bool _loading = true;
   bool _screenReady = false;
   bool _screenBusy = false;
+  int _sectionFilter = 0;
   String? _error;
 
   TroikaProject? get _activeProject {
@@ -160,11 +162,11 @@ class _AssistantHubScreenState extends State<AssistantHubScreen> {
     final choose = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-              backgroundColor: TroikaColors.surface,
-              title: const Text('Добавить срок?',
-                  style: TextStyle(color: TroikaColors.text)),
-              content: const Text('Со сроком Тройка сможет напомнить о задаче.',
-                  style: TextStyle(color: TroikaColors.textMuted)),
+              backgroundColor: TroikaPalette.of(context).surface,
+              title: Text('Добавить срок?',
+                  style: TextStyle(color: TroikaPalette.of(context).text)),
+              content: Text('Со сроком Тройка сможет напомнить о задаче.',
+                  style: TextStyle(color: TroikaPalette.of(context).textMuted)),
               actions: [
                 TextButton(
                     onPressed: () => Navigator.pop(context, false),
@@ -196,9 +198,9 @@ class _AssistantHubScreenState extends State<AssistantHubScreen> {
     final result = await showDialog<List<String>>(
         context: context,
         builder: (context) => AlertDialog(
-              backgroundColor: TroikaColors.surface,
-              title:
-                  Text(title, style: const TextStyle(color: TroikaColors.text)),
+              backgroundColor: TroikaPalette.of(context).surface,
+              title: Text(title,
+                  style: TextStyle(color: TroikaPalette.of(context).text)),
               content: SingleChildScrollView(
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
                 for (var i = 0; i < labels.length; i++)
@@ -207,7 +209,8 @@ class _AssistantHubScreenState extends State<AssistantHubScreen> {
                       child: TextField(
                           controller: controllers[i],
                           maxLines: i == 1 ? 3 : 1,
-                          style: const TextStyle(color: TroikaColors.text),
+                          style:
+                              TextStyle(color: TroikaPalette.of(context).text),
                           decoration: InputDecoration(labelText: labels[i])))
               ])),
               actions: [
@@ -301,8 +304,8 @@ class _AssistantHubScreenState extends State<AssistantHubScreen> {
   @override
   Widget build(BuildContext context) {
     final prefs = _preferences;
-    return Scaffold(
-      backgroundColor: TroikaColors.bg,
+    return TroikaPage(
+      backgroundColor: TroikaPalette.of(context).bg,
       appBar: AppBar(title: const Text('Помощник'), actions: [
         IconButton(onPressed: _load, icon: const Icon(Icons.refresh))
       ]),
@@ -313,148 +316,210 @@ class _AssistantHubScreenState extends State<AssistantHubScreen> {
               child: ListView(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
                   children: [
+                    TroikaIntro(
+                        icon: Icons.checklist_rounded,
+                        title: _activeProject?.name ?? 'Освободи голову',
+                        subtitle: _activeProject == null
+                            ? 'Собери дела и напоминания в одном месте. Начни с проекта.'
+                            : 'Задачи, сроки и заметки твоего проекта — всегда под рукой.'),
+                    _Panel(
+                        child: Row(children: [
+                      Expanded(
+                          child: _SummaryValue(
+                              label: 'Проекты',
+                              value: '${_projects.length}',
+                              icon: Icons.folder_outlined)),
+                      const SizedBox(width: 16),
+                      Expanded(
+                          child: _SummaryValue(
+                              label: 'Задачи',
+                              value: '${_tasks.length}',
+                              icon: Icons.check_circle_outline)),
+                    ])),
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 8, runSpacing: 8, children: [
+                      for (final (index, label) in [
+                        (0, 'Обзор'),
+                        (1, 'Проекты'),
+                        (2, 'Задачи'),
+                        (3, 'Напоминания')
+                      ])
+                        ChoiceChip(
+                            label: Text(label),
+                            selected: _sectionFilter == index,
+                            showCheckmark: false,
+                            onSelected: (_) =>
+                                setState(() => _sectionFilter = index)),
+                    ]),
+                    const SizedBox(height: 8),
                     if (_error != null)
                       _Panel(
                           child: Text(_error!,
                               style:
                                   const TextStyle(color: TroikaColors.error))),
-                    _section('Память', null),
-                    _Panel(
-                        child: ListTile(
+                    if (_sectionFilter == 0) ...[
+                      _section('Память', null),
+                      _Panel(
+                          child: ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .primary
+                                          .withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(12)),
+                                  child: Icon(Icons.psychology_outlined,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .primary)),
+                              title: Text('Что Тройка помнит',
+                                  style: TextStyle(
+                                      color: TroikaPalette.of(context).text)),
+                              subtitle: Text(
+                                  'Просматривай, исправляй и удаляй личный контекст.',
+                                  style: TextStyle(
+                                      color:
+                                          TroikaPalette.of(context).textMuted)),
+                              trailing: Icon(Icons.chevron_right,
+                                  color: TroikaPalette.of(context).textMuted),
+                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TroikaPageScope(child: MemoryScreen()))))),
+                    ],
+                    if (_sectionFilter == 0 || _sectionFilter == 3) ...[
+                      _section(
+                          'Входящие',
+                          IconButton(
+                              onPressed: _createTask,
+                              icon: const Icon(Icons.add_task))),
+                      if (_messages.isEmpty)
+                        _empty('Пока нет полезных напоминаний.'),
+                      for (final message in _messages)
+                        _MessageCard(
+                            message: message, onTap: () => _read(message)),
+                    ],
+                    if (_sectionFilter == 0 || _sectionFilter == 1) ...[
+                      _section(
+                          'Проекты',
+                          IconButton(
+                              onPressed: _createProject,
+                              icon: const Icon(
+                                  Icons.create_new_folder_outlined))),
+                      if (_projects.isEmpty)
+                        _empty(
+                            'Создай проект. Потом скажи: «запомни это в проект».',
+                            action: _createProject),
+                      for (final project in _projects)
+                        _ProjectCard(
+                            project: project, onTap: () => _activate(project)),
+                    ],
+                    if (_sectionFilter == 0 || _sectionFilter == 2) ...[
+                      _section(
+                          'Задачи',
+                          IconButton(
+                              onPressed: _createTask,
+                              icon: const Icon(Icons.add))),
+                      if (_tasks.isEmpty)
+                        _empty(_activeProject == null
+                            ? 'Выбери проект.'
+                            : 'В активном проекте нет открытых задач.'),
+                      for (final task in _tasks)
+                        _TaskCard(
+                            task: task,
+                            onStatusChanged: (status) =>
+                                _updateTaskStatus(task, status)),
+                    ],
+                    if (_sectionFilter == 0 || _sectionFilter == 3) ...[
+                      _section('Правила сообщений', null),
+                      _Panel(
+                          child: Column(children: [
+                        SwitchListTile(
                             contentPadding: EdgeInsets.zero,
-                            leading: Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                    color: TroikaColors.brand
-                                        .withValues(alpha: 0.08),
-                                    borderRadius: BorderRadius.circular(12)),
-                                child: const Icon(Icons.psychology_outlined,
-                                    color: TroikaColors.brand)),
-                            title: const Text('Что Тройка помнит',
-                                style: TextStyle(color: TroikaColors.text)),
-                            subtitle: const Text(
-                                'Просматривай, исправляй и удаляй личный контекст.',
-                                style:
-                                    TextStyle(color: TroikaColors.textMuted)),
-                            trailing: const Icon(Icons.chevron_right,
-                                color: TroikaColors.textMuted),
-                            onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (_) => const MemoryScreen())))),
-                    _section(
-                        'Входящие',
-                        IconButton(
-                            onPressed: _createTask,
-                            icon: const Icon(Icons.add_task))),
-                    if (_messages.isEmpty)
-                      _empty('Пока нет полезных напоминаний.'),
-                    for (final message in _messages)
-                      _MessageCard(
-                          message: message, onTap: () => _read(message)),
-                    _section(
-                        'Проекты',
-                        IconButton(
-                            onPressed: _createProject,
-                            icon:
-                                const Icon(Icons.create_new_folder_outlined))),
-                    if (_projects.isEmpty)
-                      _empty(
-                          'Создай проект. Потом скажи: «запомни это в проект».',
-                          action: _createProject),
-                    for (final project in _projects)
-                      _ProjectCard(
-                          project: project, onTap: () => _activate(project)),
-                    _section(
-                        'Задачи',
-                        IconButton(
-                            onPressed: _createTask,
-                            icon: const Icon(Icons.add))),
-                    if (_tasks.isEmpty)
-                      _empty(_activeProject == null
-                          ? 'Выбери проект.'
-                          : 'В активном проекте нет открытых задач.'),
-                    for (final task in _tasks)
-                      _TaskCard(
-                          task: task,
-                          onStatusChanged: (status) =>
-                              _updateTaskStatus(task, status)),
-                    _section('Правила сообщений', null),
-                    _Panel(
-                        child: Column(children: [
-                      SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('Напоминания',
-                              style: TextStyle(color: TroikaColors.text)),
-                          subtitle: const Text(
-                              'Просьбы напомнить и задачи со сроком',
-                              style: TextStyle(color: TroikaColors.textMuted)),
-                          value: prefs?.remindersEnabled ?? false,
-                          onChanged: (value) {
-                            if (prefs != null) {
-                              _savePreferences(
-                                  prefs.copyWith(remindersEnabled: value));
-                            }
-                          }),
-                      if (Platform.isAndroid)
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('Точные напоминания на телефоне',
-                              style: TextStyle(color: TroikaColors.text)),
-                          subtitle: const Text(
-                              'Разрешение Android для уведомления в нужную минуту',
-                              style: TextStyle(color: TroikaColors.textMuted)),
-                          onTap: () async {
-                            await Permission.notification.request();
-                            await ReminderDeliveryService.instance
-                                .requestExactAlarms();
-                            await ReminderDeliveryService.instance.sync();
-                          },
-                        ),
-                      SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('Полезные follow-up',
-                              style: TextStyle(color: TroikaColors.text)),
-                          subtitle: const Text(
-                              'Сроки, блокировки, решения и прогресс',
-                              style: TextStyle(color: TroikaColors.textMuted)),
-                          value: prefs?.proactiveEnabled ?? false,
-                          onChanged: (value) {
-                            if (prefs != null) {
-                              _savePreferences(
-                                  prefs.copyWith(proactiveEnabled: value));
-                            }
-                          }),
-                      SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('Тихие часы',
-                              style: TextStyle(color: TroikaColors.text)),
-                          subtitle: Text(
-                              '${prefs?.quietStart ?? '22:00'} — '
-                              '${prefs?.quietEnd ?? '08:00'} '
-                              '(${prefs?.timezone ?? 'UTC'})',
-                              style: const TextStyle(
-                                  color: TroikaColors.textMuted)),
-                          secondary: IconButton(
-                              tooltip: 'Настроить время',
-                              onPressed: _configureQuietHours,
-                              icon: const Icon(Icons.schedule,
-                                  color: TroikaColors.brand)),
-                          value: prefs?.quietHoursEnabled ?? false,
-                          onChanged: (value) {
-                            if (prefs != null) {
-                              _savePreferences(TroikaNotificationPreferences(
-                                  remindersEnabled: prefs.remindersEnabled,
-                                  proactiveEnabled: prefs.proactiveEnabled,
-                                  quietHoursEnabled: value,
-                                  timezone: prefs.timezone,
-                                  quietStart: prefs.quietStart,
-                                  quietEnd: prefs.quietEnd));
-                            }
-                          }),
-                    ])),
-                    if (TroikaConfig.screenSnapshotBetaEnabled) ...[
+                            title: Text('Напоминания',
+                                style: TextStyle(
+                                    color: TroikaPalette.of(context).text)),
+                            subtitle: Text(
+                                'Просьбы напомнить и задачи со сроком',
+                                style: TextStyle(
+                                    color:
+                                        TroikaPalette.of(context).textMuted)),
+                            value: prefs?.remindersEnabled ?? false,
+                            onChanged: (value) {
+                              if (prefs != null) {
+                                _savePreferences(
+                                    prefs.copyWith(remindersEnabled: value));
+                              }
+                            }),
+                        if (Platform.isAndroid)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text('Точные напоминания на телефоне',
+                                style: TextStyle(
+                                    color: TroikaPalette.of(context).text)),
+                            subtitle: Text(
+                                'Разрешение Android для уведомления в нужную минуту',
+                                style: TextStyle(
+                                    color:
+                                        TroikaPalette.of(context).textMuted)),
+                            onTap: () async {
+                              await Permission.notification.request();
+                              await ReminderDeliveryService.instance
+                                  .requestExactAlarms();
+                              await ReminderDeliveryService.instance.sync();
+                            },
+                          ),
+                        SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text('Полезные follow-up',
+                                style: TextStyle(
+                                    color: TroikaPalette.of(context).text)),
+                            subtitle: Text(
+                                'Сроки, блокировки, решения и прогресс',
+                                style: TextStyle(
+                                    color:
+                                        TroikaPalette.of(context).textMuted)),
+                            value: prefs?.proactiveEnabled ?? false,
+                            onChanged: (value) {
+                              if (prefs != null) {
+                                _savePreferences(
+                                    prefs.copyWith(proactiveEnabled: value));
+                              }
+                            }),
+                        SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text('Тихие часы',
+                                style: TextStyle(
+                                    color: TroikaPalette.of(context).text)),
+                            subtitle: Text(
+                                '${prefs?.quietStart ?? '22:00'} — '
+                                '${prefs?.quietEnd ?? '08:00'} '
+                                '(${prefs?.timezone ?? 'UTC'})',
+                                style: TextStyle(
+                                    color:
+                                        TroikaPalette.of(context).textMuted)),
+                            secondary: IconButton(
+                                tooltip: 'Настроить время',
+                                onPressed: _configureQuietHours,
+                                icon: Icon(Icons.schedule,
+                                    color:
+                                        Theme.of(context).colorScheme.primary)),
+                            value: prefs?.quietHoursEnabled ?? false,
+                            onChanged: (value) {
+                              if (prefs != null) {
+                                _savePreferences(TroikaNotificationPreferences(
+                                    remindersEnabled: prefs.remindersEnabled,
+                                    proactiveEnabled: prefs.proactiveEnabled,
+                                    quietHoursEnabled: value,
+                                    timezone: prefs.timezone,
+                                    quietStart: prefs.quietStart,
+                                    quietEnd: prefs.quietEnd));
+                              }
+                            }),
+                      ])),
+                    ],
+                    if (TroikaConfig.screenSnapshotBetaEnabled &&
+                        (_sectionFilter == 0 || _sectionFilter == 3)) ...[
                       _section('Показ экрана', null),
                       _Panel(
                           child: Column(
@@ -466,23 +531,24 @@ class _AssistantHubScreenState extends State<AssistantHubScreen> {
                                       ? Icons.visibility
                                       : Icons.visibility_off_outlined,
                                   color: _screenReady
-                                      ? TroikaColors.brand
-                                      : TroikaColors.textMuted),
+                                      ? Theme.of(context).colorScheme.primary
+                                      : TroikaPalette.of(context).textMuted),
                               const SizedBox(width: 10),
                               Expanded(
                                   child: Text(
                                       _screenReady
                                           ? 'Разрешён один снимок'
                                           : 'Снимок запрещён',
-                                      style: const TextStyle(
-                                          color: TroikaColors.text,
+                                      style: TextStyle(
+                                          color: TroikaPalette.of(context).text,
                                           fontWeight: FontWeight.w600))),
                             ]),
                             const SizedBox(height: 8),
-                            const Text(
+                            Text(
                                 'Android покажет системное окно. Разрешение действует 2 минуты и исчезает после одного кадра. Перед отправкой сервер запросит отдельное подтверждение.',
-                                style:
-                                    TextStyle(color: TroikaColors.textMuted)),
+                                style: TextStyle(
+                                    color:
+                                        TroikaPalette.of(context).textMuted)),
                             const SizedBox(height: 12),
                             Row(children: [
                               Expanded(
@@ -516,8 +582,8 @@ class _AssistantHubScreenState extends State<AssistantHubScreen> {
       padding: const EdgeInsets.only(top: 18, bottom: 6),
       child: Row(children: [
         Text(title,
-            style: const TextStyle(
-                color: TroikaColors.text,
+            style: TextStyle(
+                color: TroikaPalette.of(context).text,
                 fontSize: 18,
                 fontWeight: FontWeight.w600)),
         const Spacer(),
@@ -527,7 +593,7 @@ class _AssistantHubScreenState extends State<AssistantHubScreen> {
           child: Row(children: [
         Expanded(
             child: Text(text,
-                style: const TextStyle(color: TroikaColors.textMuted))),
+                style: TextStyle(color: TroikaPalette.of(context).textMuted))),
         if (action != null)
           TextButton(onPressed: action, child: const Text('Создать'))
       ]));
@@ -541,8 +607,32 @@ class _Panel extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-          color: TroikaColors.surface, borderRadius: BorderRadius.circular(14)),
+          color: TroikaPalette.of(context).surface,
+          borderRadius: BorderRadius.circular(14)),
       child: child);
+}
+
+class _SummaryValue extends StatelessWidget {
+  final String label, value;
+  final IconData icon;
+  const _SummaryValue(
+      {required this.label, required this.value, required this.icon});
+  @override
+  Widget build(BuildContext context) {
+    final p = TroikaPalette.of(context);
+    return Row(children: [
+      TroikaIcon(icon: icon, size: 40),
+      const SizedBox(width: 12),
+      Expanded(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(value,
+            style: TextStyle(
+                color: p.text, fontSize: 22, fontWeight: FontWeight.w600)),
+        Text(label, style: TextStyle(color: p.textMuted)),
+      ])),
+    ]);
+  }
 }
 
 class _MessageCard extends StatelessWidget {
@@ -560,24 +650,26 @@ class _MessageCard extends StatelessWidget {
               message.requiresApproval
                   ? Icons.pending_actions
                   : Icons.notifications_none,
-              color: TroikaColors.brand),
+              color: Theme.of(context).colorScheme.primary),
           const SizedBox(width: 8),
           Expanded(
               child: Text(message.title,
                   style: TextStyle(
-                      color: TroikaColors.text,
+                      color: TroikaPalette.of(context).text,
                       fontWeight: message.isRead
                           ? FontWeight.normal
                           : FontWeight.w700))),
           Text(message.category,
-              style:
-                  const TextStyle(color: TroikaColors.textMuted, fontSize: 11))
+              style: TextStyle(
+                  color: TroikaPalette.of(context).textMuted, fontSize: 11))
         ]),
         const SizedBox(height: 8),
-        Text(message.body, style: const TextStyle(color: TroikaColors.text)),
+        Text(message.body,
+            style: TextStyle(color: TroikaPalette.of(context).text)),
         const SizedBox(height: 6),
         Text('Почему: ${message.reason}',
-            style: const TextStyle(color: TroikaColors.textMuted, fontSize: 12))
+            style: TextStyle(
+                color: TroikaPalette.of(context).textMuted, fontSize: 12))
       ])));
 }
 
@@ -595,15 +687,15 @@ class _ProjectCard extends StatelessWidget {
                   ? Icons.radio_button_checked
                   : Icons.folder_outlined,
               color: project.isActive
-                  ? TroikaColors.brand
-                  : TroikaColors.textMuted),
+                  ? Theme.of(context).colorScheme.primary
+                  : TroikaPalette.of(context).textMuted),
           title: Text(project.name,
-              style: const TextStyle(color: TroikaColors.text)),
+              style: TextStyle(color: TroikaPalette.of(context).text)),
           subtitle: Text(
               project.summary.isEmpty
                   ? 'Нажми, чтобы сделать активным'
                   : project.summary,
-              style: const TextStyle(color: TroikaColors.textMuted))));
+              style: TextStyle(color: TroikaPalette.of(context).textMuted))));
 }
 
 class _TaskCard extends StatelessWidget {
@@ -619,28 +711,31 @@ class _TaskCard extends StatelessWidget {
                 : Icons.radio_button_unchecked,
             color: task.status == 'blocked'
                 ? TroikaColors.error
-                : TroikaColors.textMuted),
+                : TroikaPalette.of(context).textMuted),
         const SizedBox(width: 10),
         Expanded(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(task.title, style: const TextStyle(color: TroikaColors.text)),
+          Text(task.title,
+              style: TextStyle(color: TroikaPalette.of(context).text)),
           if (task.details.isNotEmpty)
             Text(task.details,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    color: TroikaColors.textMuted, fontSize: 12)),
+                style: TextStyle(
+                    color: TroikaPalette.of(context).textMuted, fontSize: 12)),
           if (task.dueAt.isNotEmpty)
             Text('Срок: ${task.dueAt}',
-                style: const TextStyle(color: TroikaColors.brand, fontSize: 12))
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary, fontSize: 12))
         ])),
         if (task.requiresApproval)
-          const Icon(Icons.verified_user_outlined,
-              color: TroikaColors.brand, size: 18),
+          Icon(Icons.verified_user_outlined,
+              color: Theme.of(context).colorScheme.primary, size: 18),
         PopupMenuButton<String>(
             tooltip: 'Изменить статус',
-            icon: const Icon(Icons.more_vert, color: TroikaColors.textMuted),
+            icon: Icon(Icons.more_vert,
+                color: TroikaPalette.of(context).textMuted),
             onSelected: onStatusChanged,
             itemBuilder: (context) => const [
                   PopupMenuItem(value: 'in_progress', child: Text('В работе')),

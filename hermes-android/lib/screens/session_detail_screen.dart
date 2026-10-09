@@ -1,3 +1,4 @@
+import '../widgets/troika_page.dart';
 import 'package:flutter/material.dart';
 import '../services/troika_api_service.dart';
 
@@ -28,21 +29,21 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const accent = Color(0xFFF5A623);
-    return Scaffold(
-      backgroundColor: const Color(0xFF0C0B0A),
+    final accent = Theme.of(context).colorScheme.primary;
+    return TroikaPage(
+      backgroundColor: TroikaPalette.of(context).bg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0C0B0A),
+        backgroundColor: TroikaPalette.of(context).bg,
         elevation: 0,
-        iconTheme: const IconThemeData(color: accent),
+        iconTheme: IconThemeData(color: accent),
         title: Text(
           widget.headerTitle,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 14,
-            fontWeight: FontWeight.w400,
+          style: TextStyle(
+            color: TroikaPalette.of(context).text,
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),
@@ -50,28 +51,26 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
         future: _future,
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(
+            return Center(
               child: CircularProgressIndicator(color: accent),
             );
           }
           if (snap.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  snap.error.toString(),
-                  style: const TextStyle(color: Colors.white70),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            );
+            return SingleChildScrollView(
+                child: TroikaEmptyState(
+                    icon: Icons.cloud_off_outlined,
+                    title: 'Разговор пока недоступен',
+                    message: snap.error.toString(),
+                    actionLabel: 'Повторить',
+                    onAction: () => setState(() =>
+                        _future = _api.getSessionMessages(widget.sessionId))));
           }
           final msgs = snap.data ?? const [];
           if (msgs.isEmpty) {
-            return const Center(
+            return Center(
               child: Text(
                 'Сообщений нет',
-                style: TextStyle(color: Colors.white54),
+                style: TextStyle(color: TroikaPalette.of(context).textMuted),
               ),
             );
           }
@@ -94,8 +93,8 @@ class _MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final isUser = msg.role == 'user';
     final bg = isUser
-        ? const Color(0xFFF5A623).withOpacity(0.18)
-        : Colors.white.withOpacity(0.05);
+        ? Theme.of(context).colorScheme.primary.withOpacity(0.18)
+        : TroikaPalette.of(context).surface;
     final align = isUser ? Alignment.centerRight : Alignment.centerLeft;
     final crossAxis =
         isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start;
@@ -115,11 +114,14 @@ class _MessageBubble extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
                   color: bg,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   msg.content,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  style: TextStyle(
+                      color: TroikaPalette.of(context).text,
+                      fontSize: 16,
+                      height: 1.45),
                 ),
               ),
               if (msg.timestamp != null)
@@ -127,10 +129,9 @@ class _MessageBubble extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 2, left: 4, right: 4),
                   child: Text(
                     _formatTime(msg.timestamp!),
-                    style: const TextStyle(
-                      color: Colors.white38,
-                      fontSize: 10,
-                      fontFamily: 'monospace',
+                    style: TextStyle(
+                      color: TroikaPalette.of(context).textMuted,
+                      fontSize: 12,
                     ),
                   ),
                 ),

@@ -36,6 +36,7 @@ class TroikaConfig {
   static const String _keyWakeWordEnabled = 'troika_wake_word_enabled';
   static const String _legacyKeyWakeWordEnabled = 'hermes_wake_word_enabled';
   static const String _keyThemeMode = 'troika_theme_mode';
+  static const String _keyInterfaceAccent = 'troika_interface_accent';
   static const String _keyTextScale = 'troika_text_scale';
   static const String _keyLanguage = 'troika_language';
   static const String _keyWindowsHotkey = 'troika_windows_hotkey';
@@ -351,6 +352,16 @@ class TroikaConfig {
 
   static Future<void> setThemeMode(String value) async {
     await _prefs.setString(_keyThemeMode, value);
+  }
+
+  static String get interfaceAccent =>
+      _prefs.getString(_keyInterfaceAccent) ?? 'amber';
+
+  static Future<void> setInterfaceAccent(String value) async {
+    const choices = {'amber', 'teal', 'blue', 'violet', 'rose', 'green'};
+    if (choices.contains(value)) {
+      await _prefs.setString(_keyInterfaceAccent, value);
+    }
   }
 
   static double get textScale => _prefs.getDouble(_keyTextScale) ?? 1.0;

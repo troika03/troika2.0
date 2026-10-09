@@ -1,10 +1,10 @@
+import '../widgets/troika_page.dart';
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 
 import '../services/local_document_service.dart';
 import '../services/windows_shell_service.dart';
-import '../theme/troika_theme.dart';
 
 class LocalDocumentsScreen extends StatefulWidget {
   final bool initialPresentation;
@@ -104,10 +104,10 @@ class _LocalDocumentsScreenState extends State<LocalDocumentsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return TroikaPage(
       appBar: AppBar(
         title: const Text('Документы'),
-        backgroundColor: TroikaColors.bg,
+        backgroundColor: TroikaPalette.of(context).bg,
         surfaceTintColor: Colors.transparent,
       ),
       body: Center(
@@ -118,16 +118,15 @@ class _LocalDocumentsScreenState extends State<LocalDocumentsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  'Создать локально',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Работает локально: файл создаётся на устройстве.',
-                  style: TextStyle(color: TroikaColors.textMuted),
-                ),
-                const SizedBox(height: 24),
+                TroikaIntro(
+                    icon: _presentation
+                        ? Icons.slideshow_outlined
+                        : Icons.description_outlined,
+                    title: _presentation
+                        ? 'Собери свою историю'
+                        : 'Мысли в документ',
+                    subtitle:
+                        'Добавь свой текст. Готовый файл сохранится на устройстве — интернет не нужен.'),
                 SegmentedButton<bool>(
                   segments: const [
                     ButtonSegment(
@@ -150,10 +149,10 @@ class _LocalDocumentsScreenState extends State<LocalDocumentsScreen> {
                 TextField(
                   controller: _title,
                   enabled: !_saving,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Название',
                     filled: true,
-                    fillColor: TroikaColors.surface,
+                    fillColor: TroikaPalette.of(context).surface,
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -161,7 +160,7 @@ class _LocalDocumentsScreenState extends State<LocalDocumentsScreen> {
                 TextField(
                   controller: _content,
                   enabled: !_saving,
-                  minLines: 8,
+                  minLines: 5,
                   maxLines: 18,
                   decoration: InputDecoration(
                     labelText: _presentation ? 'Слайды' : 'Текст',
@@ -170,7 +169,7 @@ class _LocalDocumentsScreenState extends State<LocalDocumentsScreen> {
                         : 'Напиши текст документа',
                     alignLabelWithHint: true,
                     filled: true,
-                    fillColor: TroikaColors.surface,
+                    fillColor: TroikaPalette.of(context).surface,
                     border: const OutlineInputBorder(),
                   ),
                 ),

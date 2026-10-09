@@ -1,3 +1,4 @@
+import '../widgets/troika_page.dart';
 import 'dart:convert';
 import '../widgets/web_sources_view.dart';
 import 'package:flutter/gestures.dart';
@@ -118,7 +119,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void _attachSheet() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: TroikaColors.surface,
+      backgroundColor: TroikaPalette.of(context).surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
@@ -147,8 +148,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _sheetItem(IconData icon, String label, VoidCallback onTap) {
     return ListTile(
-      leading: Icon(icon, color: TroikaColors.brand),
-      title: Text(label, style: const TextStyle(color: TroikaColors.text)),
+      leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
+      title:
+          Text(label, style: TextStyle(color: TroikaPalette.of(context).text)),
       onTap: onTap,
     );
   }
@@ -171,14 +173,14 @@ class _ChatScreenState extends State<ChatScreen> {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: TroikaColors.surface,
-        title: const Text(
+        backgroundColor: TroikaPalette.of(context).surface,
+        title: Text(
           'Подтвердить действие?',
-          style: TextStyle(color: TroikaColors.text),
+          style: TextStyle(color: TroikaPalette.of(context).text),
         ),
         content: Text(
           request.description,
-          style: const TextStyle(color: TroikaColors.textMuted),
+          style: TextStyle(color: TroikaPalette.of(context).textMuted),
         ),
         actions: [
           TextButton(
@@ -264,9 +266,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
               const SizedBox(height: 9),
-              const Text(
+              Text(
                 'Локальные команды готовы. Интернет не нужен.',
-                style: TextStyle(color: TroikaColors.textMuted, fontSize: 15),
+                style: TextStyle(
+                    color: TroikaPalette.of(context).textMuted, fontSize: 15),
               ),
               const SizedBox(height: 26),
               Wrap(
@@ -335,14 +338,16 @@ class _ChatScreenState extends State<ChatScreen> {
                     ? Image.memory(bytes,
                         width: 64, height: 64, fit: BoxFit.cover)
                     : Container(
-                        width: 64, height: 64, color: TroikaColors.surfaceHi),
+                        width: 64,
+                        height: 64,
+                        color: TroikaPalette.of(context).surfaceHi),
               ),
               Positioned(
                 top: -6,
                 right: -6,
                 child: IconButton(
-                  icon:
-                      const Icon(Icons.cancel, size: 18, color: Colors.white70),
+                  icon: Icon(Icons.cancel,
+                      size: 18, color: TroikaPalette.of(context).textMuted),
                   onPressed: () => setState(() => _pendingImages.removeAt(i)),
                 ),
               ),
@@ -363,26 +368,27 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             IconButton(
               icon: const Icon(Icons.add_circle_outline),
-              color: TroikaColors.brand,
+              color: Theme.of(context).colorScheme.primary,
               onPressed: _attachSheet,
             ),
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
-                  color: TroikaColors.surface,
+                  color: TroikaPalette.of(context).surface,
                   borderRadius: BorderRadius.circular(22),
-                  border: Border.all(color: Colors.white10),
+                  border: Border.all(color: TroikaPalette.of(context).line),
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 child: TextField(
                   controller: _input,
-                  style: const TextStyle(color: TroikaColors.text),
+                  style: TextStyle(color: TroikaPalette.of(context).text),
                   minLines: 1,
                   maxLines: 5,
                   textInputAction: TextInputAction.newline,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: 'Сообщение…',
-                    hintStyle: TextStyle(color: TroikaColors.textFaint),
+                    hintStyle:
+                        TextStyle(color: TroikaPalette.of(context).textFaint),
                     border: InputBorder.none,
                   ),
                 ),
@@ -392,7 +398,7 @@ class _ChatScreenState extends State<ChatScreen> {
             // Микрофон — запуск голосового диалога.
             IconButton(
               icon: Icon(isBusy ? Icons.stop_circle : Icons.mic_none),
-              color: TroikaColors.brand,
+              color: Theme.of(context).colorScheme.primary,
               onPressed: () {
                 // Десктопный push-to-talk: идёт запись → повторное нажатие
                 // останавливает и обрабатывает (STT → Troika → TTS).
@@ -442,7 +448,7 @@ class _QuickCard extends StatelessWidget {
     return SizedBox(
       width: 210,
       child: Material(
-        color: TroikaColors.surface,
+        color: TroikaPalette.of(context).surface,
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           onTap: onTap,
@@ -451,20 +457,21 @@ class _QuickCard extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white10),
+              border: Border.all(color: TroikaPalette.of(context).line),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(icon, color: TroikaColors.brand, size: 22),
+                Icon(icon,
+                    color: Theme.of(context).colorScheme.primary, size: 22),
                 const SizedBox(height: 16),
                 Text(title,
                     style: const TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 3),
                 Text(
                   subtitle,
-                  style: const TextStyle(
-                    color: TroikaColors.textMuted,
+                  style: TextStyle(
+                    color: TroikaPalette.of(context).textMuted,
                     fontSize: 12,
                   ),
                 ),
@@ -488,8 +495,8 @@ class _SendButton extends StatelessWidget {
       child: Container(
         width: 44,
         height: 44,
-        decoration: const BoxDecoration(
-          color: TroikaColors.brand,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary,
           shape: BoxShape.circle,
         ),
         child:
@@ -516,8 +523,8 @@ class _MessageBubble extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: isUser
-              ? TroikaColors.brand.withOpacity(0.14)
-              : TroikaColors.surface,
+              ? Theme.of(context).colorScheme.primary.withOpacity(0.14)
+              : TroikaPalette.of(context).surface,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
@@ -525,8 +532,9 @@ class _MessageBubble extends StatelessWidget {
             bottomRight: Radius.circular(isUser ? 4 : 16),
           ),
           border: Border.all(
-            color:
-                isUser ? TroikaColors.brand.withOpacity(0.28) : Colors.white10,
+            color: isUser
+                ? Theme.of(context).colorScheme.primary.withOpacity(0.28)
+                : TroikaPalette.of(context).line,
           ),
         ),
         child: Column(
@@ -554,15 +562,15 @@ class _MessageBubble extends StatelessWidget {
               _LinkifiedText(
                 text: message.text,
                 color: isUser
-                    ? TroikaColors.text.withOpacity(0.92)
-                    : TroikaColors.text,
+                    ? TroikaPalette.of(context).text.withOpacity(0.92)
+                    : TroikaPalette.of(context).text,
               ),
             if (!isUser) WebSourcesView(trace: message.webSources),
             if (message.fromVoice)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Icon(Icons.graphic_eq,
-                    size: 12, color: TroikaColors.textFaint),
+                    size: 12, color: TroikaPalette.of(context).textFaint),
               ),
           ],
         ),
@@ -616,8 +624,9 @@ class _TypingDotsState extends State<_TypingDots>
               padding: const EdgeInsets.symmetric(horizontal: 2),
               child: Opacity(
                 opacity: op.toDouble(),
-                child: const CircleAvatar(
-                    radius: 3, backgroundColor: TroikaColors.textMuted),
+                child: CircleAvatar(
+                    radius: 3,
+                    backgroundColor: TroikaPalette.of(context).textMuted),
               ),
             );
           }),
@@ -690,8 +699,8 @@ class _LinkifiedTextState extends State<_LinkifiedText> {
       _recognizers.add(rec);
       spans.add(TextSpan(
         text: raw,
-        style: const TextStyle(
-          color: TroikaColors.brandSoft,
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.primary,
           decoration: TextDecoration.underline,
         ),
         recognizer: rec,
@@ -740,9 +749,9 @@ class _ThoughtsViewState extends State<_ThoughtsView> {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
+        color: TroikaPalette.of(context).surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: TroikaPalette.of(context).line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -760,7 +769,7 @@ class _ThoughtsViewState extends State<_ThoughtsView> {
                   Text(
                     widget.live ? 'Размышляет…' : 'Ход мыслей ($count)',
                     style: TextStyle(
-                      color: TroikaColors.textMuted,
+                      color: TroikaPalette.of(context).textMuted,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -769,7 +778,7 @@ class _ThoughtsViewState extends State<_ThoughtsView> {
                   Icon(
                     _expanded ? Icons.expand_less : Icons.expand_more,
                     size: 16,
-                    color: TroikaColors.textFaint,
+                    color: TroikaPalette.of(context).textFaint,
                   ),
                 ],
               ),
@@ -797,16 +806,18 @@ class _ThoughtsViewState extends State<_ThoughtsView> {
     switch (s.kind) {
       case ThoughtKind.thinking:
         icon = '·';
-        color = TroikaColors.text.withOpacity(0.75);
+        color = TroikaPalette.of(context).text.withOpacity(0.75);
         break;
       case ThoughtKind.toolStart:
         icon = '🔧';
-        color = TroikaColors.brandSoft;
+        color = Theme.of(context).colorScheme.primary;
         text = 'вызываю $text';
         break;
       case ThoughtKind.toolDone:
         icon = s.isError ? '⚠️' : '✅';
-        color = s.isError ? TroikaColors.error : TroikaColors.textMuted;
+        color = s.isError
+            ? TroikaColors.error
+            : TroikaPalette.of(context).textMuted;
         text = s.isError ? '$text — ошибка' : '$text — готово';
         break;
     }

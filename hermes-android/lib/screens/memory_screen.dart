@@ -1,3 +1,4 @@
+import '../widgets/troika_page.dart';
 import 'package:flutter/material.dart';
 import '../services/troika_api_service.dart';
 import '../theme/troika_theme.dart';
@@ -76,7 +77,7 @@ class _MemoryScreenState extends State<MemoryScreen> {
     final result = await showModalBottomSheet<_MemoryDraft>(
         context: context,
         isScrollControlled: true,
-        backgroundColor: TroikaColors.surface,
+        backgroundColor: TroikaPalette.of(context).surface,
         shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
         builder: (sheetContext) => StatefulBuilder(
@@ -95,21 +96,23 @@ class _MemoryScreenState extends State<MemoryScreen> {
                                   width: 40,
                                   height: 4,
                                   decoration: BoxDecoration(
-                                      color: TroikaColors.textFaint,
+                                      color:
+                                          TroikaPalette.of(context).textFaint,
                                       borderRadius: BorderRadius.circular(2)))),
                           const SizedBox(height: 24),
                           Text(
                               memory == null
                                   ? 'Что запомнить'
                                   : 'Исправить запись',
-                              style: const TextStyle(
-                                  color: TroikaColors.text,
+                              style: TextStyle(
+                                  color: TroikaPalette.of(context).text,
                                   fontSize: 22,
                                   fontWeight: FontWeight.w600)),
                           const SizedBox(height: 8),
-                          const Text(
+                          Text(
                               'Эта информация будет учитываться в будущих ответах. Не сохраняй пароли и платёжные данные.',
-                              style: TextStyle(color: TroikaColors.textMuted)),
+                              style: TextStyle(
+                                  color: TroikaPalette.of(context).textMuted)),
                           const SizedBox(height: 24),
                           Wrap(spacing: 8, runSpacing: 8, children: [
                             for (final option in const [
@@ -125,8 +128,11 @@ class _MemoryScreenState extends State<MemoryScreen> {
                                   avatar: Icon(option.$3,
                                       size: 18,
                                       color: kind == option.$1
-                                          ? TroikaColors.brandDeep
-                                          : TroikaColors.textMuted),
+                                          ? Theme.of(context)
+                                              .colorScheme
+                                              .primary
+                                          : TroikaPalette.of(context)
+                                              .textMuted),
                                   label: Text(option.$2),
                                   selected: kind == option.$1,
                                   onSelected: (_) =>
@@ -137,7 +143,8 @@ class _MemoryScreenState extends State<MemoryScreen> {
                               controller: title,
                               maxLength: 80,
                               textInputAction: TextInputAction.next,
-                              style: const TextStyle(color: TroikaColors.text),
+                              style: TextStyle(
+                                  color: TroikaPalette.of(context).text),
                               decoration: const InputDecoration(
                                   labelText: 'Короткий заголовок',
                                   hintText: 'Например: Формат ответов')),
@@ -147,7 +154,8 @@ class _MemoryScreenState extends State<MemoryScreen> {
                               minLines: 3,
                               maxLines: 6,
                               maxLength: 1200,
-                              style: const TextStyle(color: TroikaColors.text),
+                              style: TextStyle(
+                                  color: TroikaPalette.of(context).text),
                               decoration: const InputDecoration(
                                   labelText: 'Что учитывать',
                                   hintText:
@@ -189,12 +197,13 @@ class _MemoryScreenState extends State<MemoryScreen> {
     final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-                backgroundColor: TroikaColors.surface,
-                title: const Text('Удалить из памяти?',
-                    style: TextStyle(color: TroikaColors.text)),
+                backgroundColor: TroikaPalette.of(context).surface,
+                title: Text('Удалить из памяти?',
+                    style: TextStyle(color: TroikaPalette.of(context).text)),
                 content: Text(
                     '«${memory.title}» больше не будет учитываться в ответах.',
-                    style: const TextStyle(color: TroikaColors.textMuted)),
+                    style:
+                        TextStyle(color: TroikaPalette.of(context).textMuted)),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(dialogContext, false),
@@ -229,8 +238,8 @@ class _MemoryScreenState extends State<MemoryScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-      backgroundColor: TroikaColors.bg,
+  Widget build(BuildContext context) => TroikaPage(
+      backgroundColor: TroikaPalette.of(context).bg,
       appBar: AppBar(title: const Text('Память'), actions: [
         IconButton(
             tooltip: 'Обновить',
@@ -257,16 +266,19 @@ class _MemoryScreenState extends State<MemoryScreen> {
                     Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                            color: TroikaColors.surface,
+                            color: TroikaPalette.of(context).surface,
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                                color: TroikaColors.brand
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .primary
                                     .withValues(alpha: 0.12))),
-                        child: const Row(
+                        child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Icon(Icons.psychology_outlined,
-                                  color: TroikaColors.brand, size: 28),
+                                  color: Theme.of(context).colorScheme.primary,
+                                  size: 28),
                               SizedBox(width: 16),
                               Expanded(
                                   child: Column(
@@ -275,14 +287,16 @@ class _MemoryScreenState extends State<MemoryScreen> {
                                       children: [
                                     Text('Ты управляешь памятью',
                                         style: TextStyle(
-                                            color: TroikaColors.text,
+                                            color:
+                                                TroikaPalette.of(context).text,
                                             fontSize: 18,
                                             fontWeight: FontWeight.w600)),
                                     SizedBox(height: 8),
                                     Text(
                                         'Здесь видны факты, предпочтения и правила общения, которые Тройка учитывает в ответах.',
                                         style: TextStyle(
-                                            color: TroikaColors.textMuted))
+                                            color: TroikaPalette.of(context)
+                                                .textMuted))
                                   ]))
                             ])),
                     if (_error != null) ...[
@@ -295,14 +309,15 @@ class _MemoryScreenState extends State<MemoryScreen> {
                     ],
                     const SizedBox(height: 24),
                     Row(children: [
-                      const Text('Сохранённое',
+                      Text('Сохранённое',
                           style: TextStyle(
-                              color: TroikaColors.text,
+                              color: TroikaPalette.of(context).text,
                               fontSize: 18,
                               fontWeight: FontWeight.w600)),
                       const Spacer(),
                       Text('${_memories.length}',
-                          style: const TextStyle(color: TroikaColors.textMuted))
+                          style: TextStyle(
+                              color: TroikaPalette.of(context).textMuted))
                     ]),
                     const SizedBox(height: 12),
                     if (_memories.isEmpty && _error == null)
@@ -339,13 +354,14 @@ class _StateCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-          color: TroikaColors.surface, borderRadius: BorderRadius.circular(16)),
+          color: TroikaPalette.of(context).surface,
+          borderRadius: BorderRadius.circular(16)),
       child: Column(children: [
-        Icon(icon, color: TroikaColors.brand, size: 32),
+        Icon(icon, color: Theme.of(context).colorScheme.primary, size: 32),
         const SizedBox(height: 12),
         Text(text,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: TroikaColors.textMuted)),
+            style: TextStyle(color: TroikaPalette.of(context).textMuted)),
         const SizedBox(height: 12),
         TextButton(onPressed: onAction, child: Text(actionLabel))
       ]));
@@ -368,39 +384,45 @@ class _MemoryCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.fromLTRB(16, 16, 8, 16),
       decoration: BoxDecoration(
-          color: TroikaColors.surface, borderRadius: BorderRadius.circular(16)),
+          color: TroikaPalette.of(context).surface,
+          borderRadius: BorderRadius.circular(16)),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Container(
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-                color: TroikaColors.brand.withValues(alpha: 0.08),
+                color: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12)),
-            child: Icon(_kind.$2, color: TroikaColors.brand, size: 20)),
+            child: Icon(_kind.$2,
+                color: Theme.of(context).colorScheme.primary, size: 20)),
         const SizedBox(width: 12),
         Expanded(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(_kind.$1.toUpperCase(),
-              style: const TextStyle(
-                  color: TroikaColors.brand,
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.primary,
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0.7)),
           const SizedBox(height: 4),
           Text(memory.title,
-              style: const TextStyle(
-                  color: TroikaColors.text,
+              style: TextStyle(
+                  color: TroikaPalette.of(context).text,
                   fontSize: 16,
                   fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           Text(memory.content,
-              style:
-                  const TextStyle(color: TroikaColors.textMuted, height: 1.35))
+              style: TextStyle(
+                  color: TroikaPalette.of(context).textMuted, height: 1.35))
         ])),
         PopupMenuButton<String>(
             tooltip: 'Действия',
-            icon: const Icon(Icons.more_vert, color: TroikaColors.textMuted),
+            icon: Icon(Icons.more_vert,
+                color: TroikaPalette.of(context).textMuted),
             onSelected: (value) {
               if (value == 'edit') {
                 onEdit();

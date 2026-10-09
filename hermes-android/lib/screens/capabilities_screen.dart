@@ -1,3 +1,4 @@
+import '../widgets/troika_page.dart';
 import 'package:flutter/material.dart';
 
 import '../services/capability_service.dart';
@@ -89,7 +90,7 @@ class _CapabilitiesScreenState extends State<CapabilitiesScreen>
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Scaffold(
+    return TroikaPage(
       appBar: AppBar(
         title: const Text('Возможности'),
         surfaceTintColor: Colors.transparent,
@@ -120,15 +121,15 @@ class _CapabilitiesScreenState extends State<CapabilitiesScreen>
                   : ListView(
                       padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
                       children: [
+                        const TroikaIntro(
+                            icon: Icons.extension_outlined,
+                            title: 'Больше возможностей',
+                            subtitle:
+                                'Тройка сама выбирает нужное для задачи. Ты решаешь, что ей доступно.'),
                         Text(
-                            'Тройка сама выбирает нужные возможности для задачи.',
-                            style: Theme.of(context).textTheme.titleMedium),
-                        const SizedBox(height: 8),
-                        Text(
-                            'Общие настройки аккаунта. Изменения действуют для следующих '
-                            'действий и не удаляют данные.',
+                            'Настройки общие для аккаунта. Данные сохраняются.',
                             style: TextStyle(color: colors.onSurfaceVariant)),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 16),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
@@ -197,7 +198,7 @@ class _CapabilitiesScreenState extends State<CapabilitiesScreen>
                         width: 24,
                         height: 24,
                         child: CircularProgressIndicator(strokeWidth: 2))
-                    : Icon(_icon(item.id)),
+                    : TroikaIcon(icon: _icon(item.id)),
               )
             else ...[
               Text(item.title, style: Theme.of(context).textTheme.titleMedium),

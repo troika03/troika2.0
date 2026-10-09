@@ -1,3 +1,4 @@
+import '../widgets/troika_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -106,117 +107,114 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Настройка Тройки',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+    return TroikaPage(
+      body: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Настройка Тройки',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Микрофон нужен, чтобы сразу сказать задачу и получить '
-                'готовый результат. Остальные разрешения включаются позже '
-                'только по необходимости в разделе «Разрешения».',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: Colors.white70,
-                ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Микрофон нужен, чтобы сразу сказать задачу и получить '
+              'готовый результат. Остальные разрешения включаются позже '
+              'только по необходимости в разделе «Разрешения».',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: TroikaPalette.of(context).textMuted,
               ),
-              const SizedBox(height: 24),
-              Expanded(
-                child: ListView(
-                  children: [
+            ),
+            const SizedBox(height: 24),
+            Expanded(
+              child: ListView(
+                children: [
+                  _Step(
+                    icon: Icons.mic,
+                    title: 'Микрофон',
+                    subtitle: 'Чтобы слышать тебя и распознавать речь.',
+                    done: _mic,
+                    required_: true,
+                    onTap: _grantMic,
+                  ),
+                  if (TroikaConfig.developerDiagnosticsEnabled) ...[
                     _Step(
-                      icon: Icons.mic,
-                      title: 'Микрофон',
-                      subtitle: 'Чтобы слышать тебя и распознавать речь.',
-                      done: _mic,
-                      required_: true,
-                      onTap: _grantMic,
+                      icon: Icons.accessibility_new,
+                      title: 'Спец-возможности',
+                      subtitle:
+                          'Необязательно. Разрешает нажатия, свайпы, ввод и '
+                          'скриншоты.',
+                      done: _accessibility,
+                      required_: false,
+                      onTap: () => _invoke('openAccessibilitySettings'),
                     ),
-                    if (TroikaConfig.developerDiagnosticsEnabled) ...[
-                      _Step(
-                        icon: Icons.accessibility_new,
-                        title: 'Спец-возможности',
-                        subtitle:
-                            'Необязательно. Разрешает нажатия, свайпы, ввод и '
-                            'скриншоты.',
-                        done: _accessibility,
-                        required_: false,
-                        onTap: () => _invoke('openAccessibilitySettings'),
-                      ),
-                      _Step(
-                        icon: Icons.layers,
-                        title: 'Поверх других окон',
-                        subtitle: 'Необязательное developer-разрешение.',
-                        done: _overlay,
-                        required_: false,
-                        onTap: () => _invoke('requestOverlayPermission'),
-                      ),
-                      _Step(
-                        icon: Icons.battery_charging_full,
-                        title: 'Фоновое пробуждение',
-                        subtitle: 'Помогает локальному wake word работать при '
-                            'выключенном экране.',
-                        done: _battery,
-                        required_: false,
-                        onTap: () =>
-                            _invoke('requestBatteryOptimizationDisable'),
-                      ),
-                      _Step(
-                        icon: Icons.my_location,
-                        title: 'Местоположение',
-                        subtitle: 'Необязательный контекст по явному согласию.',
-                        done: _location,
-                        required_: false,
-                        onTap: () => _invoke('requestLocationPermission'),
-                      ),
-                      _Step(
-                        icon: Icons.location_searching,
-                        title: 'Местоположение в фоне',
-                        subtitle:
-                            'Developer-настройка. Требует отдельного согласия.',
-                        done: _locationBg,
-                        required_: false,
-                        onTap: () => _invoke('requestBackgroundLocation'),
-                      ),
-                    ],
+                    _Step(
+                      icon: Icons.layers,
+                      title: 'Поверх других окон',
+                      subtitle: 'Необязательное developer-разрешение.',
+                      done: _overlay,
+                      required_: false,
+                      onTap: () => _invoke('requestOverlayPermission'),
+                    ),
+                    _Step(
+                      icon: Icons.battery_charging_full,
+                      title: 'Фоновое пробуждение',
+                      subtitle: 'Помогает локальному wake word работать при '
+                          'выключенном экране.',
+                      done: _battery,
+                      required_: false,
+                      onTap: () => _invoke('requestBatteryOptimizationDisable'),
+                    ),
+                    _Step(
+                      icon: Icons.my_location,
+                      title: 'Местоположение',
+                      subtitle: 'Необязательный контекст по явному согласию.',
+                      done: _location,
+                      required_: false,
+                      onTap: () => _invoke('requestLocationPermission'),
+                    ),
+                    _Step(
+                      icon: Icons.location_searching,
+                      title: 'Местоположение в фоне',
+                      subtitle:
+                          'Developer-настройка. Требует отдельного согласия.',
+                      done: _locationBg,
+                      required_: false,
+                      onTap: () => _invoke('requestBackgroundLocation'),
+                    ),
                   ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _requiredDone ? _finish : null,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: Text(
+                  _requiredDone ? 'Готово, продолжить' : 'Выдай микрофон',
                 ),
               ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: _requiredDone ? _finish : null,
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: Text(
-                    _requiredDone ? 'Готово, продолжить' : 'Выдай микрофон',
+            ),
+            if (_requiredDone &&
+                TroikaConfig.developerDiagnosticsEnabled &&
+                !(_overlay && _battery))
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Center(
+                  child: TextButton(
+                    onPressed: _finish,
+                    child: const Text('Пропустить необязательное'),
                   ),
                 ),
               ),
-              if (_requiredDone &&
-                  TroikaConfig.developerDiagnosticsEnabled &&
-                  !(_overlay && _battery))
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Center(
-                    child: TextButton(
-                      onPressed: _finish,
-                      child: const Text('Пропустить необязательное'),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+          ],
         ),
       ),
     );
@@ -249,7 +247,8 @@ class _Step extends StatelessWidget {
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: Icon(
           icon,
-          color: done ? Colors.greenAccent : Colors.white70,
+          color:
+              done ? Colors.greenAccent : TroikaPalette.of(context).textMuted,
           size: 28,
         ),
         title: Row(
@@ -281,7 +280,8 @@ class _Step extends StatelessWidget {
           padding: const EdgeInsets.only(top: 4),
           child: Text(
             subtitle,
-            style: theme.textTheme.bodySmall?.copyWith(color: Colors.white60),
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: TroikaPalette.of(context).textMuted),
           ),
         ),
         trailing: done

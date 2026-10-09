@@ -48,6 +48,7 @@ class ConversationView extends StatelessWidget {
             // Последний запрос пользователя
             if (userText.isNotEmpty)
               _bubble(
+                context: context,
                 text: userText,
                 isUser: true,
               ),
@@ -55,6 +56,7 @@ class ConversationView extends StatelessWidget {
             // Ответ Тройки.
             if (troikaText.isNotEmpty)
               _bubble(
+                context: context,
                 text: troikaText,
                 isUser: false,
               ),
@@ -64,7 +66,11 @@ class ConversationView extends StatelessWidget {
     );
   }
 
-  Widget _bubble({required String text, required bool isUser}) {
+  Widget _bubble({
+    required BuildContext context,
+    required String text,
+    required bool isUser,
+  }) {
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -72,8 +78,8 @@ class ConversationView extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: isUser
-              ? TroikaColors.brand.withOpacity(0.13)
-              : TroikaColors.surface,
+              ? Theme.of(context).colorScheme.primary.withOpacity(0.13)
+              : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
@@ -81,16 +87,17 @@ class ConversationView extends StatelessWidget {
             bottomRight: Radius.circular(isUser ? 4 : 16),
           ),
           border: Border.all(
-            color:
-                isUser ? TroikaColors.brand.withOpacity(0.28) : Colors.white10,
+            color: isUser
+                ? Theme.of(context).colorScheme.primary.withOpacity(0.28)
+                : Theme.of(context).dividerColor,
           ),
         ),
         child: Text(
           text,
           style: TextStyle(
             color: isUser
-                ? TroikaColors.text.withOpacity(0.85)
-                : TroikaColors.text,
+                ? Theme.of(context).colorScheme.onSurface.withOpacity(0.85)
+                : Theme.of(context).colorScheme.onSurface,
             fontSize: 14,
             height: 1.4,
           ),

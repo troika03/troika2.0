@@ -90,7 +90,7 @@ class _StatusOrbState extends State<StatusOrb> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final color = _orbColor(widget.state);
+    final color = _orbColor(context, widget.state);
     final size = widget.size;
     return Semantics(
       container: true,
@@ -296,12 +296,14 @@ class _OrbContourPainter extends CustomPainter {
   }
 }
 
-Color _orbColor(VoiceOrbState state) {
+Color _orbColor(BuildContext context, VoiceOrbState state) {
   return switch (state) {
     VoiceOrbState.error => TroikaColors.error,
-    VoiceOrbState.approval => TroikaColors.brandDeep,
-    VoiceOrbState.done => TroikaColors.brandSoft,
-    VoiceOrbState.listening || VoiceOrbState.speaking => TroikaColors.brandSoft,
-    _ => TroikaColors.brand,
+    VoiceOrbState.approval => Theme.of(context).colorScheme.primary,
+    VoiceOrbState.done => Theme.of(context).colorScheme.primary,
+    VoiceOrbState.listening ||
+    VoiceOrbState.speaking =>
+      Theme.of(context).colorScheme.primary,
+    _ => Theme.of(context).colorScheme.primary,
   };
 }

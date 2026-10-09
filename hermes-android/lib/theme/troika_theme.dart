@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../config/troika_config.dart';
 import '../services/assistant_service.dart';
 
 /// Единая дизайн-система Тройки.
@@ -13,6 +14,16 @@ class TroikaColors {
   static const Color brand = Color(0xFFF5A623);
   static const Color brandDeep = Color(0xFFE08A12);
   static const Color brandSoft = Color(0xFFFFC65C);
+
+  /// Keep accent tones readable on both neutral backgrounds.
+  static Color accentFor(String name, {required bool dark}) => switch (name) {
+        'teal' => dark ? const Color(0xFF65C8B9) : const Color(0xFF00695C),
+        'blue' => dark ? const Color(0xFF82B9F5) : const Color(0xFF245B9A),
+        'violet' => dark ? const Color(0xFFB6A2F4) : const Color(0xFF6246A3),
+        'rose' => dark ? const Color(0xFFFFA1AE) : const Color(0xFFAD3E56),
+        'green' => dark ? const Color(0xFFA6CF82) : const Color(0xFF537735),
+        _ => dark ? brand : brandDeep,
+      };
 
   /// Фон — тёплый почти-чёрный (не чистый #000, чуть тёплее).
   static const Color bg = Color(0xFF0C0B0A);
@@ -79,11 +90,12 @@ class TroikaLightColors {
 
 /// Тема приложения.
 ThemeData buildTroikaTheme() {
-  const accent = TroikaColors.brand;
+  final accent =
+      TroikaColors.accentFor(TroikaConfig.interfaceAccent, dark: true);
   return ThemeData(
     brightness: Brightness.dark,
     scaffoldBackgroundColor: TroikaColors.bg,
-    colorScheme: const ColorScheme.dark(
+    colorScheme: ColorScheme.dark(
       primary: accent,
       secondary: accent,
       surface: TroikaColors.surface,
@@ -97,12 +109,14 @@ ThemeData buildTroikaTheme() {
 
 /// Светлая тема использует тот же янтарный акцент и ту же типографику.
 ThemeData buildTroikaLightTheme() {
+  final accent =
+      TroikaColors.accentFor(TroikaConfig.interfaceAccent, dark: false);
   return ThemeData(
     brightness: Brightness.light,
     scaffoldBackgroundColor: TroikaLightColors.bg,
-    colorScheme: const ColorScheme.light(
-      primary: TroikaColors.brandDeep,
-      secondary: TroikaColors.brandDeep,
+    colorScheme: ColorScheme.light(
+      primary: accent,
+      secondary: accent,
       surface: TroikaLightColors.surface,
       error: TroikaColors.error,
       onPrimary: Color(0xFFFFFFFF),

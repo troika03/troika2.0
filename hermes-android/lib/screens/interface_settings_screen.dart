@@ -1,9 +1,11 @@
+import '../widgets/troika_page.dart';
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 
 import '../config/troika_config.dart';
 import '../services/windows_shell_service.dart';
+import '../theme/troika_theme.dart';
 
 class InterfaceSettingsScreen extends StatefulWidget {
   final VoidCallback? onChanged;
@@ -17,6 +19,7 @@ class InterfaceSettingsScreen extends StatefulWidget {
 
 class _InterfaceSettingsScreenState extends State<InterfaceSettingsScreen> {
   late String _theme = TroikaConfig.themeMode;
+  late String _accent = TroikaConfig.interfaceAccent;
   late double _scale = TroikaConfig.textScale;
   late String _windowsHotkey = TroikaConfig.windowsHotkey;
   late bool _windowsPinned = TroikaConfig.windowsAlwaysOnTop;
@@ -31,6 +34,14 @@ class _InterfaceSettingsScreenState extends State<InterfaceSettingsScreen> {
   Future<void> _setScale(double value) async {
     await TroikaConfig.setTextScale(value);
     setState(() => _scale = value);
+    widget.onChanged?.call();
+  }
+
+  Future<void> _setAccent(String value) async {
+    if (value == _accent) return;
+    await TroikaConfig.setInterfaceAccent(value);
+    if (!mounted) return;
+    setState(() => _accent = value);
     widget.onChanged?.call();
   }
 
@@ -58,11 +69,16 @@ class _InterfaceSettingsScreenState extends State<InterfaceSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return TroikaPage(
       appBar: AppBar(title: const Text('Интерфейс')),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          const TroikaIntro(
+              icon: Icons.palette_outlined,
+              title: 'Как тебе удобно',
+              subtitle:
+                  'Выбери оформление и размер текста. Изменения видны сразу.'),
           const Text('Тема', style: TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 10),
           SegmentedButton<String>(
@@ -72,9 +88,53 @@ class _InterfaceSettingsScreenState extends State<InterfaceSettingsScreen> {
               ButtonSegment(value: 'light', label: Text('Светлая')),
             ],
             selected: {_theme},
+            showSelectedIcon: false,
             onSelectionChanged: (values) => _setTheme(values.first),
           ),
+          const SizedBox(height: 8),
+          Card(
+              child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Цвет акцента',
+                            style: TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 4),
+                        Text('Кнопки, выделения и голосовой круг',
+                            style: TextStyle(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant)),
+                        const SizedBox(height: 16),
+                        Wrap(spacing: 8, runSpacing: 8, children: [
+                          for (final (id, label) in troikaAccentChoices)
+                            ChoiceChip(
+                                avatar: CircleAvatar(
+                                    backgroundColor: TroikaColors.accentFor(id,
+                                        dark: Theme.of(context).brightness ==
+                                            Brightness.dark),
+                                    radius: 9),
+                                label: Text(label),
+                                selected: _accent == id,
+                                showCheckmark: false,
+                                onSelected: (_) => _setAccent(id)),
+                        ]),
+                      ]))),
           const Divider(),
+          Card(
+              child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Так будет выглядеть текст',
+                            style: Theme.of(context).textTheme.titleLarge),
+                        const SizedBox(height: 8),
+                        const Text(
+                            'Тройка рядом, когда нужна помощь. Все настройки можно изменить позже.'),
+                      ]))),
           const ListTile(
             contentPadding: EdgeInsets.zero,
             title: Text('Язык'),

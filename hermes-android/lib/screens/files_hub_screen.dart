@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-
-import '../theme/troika_theme.dart';
+import '../widgets/troika_page.dart';
 import 'files_screen.dart';
 import 'local_documents_screen.dart';
 import 'development_screen.dart';
@@ -8,77 +7,55 @@ import 'development_screen.dart';
 class FilesHubScreen extends StatelessWidget {
   const FilesHubScreen({super.key});
 
-  Future<void> _open(BuildContext context, Widget screen) {
-    return Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
-  }
+  Future<void> _open(BuildContext context, Widget screen) => Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => TroikaPageScope(child: screen)));
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Файлы')),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          const Text(
-            'Создавай, открывай и сохраняй результаты Тройки.',
-            style: TextStyle(color: TroikaColors.textMuted),
-          ),
-          const SizedBox(height: 18),
-          _FileAction(
-            icon: Icons.description_outlined,
-            title: 'Документ',
-            subtitle: 'Создать DOCX локально',
-            onTap: () => _open(context, const LocalDocumentsScreen()),
-          ),
-          _FileAction(
-            icon: Icons.slideshow_outlined,
-            title: 'Презентация',
-            subtitle: 'Создать PPTX локально',
-            onTap: () => _open(
-              context,
-              const LocalDocumentsScreen(initialPresentation: true),
-            ),
-          ),
-          _FileAction(
-            icon: Icons.cloud_outlined,
-            title: 'Личные файлы',
-            subtitle: 'Файлы устройства и прежние облачные документы',
-            onTap: () => _open(context, const FilesScreen()),
-          ),
-          _FileAction(icon: Icons.code, title: 'Разработка',
-            subtitle: 'Создать проект, проверить и исправить код',
-            onTap: () => _open(context, const DevelopmentScreen())),
-        ],
-      ),
-    );
-  }
-}
-
-class _FileAction extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  const _FileAction({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        minTileHeight: 68,
-        leading: Icon(icon, color: TroikaColors.brand),
-        title: Text(title),
-        subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onTap,
-      ),
-    );
-  }
+  Widget build(BuildContext context) => TroikaPage(
+        appBar: AppBar(title: const Text('Файлы')),
+        body: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+            children: [
+              const TroikaIntro(
+                  icon: Icons.folder_open_rounded,
+                  title: 'От идеи до результата',
+                  subtitle:
+                      'Документы, презентации и код. Создавай новое или возвращайся к сохранённому.'),
+              TroikaActionCard(
+                  icon: Icons.folder_outlined,
+                  title: 'Личные файлы',
+                  subtitle: 'Открыть, сохранить или поделиться',
+                  onTap: () => _open(context, const FilesScreen())),
+              const SizedBox(height: 12),
+              Text('Создать новое',
+                  style: TextStyle(
+                      color: TroikaPalette.of(context).text,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(height: 16),
+              TroikaActionCard(
+                  icon: Icons.description_outlined,
+                  title: 'Документ',
+                  subtitle: 'Текст в аккуратном файле DOCX · локально',
+                  color: TroikaPalette.of(context).dark
+                      ? const Color(0xFF94BDDD)
+                      : const Color(0xFF376489),
+                  onTap: () => _open(context, const LocalDocumentsScreen())),
+              TroikaActionCard(
+                  icon: Icons.slideshow_outlined,
+                  title: 'Презентация',
+                  subtitle: 'Слайды в формате PPTX · локально',
+                  onTap: () => _open(context,
+                      const LocalDocumentsScreen(initialPresentation: true))),
+              TroikaActionCard(
+                  icon: Icons.code_rounded,
+                  title: 'Разработка',
+                  subtitle: 'Проект с исходниками, проверкой и исправлениями',
+                  color: TroikaPalette.of(context).dark
+                      ? const Color(0xFFAEC9A2)
+                      : const Color(0xFF526E43),
+                  onTap: () => _open(context, const DevelopmentScreen())),
+            ]),
+      );
 }

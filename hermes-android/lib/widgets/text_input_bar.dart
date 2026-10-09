@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../theme/troika_theme.dart';
 
 /// Текстовое поле для ввода запроса (когда не хочется говорить голосом)
 class TextInputBar extends StatefulWidget {
@@ -35,21 +34,25 @@ class _TextInputBarState extends State<TextInputBar> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
         decoration: BoxDecoration(
-          color: TroikaColors.surface,
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: Colors.white10),
+          border: Border.all(color: Theme.of(context).dividerColor),
         ),
         child: Row(
           children: [
             Expanded(
               child: TextField(
                 controller: _controller,
-                style: const TextStyle(color: TroikaColors.text, fontSize: 14),
-                decoration: const InputDecoration(
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                    fontSize: 14),
+                decoration: InputDecoration(
                   hintText: 'Написать…',
-                  hintStyle: TextStyle(color: TroikaColors.textFaint),
+                  hintStyle: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
                   border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 ),
                 onSubmitted: (_) => _submit(),
               ),
@@ -57,17 +60,17 @@ class _TextInputBarState extends State<TextInputBar> {
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: _loading
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 24,
                       height: 24,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: TroikaColors.brand,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                     )
                   : IconButton(
                       icon: const Icon(Icons.send_rounded),
-                      color: TroikaColors.brand,
+                      color: Theme.of(context).colorScheme.primary,
                       onPressed: _submit,
                     ),
             ),

@@ -1,3 +1,4 @@
+import '../widgets/troika_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -228,26 +229,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF17150F),
-        title: const Text(
+        backgroundColor: TroikaPalette.of(context).surface,
+        title: Text(
           'Удалить пресет?',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: TroikaPalette.of(context).text),
         ),
         content: Text(
           'Пресет «$name» будет удален.',
-          style: const TextStyle(color: Colors.white70),
+          style: TextStyle(color: TroikaPalette.of(context).textMuted),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
+            child: Text(
               'Отмена',
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(color: TroikaPalette.of(context).textMuted),
             ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
+            child: Text(
               'Удалить',
               style: TextStyle(color: Color(0xFFE57373)),
             ),
@@ -269,30 +270,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF17150F),
-        title: const Text('Имя пресета', style: TextStyle(color: Colors.white)),
+        backgroundColor: TroikaPalette.of(context).surface,
+        title: Text('Имя пресета',
+            style: TextStyle(color: TroikaPalette.of(context).text)),
         content: TextField(
           controller: controller,
           autofocus: true,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
+          style: TextStyle(color: TroikaPalette.of(context).text),
+          decoration: InputDecoration(
             hintText: 'Например: Мой голос',
-            hintStyle: TextStyle(color: Colors.white24),
+            hintStyle: TextStyle(color: TroikaPalette.of(context).textMuted),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text(
+            child: Text(
               'Отмена',
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(color: TroikaPalette.of(context).textMuted),
             ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text(
+            child: Text(
               'Сохранить',
-              style: TextStyle(color: Color(0xFFF5A623)),
+              style: TextStyle(color: Theme.of(context).colorScheme.primary),
             ),
           ),
         ],
@@ -533,9 +535,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openAccountLogin() async {
     final authenticated = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (routeContext) => AuthScreen(
+        builder: (routeContext) => TroikaPageScope(
+            child: AuthScreen(
           onAuthenticated: () => Navigator.of(routeContext).pop(true),
-        ),
+        )),
       ),
     );
     if (authenticated != true || !mounted) return;
@@ -593,16 +596,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF17150F),
+        backgroundColor: TroikaPalette.of(context).surface,
         title: Text(
           device.current ? 'Выйти на этом устройстве?' : 'Отозвать устройство?',
-          style: const TextStyle(color: Colors.white),
+          style: TextStyle(color: TroikaPalette.of(context).text),
         ),
         content: Text(
           device.current
               ? 'Текущий сеанс завершится. Для облачных функций потребуется войти снова.'
               : '«${device.name}» сразу потеряет доступ к аккаунту, задачам и управлению.',
-          style: const TextStyle(color: Colors.white70, height: 1.4),
+          style: TextStyle(
+              color: TroikaPalette.of(context).textMuted, height: 1.4),
         ),
         actions: [
           TextButton(
@@ -656,14 +660,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF17150F),
-        title: const Text(
+        backgroundColor: TroikaPalette.of(context).surface,
+        title: Text(
           'Выйти на всех устройствах?',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: TroikaPalette.of(context).text),
         ),
-        content: const Text(
+        content: Text(
           'Все телефоны и компьютеры сразу потеряют доступ. Войти потребуется заново.',
-          style: TextStyle(color: Colors.white70, height: 1.4),
+          style: TextStyle(
+              color: TroikaPalette.of(context).textMuted, height: 1.4),
         ),
         actions: [
           TextButton(
@@ -734,16 +739,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.03),
+          color: TroikaPalette.of(context).surface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white10),
+          border: Border.all(color: TroikaPalette.of(context).line),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               _devicesError!,
-              style: const TextStyle(color: Colors.white54, height: 1.4),
+              style: TextStyle(
+                  color: TroikaPalette.of(context).textMuted, height: 1.4),
             ),
             const SizedBox(height: 8),
             TextButton.icon(
@@ -756,22 +762,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     }
     if (_accountDevices.isEmpty) {
-      return const Text(
+      return Text(
         'Подключённые устройства пока не найдены.',
-        style: TextStyle(color: Colors.white54, fontSize: 13),
+        style:
+            TextStyle(color: TroikaPalette.of(context).textMuted, fontSize: 13),
       );
     }
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: TroikaPalette.of(context).surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white10),
+        border: Border.all(color: TroikaPalette.of(context).line),
       ),
       child: Column(
         children: [
           for (var index = 0; index < _accountDevices.length; index++) ...[
             if (index > 0)
-              const Divider(height: 1, indent: 56, color: Colors.white10),
+              Divider(
+                  height: 1, indent: 56, color: TroikaPalette.of(context).line),
             ListTile(
               minVerticalPadding: 12,
               leading: Icon(
@@ -779,18 +787,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ? Icons.phone_android
                     : Icons.devices_outlined,
                 color: _accountDevices[index].current
-                    ? const Color(0xFFF5A623)
-                    : Colors.white54,
+                    ? Theme.of(context).colorScheme.primary
+                    : TroikaPalette.of(context).textMuted,
               ),
               title: Text(
                 _accountDevices[index].name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white70),
+                style: TextStyle(color: TroikaPalette.of(context).textMuted),
               ),
               subtitle: Text(
                 _deviceSubtitle(_accountDevices[index]),
-                style: const TextStyle(color: Colors.white38, fontSize: 12),
+                style: TextStyle(
+                    color: TroikaPalette.of(context).textMuted, fontSize: 12),
               ),
               trailing: _accountDevices[index].active
                   ? IconButton(
@@ -856,31 +865,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF17150F),
-          title: const Text(
+          backgroundColor: TroikaPalette.of(context).surface,
+          title: Text(
             'Удалить аккаунт?',
-            style: TextStyle(color: Colors.white),
+            style: TextStyle(color: TroikaPalette.of(context).text),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Сервер удалит историю диалогов, проекты, задачи, напоминания, '
                 'документы и данные устройства. Отменить это нельзя. Копии '
                 'файлов, уже сохранённые на телефоне, останутся.',
-                style: TextStyle(color: Colors.white70, height: 1.4),
+                style: TextStyle(
+                    color: TroikaPalette.of(context).textMuted, height: 1.4),
               ),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 'Для подтверждения введи УДАЛИТЬ',
-                style: TextStyle(color: Colors.white54, fontSize: 12),
+                style: TextStyle(
+                    color: TroikaPalette.of(context).textMuted, fontSize: 12),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: confirmationController,
                 autofocus: true,
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(color: TroikaPalette.of(context).text),
                 onChanged: (value) => setDialogState(
                   () => exactConfirmation = value.trim() == 'УДАЛИТЬ',
                 ),
@@ -919,16 +930,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         context: context,
         barrierDismissible: false,
         builder: (dialogContext) => AlertDialog(
-          backgroundColor: const Color(0xFF17150F),
+          backgroundColor: TroikaPalette.of(context).surface,
           title: Text(
             completed ? 'Аккаунт удалён' : 'Удаление принято',
-            style: const TextStyle(color: Colors.white),
+            style: TextStyle(color: TroikaPalette.of(context).text),
           ),
           content: Text(
             completed
                 ? 'Данные удалены, доступ устройства отозван.'
                 : 'Доступ уже отозван. Сервер завершит очистку автоматически.',
-            style: const TextStyle(color: Colors.white70),
+            style: TextStyle(color: TroikaPalette.of(context).textMuted),
           ),
           actions: [
             TextButton(
@@ -957,24 +968,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SettingsSection.account => 'Аккаунт и данные',
     };
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0C0B0A),
+    return TroikaPage(
+      backgroundColor: TroikaPalette.of(context).bg,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         title: Text(
           title,
-          style: const TextStyle(color: Colors.white70),
+          style: TextStyle(color: TroikaPalette.of(context).textMuted),
         ),
-        iconTheme: const IconThemeData(color: Colors.white38),
+        iconTheme: IconThemeData(color: TroikaPalette.of(context).textMuted),
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
           if (widget.section == SettingsSection.advanced) ...[
             _sectionHeader('Подключение к серверу'),
-            const Text(
+            Text(
               'IP-адрес или домен твоего сервера (вид: http://1.2.3.4:8642)',
-              style: TextStyle(color: Colors.white38, fontSize: 12),
+              style: TextStyle(
+                  color: TroikaPalette.of(context).textMuted, fontSize: 12),
             ),
             const SizedBox(height: 8),
             _inputField(
@@ -990,16 +1002,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               obscure: true,
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               'Создай на сервере: openssl rand -hex 32 (API_SERVER_KEY)',
-              style: TextStyle(color: Colors.white38, fontSize: 11),
+              style: TextStyle(
+                  color: TroikaPalette.of(context).textMuted, fontSize: 11),
             ),
             const SizedBox(height: 16),
             OutlinedButton.icon(
               onPressed: _testing ? null : _testConnection,
               style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFF5A623),
-                side: const BorderSide(color: Color(0xFFF5A623)),
+                foregroundColor: Theme.of(context).colorScheme.primary,
+                side: BorderSide(color: Theme.of(context).colorScheme.primary),
               ),
               icon: _testing
                   ? const SizedBox(
@@ -1014,28 +1027,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 8),
               Text(
                 _testResult!,
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
+                style: TextStyle(
+                    color: TroikaPalette.of(context).textMuted, fontSize: 13),
               ),
             ],
             const SizedBox(height: 24),
-            const Divider(color: Colors.white10),
+            Divider(color: TroikaPalette.of(context).line),
             const SizedBox(height: 16),
             _sectionHeader('Wake-word'),
             SwitchListTile(
-              title: const Text(
+              title: Text(
                 'Слушать "Тройка" в фоне',
-                style: TextStyle(color: Colors.white70),
+                style: TextStyle(color: TroikaPalette.of(context).textMuted),
               ),
-              subtitle: const Text(
+              subtitle: Text(
                 'Работает в фоне, расходует заряд',
-                style: TextStyle(color: Colors.white30, fontSize: 12),
+                style: TextStyle(
+                    color: TroikaPalette.of(context).textMuted, fontSize: 12),
               ),
               value: assistant.wakeWordEnabled,
               onChanged: (v) => assistant.setWakeWordEnabled(v),
-              activeThumbColor: const Color(0xFFF5A623),
+              activeThumbColor: Theme.of(context).colorScheme.primary,
             ),
             const SizedBox(height: 24),
-            const Divider(color: Colors.white10),
+            Divider(color: TroikaPalette.of(context).line),
             const SizedBox(height: 16),
             _sectionHeader('Пресеты голоса'),
             if (_presets.isNotEmpty)
@@ -1057,13 +1072,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: isActive
-                              ? const Color(0xFF2A2012)
-                              : const Color(0xFF17150F),
+                              ? TroikaPalette.of(context).tint
+                              : TroikaPalette.of(context).surface,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: isActive
-                                ? const Color(0xFFF5A623)
-                                : Colors.white10,
+                                ? Theme.of(context).colorScheme.primary
+                                : TroikaPalette.of(context).line,
                             width: 1.5,
                           ),
                         ),
@@ -1078,8 +1093,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     p.name,
                                     style: TextStyle(
                                       color: isActive
-                                          ? Colors.white
-                                          : Colors.white70,
+                                          ? TroikaPalette.of(context).text
+                                          : TroikaPalette.of(context).textMuted,
                                       fontSize: 14,
                                       fontWeight: isActive
                                           ? FontWeight.w600
@@ -1090,9 +1105,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   ),
                                 ),
                                 if (isActive)
-                                  const Icon(
+                                  Icon(
                                     Icons.check_circle,
-                                    color: Color(0xFFF5A623),
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
                                     size: 14,
                                   ),
                               ],
@@ -1100,8 +1116,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             const Spacer(),
                             Text(
                               '${p.rate}x / ${p.pitch}Hz',
-                              style: const TextStyle(
-                                color: Colors.white30,
+                              style: TextStyle(
+                                color: TroikaPalette.of(context).textMuted,
                                 fontSize: 10,
                               ),
                             ),
@@ -1115,26 +1131,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
             OutlinedButton.icon(
               onPressed: _saveCurrentAsPreset,
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white70,
-                side: const BorderSide(color: Colors.white10),
+                foregroundColor: TroikaPalette.of(context).textMuted,
+                side: BorderSide(color: TroikaPalette.of(context).line),
                 minimumSize: const Size(double.infinity, 45),
               ),
               icon: const Icon(Icons.add_circle_outline, size: 18),
               label: const Text('Сохранить текущие настройки как пресет'),
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'Тап — применить, долгий тап — удалить.',
-              style: TextStyle(color: Colors.white38, fontSize: 11),
+              style: TextStyle(
+                  color: TroikaPalette.of(context).textMuted, fontSize: 11),
             ),
             const SizedBox(height: 24),
-            const Divider(color: Colors.white10),
+            Divider(color: TroikaPalette.of(context).line),
             const SizedBox(height: 16),
             _sectionHeader('Голос Тройки'),
-            const Text(
+            Text(
               'Слушай образец и выбирай. Edge TTS на PC, играет на телефоне.',
-              style:
-                  TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
+              style: TextStyle(
+                  color: TroikaPalette.of(context).textMuted,
+                  fontSize: 13,
+                  height: 1.5),
             ),
             const SizedBox(height: 12),
             ..._voices.map((v) {
@@ -1143,12 +1162,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 margin: const EdgeInsets.only(bottom: 8),
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? const Color(0xFF2A2012)
-                      : const Color(0xFF17150F),
+                      ? TroikaPalette.of(context).tint
+                      : TroikaPalette.of(context).surface,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: isSelected
-                        ? const Color(0xFFF5A623)
+                        ? Theme.of(context).colorScheme.primary
                         : Colors.transparent,
                     width: 1.5,
                   ),
@@ -1161,7 +1180,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: Text(
                     v['name']!,
                     style: TextStyle(
-                      color: Colors.white,
+                      color: TroikaPalette.of(context).text,
                       fontSize: 14,
                       fontWeight:
                           isSelected ? FontWeight.w600 : FontWeight.normal,
@@ -1169,25 +1188,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   subtitle: Text(
                     v['desc']!,
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                    style: TextStyle(
+                        color: TroikaPalette.of(context).textMuted,
+                        fontSize: 12),
                   ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.play_circle_outline,
-                          color: Colors.white70,
+                          color: TroikaPalette.of(context).textMuted,
                         ),
                         tooltip: 'Прослушать',
                         onPressed: () => _previewVoice(v['id']!),
                       ),
                       if (isSelected)
-                        const Padding(
+                        Padding(
                           padding: EdgeInsets.only(left: 4),
                           child: Icon(
                             Icons.check_circle,
-                            color: Color(0xFFF5A623),
+                            color: Theme.of(context).colorScheme.primary,
                           ),
                         ),
                     ],
@@ -1198,11 +1219,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             }),
             const SizedBox(height: 16),
             _sectionHeader('Настройки звучания'),
-            const Text(
+            Text(
               'Жми "Прослушать" чтобы услышать как звучит с этими настройками. '
               'Чтобы голос звучал более женственно — увеличий тон.',
-              style:
-                  TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
+              style: TextStyle(
+                  color: TroikaPalette.of(context).textMuted,
+                  fontSize: 12,
+                  height: 1.4),
             ),
             const SizedBox(height: 8),
             _sliderRow(
@@ -1240,8 +1263,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: OutlinedButton.icon(
                     onPressed: _previewCurrentSettings,
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFFF5A623),
-                      side: const BorderSide(color: Color(0xFFF5A623)),
+                      foregroundColor: Theme.of(context).colorScheme.primary,
+                      side: BorderSide(
+                          color: Theme.of(context).colorScheme.primary),
                     ),
                     icon: const Icon(Icons.play_arrow, size: 16),
                     label: const Text('Прослушать'),
@@ -1252,7 +1276,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: ElevatedButton.icon(
                     onPressed: _applyVoiceSettings,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFF5A623),
+                      backgroundColor: Theme.of(context).colorScheme.primary,
                     ),
                     icon: const Icon(Icons.check, size: 16),
                     label: const Text('Применить'),
@@ -1263,7 +1287,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 8),
             TextButton.icon(
               onPressed: _resetVoiceSettings,
-              style: TextButton.styleFrom(foregroundColor: Colors.white54),
+              style: TextButton.styleFrom(
+                  foregroundColor: TroikaPalette.of(context).textMuted),
               icon: const Icon(Icons.refresh, size: 14),
               label: const Text(
                 'Сбросить к дефолтам',
@@ -1271,21 +1296,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            const Divider(color: Colors.white10),
+            Divider(color: TroikaPalette.of(context).line),
             const SizedBox(height: 16),
             _sectionHeader('Прерывание речи (barge-in)'),
             SwitchListTile(
-              title: const Text(
+              title: Text(
                 'Замолкать когда я говорю',
-                style: TextStyle(color: Colors.white70),
+                style: TextStyle(color: TroikaPalette.of(context).textMuted),
               ),
-              subtitle: const Text(
+              subtitle: Text(
                 'Тройка обрывает свой ответ как только слышит твой голос',
-                style: TextStyle(color: Colors.white30, fontSize: 12),
+                style: TextStyle(
+                    color: TroikaPalette.of(context).textMuted, fontSize: 12),
               ),
               value: _bargeInEnabled,
               onChanged: _saveBargeInEnabled,
-              activeThumbColor: const Color(0xFFF5A623),
+              activeThumbColor: Theme.of(context).colorScheme.primary,
               contentPadding: EdgeInsets.zero,
             ),
             if (_bargeInEnabled) ...[
@@ -1303,133 +1329,145 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         : '$_bargeInThreshold (средняя)',
                 onChanged: (v) => _saveBargeInThreshold(v.toInt()),
               ),
-              const Text(
+              Text(
                 'Меньше = срабатывает на любой шорох (включая шум). '
                 'Больше = только когда говоришь явно.',
                 style: TextStyle(
-                  color: Colors.white38,
+                  color: TroikaPalette.of(context).textMuted,
                   fontSize: 11,
                   height: 1.4,
                 ),
               ),
             ],
             const SizedBox(height: 16),
-            const Divider(color: Colors.white10),
+            Divider(color: TroikaPalette.of(context).line),
             const SizedBox(height: 16),
           ],
           if (widget.section != SettingsSection.account) ...[
             _sectionHeader('Управление телефоном'),
-            const Text(
+            Text(
               'Разреши Тройке принимать команды только от твоего '
               'авторизованного сервера. Можно отключить в любой момент.',
-              style:
-                  TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
+              style: TextStyle(
+                  color: TroikaPalette.of(context).textMuted,
+                  fontSize: 13,
+                  height: 1.5),
             ),
             SwitchListTile(
-              title: const Text(
+              title: Text(
                 'Разрешить управление телефоном',
-                style: TextStyle(color: Colors.white70),
+                style: TextStyle(color: TroikaPalette.of(context).textMuted),
               ),
-              subtitle: const Text(
+              subtitle: Text(
                 'По умолчанию выключено. Опасные действия всё равно требуют '
                 'отдельного подтверждения.',
-                style: TextStyle(color: Colors.white38, fontSize: 12),
+                style: TextStyle(
+                    color: TroikaPalette.of(context).textMuted, fontSize: 12),
               ),
               value: _phoneControlEnabled,
               onChanged: _setPhoneControlEnabled,
-              activeThumbColor: const Color(0xFFF5A623),
+              activeThumbColor: Theme.of(context).colorScheme.primary,
               contentPadding: EdgeInsets.zero,
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Для нажатий, свайпов и ввода текста дополнительно включи '
               'Тройку в Спец. возможностях Android.',
-              style:
-                  TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
+              style: TextStyle(
+                  color: TroikaPalette.of(context).textMuted,
+                  fontSize: 13,
+                  height: 1.5),
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: _openAccessibilitySettings,
               style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFF5A623),
-                side: const BorderSide(color: Color(0xFFF5A623)),
+                foregroundColor: Theme.of(context).colorScheme.primary,
+                side: BorderSide(color: Theme.of(context).colorScheme.primary),
               ),
               icon: const Icon(Icons.accessibility_new, size: 18),
               label: const Text('Открыть спец. возможности'),
             ),
             const SizedBox(height: 24),
-            const Divider(color: Colors.white10),
+            Divider(color: TroikaPalette.of(context).line),
             const SizedBox(height: 16),
             _sectionHeader('Файловая система'),
-            const Text(
+            Text(
               'По умолчанию Тройка видит общедоступные папки: Downloads, '
               'Documents, Pictures, Music, Movies, DCIM. '
               'Если нужен доступ ко ВСЕМ файлам телефона (включая файлы '
               'других приложений) — дай разрешение "All files access".',
-              style:
-                  TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
+              style: TextStyle(
+                  color: TroikaPalette.of(context).textMuted,
+                  fontSize: 13,
+                  height: 1.5),
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: _requestAllFilesAccess,
               style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFF5A623),
-                side: const BorderSide(color: Color(0xFFF5A623)),
+                foregroundColor: Theme.of(context).colorScheme.primary,
+                side: BorderSide(color: Theme.of(context).colorScheme.primary),
               ),
               icon: const Icon(Icons.folder_open, size: 18),
               label: const Text('Открыть доступ ко всем файлам'),
             ),
             const SizedBox(height: 24),
-            const Divider(color: Colors.white10),
+            Divider(color: TroikaPalette.of(context).line),
             const SizedBox(height: 16),
             _sectionHeader('Календарь'),
-            const Text(
+            Text(
               'Чтобы Тройка мог ставить встречи и читать события из '
               'системного календаря (Google / Samsung / Outlook), '
               'разреши доступ.',
-              style:
-                  TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
+              style: TextStyle(
+                  color: TroikaPalette.of(context).textMuted,
+                  fontSize: 13,
+                  height: 1.5),
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: _requestCalendarPermission,
               style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFF5A623),
-                side: const BorderSide(color: Color(0xFFF5A623)),
+                foregroundColor: Theme.of(context).colorScheme.primary,
+                side: BorderSide(color: Theme.of(context).colorScheme.primary),
               ),
               icon: const Icon(Icons.event_available, size: 18),
               label: const Text('Разрешить доступ к календарю'),
             ),
             const SizedBox(height: 16),
-            const Divider(color: Colors.white10),
+            Divider(color: TroikaPalette.of(context).line),
             const SizedBox(height: 16),
             _sectionHeader('Местоположение'),
-            const Text(
+            Text(
               'Только после включения Тройка получает GPS, Wi-Fi и Bluetooth '
               'контекст вместе с запросами. Разрешение Android само ничего не отправляет.',
-              style:
-                  TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
+              style: TextStyle(
+                  color: TroikaPalette.of(context).textMuted,
+                  fontSize: 13,
+                  height: 1.5),
             ),
             const SizedBox(height: 12),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text(
+              title: Text(
                 'Передавать контекст местоположения',
-                style: TextStyle(color: Colors.white70),
+                style: TextStyle(color: TroikaPalette.of(context).textMuted),
               ),
-              subtitle: const Text(
+              subtitle: Text(
                 'Выключение останавливает передачу и очищает временный контекст на сервере.',
-                style: TextStyle(color: Colors.white38, fontSize: 12),
+                style: TextStyle(
+                    color: TroikaPalette.of(context).textMuted, fontSize: 12),
               ),
               value: _locationContextEnabled,
-              activeThumbColor: const Color(0xFFF5A623),
+              activeThumbColor: Theme.of(context).colorScheme.primary,
               onChanged: _setLocationContextEnabled,
             ),
             OutlinedButton.icon(
               onPressed: _requestLocationPermission,
               style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFF5A623),
-                side: const BorderSide(color: Color(0xFFF5A623)),
+                foregroundColor: Theme.of(context).colorScheme.primary,
+                side: BorderSide(color: Theme.of(context).colorScheme.primary),
               ),
               icon: const Icon(Icons.my_location, size: 18),
               label: const Text('Разрешить местоположение'),
@@ -1437,11 +1475,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
           if (widget.section == SettingsSection.account &&
               !TroikaConfig.signedIn) ...[
-            const Text(
+            Text(
               'Аккаунт не подключён. Войди в Тройку, чтобы история, задачи '
               'и файлы были одинаковыми на телефоне и Windows.',
-              style:
-                  TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
+              style: TextStyle(
+                  color: TroikaPalette.of(context).textMuted,
+                  fontSize: 13,
+                  height: 1.5),
             ),
             const SizedBox(height: 16),
             FilledButton.icon(
@@ -1453,14 +1493,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (widget.section != SettingsSection.permissions &&
               TroikaConfig.apiKey.startsWith('trk_live_')) ...[
             const SizedBox(height: 24),
-            const Divider(color: Colors.white10),
+            Divider(color: TroikaPalette.of(context).line),
             const SizedBox(height: 16),
             _sectionHeader('Аккаунт'),
             if (TroikaConfig.accountEmail.isNotEmpty) ...[
               Text(
                 TroikaConfig.accountEmail,
-                style: const TextStyle(
-                  color: Colors.white70,
+                style: TextStyle(
+                  color: TroikaPalette.of(context).textMuted,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -1479,17 +1519,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ] else if (_subscriptionError != null) ...[
               Text(
                 _subscriptionError!,
-                style: const TextStyle(color: Colors.white54, fontSize: 13),
+                style: TextStyle(
+                    color: TroikaPalette.of(context).textMuted, fontSize: 13),
               ),
               TextButton(
                 onPressed: _loadSubscription,
                 child: const Text('Повторить'),
               ),
             ],
-            const Text(
+            Text(
               'Устройства',
               style: TextStyle(
-                color: Colors.white70,
+                color: TroikaPalette.of(context).textMuted,
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
               ),
@@ -1517,12 +1558,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               'Сначала можно сохранить ZIP со всеми переносимыми данными и '
               'личными файлами. Удаление отзывает доступ всех устройств и '
               'стирает серверную историю, проекты, задачи, напоминания и документы.',
-              style:
-                  TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
+              style: TextStyle(
+                  color: TroikaPalette.of(context).textMuted,
+                  fontSize: 13,
+                  height: 1.5),
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
@@ -1530,8 +1573,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ? null
                   : _exportAccountData,
               style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFF5A623),
-                side: const BorderSide(color: Color(0xFFF5A623)),
+                foregroundColor: Theme.of(context).colorScheme.primary,
+                side: BorderSide(color: Theme.of(context).colorScheme.primary),
               ),
               icon: _exportingAccount
                   ? const SizedBox(
@@ -1569,7 +1612,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ElevatedButton(
               onPressed: _save,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFF5A623),
+                backgroundColor: Theme.of(context).colorScheme.primary,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -1605,12 +1648,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               Text(
                 label,
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
+                style: TextStyle(
+                    color: TroikaPalette.of(context).textMuted, fontSize: 13),
               ),
               Text(
                 display,
-                style: const TextStyle(
-                  color: Color(0xFFF5A623),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.primary,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1619,11 +1663,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           SliderTheme(
             data: SliderTheme.of(context).copyWith(
-              activeTrackColor: const Color(0xFFF5A623),
-              inactiveTrackColor: Colors.white12,
-              thumbColor: const Color(0xFFF5A623),
+              activeTrackColor: Theme.of(context).colorScheme.primary,
+              inactiveTrackColor: TroikaPalette.of(context).line,
+              thumbColor: Theme.of(context).colorScheme.primary,
               overlayColor: const Color(0x337C6AF7),
-              valueIndicatorColor: const Color(0xFFF5A623),
+              valueIndicatorColor: Theme.of(context).colorScheme.primary,
             ),
             child: Slider(
               value: value.clamp(min, max),
@@ -1644,8 +1688,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       padding: const EdgeInsets.only(bottom: 12),
       child: Text(
         text,
-        style: const TextStyle(
-          color: Color(0xFFF5A623),
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.primary,
           fontSize: 12,
           fontWeight: FontWeight.w600,
           letterSpacing: 1.5,
@@ -1663,21 +1707,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return TextField(
       controller: controller,
       obscureText: obscure,
-      style: const TextStyle(color: Colors.white, fontSize: 14),
+      style: TextStyle(color: TroikaPalette.of(context).text, fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        labelStyle: const TextStyle(color: Colors.white38),
-        hintStyle: const TextStyle(color: Colors.white24),
+        labelStyle: TextStyle(color: TroikaPalette.of(context).textMuted),
+        hintStyle: TextStyle(color: TroikaPalette.of(context).textMuted),
         filled: true,
-        fillColor: const Color(0xFF17150F),
+        fillColor: TroikaPalette.of(context).surface,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFF5A623)),
+          borderSide: BorderSide(color: Theme.of(context).colorScheme.primary),
         ),
       ),
     );

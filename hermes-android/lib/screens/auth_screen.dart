@@ -1,3 +1,4 @@
+import '../widgets/troika_page.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -22,6 +23,7 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _register = true;
   bool _busy = false;
   bool _showServer = false;
+  bool _showPassword = false;
   String? _error;
 
   @override
@@ -76,7 +78,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return TroikaPage(
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -87,35 +89,13 @@ class _AuthScreenState extends State<AuthScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      'Тройка',
-                      style:
-                          Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _register
-                          ? 'Создай бесплатный аккаунт'
-                          : 'Войди в аккаунт',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(color: Colors.white70),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Скажи, что нужно сделать. Тройка выполнит задачу, '
-                      'сохранит результат и запомнит полезный контекст.',
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Например: разобрать задание, подготовить отчёт, '
-                      'помочь с кодом или напомнить о деле.',
-                      style: TextStyle(color: Colors.white60),
-                    ),
-                    const SizedBox(height: 24),
+                    TroikaIntro(
+                        icon: Icons.waving_hand_outlined,
+                        title:
+                            _register ? 'Привет, я Тройка' : 'С возвращением',
+                        subtitle: _register
+                            ? 'Создай бесплатный аккаунт. Разговоры, память и дела будут доступны после входа.'
+                            : 'Войди, чтобы вернуться к своим разговорам и делам.'),
                     TextField(
                       controller: _email,
                       enabled: !_busy,
@@ -127,16 +107,25 @@ class _AuthScreenState extends State<AuthScreen> {
                     TextField(
                       controller: _password,
                       enabled: !_busy,
-                      obscureText: true,
+                      obscureText: !_showPassword,
                       autofillHints: [
                         _register
                             ? AutofillHints.newPassword
                             : AutofillHints.password,
                       ],
                       onSubmitted: (_) => _busy ? null : _submit(),
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Пароль',
                         helperText: 'Минимум 10 символов',
+                        suffixIcon: IconButton(
+                            tooltip: _showPassword
+                                ? 'Скрыть пароль'
+                                : 'Показать пароль',
+                            onPressed: () =>
+                                setState(() => _showPassword = !_showPassword),
+                            icon: Icon(_showPassword
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined)),
                       ),
                     ),
                     const SizedBox(height: 8),

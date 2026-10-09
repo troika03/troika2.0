@@ -10,6 +10,7 @@ import 'screens/auth_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'theme/troika_theme.dart';
 import 'services/thought_translator.dart';
+import 'widgets/troika_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,14 +20,6 @@ void main() async {
 
   // Прогреть офлайн-переводчик мыслей EN->RU в фоне (разовая загрузка модели).
   unawaited(ThoughtTranslator.instance.warmUp());
-
-  // Тёмный статус бар
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-    ),
-  );
 
   runApp(const TroikaApp());
 }
@@ -73,24 +66,42 @@ class _TroikaAppState extends State<TroikaApp> {
         theme: buildTroikaLightTheme(),
         darkTheme: buildTroikaTheme(),
         themeMode: _themeMode,
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            textScaler: TextScaler.linear(TroikaConfig.textScale),
-          ),
-          child: child!,
-        ),
+        builder: (context, child) {
+          final systemDark = TroikaConfig.themeMode == 'dark' ||
+              (TroikaConfig.themeMode == 'system' &&
+                  MediaQuery.platformBrightnessOf(context) == Brightness.dark);
+          final surface = systemDark ? TroikaColors.bg : TroikaLightColors.bg;
+          return AnnotatedRegion<SystemUiOverlayStyle>(
+            value: SystemUiOverlayStyle(
+              statusBarColor: Colors.transparent,
+              statusBarIconBrightness:
+                  systemDark ? Brightness.light : Brightness.dark,
+              systemNavigationBarColor: surface,
+              systemNavigationBarIconBrightness:
+                  systemDark ? Brightness.light : Brightness.dark,
+            ),
+            child: MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(TroikaConfig.textScale),
+              ),
+              child: child!,
+            ),
+          );
+        },
         home: !_authenticated
-            ? AuthScreen(
+            ? TroikaPageScope(
+                child: AuthScreen(
                 onAuthenticated: () => setState(() => _authenticated = true),
-              )
+              ))
             : _onboarded
                 ? HomeScreen(
                     onSignedOut: () => setState(() => _authenticated = false),
                     onAppearanceChanged: () => setState(() {}),
                   )
-                : OnboardingScreen(
+                : TroikaPageScope(
+                    child: OnboardingScreen(
                     onDone: () => setState(() => _onboarded = true),
-                  ),
+                  )),
       ),
     );
   }

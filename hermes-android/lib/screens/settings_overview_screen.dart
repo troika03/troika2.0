@@ -1,3 +1,4 @@
+import '../widgets/troika_page.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -24,7 +25,8 @@ class SettingsOverviewScreen extends StatelessWidget {
   });
 
   Future<void> _open(BuildContext context, Widget screen) {
-    return Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+    return Navigator.push(context,
+        MaterialPageRoute(builder: (_) => TroikaPageScope(child: screen)));
   }
 
   @override
@@ -32,7 +34,7 @@ class SettingsOverviewScreen extends StatelessWidget {
     final assistant = context.watch<AssistantService>();
     final account = TroikaConfig.accountEmail.trim();
 
-    return Scaffold(
+    return TroikaPage(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Профиль'),
@@ -46,6 +48,11 @@ class SettingsOverviewScreen extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
             children: [
+              const TroikaIntro(
+                  icon: Icons.person_outline_rounded,
+                  title: 'Тройка под тебя',
+                  subtitle:
+                      'Голос, память и привычки. Всё важное — под твоим контролем.'),
               _SettingsCard(
                 title: 'Аккаунт',
                 children: [
@@ -62,8 +69,7 @@ class SettingsOverviewScreen extends StatelessWidget {
                     ),
                     title:
                         Text(account.isEmpty ? 'Локальный профиль' : account),
-                    subtitle: const Text(
-                        'Устройства, экспорт и управление аккаунтом'),
+                    subtitle: const Text('Тариф, устройства и данные'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _open(
                       context,
@@ -101,7 +107,8 @@ class SettingsOverviewScreen extends StatelessWidget {
                     ),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.record_voice_over_outlined),
+                    leading: const TroikaIcon(
+                        icon: Icons.record_voice_over_outlined),
                     title: const Text('Голос и озвучка'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _open(context, const VoiceScreen()),
@@ -113,7 +120,7 @@ class SettingsOverviewScreen extends StatelessWidget {
                 children: [
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.shield_outlined),
+                    leading: const TroikaIcon(icon: Icons.shield_outlined),
                     title: const Text('Этот телефон и разрешения'),
                     subtitle: Text(
                       'Телефон: ${TroikaConfig.phoneControlEnabled ? "включён" : "выключен"} · '
@@ -135,7 +142,7 @@ class SettingsOverviewScreen extends StatelessWidget {
                 children: [
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.extension_outlined),
+                    leading: const TroikaIcon(icon: Icons.extension_outlined),
                     title: const Text('Плагины, навыки и инструменты'),
                     subtitle: const Text('Тройка подключает нужное для задачи'),
                     trailing: const Icon(Icons.chevron_right),
@@ -148,7 +155,7 @@ class SettingsOverviewScreen extends StatelessWidget {
                 children: [
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.memory_outlined),
+                    leading: const TroikaIcon(icon: Icons.psychology_outlined),
                     title: const Text('Что помнит Тройка'),
                     subtitle: const Text('Посмотреть, изменить или удалить'),
                     trailing: const Icon(Icons.chevron_right),
@@ -161,7 +168,7 @@ class SettingsOverviewScreen extends StatelessWidget {
                 children: [
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.palette_outlined),
+                    leading: const TroikaIcon(icon: Icons.palette_outlined),
                     title: const Text('Тема, язык и размер текста'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _open(
@@ -209,7 +216,7 @@ class _SettingsCard extends StatelessWidget {
       child: Material(
         color: Theme.of(context).colorScheme.surface,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(24),
           side: BorderSide(
             color: Theme.of(context)
                 .colorScheme
@@ -219,14 +226,14 @@ class _SettingsCard extends StatelessWidget {
         ),
         clipBehavior: Clip.antiAlias,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 title,
                 style: const TextStyle(
-                  fontSize: 17,
+                  fontSize: 20,
                   fontWeight: FontWeight.w600,
                 ),
               ),

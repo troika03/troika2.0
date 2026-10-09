@@ -1,7 +1,7 @@
+import '../widgets/troika_page.dart';
 import 'package:flutter/material.dart';
 
 import '../services/custom_command_store.dart';
-import '../theme/troika_theme.dart';
 
 class CommandsScreen extends StatefulWidget {
   const CommandsScreen({super.key});
@@ -50,7 +50,8 @@ class _CommandsScreenState extends State<CommandsScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: TroikaColors.surface,
+          scrollable: true,
+          backgroundColor: TroikaPalette.of(context).surface,
           title: const Text('Новая команда'),
           content: SizedBox(
             width: 430,
@@ -96,10 +97,12 @@ class _CommandsScreenState extends State<CommandsScreen> {
         ),
       ),
     );
-    if (saved != true || phrase.text.trim().isEmpty) return;
+    final spokenPhrase = phrase.text.trim();
+    phrase.dispose();
+    if (saved != true || spokenPhrase.isEmpty) return;
     final updated = [
-      ..._custom.where((item) => item.phrase != phrase.text.trim()),
-      CustomCommand(phrase: phrase.text.trim(), action: action),
+      ..._custom.where((item) => item.phrase != spokenPhrase),
+      CustomCommand(phrase: spokenPhrase, action: action),
     ];
     await CustomCommandStore.save(updated);
     await _load();
@@ -114,10 +117,10 @@ class _CommandsScreenState extends State<CommandsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return TroikaPage(
       appBar: AppBar(
         title: const Text('Команды'),
-        backgroundColor: TroikaColors.bg,
+        backgroundColor: TroikaPalette.of(context).bg,
         surfaceTintColor: Colors.transparent,
         actions: [
           TextButton.icon(
@@ -131,8 +134,11 @@ class _CommandsScreenState extends State<CommandsScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
         children: [
-          const Text('Команды без интернета', style: _sectionStyle),
-          const SizedBox(height: 10),
+          const TroikaIntro(
+              icon: Icons.bolt_outlined,
+              title: 'Скажи — и готово',
+              subtitle:
+                  'Команды без интернета. Можно создать свою фразу для привычного действия.'),
           const _CommandGroup(
             title: 'Общение и помощь',
             commands: [
@@ -177,9 +183,9 @@ class _CommandsScreenState extends State<CommandsScreen> {
             ],
           ),
           if (_custom.isEmpty)
-            const Text(
+            Text(
               'Создай свою фразу для готового безопасного действия.',
-              style: TextStyle(color: TroikaColors.textMuted),
+              style: TextStyle(color: TroikaPalette.of(context).textMuted),
             )
           else
             ..._custom.map((command) => ListTile(
@@ -199,8 +205,7 @@ class _CommandsScreenState extends State<CommandsScreen> {
 }
 
 const _sectionStyle = TextStyle(
-  color: TroikaColors.text,
-  fontSize: 19,
+  fontSize: 20,
   fontWeight: FontWeight.w600,
 );
 
@@ -216,19 +221,27 @@ class _CommandGroup extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: TroikaColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white10),
+        color: TroikaPalette.of(context).surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: TroikaPalette.of(context).line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+          Row(children: [
+            TroikaIcon(icon: Icons.bolt_outlined, size: 40),
+            const SizedBox(width: 12),
+            Expanded(
+                child: Text(title,
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w600)))
+          ]),
           const SizedBox(height: 8),
           ...commands.map((command) => Padding(
                 padding: const EdgeInsets.only(top: 5),
                 child: Text(command,
-                    style: const TextStyle(color: TroikaColors.textMuted)),
+                    style:
+                        TextStyle(color: TroikaPalette.of(context).textMuted)),
               )),
         ],
       ),

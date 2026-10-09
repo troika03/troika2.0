@@ -1,6 +1,7 @@
+import '../widgets/troika_page.dart';
 import 'package:flutter/material.dart';
 import '../services/files_service.dart';
-import '../theme/troika_theme.dart';
+import 'local_documents_screen.dart';
 
 /// Личные документы текущего аккаунта Тройки.
 class FilesScreen extends StatefulWidget {
@@ -114,10 +115,10 @@ class _FilesScreenState extends State<FilesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: TroikaColors.bg,
+    return TroikaPage(
+      backgroundColor: TroikaPalette.of(context).bg,
       appBar: AppBar(
-        backgroundColor: TroikaColors.bg,
+        backgroundColor: TroikaPalette.of(context).bg,
         title: const Text('Файлы Тройки'),
         actions: [
           IconButton(
@@ -141,87 +142,98 @@ class _FilesScreenState extends State<FilesScreen> {
     if (_error != null) {
       return ListView(
         children: [
-          const SizedBox(height: 80),
-          const Icon(Icons.cloud_off, size: 48, color: TroikaColors.textFaint),
-          const SizedBox(height: 12),
-          Center(
-            child: Text(_error!,
-                style: const TextStyle(color: TroikaColors.textMuted)),
-          ),
+          TroikaEmptyState(
+              icon: Icons.cloud_off_outlined,
+              title: 'Не удалось загрузить файлы',
+              message: _error!,
+              actionLabel: 'Повторить',
+              onAction: _load),
         ],
       );
     }
     if (_items.isEmpty) {
       return ListView(
-        children: const [
-          SizedBox(height: 100),
-          Center(
-            child: Text('Здесь пока пусто',
-                style: TextStyle(color: TroikaColors.textMuted)),
-          ),
+        children: [
+          TroikaEmptyState(
+              icon: Icons.folder_open_outlined,
+              title: 'Здесь пока пусто',
+              message:
+                  'Создай документ или попроси Тройку подготовить файл. Сохранённые результаты появятся здесь.',
+              actionLabel: 'Создать документ',
+              onAction: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const TroikaPageScope(
+                          child: LocalDocumentsScreen())))),
         ],
       );
     }
     return ListView.separated(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
       itemCount: _items.length,
-      separatorBuilder: (_, __) =>
-          const Divider(height: 1, color: Colors.white10),
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (_, i) => _row(_items[i]),
     );
   }
 
   Widget _row(TroikaFile f) {
     final isBusy = _busyId == f.id;
-    return ListTile(
-      leading: Icon(_iconForExt(f.ext), color: _colorForExt(f.ext)),
-      title: Text(
-        f.name,
-        style: const TextStyle(color: TroikaColors.text, fontSize: 15),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text(
-        '${_fmtSize(f.size)} · ${_fmtDate(f.time)}',
-        style: const TextStyle(color: TroikaColors.textFaint, fontSize: 12),
-      ),
-      trailing: isBusy
-          ? const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  tooltip: 'Сохранить на телефон',
-                  icon: const Icon(Icons.download_outlined),
-                  onPressed: () => _saveFile(f),
-                ),
-                PopupMenuButton<String>(
-                  tooltip: 'Другие действия',
-                  onSelected: (action) {
-                    if (action == 'open') _openFile(f);
-                    if (action == 'save') _saveFile(f);
-                    if (action == 'share') _shareFile(f);
-                    if (action == 'delete') _deleteFile(f);
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'open', child: Text('Открыть')),
-                    PopupMenuItem(
-                      value: 'save',
-                      child: Text('Сохранить на телефон'),
+    return Card(
+        clipBehavior: Clip.antiAlias,
+        child: ListTile(
+          leading:
+              TroikaIcon(icon: _iconForExt(f.ext), color: _colorForExt(f.ext)),
+          title: Text(
+            f.name,
+            style:
+                TextStyle(color: TroikaPalette.of(context).text, fontSize: 15),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Text(
+            '${_fmtSize(f.size)} · ${_fmtDate(f.time)}',
+            style: TextStyle(
+                color: TroikaPalette.of(context).textFaint, fontSize: 12),
+          ),
+          trailing: isBusy
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: 'Сохранить на телефон',
+                      icon: const Icon(Icons.download_outlined),
+                      onPressed: () => _saveFile(f),
                     ),
-                    PopupMenuItem(value: 'share', child: Text('Поделиться')),
-                    PopupMenuDivider(),
-                    PopupMenuItem(value: 'delete', child: Text('Удалить')),
+                    PopupMenuButton<String>(
+                      tooltip: 'Другие действия',
+                      onSelected: (action) {
+                        if (action == 'open') _openFile(f);
+                        if (action == 'save') _saveFile(f);
+                        if (action == 'share') _shareFile(f);
+                        if (action == 'delete') _deleteFile(f);
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'open', child: Text('Открыть')),
+                        PopupMenuItem(
+                          value: 'save',
+                          child: Text('Сохранить на телефон'),
+                        ),
+                        PopupMenuItem(
+                            value: 'share', child: Text('Поделиться')),
+                        PopupMenuDivider(),
+                        PopupMenuItem(value: 'delete', child: Text('Удалить')),
+                      ],
+                    ),
                   ],
                 ),
-              ],
-            ),
-      onTap: isBusy ? null : () => _openFile(f),
-    );
+          onTap: isBusy ? null : () => _openFile(f),
+        ));
   }
 
   static IconData _iconForExt(String ext) {
@@ -246,7 +258,7 @@ class _FilesScreenState extends State<FilesScreen> {
     }
   }
 
-  static Color _colorForExt(String ext) {
+  Color _colorForExt(String ext) {
     switch (ext) {
       case 'docx':
       case 'doc':
@@ -257,7 +269,7 @@ class _FilesScreenState extends State<FilesScreen> {
       case 'ppt':
         return const Color(0xFFE88732);
       default:
-        return TroikaColors.textMuted;
+        return TroikaPalette.of(context).textMuted;
     }
   }
 

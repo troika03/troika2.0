@@ -13,6 +13,7 @@ import '../services/troika_api_service.dart';
 import '../services/windows_shell_service.dart';
 import '../theme/troika_theme.dart';
 import '../widgets/status_orb.dart';
+import '../widgets/troika_page.dart';
 import '../widgets/web_sources_view.dart';
 import 'chat_screen.dart';
 import 'commands_screen.dart';
@@ -47,6 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _windowsShellInitialized = false;
   bool _windowsCompact = false;
   bool _windowsPinned = TroikaConfig.windowsAlwaysOnTop;
+  int _mobileTab = 0;
   RunApprovalRequest? _shownApproval;
   bool _approvalDialogOpen = false;
 
@@ -237,15 +239,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _open(Widget screen) async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+    await Navigator.push(context,
+        MaterialPageRoute(builder: (_) => TroikaPageScope(child: screen)));
   }
 
   Future<void> _openChat() => _open(
-        Scaffold(
-          backgroundColor: TroikaColors.bg,
+        TroikaPage(
           appBar: AppBar(
             title: const Text('Текст'),
-            backgroundColor: TroikaColors.bg,
             surfaceTintColor: Colors.transparent,
           ),
           body: ChatScreen(
@@ -273,8 +274,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onExpand: _showCommandCenter,
         onClose: _hideCompact,
         onOpenText: () => _openFromCompact(
-          Scaffold(
-            backgroundColor: TroikaColors.bg,
+          TroikaPage(
             appBar: AppBar(title: const Text('Текст')),
             body: ChatScreen(
               onOpenCommands: () => _open(const CommandsScreen()),
@@ -296,7 +296,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     return Scaffold(
-      backgroundColor: TroikaColors.bg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         bottom: false,
         child: wide
@@ -309,7 +309,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       onSignedOut: widget.onSignedOut,
                     ),
                   ),
-                  const VerticalDivider(width: 1, color: Colors.white10),
+                  VerticalDivider(
+                      width: 1, color: Theme.of(context).dividerColor),
                   Expanded(
                     child: Column(
                       children: [
@@ -328,7 +329,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
-                  const VerticalDivider(width: 1, color: Colors.white10),
+                  VerticalDivider(
+                      width: 1, color: Theme.of(context).dividerColor),
                   SizedBox(
                     width: 270,
                     child: _RightRail(
@@ -339,37 +341,39 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ],
               )
-            : Column(
-                children: [
-                  _Header(
-                    state: assistant.state,
-                    connected: connected,
-                    onSettings: () => _open(
-                      SettingsOverviewScreen(onSignedOut: widget.onSignedOut),
-                    ),
+            : _mobileTab != 0
+                ? switch (_mobileTab) {
+                    1 => const AssistantHubScreen(),
+                    2 => const FilesHubScreen(),
+                    3 => SettingsOverviewScreen(
+                        onSignedOut: widget.onSignedOut,
+                        onAppearanceChanged: widget.onAppearanceChanged),
+                    _ => voiceHome,
+                  }
+                : Column(
+                    children: [
+                      _Header(
+                        state: assistant.state,
+                        connected: connected,
+                        onSettings: () => _open(
+                          SettingsOverviewScreen(
+                              onSignedOut: widget.onSignedOut),
+                        ),
+                      ),
+                      Expanded(child: voiceHome),
+                    ],
                   ),
-                  Expanded(child: voiceHome),
-                ],
-              ),
       ),
       bottomNavigationBar: wide
           ? null
           : NavigationBar(
               height: 64,
-              selectedIndex: 0,
-              backgroundColor: TroikaColors.surface,
-              indicatorColor: TroikaColors.brand.withValues(alpha: 0.16),
+              selectedIndex: _isWindows ? 0 : _mobileTab,
+              backgroundColor: Theme.of(context).colorScheme.surface,
+              indicatorColor:
+                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.16),
               onDestinationSelected: (index) {
-                if (index == 1) _open(const AssistantHubScreen());
-                if (index == 2) _open(const FilesHubScreen());
-                if (index == 3) {
-                  _open(
-                    SettingsOverviewScreen(
-                      onSignedOut: widget.onSignedOut,
-                      onAppearanceChanged: widget.onAppearanceChanged,
-                    ),
-                  );
-                }
+                setState(() => _mobileTab = index);
               },
               destinations: const [
                 NavigationDestination(
@@ -410,12 +414,15 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = TroikaColors.forState(state);
+    final accent = state == AssistantState.error
+        ? TroikaColors.error
+        : Theme.of(context).colorScheme.primary;
     return Container(
       height: 62,
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Colors.white10)),
+      decoration: BoxDecoration(
+        border:
+            Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
       ),
       child: Row(
         children: [
@@ -444,8 +451,8 @@ class _Header extends StatelessWidget {
             ),
           Text(
             connected ? 'На связи' : 'Локально',
-            style: const TextStyle(
-              color: TroikaColors.textMuted,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontSize: 12,
             ),
           ),
@@ -503,7 +510,7 @@ class _VoiceHome extends StatelessWidget {
                     label,
                     key: const ValueKey('voice-state-label'),
                     style: TextStyle(
-                      color: _voiceAccent(orbState),
+                      color: _voiceAccent(context, orbState),
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                     ),
@@ -519,8 +526,8 @@ class _VoiceHome extends StatelessWidget {
                     textAlign: TextAlign.center,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: TroikaColors.textMuted,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                       fontSize: 14,
                     ),
                   ),
@@ -603,11 +610,10 @@ Future<void> _handleOrbTap(AssistantService assistant) async {
 VoiceOrbState _voiceOrbState(AssistantService assistant) {
   if (assistant.pendingApproval != null) return VoiceOrbState.approval;
   return switch (assistant.state) {
-    AssistantState.idle =>
-      assistant.lastResult == null ||
-              assistant.lastResult!.kind == AssistantResultKind.answer
-          ? VoiceOrbState.idle
-          : VoiceOrbState.done,
+    AssistantState.idle => assistant.lastResult == null ||
+            assistant.lastResult!.kind == AssistantResultKind.answer
+        ? VoiceOrbState.idle
+        : VoiceOrbState.done,
     AssistantState.wakeDetected ||
     AssistantState.recording =>
       VoiceOrbState.listening,
@@ -649,14 +655,14 @@ String _voiceStateHint(AssistantService assistant, VoiceOrbState state) {
   };
 }
 
-Color _voiceAccent(VoiceOrbState state) {
+Color _voiceAccent(BuildContext context, VoiceOrbState state) {
   return switch (state) {
     VoiceOrbState.error => TroikaColors.error,
     VoiceOrbState.listening ||
     VoiceOrbState.speaking ||
     VoiceOrbState.done =>
-      TroikaColors.brandSoft,
-    _ => TroikaColors.brand,
+      Theme.of(context).colorScheme.primary,
+    _ => Theme.of(context).colorScheme.primary,
   };
 }
 
@@ -690,7 +696,7 @@ class _CurrentCards extends StatelessWidget {
           body: _voiceStateHint(assistant, orbState),
           accent: assistant.state == AssistantState.error
               ? TroikaColors.error
-              : TroikaColors.brand,
+              : Theme.of(context).colorScheme.primary,
         ),
       );
     }
@@ -750,7 +756,7 @@ class _HomeCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String body;
-  final Color accent;
+  final Color? accent;
   final String? actionLabel;
   final VoidCallback? onAction;
 
@@ -758,17 +764,18 @@ class _HomeCard extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.body,
-    this.accent = TroikaColors.brand,
+    this.accent,
     this.actionLabel,
     this.onAction,
   });
 
   @override
   Widget build(BuildContext context) {
+    final accent = this.accent ?? Theme.of(context).colorScheme.primary;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: TroikaColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: accent.withValues(alpha: 0.18)),
       ),
@@ -798,8 +805,8 @@ class _HomeCard extends StatelessWidget {
                   body,
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: TroikaColors.textMuted,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                     height: 1.35,
                   ),
                 ),
@@ -919,10 +926,14 @@ class _NavItem extends StatelessWidget {
       child: ListTile(
         dense: true,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
-        tileColor: active ? TroikaColors.brand.withValues(alpha: 0.11) : null,
+        tileColor: active
+            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.11)
+            : null,
         leading: Icon(
           icon,
-          color: active ? TroikaColors.brand : TroikaColors.textMuted,
+          color: active
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).colorScheme.onSurfaceVariant,
         ),
         title: Text(label),
         onTap: onTap,
@@ -1003,7 +1014,7 @@ class _CompactAssistant extends StatelessWidget {
       child: Focus(
         autofocus: true,
         child: Scaffold(
-          backgroundColor: TroikaColors.bg,
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           body: SafeArea(
             child: Column(
               children: [
@@ -1016,7 +1027,9 @@ class _CompactAssistant extends StatelessWidget {
                         height: 8,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: TroikaColors.forState(assistant.state),
+                          color: assistant.state == AssistantState.error
+                              ? TroikaColors.error
+                              : Theme.of(context).colorScheme.primary,
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -1057,7 +1070,7 @@ class _CompactAssistant extends StatelessWidget {
                         Text(
                           _voiceStateLabel(assistant, orbState),
                           style: TextStyle(
-                            color: _voiceAccent(orbState),
+                            color: _voiceAccent(context, orbState),
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),
@@ -1068,7 +1081,10 @@ class _CompactAssistant extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: TroikaColors.textMuted),
+                          style: TextStyle(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant),
                         ),
                         const SizedBox(height: 6),
                         _OrbButton(
@@ -1091,8 +1107,8 @@ class _CompactAssistant extends StatelessWidget {
                   child: Text(
                     '$hotkeyLabel · повторно — остановить · Esc — скрыть',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: TroikaColors.textMuted,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                       fontSize: 12,
                     ),
                   ),
@@ -1131,8 +1147,8 @@ class _ActionTile extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        tileColor: TroikaColors.surface,
-        leading: Icon(icon, color: TroikaColors.brand),
+        tileColor: Theme.of(context).colorScheme.surface,
+        leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
         title: Text(title, style: const TextStyle(fontSize: 14)),
         trailing: const Icon(Icons.chevron_right, size: 18),
         onTap: onTap,
