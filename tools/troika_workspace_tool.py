@@ -116,7 +116,7 @@ def _handle_files(args: dict[str, Any], **kwargs: Any) -> str:
         if action == "write":
             from tools.troika_documents_tool import _handle_project
             return _handle_project({"title": Path(path).stem or "project",
-                                    "files": [{"path": path, "content": str(args.get("content") or "")}]}, **kwargs)
+                                    "files": [{"path": path, "content": str(args.get("content") or "")}]}, source_project=False, **kwargs)
         if action in {"replace", "mkdir", "copy", "move"}:
             return _result(False, error="device_project_required",
                            message="Use troika_create_project to prepare a new local version; no server workspace writes.")

@@ -19,6 +19,7 @@ from gateway.session_context import (
     set_session_override,
 )
 from troika_product.access import AccessPrincipal, AccessRegistry
+from troika_product.development import DEVELOPMENT_GUIDANCE
 from troika_product.feature_policy import FORBIDDEN_PRODUCT_TOOLS, product_toolsets
 
 
@@ -43,7 +44,7 @@ CAPABILITIES = (
                "Готовить документы и презентации по задаче пользователя."),
     Capability("development", "Разработка", "Создавать проекты с кодом, README и тестами.",
                ("troika_create_project",),
-               "Собирать проект с исходниками и инструкцией запуска. Не запускать код на сервере."),
+               DEVELOPMENT_GUIDANCE),
     Capability("files", "Файлы", "Искать, читать и изменять личные файлы.",
                ("troika_files", "troika_file_search", "troika_terminal"),
                "Работать с файлами владельца через ограниченные файловые операции."),

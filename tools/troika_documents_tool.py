@@ -165,7 +165,7 @@ def _handle_project(args: dict[str, Any], **kwargs: Any) -> str:
     if get_session_env("TROIKA_PRODUCT_DELIVERY_MODE", "server") != "device":
         return json.dumps({"ok": False, "error": "device_delivery_client_required"})
     try:
-        data, checks = build_project(args)
+        data, checks = build_project(args, require_complete=kwargs.get("source_project", True))
         name = str(args.get("title") or "project")
         artifact = device_deliveries.create(identity[0], identity[1], name, "zip", "application/zip", data)
         return json.dumps({"ok": True, "artifact": artifact, "checks": checks,
@@ -268,12 +268,12 @@ registry.register(
 registry.register(
     name="troika_create_project", toolset="troika_documents", handler=_handle_project,
     schema={"name": "troika_create_project",
-            "description": "Develop a source project with code, tests and README, or provide a revised project after check output. Delivered only to the user's device as ZIP. Python/JSON syntax is checked; this does NOT execute code or prove tests passed. Include test files and clear run instructions. Never claim deployment or test success without actual local execution results.",
+            "description": "Package COMPLETE source files you have written into a device ZIP; this tool does not generate code. Include the requested implementation, README.md with run instructions, and behavior tests. Empty or Hello World-only projects are rejected. For a web app include its browser UI and working logic, not a console substitute. Python/JSON syntax checks do not execute code or prove tests passed. Correct incomplete files and retry on failure. Never claim deployment or test success without local execution results.",
             "parameters": {"type": "object", "properties": {
                 "title": {"type": "string"}, "instructions": {"type": "string"},
                 "files": {"type": "array", "items": {"type": "object", "properties": {
                     "path": {"type": "string", "description": "Relative project path; no absolute paths or .."},
-                    "content": {"type": "string"}}, "required": ["path", "content"]}}},
+                    "content": {"type": "string", "description": "Complete UTF-8 file contents, not a summary, filename or placeholder."}}, "required": ["path", "content"]}}},
                 "required": ["title", "files"]}},
     check_fn=_documents_available,
 )

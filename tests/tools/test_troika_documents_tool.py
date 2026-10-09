@@ -13,7 +13,10 @@ from troika_product.device_delivery import DeviceDeliveryStore
 
 @pytest.mark.parametrize("handler,args", [
     ("_handle_docx", {"title": "Локальный", "content": "Содержимое"}),
-    ("_handle_project", {"title": "Код", "files": [{"path": "main.py", "content": "print(1)"}]}),
+    ("_handle_project", {"title": "Код", "files": [
+        {"path": "main.py", "content": "def add(a,b): return a+b"},
+        {"path": "test_add.py", "content": "from main import add\nassert add(1,2)==3"},
+        {"path": "README.md", "content": "Run python test_add.py"}]}),
 ])
 def test_device_mode_never_writes_artifact_store(tmp_path, monkeypatch, handler, args):
     store = DeviceDeliveryStore()

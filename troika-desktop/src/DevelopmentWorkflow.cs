@@ -17,6 +17,6 @@ namespace Troika.Desktop {
                 prompt = Development.RepairContext(folder, report) + "\nСохрани исходное назначение проекта. Обязательно включи работающие тесты и PLAN.md. " + Portable(kind);
             }
         }
-        public static string Portable(string kind) { return kind.StartsWith("Python") ? "Python: только стандартная библиотека, unittest test_*.py; тесты импортируют настоящий код проекта. Без pip и внешних сервисов." : "JavaScript: CommonJS index.js, test_*.js с node:test и node:assert/strict, только test(name, callback). Тесты импортируют настоящий код. Без npm, сети и внешних пакетов."; }
+        public static string Portable(string kind) { return "Сохрани назначение и требования: веб-приложению нужен браузерный интерфейс HTML/CSS и работающая логика. Среда проверки не заменяет интерфейс консольной программой. troika_create_project только упаковывает полный код, который ты напишешь, README.md и тесты; Hello World и заглушки не выполняют задачу. " + (kind.StartsWith("Python") ? "Python: только стандартная библиотека, unittest test_*.py; тесты импортируют настоящий код проекта. Без pip и внешних сервисов." : "JavaScript: CommonJS index.js, test_*.js с node:test и node:assert/strict, только test(name, callback). Тесты импортируют настоящий код. Без npm, сети и внешних пакетов."); }
     }
 }

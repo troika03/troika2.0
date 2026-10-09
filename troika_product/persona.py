@@ -64,5 +64,7 @@ def load_troika_persona() -> str:
 попроси открыть «Файлы» в течение 10 минут, чтобы завершить передачу.
 """
     from troika_product.capabilities import ROUTING_GUIDANCE
+    from troika_product.development import DEVELOPMENT_GUIDANCE
     text += "\n\n" + ROUTING_GUIDANCE
+    text += "\n\n" + DEVELOPMENT_GUIDANCE
     return text + "\n\n" + TROIKA_PERSONA_MARKER
