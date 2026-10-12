@@ -49,17 +49,18 @@ namespace Troika.Desktop {
             }
         }
         private async Task ShowNotifications() {
-            await Safe(async () => {
-                var value = await api.Get("/v1/notification-preferences", CancellationToken.None); panelContent.Children.Clear(); panelContent.Children.Add(Label("Напоминания и тихие часы", 18, text)); Gap();
+            await Safe(async () => { var value = await api.Get("/v1/notification-preferences", CancellationToken.None); RenderNotifications(value); });
+        }
+        private void RenderNotifications(Dictionary<string, object> value) {
+                panelContent.Children.Clear();
                 var reminders = new CheckBox { Content = "Напоминания", IsChecked = Json.Flag(value, "reminders_enabled"), Foreground = text, Margin = new Thickness(0, 7, 0, 7) };
                 var proactive = new CheckBox { Content = "Предложения Тройки", IsChecked = Json.Flag(value, "proactive_enabled"), Foreground = text, Margin = new Thickness(0, 7, 0, 7) };
                 var quiet = new CheckBox { Content = "Тихие часы", IsChecked = Json.Flag(value, "quiet_hours_enabled"), Foreground = text, Margin = new Thickness(0, 7, 0, 7) };
-                panelContent.Children.Add(reminders); panelContent.Children.Add(proactive); panelContent.Children.Add(quiet); Gap();
-                panelContent.Children.Add(Label("Часовой пояс IANA", 12, muted)); var zone = Field("Часовой пояс", false); zone.Text = Json.Text(value, "timezone"); panelContent.Children.Add(zone);
+                panelContent.Children.Add(reminders); panelContent.Children.Add(proactive); SurfaceGroup(0, "Напоминания", "Что Тройка сообщает в открытом приложении", "tasks"); int schedule = panelContent.Children.Count; panelContent.Children.Add(quiet);
+                panelContent.Children.Add(Label("Часовой пояс", 12, muted)); var zone = Field("Часовой пояс", false); zone.Text = Json.Text(value, "timezone"); panelContent.Children.Add(zone);
                 panelContent.Children.Add(Label("Не беспокоить с / до", 12, muted)); var start = Field("Начало тихих часов", false); start.Text = Json.Text(value, "quiet_start"); var end = Field("Конец тихих часов", false); end.Text = Json.Text(value, "quiet_end"); panelContent.Children.Add(start); panelContent.Children.Add(end);
-                AddPanelButton("Сохранить", () => { var task = Safe(async () => { await api.Call("PUT", "/v1/notification-preferences", new { reminders_enabled = reminders.IsChecked == true, proactive_enabled = proactive.IsChecked == true, quiet_hours_enabled = quiet.IsChecked == true, timezone = zone.Text.Trim(), quiet_start = start.Text.Trim(), quiet_end = end.Text.Trim() }, CancellationToken.None); SetStatus("Настройки напоминаний сохранены", false); await ShowNotifications(); }); }, true);
+                SurfaceGroup(schedule, "Тихие часы", "Время без звука и предложений", "tasks"); AddPanelButton("Сохранить", () => { var task = Safe(async () => { await api.Call("PUT", "/v1/notification-preferences", new { reminders_enabled = reminders.IsChecked == true, proactive_enabled = proactive.IsChecked == true, quiet_hours_enabled = quiet.IsChecked == true, timezone = zone.Text.Trim(), quiet_start = start.Text.Trim(), quiet_end = end.Text.Trim() }, CancellationToken.None); SetStatus("Настройки напоминаний сохранены", false); await ShowNotifications(); }); }, true);
                 Gap(); panelContent.Children.Add(Label("В новом клиенте напоминания появляются, пока приложение открыто или свёрнуто. Доставка после полного закрытия ещё не реализована. Для остальных часовых поясов настройте IANA-зону на телефоне; при включённых тихих часах неподдержанная Windows зона блокирует звук.", 11, muted));
-            });
         }
     }
 }

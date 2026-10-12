@@ -15,7 +15,7 @@ namespace Troika.Desktop {
             if (!api.Account.SignedIn) {
                 panelContent.Children.Clear();
                 panelContent.Children.Add(Label("Войдите, чтобы управлять возможностями аккаунта.", 14, muted));
-                AddPanelButton("Войти", () => OpenPanel("Аккаунт"), true);
+                AddPanelButton("Войти", () => OpenPanel("Аккаунт"), true); SurfaceGroup(0, "Возможности вашего аккаунта", "Плагины, навыки и инструменты", "spark");
                 return;
             }
             try {
@@ -48,8 +48,8 @@ namespace Troika.Desktop {
             panelContent.Children.Add(tabs); Gap();
             if (catalogueItems.Count == 0) panelContent.Children.Add(Label("В этом аккаунте пока нет доступных возможностей.", 13, muted));
             foreach (var item in catalogueItems) {
+                int itemCard = panelContent.Children.Count;
                 bool enabled = Json.Flag(item, "enabled"), available = Json.Flag(item, "available");
-                panelContent.Children.Add(Label(Json.Text(item, "title"), 16, text));
                 if (catalogueTab == 0) {
                     panelContent.Children.Add(Label(Json.Text(item, "description"), 12, muted));
                     var toggle = new CheckBox { Content = available ? "Подключено" : "Пока недоступно", IsChecked = enabled,
@@ -64,10 +64,12 @@ namespace Troika.Desktop {
                         panelContent.Children.Add(Label(title, 13, muted));
                     }
                 }
-                Gap();
+                SurfaceGroup(itemCard, Json.Text(item, "title"), "", "spark");
             }
+            int actions = panelContent.Children.Count;
             AddPanelButton("Обновить", () => OpenPanel("Каталог возможностей"), false);
             AddPanelButton("Назад", () => OpenPanel("Возможности"), false);
+            CompactActions(actions);
         }
         private async Task SaveCapabilityPreference(string id, bool enabled) {
             if (catalogueSaving) return;

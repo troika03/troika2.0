@@ -121,6 +121,7 @@ namespace Troika.Desktop {
         }
         private void Build() {
             ApplyPalette(); navigation.Clear();
+            ApplyControlStyles();
             Background = background; Foreground = text;
             var style = new Style(typeof(ScrollViewer)); style.Setters.Add(new Setter(ScrollViewer.PanningModeProperty, PanningMode.VerticalOnly)); Resources[typeof(ScrollViewer)] = style;
             Resources[SystemParameters.VerticalScrollBarWidthKey] = 6.0;
@@ -324,7 +325,7 @@ namespace Troika.Desktop {
                 if (title == "Аккаунт") { await RenderAccount(); return; }
                 if (title == "Файлы") { await RenderFiles(); return; }
                 if (title == "Подтверждение") return;
-                if (!api.Account.SignedIn) { panelContent.Children.Clear(); panelContent.Children.Add(Label("Войдите, чтобы увидеть " + title.ToLowerInvariant() + ".", 14, muted)); AddPanelButton("Войти", () => OpenPanel("Аккаунт"), true); return; }
+                if (!api.Account.SignedIn) { panelContent.Children.Clear(); panelContent.Children.Add(Label("Войдите, чтобы увидеть " + title.ToLowerInvariant() + ".", 14, muted)); AddPanelButton("Войти", () => OpenPanel("Аккаунт"), true); SurfaceGroup(0, "Ваши " + title.ToLowerInvariant(), "Раздел доступен на телефоне и ПК в одном аккаунте.", title == "Дела" ? "tasks" : "memory"); return; }
                 var value = await api.Get(title == "Дела" ? "/v1/assistant/tasks?include_closed=false" : "/v1/memories", CancellationToken.None);
                 if (revision != panelRevision) return; panelContent.Children.Clear();
                 if (title == "Дела") { var projects = await api.Get("/v1/assistant/projects", CancellationToken.None); if (revision != panelRevision) return; RenderTasks(value, projects); } else RenderMemories(value);
@@ -339,11 +340,11 @@ namespace Troika.Desktop {
             if (!compact) { sidebar.Visibility = Visibility.Visible; body.ColumnDefinitions[0].Width = new GridLength(180); }
         }
         private void Gap() { panelContent.Children.Add(new Border { Height = 15 }); }
-        private void AddPanelButton(string title, Action action, bool primary) { var button = Button(title, action, primary); button.Margin = new Thickness(0, 6, 0, 4); button.HorizontalAlignment = HorizontalAlignment.Stretch; panelContent.Children.Add(button); }
+        private void AddPanelButton(string title, Action action, bool primary) { var button = Button(title, action, primary); button.Margin = new Thickness(0, 6, 0, 4); button.HorizontalAlignment = HorizontalAlignment.Left; button.MaxWidth = 320; button.Content = Label(title, 14, primary ? accentText : text); panelContent.Children.Add(button); }
         private async Task RenderAccount() {
             panelContent.Children.Clear();
             if (!api.Account.SignedIn) {
-                panelContent.Children.Add(Label("Ваш голос. Ваш контекст.", 22, text)); Gap(); panelContent.Children.Add(Label("Войдите в тот же аккаунт, что на телефоне. История и память будут доступны здесь.", 13, muted)); Gap();
+                int signIn = panelContent.Children.Count;
                 panelContent.Children.Add(Label("Почта", 12, muted)); var email = Field("Почта", false); panelContent.Children.Add(email);
                 panelContent.Children.Add(Label("Пароль", 12, muted)); var password = new PasswordBox { Background = surface, Foreground = text, BorderBrush = line, Padding = new Thickness(11), Margin = new Thickness(0, 6, 0, 12) }; AccessibleName(password, "Пароль"); panelContent.Children.Add(password);
                 var resultLabel = Label("", 12, muted); bool authenticating = false;
@@ -354,27 +355,43 @@ namespace Troika.Desktop {
                         await api.Authenticate(email.Text, password.Password, register, CancellationToken.None); password.Clear(); await RefreshAccount(); await RenderAccount(); SetStatus("Вы вошли в аккаунт", false);
                     } catch (Exception error) { resultLabel.Text = error is System.Net.Http.HttpRequestException ? "Нет соединения с сервером." : error.Message; } finally { authenticating = false; }
                 };
-                AddPanelButton("Войти", () => login(false), true); AddPanelButton("Создать аккаунт", () => login(true), false); panelContent.Children.Add(resultLabel); Gap();
-                panelContent.Children.Add(Label("Пароль нового аккаунта: от 10 символов. Ключи моделей не нужны.", 11, muted)); Gap(); AddAppearanceSettings(); return;
+                int actions = panelContent.Children.Count; AddPanelButton("Войти", () => login(false), true); AddPanelButton("Создать аккаунт", () => login(true), false); CompactActions(actions); panelContent.Children.Add(resultLabel);
+                panelContent.Children.Add(Label("Пароль нового аккаунта: от 10 символов. Ключи моделей не нужны.", 11, muted)); SurfaceGroup(signIn, "Ваш голос. Ваш контекст.", "Войдите в тот же аккаунт, что на телефоне. История и память будут доступны здесь.", "profile"); AddAppearanceSettings(); return;
             }
-            panelContent.Children.Add(Label(api.Account.Email, 15, text)); Gap();
             int revision = panelRevision; var subscription = await api.Get("/v1/subscription", CancellationToken.None); if (revision != panelRevision) return;
+            RenderAccountDetails(api.Account.Email, subscription);
+        }
+        private void RenderAccountDetails(string email, Dictionary<string, object> subscription) {
+            int account = panelContent.Children.Count; panelContent.Children.Add(Label(email, 14, muted)); Gap();
             var plan = Json.Text(subscription, "plan"); panelContent.Children.Add(Label(plan.Length == 0 ? "Тариф недоступен" : char.ToUpper(plan[0]) + plan.Substring(1), 24, text));
             if (Json.Flag(subscription, "quota_enforced")) { panelContent.Children.Add(Label("Осталось " + Json.Text(subscription, "remaining") + " из " + Json.Text(subscription, "daily_limit") + " запросов сегодня", 13, muted)); DateTime resets; if (DateTime.TryParse(Json.Text(subscription, "resets_at"), out resets)) panelContent.Children.Add(Label("Обновление: " + resets.ToLocalTime().ToString("d MMM, HH:mm"), 12, muted)); }
-            Gap(); panelContent.Children.Add(Label("На этом компьютере", 15, text));
+            SurfaceGroup(account, "Аккаунт и тариф", "", "profile"); int settings = panelContent.Children.Count;
             Check("Озвучивать ответы", autoSpeak, value => { autoSpeak = value; SaveSettings(); }); Check("Закрепить поверх окон", Topmost, value => { Topmost = value; SaveSettings(); }); Check("Меньше анимации", reducedMotion, value => { reducedMotion = value; orb.Motion = !value && SystemParameters.ClientAreaAnimation; orb.SetState(orb.State); SaveSettings(); });
-            AddAppearanceSettings(); Gap();
+            SurfaceGroup(settings, "На этом компьютере", "Голос и поведение окна", "home"); AddAppearanceSettings();
+            int management = panelContent.Children.Count;
             AddPanelButton("Устройства", () => { var task = ShowDevices(); }, false);
             AddPanelButton("Напоминания и тихие часы", () => { var task = ShowNotifications(); }, false);
             AddPanelButton("Экспорт данных аккаунта…", () => { var task = ExportAccount(); }, false);
+            CompactActions(management); SurfaceGroup(management, "Устройства и данные", "", "files"); int access = panelContent.Children.Count;
             AddPanelButton("Выйти на этом ПК", () => { var task = Logout(); }, false);
             AddPanelButton("Удалить аккаунт…", ConfirmAccountDeletion, false);
+            CompactActions(access); SurfaceGroup(access, "Доступ к аккаунту", "Удаление аккаунта требует отдельного подтверждения.", "profile");
             panelContent.Children.Add(Label("Ctrl+Alt+T — голос. Готовые файлы хранятся на этом ПК; автоматической облачной копии нет.", 11, muted));
         }
         private void Check(string title, bool current, Action<bool> update) { var check = new CheckBox { Content = title, IsChecked = current, Foreground = text, FontSize = 13, Margin = new Thickness(0, 7, 0, 7) }; check.Click += delegate { update(check.IsChecked == true); }; panelContent.Children.Add(check); }
         private void SaveSettings() { store.SaveSettings(new { auto_speak = autoSpeak, light = light, reduced_motion = reducedMotion, always_on_top = Topmost, interface_accent = interfaceAccent }); }
         private async Task ShowDevices() {
-            await Safe(async () => { var value = await api.Get("/v1/account/devices", CancellationToken.None); panelContent.Children.Clear(); foreach (var device in Json.Rows(value, "devices")) { var id = Json.Text(device, "id"); var name = Json.Text(device, "name"); panelContent.Children.Add(Label(name, 15, text)); panelContent.Children.Add(Label(Json.Text(device, "platform") + " · " + Json.Text(device, "status"), 12, muted)); if (Json.Flag(device, "current")) api.Account.DeviceId = id; else if (Json.Text(device, "status") == "active") AddPanelButton("Отозвать доступ", () => ConfirmDeviceRevocation(id, name), false); Gap(); } AddPanelButton("Назад", () => OpenPanel("Аккаунт"), false); });
+            await Safe(async () => { var value = await api.Get("/v1/account/devices", CancellationToken.None); RenderDeviceCards(value); });
+        }
+        private void RenderDeviceCards(Dictionary<string, object> value) {
+            panelContent.Children.Clear();
+            foreach (var device in Json.Rows(value, "devices")) {
+                int deviceCard = panelContent.Children.Count; var id = Json.Text(device, "id"); var name = Json.Text(device, "name");
+                panelContent.Children.Add(Label(Json.Text(device, "platform") + " · " + (Json.Flag(device, "current") ? "Это устройство" : Json.Text(device, "status") == "active" ? "Подключено" : "Доступ отозван"), 12, muted));
+                if (Json.Flag(device, "current")) api.Account.DeviceId = id; else if (Json.Text(device, "status") == "active") AddPanelButton("Отозвать доступ", () => ConfirmDeviceRevocation(id, name), false);
+                SurfaceGroup(deviceCard, name, "", "profile");
+            }
+            AddPanelButton("Назад", () => OpenPanel("Аккаунт"), false);
         }
         private async Task Logout() {
             if (busy || recorder.Recording || speaking) { SetStatus("Сначала остановите текущую задачу.", true); return; }
@@ -387,20 +404,23 @@ namespace Troika.Desktop {
             });
         }
         private void RenderTasks(Dictionary<string, object> value, Dictionary<string, object> projects) {
-            panelContent.Children.Add(Label("Что держим в фокусе", 16, text)); Gap();
+            var items = Json.Rows(value, "tasks").ToList();
+            int project = panelContent.Children.Count;
             RenderProjects(projects);
+            SurfaceGroup(project, "Текущий проект", "", "files"); int form = panelContent.Children.Count;
+            panelContent.Children.Add(Label("Название задачи", 12, muted));
             var input = Field("Название задачи", false); panelContent.Children.Add(input);
-            panelContent.Children.Add(Label("Напомнить (необязательно)", 12, muted)); var date = new DatePicker { Foreground = text, SelectedDate = null, Margin = new Thickness(0, 6, 0, 6) }; AccessibleName(date, "Дата напоминания"); panelContent.Children.Add(date);
+            panelContent.Children.Add(Label("Напомнить (необязательно)", 12, muted)); var date = new DatePicker { Foreground = text, Background = surface, BorderBrush = line, SelectedDate = null, Margin = new Thickness(0, 6, 0, 6) }; AccessibleName(date, "Дата напоминания"); panelContent.Children.Add(date);
             var time = Field("Время напоминания, ЧЧ:ММ", false); time.Text = "18:00"; panelContent.Children.Add(time);
-            AddPanelButton("Добавить дело", () => { var task = Safe(async () => { if (input.Text.Trim().Length == 0) return;
+            int actions = panelContent.Children.Count; AddPanelButton("Добавить дело", () => { var task = Safe(async () => { if (input.Text.Trim().Length == 0) return;
                 DateTime? due = null; if (date.SelectedDate != null) { TimeSpan clock; if (!TimeSpan.TryParse(time.Text, out clock) || clock.TotalHours < 0 || clock.TotalHours >= 24) throw new InvalidOperationException("Введите время в формате ЧЧ:ММ."); var local = date.SelectedDate.Value.Date.Add(clock); if (local <= DateTime.Now) throw new InvalidOperationException("Выберите будущую дату и время."); due = local.ToUniversalTime(); }
                 await EnsureProject(); await api.Call("POST", "/v1/assistant/tasks", new { title = input.Text.Trim(), action_mode = "remind", due_at = due.HasValue ? due.Value.ToString("o") : null }, CancellationToken.None); await OpenPanelTask("Дела"); }); }, true);
-            AddPanelButton("Заметки проекта", () => { var task = ShowNotes(); }, false); Gap();
-            var items = Json.Rows(value, "tasks").ToList(); if (items.Count == 0) panelContent.Children.Add(Label("Пока пусто. Добавьте дело или скажите Тройке, о чём напомнить.", 13, muted));
-            foreach (var item in items) { var id = Json.Text(item, "id"); panelContent.Children.Add(Label(Json.Text(item, "title"), 15, text)); DateTime due; if (DateTime.TryParse(Json.Text(item, "due_at"), out due)) panelContent.Children.Add(Label(due.ToLocalTime().ToString("d MMM, HH:mm"), 12, muted)); AddPanelButton("Готово", () => { var task = Safe(async () => { await api.Call("PATCH", "/v1/assistant/tasks/" + Uri.EscapeDataString(id), new { status = "completed" }, CancellationToken.None); await OpenPanelTask("Дела"); }); }, false); Gap(); }
+            AddPanelButton("Заметки проекта", () => { var task = ShowNotes(); }, false); CompactActions(actions); var formCard = SurfaceGroup(form, "Новое дело", "Добавьте задачу и, если нужно, время напоминания.", "tasks"); CollapsibleGroup(formCard, "Добавить дело", items.Count == 0);
+            if (items.Count == 0) EmptyState("Пока нет дел", "Добавьте дело или скажите Тройке, о чём напомнить.", "tasks");
+            foreach (var item in items) { int taskCard = panelContent.Children.Count; var id = Json.Text(item, "id"); DateTime due; if (DateTime.TryParse(Json.Text(item, "due_at"), out due)) panelContent.Children.Add(Label(due.ToLocalTime().ToString("d MMM, HH:mm"), 12, muted)); AddPanelButton("Готово", () => { var task = Safe(async () => { await api.Call("PATCH", "/v1/assistant/tasks/" + Uri.EscapeDataString(id), new { status = "completed" }, CancellationToken.None); await OpenPanelTask("Дела"); }); }, false); SurfaceGroup(taskCard, Json.Text(item, "title"), "", "tasks"); }
         }
         private void RenderMemories(Dictionary<string, object> value) {
-            panelContent.Children.Add(Label("Что Тройка помнит о вас", 16, text)); Gap(); var items = Json.Rows(value, "memories").ToList();
+            int preferencesCard = panelContent.Children.Count; var items = Json.Rows(value, "memories").ToList();
             object rawPreferences; var preferences = value.TryGetValue("preferences", out rawPreferences) ? rawPreferences as Dictionary<string, object> : null;
             if (preferences != null) {
                 bool automaticEnabled = Json.Flag(preferences, "automatic_enabled");
@@ -418,24 +438,28 @@ namespace Troika.Desktop {
                     });
                     automatic.IsChecked = automaticEnabled; automatic.IsEnabled = true;
                 };
-                automatic.Click += change; Gap();
+                automatic.Click += change;
             } else panelContent.Children.Add(Label("Для автоматической памяти требуется обновление сервера.", 12, muted));
-            AddPanelButton("Добавить запись", () => EditMemory(null), true); Gap();
-            if (items.Count == 0) panelContent.Children.Add(Label("Память пока пуста. Скажите: «Запомни…»", 13, muted));
-            foreach (var item in items) { var memory = item; var id = Json.Text(item, "id"); var content = Json.Text(item, "content"); if (content.Length == 0) content = Json.Text(item, "text"); panelContent.Children.Add(Label(content, 14, text)); if (Json.Text(item, "source") == "automatic") panelContent.Children.Add(Label("Сохранено автоматически", 11, muted)); AddPanelButton("Изменить запись", () => EditMemory(memory), false); AddPanelButton("Удалить эту запись", () => {
+            AddPanelButton("Добавить запись", () => EditMemory(null), true); SurfaceGroup(preferencesCard, "Что Тройка помнит о вас", "Контекст, который остаётся между разговорами.", "memory");
+            if (items.Count == 0) EmptyState("Память пока пуста", "Скажите: «Запомни…» или добавьте запись вручную.", "memory");
+            foreach (var item in items) { int memoryCard = panelContent.Children.Count; var memory = item; var id = Json.Text(item, "id"); var content = Json.Text(item, "content"); if (content.Length == 0) content = Json.Text(item, "text"); panelContent.Children.Add(Label(content, 14, text)); if (Json.Text(item, "source") == "automatic") { var source = Label("Сохранено автоматически", 11, muted); source.Margin = new Thickness(0, 8, 0, 0); panelContent.Children.Add(source); } int actions = panelContent.Children.Count; AddPanelButton("Изменить запись", () => EditMemory(memory), false); AddPanelButton("Удалить эту запись", () => {
                     panelContent.Children.Clear(); panelContent.Children.Add(Label("Удалить эту запись из памяти аккаунта на всех устройствах?", 15, text)); Gap();
                     AddPanelButton("Удалить", () => { var task = Safe(async () => { await api.Call("DELETE", "/v1/memories/" + Uri.EscapeDataString(id), null, CancellationToken.None); await OpenPanelTask("Память"); }); }, true); AddPanelButton("Отмена", () => OpenPanel("Память"), false);
-                }, false); Gap(); }
+                }, false); CompactActions(actions); SurfaceGroup(memoryCard, Json.Text(item, "title"), "", "memory"); }
         }
         private async Task RenderFiles() {
             var owner = api.Account.Email; int revision = panelRevision;
             if (api.Account.SignedIn) await Safe(ReceiveFiles); if (revision != panelRevision) return;
-            panelContent.Children.Clear(); panelContent.Children.Add(Label("Сохранено на этом ПК", 16, text)); Gap();
-            if (owner.Length == 0) { panelContent.Children.Add(Label("Войдите, чтобы открыть файлы своего аккаунта.", 13, muted)); AddPanelButton("Войти", () => OpenPanel("Аккаунт"), true); return; }
-            var files = store.Files(owner).ToList(); if (files.Count == 0) panelContent.Children.Add(Label("Попросите Тройку создать документ. Он сохранится здесь и будет доступен без интернета.", 13, muted));
+            panelContent.Children.Clear();
+            if (owner.Length == 0) { panelContent.Children.Add(Label("Войдите, чтобы открыть файлы своего аккаунта.", 13, muted)); AddPanelButton("Войти", () => OpenPanel("Аккаунт"), true); SurfaceGroup(0, "Сохранено на этом ПК", "Документы и результаты ваших задач", "files"); return; }
+            RenderFileCards(store.Files(owner).ToList());
+        }
+        private void RenderFileCards(List<string> files) {
+            panelContent.Children.Add(Label("Сохранено на этом ПК · " + files.Count, 14, muted)); Gap();
+            if (files.Count == 0) EmptyState("Здесь будут готовые файлы", "Попросите Тройку создать документ. Он сохранится здесь и будет доступен без интернета.", "files");
             foreach (var path in files.Take(80)) {
-                var filePath = path; panelContent.Children.Add(Label(Path.GetFileName(path), 14, text)); panelContent.Children.Add(Label(File.GetLastWriteTime(path).ToString("d MMM, HH:mm") + " · " + Math.Max(1, new FileInfo(path).Length / 1024) + " КБ", 11, muted));
-                AddPanelButton("Открыть", () => OpenFile(filePath), true); AddPanelButton("Сохранить копию…", () => ExportFile(filePath), false); Gap();
+                int fileCard = panelContent.Children.Count; var filePath = path; panelContent.Children.Add(Label(File.GetLastWriteTime(path).ToString("d MMM, HH:mm") + " · " + Math.Max(1, new FileInfo(path).Length / 1024) + " КБ", 11, muted));
+                int actions = panelContent.Children.Count; AddPanelButton("Открыть", () => OpenFile(filePath), true); AddPanelButton("Сохранить копию…", () => ExportFile(filePath), false); CompactActions(actions); SurfaceGroup(fileCard, Path.GetFileName(path), "", "files");
             }
             AddPanelButton("Ранее сохранённые файлы на сервере", () => { var task = ShowLegacyFiles(); }, false);
         }

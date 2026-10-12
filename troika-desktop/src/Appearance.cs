@@ -72,14 +72,14 @@ namespace Troika.Desktop {
         }
 
         private void AddAppearanceSettings() {
-            panelContent.Children.Add(Label("Интерфейс", 20, text));
+            int appearance = panelContent.Children.Count;
             Check("Светлая тема", light, value => {
                 if (busy || recorder.Recording || speaking || localCheck != null || developmentRelay != null && developmentRelay.Checking) { SetStatus("Сначала остановите текущую задачу.", true); return; }
                 light = value; RebuildAppearance();
             });
             var choices = new[] { "amber", "teal", "blue", "violet", "rose", "green" };
             var names = new[] { "Янтарный", "Бирюзовый", "Синий", "Фиолетовый", "Розовый", "Зелёный" };
-            var picker = new ComboBox { ItemsSource = names, SelectedIndex = Array.IndexOf(choices, interfaceAccent), MinHeight = 44, FontSize = 14, Margin = new Thickness(0, 8, 0, 16), Foreground = Color("#29241D"), Background = Brushes.White };
+            var picker = new ComboBox { ItemsSource = names, SelectedIndex = Array.IndexOf(choices, interfaceAccent), MinHeight = 44, FontSize = 14, Margin = new Thickness(0, 8, 0, 0) };
             AccessibleName(picker, "Цвет акцента");
             picker.SelectionChanged += delegate {
                 if (picker.SelectedIndex < 0) return;
@@ -87,6 +87,7 @@ namespace Troika.Desktop {
                 interfaceAccent = choices[picker.SelectedIndex]; RebuildAppearance();
             };
             panelContent.Children.Add(Label("Цвет акцента", 14, muted)); panelContent.Children.Add(picker);
+            SurfaceGroup(appearance, "Интерфейс", "Тема и акцент сохраняются на этом ПК.", "spark");
         }
 
         private void RebuildAppearance() {
