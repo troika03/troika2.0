@@ -23,6 +23,37 @@ class TroikaPalette {
   Color get tint => accent.withValues(alpha: dark ? 0.16 : 0.11);
 }
 
+/// Translucency belongs to the surface, so text and controls stay fully opaque.
+class TroikaGlass extends StatelessWidget {
+  final Widget child;
+  final double radius;
+  const TroikaGlass({super.key, required this.child, this.radius = 20});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = TroikaPalette.of(context);
+    final content = DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            p.surface.withValues(alpha: p.dark ? 0.94 : 0.96),
+            p.surface.withValues(alpha: p.dark ? 0.78 : 0.84),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: p.line.withValues(alpha: 0.72)),
+      ),
+      child: child,
+    );
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: content,
+    );
+  }
+}
+
 ThemeData troikaPageTheme(ThemeData base) {
   final p = TroikaPalette(base.brightness == Brightness.dark);
   final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(20));
@@ -219,35 +250,36 @@ class TroikaActionCard extends StatelessWidget {
     final p = TroikaPalette.of(context);
     return Padding(
         padding: const EdgeInsets.only(bottom: 12),
-        child: Material(
-            color: p.surface,
-            borderRadius: BorderRadius.circular(20),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-                onTap: onTap,
-                child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Row(children: [
-                      TroikaIcon(icon: icon, color: color),
-                      const SizedBox(width: 16),
-                      Expanded(
-                          child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                            Text(title,
-                                style: TextStyle(
-                                    color: p.text,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600)),
-                            const SizedBox(height: 4),
-                            Text(subtitle,
-                                style:
-                                    TextStyle(color: p.textMuted, height: 1.4)),
-                          ])),
-                      const SizedBox(width: 8),
-                      Icon(Icons.arrow_forward_rounded,
-                          color: p.textMuted, size: 20),
-                    ])))));
+        child: TroikaGlass(
+            child: Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                    onTap: onTap,
+                    child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Row(children: [
+                          TroikaIcon(icon: icon, color: color),
+                          const SizedBox(width: 16),
+                          Expanded(
+                              child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                Text(title,
+                                    style: TextStyle(
+                                        color: p.text,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600)),
+                                const SizedBox(height: 4),
+                                Text(subtitle,
+                                    style: TextStyle(
+                                        color: p.textMuted, height: 1.4)),
+                              ])),
+                          const SizedBox(width: 8),
+                          Icon(Icons.arrow_forward_rounded,
+                              color: p.textMuted, size: 20),
+                        ]))))));
   }
 }
 

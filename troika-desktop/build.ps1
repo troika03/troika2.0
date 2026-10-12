@@ -24,5 +24,10 @@ if ($Test) {
     if ($LASTEXITCODE -ne 0) { throw 'Capability catalogue test build failed.' }
     & (Join-Path $output 'CapabilityCatalogueTests.exe')
     if ($LASTEXITCODE -ne 0) { throw 'Capability catalogue tests failed.' }
+    $appearanceSource = Join-Path $root 'tests\DesktopAppearanceTests.cs'
+    & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'DesktopAppearanceTests.exe')) ('/reference:' + (Join-Path $output 'TroikaDesktop.exe')) $references $appearanceSource
+    if ($LASTEXITCODE -ne 0) { throw 'Appearance test build failed.' }
+    & (Join-Path $output 'DesktopAppearanceTests.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'Appearance tests failed.' }
 }
 Write-Output ('Built: ' + (Join-Path $output 'TroikaDesktop.exe'))
