@@ -33,6 +33,7 @@ from typing import Any, Callable, Dict, List, NamedTuple, Optional, Set
 
 from hermes_constants import get_hermes_home
 from tools import skill_usage
+from agent.provider_metering import provider_context_target
 
 logger = logging.getLogger(__name__)
 
@@ -1544,7 +1545,7 @@ def run_curator_review(
     if synchronous:
         _llm_pass()
     else:
-        t = threading.Thread(target=_llm_pass, daemon=True, name="curator-review")
+        t = threading.Thread(target=provider_context_target(_llm_pass), daemon=True, name="curator-review")
         t.start()
 
     return {

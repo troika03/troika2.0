@@ -65,6 +65,7 @@ from agent.prompt_caching import apply_anthropic_cache_control
 from agent.retry_utils import jittered_backoff
 from agent.trajectory import has_incomplete_scratchpad
 from agent.usage_pricing import estimate_usage_cost, normalize_usage
+from agent.provider_metering import ProviderCallBlocked
 from hermes_constants import display_hermes_home as _dhh_fn, PARTIAL_STREAM_STUB_ID
 from hermes_logging import set_session_context
 from tools.schema_sanitizer import strip_pattern_and_format
@@ -669,6 +670,7 @@ def run_conversation(
 
     # Main conversation loop
     api_call_count = 0
+    provider_block_code = None
     final_response = None
     interrupted = False
     failed = False
@@ -1887,6 +1889,20 @@ def run_conversation(
                 agent._persist_session(messages, conversation_history)
                 interrupted = True
                 final_response = f"Operation interrupted: waiting for model response ({api_elapsed:.1f}s elapsed)."
+                break
+
+            except ProviderCallBlocked as error:
+                # A resource refusal cannot be recovered by retries, schema
+                # repair, compression, credential rotation or paid fallback.
+                if thinking_spinner:
+                    thinking_spinner.stop("")
+                    thinking_spinner = None
+                if agent.thinking_callback:
+                    agent.thinking_callback("")
+                provider_block_code = error.code
+                _turn_exit_reason = error.code
+                failed = True
+                final_response = str(error)
                 break
 
             except Exception as api_error:
@@ -3150,6 +3166,8 @@ def run_conversation(
                         )
         
         # If the API call was interrupted, skip response processing
+        if provider_block_code is not None:
+            break
         if interrupted:
             _turn_exit_reason = "interrupted_during_api_call"
             break
@@ -4050,6 +4068,13 @@ def run_conversation(
                     agent._safe_print(f"🎉 Conversation completed after {api_call_count} OpenAI-compatible API call(s)")
                 break
             
+        except ProviderCallBlocked as error:
+            provider_block_code = error.code
+            _turn_exit_reason = error.code
+            failed = True
+            final_response = str(error)
+            break
+
         except Exception as e:
             error_msg = f"Error during OpenAI-compatible API call #{api_call_count}: {str(e)}"
             try:
@@ -4363,6 +4388,8 @@ def run_conversation(
     }
     if agent._tool_guardrail_halt_decision is not None:
         result["guardrail"] = agent._tool_guardrail_halt_decision.to_metadata()
+    if provider_block_code is not None:
+        result["error_code"] = provider_block_code
     # If a /steer landed after the final assistant turn (no more tool
     # batches to drain into), hand it back to the caller so it can be
     # delivered as the next user turn instead of being silently lost.

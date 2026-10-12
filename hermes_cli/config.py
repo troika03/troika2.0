@@ -1716,6 +1716,17 @@ DEFAULT_CONFIG = {
 
     # Gateway settings — control how messaging platforms (Telegram, Discord,
     # Slack, etc.) deliver agent-produced files as native attachments.
+    "platforms": {
+        "api_server": {
+            "extra": {
+                # Staged text metering; no paid routes or production migration
+                # are enabled by an empty, server-owned price catalogue.
+                "product_resource_text_enabled": False,
+                "product_resource_prices": {},
+            },
+        },
+    },
+
     "gateway": {
         # Extra directories from which model-emitted bare file paths may be
         # uploaded as native gateway attachments. Files inside the Hermes

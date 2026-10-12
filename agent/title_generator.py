@@ -9,6 +9,7 @@ import threading
 from typing import Callable, Optional
 
 from agent.auxiliary_client import call_llm
+from agent.provider_metering import provider_context_target
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +159,7 @@ def maybe_auto_title(
         return
 
     thread = threading.Thread(
-        target=auto_title_session,
+        target=provider_context_target(auto_title_session),
         args=(session_db, session_id, user_message, assistant_response),
         kwargs={
             "failure_callback": failure_callback,

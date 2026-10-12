@@ -1186,13 +1186,14 @@ class AIAgent:
         keep working.
         """
         from agent.background_review import spawn_background_review_thread
+        from agent.provider_metering import provider_context_target
         target, _prompt = spawn_background_review_thread(
             self,
             messages_snapshot,
             review_memory=review_memory,
             review_skills=review_skills,
         )
-        t = threading.Thread(target=target, daemon=True, name="bg-review")
+        t = threading.Thread(target=provider_context_target(target), daemon=True, name="bg-review")
         t.start()
 
     def _build_memory_write_metadata(
@@ -2667,10 +2668,11 @@ class AIAgent:
 
     def _create_request_openai_client(self, *, reason: str, api_kwargs: Optional[dict] = None) -> Any:
         from unittest.mock import Mock
+        from agent.provider_metering import wrap_provider_client
 
         primary_client = self._ensure_primary_openai_client(reason=reason)
         if isinstance(primary_client, Mock):
-            return primary_client
+            return wrap_provider_client(primary_client, provider=self.provider)
         with self._openai_client_lock():
             request_kwargs = dict(self._client_kwargs)
         # Per-request OpenAI-wire clients (used by both the non-streaming
@@ -2689,7 +2691,10 @@ class AIAgent:
             and self._api_kwargs_have_image_parts(api_kwargs or {})
         ):
             request_kwargs["default_headers"] = self._copilot_headers_for_request(is_vision=True)
-        return self._create_openai_client(request_kwargs, reason=reason, shared=False)
+        return wrap_provider_client(
+            self._create_openai_client(request_kwargs, reason=reason, shared=False),
+            provider=self.provider,
+        )
 
     def _close_request_openai_client(self, client: Any, *, reason: str) -> None:
         self._close_openai_client(client, reason=reason, shared=False)

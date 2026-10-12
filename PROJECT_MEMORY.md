@@ -122,15 +122,25 @@ Pro — 10 000. Это временный дневной guard, не защит�
 `resource_ledger.py`: общий транзакционный резерв, списание, идемпотентность,
 периоды, бонус/докупка, предметные квоты и export/delete. Считать весь input,
 включая сообщённый владельцем overhead 2–7 тыс. токенов на простое приветствие.
-Это ядро без production activation. Все LLM/auxiliary/voice/paid tools,
+Добавлен staged text adapter: основные и центральные auxiliary SDK calls,
+sync/async streaming, account/Run scope в runtime и workers, фактический полный
+input/cache/reasoning и остановка повторов при неизвестном расходе. Проверки:
+Подготовленный Git tree без чужого WIP: 497 passed, 0 failed в девяти файлах,
+включая 46 adapter, 13 runtime/hosted и 176 legacy auxiliary checks;
+313 product и 31 ledger checks
+первого этапа passed. Ruff и compileall passed. Флаг выключен, production
+сохраняет прежний дневной guard. Native/voice/vision/paid tools, reconciliation,
 concurrency, оценка/approval бюджета, API/UI, anti-abuse/global Free budget
-и billing ещё требуют подключения. Проверки: 313 product tests passed;
-после исправления гонки dispatch 31 новый ledger test passed, Ruff passed.
-Общий Windows baseline остаётся красным; состав проверок и ограничения —
-`docs/audit/RESOURCE_LEDGER_2026_10_12.md`.
-Полный default Python обнаружил 1237 файлов и завершился с exit 1; полный
-aggregate в сохранённом stdout отсутствует. Baseline остаётся красным;
-детали в `docs/audit/SUBSCRIPTION_LIMIT_CHECKS_2026_10_07.md`.
+и billing ещё открыты. Доказательства и границы —
+`docs/audit/RESOURCE_LEDGER_2026_10_12.md` и
+`docs/audit/LLM_RESOURCE_METERING_2026_10_12.md`.
+Общий default Python 12 октября: 1 246 файлов. Первый прогон оборвался без
+summary после результатов 940 файлов (частичный счётчик 18 462 passed,
+306 failed); остальные 306 дали полный summary 6 894 passed, 124 failed.
+Обёртка остатка получила KeyboardInterrupt после summary, успешный exit не
+заявляется. Это покрытие файлов двух запусков общего checkout; baseline
+красный. Регрессия экрана настроек от новых defaults исправлена, восемь schema
+checks прошли. Состав и ограничения — в аудите учёта LLM.
 
 На production единственный загруженный поисковый provider — SearXNG
 2026.10.4-d48c4b555, закреплённый digest в Compose. Сервис доступен только

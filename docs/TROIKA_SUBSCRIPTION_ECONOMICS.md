@@ -154,7 +154,13 @@ ownership, revoke, export/delete и полного input. Это основа с
 Boolean подтверждения оплаты/верификации нельзя принимать от клиента;
 сам ledger не проверяет подписи платежей и не заменяет billing.
 
-Следующие этапы: подключить каждый LLM/auxiliary/STT/TTS/paid-tool вызов;
+Добавлен staged text adapter: основной Chat Completions SDK и центральный
+auxiliary router, sync/async streaming, полный provider input, cache/reasoning,
+серверный owner/Run scope и блокировка повторов при неизвестном расходе.
+Флаг по умолчанию выключен; платные provider/model и production config не менялись.
+Доказательства: [учёт LLM](audit/LLM_RESOURCE_METERING_2026_10_12.md).
+
+Следующие этапы: закончить все native/vision/STT/TTS/paid-tool маршруты и сверку bills;
 предметную квоту на весь успешный результат и общую concurrency; оценку/approval
 бюджета; subscription API и Android/WPF UI; billing/anti-abuse/global Free cap;
 миграцию и свежий E2E. Нельзя показывать действующий месячный остаток,

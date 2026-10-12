@@ -949,6 +949,12 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 os.getenv("TROIKA_PRODUCT_QUOTAS_ENABLED", "true"),
             )
         )
+        # Staged text adapter only. Voice/vision/tools, billing and the global
+        # Free cap must be integrated before replacing the production guard.
+        self._product_resource_text_enabled = _coerce_config_bool(
+            extra.get("product_resource_text_enabled", False)
+        )
+        self._product_resource_prices = extra.get("product_resource_prices", {})
         self._product_voice_enabled = _coerce_config_bool(
             extra.get(
                 "product_voice_enabled",
@@ -1796,6 +1802,29 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
     # ------------------------------------------------------------------
     # Agent creation helper
     # ------------------------------------------------------------------
+
+    def _resource_call_scope(self, principal, run_key):
+        from contextlib import contextmanager
+        from agent.provider_metering import ProviderCallBlocked, provider_metering_scope
+
+        @contextmanager
+        def scope():
+            meter = None
+            if self._product_resource_text_enabled:
+                if principal is None or self._access_registry is None:
+                    raise ProviderCallBlocked("resource_identity_required", "Для учёта ресурса нужен подтверждённый аккаунт.")
+                from troika_product.llm_metering import LLMMeter, PriceCatalogue
+                from troika_product.resource_ledger import ResourceLedger
+
+                meter = LLMMeter(
+                    ResourceLedger(self._access_registry), principal,
+                    run_key=run_key,
+                    catalogue=PriceCatalogue.from_config(self._product_resource_prices),
+                )
+            with provider_metering_scope(meter):
+                yield
+
+        return scope()
 
     def _create_agent(
         self,
@@ -5331,6 +5360,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         """
         loop = asyncio.get_running_loop()
 
+        @self._resource_call_scope(product_principal, str(uuid.uuid4()))
         def _run():
             from gateway.session_context import (
                 clear_session_override,
@@ -5736,6 +5766,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                     except Exception:
                         pass
 
+                @self._resource_call_scope(principal, run_id)
                 def _run_sync():
                     from gateway.session_context import (
                         clear_session_override,

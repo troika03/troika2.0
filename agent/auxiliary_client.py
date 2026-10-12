@@ -49,6 +49,11 @@ from pathlib import Path  # noqa: F401 — used by test mocks
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 from urllib.parse import urlparse, parse_qs, urlunparse
+from agent.provider_metering import (
+    ProviderCallBlocked,
+    current_provider_client_cache,
+    metered_client_resolver,
+)
 
 # NOTE: `from openai import OpenAI` is deliberately NOT at module top — the
 # openai SDK pulls a large type tree (~240 ms cold, including responses/*,
@@ -88,7 +93,10 @@ class _OpenAIProxy:
     __slots__ = ()
 
     def __call__(self, *args, **kwargs):
-        return _load_openai_cls()(*args, **kwargs)
+        from agent.provider_metering import current_provider_guard, wrap_provider_client
+        if current_provider_guard() is not None:
+            kwargs["max_retries"] = 0
+        return wrap_provider_client(_load_openai_cls()(*args, **kwargs))
 
     def __instancecheck__(self, obj):
         return isinstance(obj, _load_openai_cls())
@@ -3088,7 +3096,10 @@ def _to_async_client(sync_client, model: str, is_vision: bool = False):
                     async_kwargs["default_headers"] = dict(_ph_async.default_headers)
         except Exception:
             pass
-    return AsyncOpenAI(**async_kwargs), model
+    from agent.provider_metering import current_provider_guard, wrap_provider_client
+    if current_provider_guard() is not None:
+        async_kwargs["max_retries"] = 0
+    return wrap_provider_client(AsyncOpenAI(**async_kwargs), async_mode=True), model
 
 
 def _normalize_resolved_model(model_name: Optional[str], provider: str) -> Optional[str]:
@@ -3103,6 +3114,7 @@ def _normalize_resolved_model(model_name: Optional[str], provider: str) -> Optio
         return model_name
 
 
+@metered_client_resolver
 def resolve_provider_client(
     provider: str,
     model: str = None,
@@ -4118,8 +4130,10 @@ def _client_cache_key(
 
 
 def _store_cached_client(cache_key: tuple, client: Any, default_model: Optional[str], *, bound_loop: Any = None) -> None:
+    scoped_cache = current_provider_client_cache()
+    cache = _client_cache if scoped_cache is None else scoped_cache
     with _client_cache_lock:
-        old_entry = _client_cache.get(cache_key)
+        old_entry = cache.get(cache_key)
         if old_entry is not None and old_entry[0] is not client:
             _force_close_async_httpx(old_entry[0])
             try:
@@ -4128,7 +4142,7 @@ def _store_cached_client(cache_key: tuple, client: Any, default_model: Optional[
                     close_fn()
             except Exception:
                 pass
-        _client_cache[cache_key] = (client, default_model, bound_loop)
+        cache[cache_key] = (client, default_model, bound_loop)
 
 
 def _refresh_nous_auxiliary_client(
@@ -4335,6 +4349,8 @@ def _get_cached_client(
             current_loop = _aio.get_event_loop()
         except RuntimeError:
             pass
+    scoped_cache = current_provider_client_cache()
+    cache = _client_cache if scoped_cache is None else scoped_cache
     runtime = _normalize_main_runtime(main_runtime)
     cache_key = _client_cache_key(
         provider,
@@ -4346,8 +4362,8 @@ def _get_cached_client(
         is_vision=is_vision,
     )
     with _client_cache_lock:
-        if cache_key in _client_cache:
-            cached_client, cached_default, cached_loop = _client_cache[cache_key]
+        if cache_key in cache:
+            cached_client, cached_default, cached_loop = cache[cache_key]
             if async_mode:
                 # Validate: the cached client must be bound to the CURRENT,
                 # OPEN loop.  If the loop changed or was closed, the httpx
@@ -4362,7 +4378,7 @@ def _get_cached_client(
                     return cached_client, effective
                 # Stale — evict and fall through to create a new client.
                 _force_close_async_httpx(cached_client)
-                del _client_cache[cache_key]
+                del cache[cache_key]
             else:
                 effective = _compat_model(cached_client, model, cached_default)
                 return cached_client, effective
@@ -4394,16 +4410,16 @@ def _get_cached_client(
         # can detect stale entries later.
         bound_loop = current_loop
         with _client_cache_lock:
-            if cache_key not in _client_cache:
+            if cache_key not in cache:
                 # Safety belt: if the cache has grown beyond the max, evict
                 # the oldest entries (FIFO — dict preserves insertion order).
-                while len(_client_cache) >= _CLIENT_CACHE_MAX_SIZE:
-                    evict_key, evict_entry = next(iter(_client_cache.items()))
+                while len(cache) >= _CLIENT_CACHE_MAX_SIZE:
+                    evict_key, evict_entry = next(iter(cache.items()))
                     _force_close_async_httpx(evict_entry[0])
-                    del _client_cache[evict_key]
-                _client_cache[cache_key] = (client, default_model, bound_loop)
+                    del cache[evict_key]
+                cache[cache_key] = (client, default_model, bound_loop)
             else:
-                client, default_model, _ = _client_cache[cache_key]
+                client, default_model, _ = cache[cache_key]
     return client, model or default_model
 
 
@@ -4891,6 +4907,8 @@ def call_llm(
     try:
         return _validate_llm_response(
             client.chat.completions.create(**kwargs), task)
+    except ProviderCallBlocked:
+        raise
     except Exception as first_err:
         if "temperature" in kwargs and _is_unsupported_temperature_error(first_err):
             retry_kwargs = dict(kwargs)
@@ -5297,6 +5315,8 @@ async def async_call_llm(
     try:
         return _validate_llm_response(
             await client.chat.completions.create(**kwargs), task)
+    except ProviderCallBlocked:
+        raise
     except Exception as first_err:
         if "temperature" in kwargs and _is_unsupported_temperature_error(first_err):
             retry_kwargs = dict(kwargs)

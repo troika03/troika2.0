@@ -1509,7 +1509,8 @@ def _run_single_child(
                 task_id=child_task_id,
             )
 
-        _child_future = _timeout_executor.submit(_run_with_thread_capture)
+        from agent.provider_metering import provider_context_target
+        _child_future = _timeout_executor.submit(provider_context_target(_run_with_thread_capture))
         try:
             result = _child_future.result(timeout=child_timeout)
         except Exception as _timeout_exc:
@@ -2101,8 +2102,9 @@ def delegate_task(
         with ThreadPoolExecutor(max_workers=max_children) as executor:
             futures = {}
             for i, t, child in children:
+                from agent.provider_metering import provider_context_target
                 future = executor.submit(
-                    _run_single_child,
+                    provider_context_target(_run_single_child),
                     task_index=i,
                     goal=t["goal"],
                     child=child,

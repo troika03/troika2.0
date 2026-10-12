@@ -400,7 +400,9 @@ def _build_schema_from_config(
         full_key = f"{prefix}.{key}" if prefix else key
 
         # Skip internal / version keys
-        if full_key in {"_config_version",}:
+        if full_key in {"_config_version", "platforms"}:
+            # Operator-owned gateway routes and resource prices must not
+            # become ordinary assistant preference controls.
             continue
 
         # Category is the first path component for nested keys, or "general"
