@@ -1,6 +1,6 @@
 # Troika 1.0: трекер реализации
 
-Обновлено 2026-10-08. Требования: [главный Word-план](Troika_1.0_Launch_Plan_Final_Updated.docx)
+Обновлено 2026-10-12. Требования: [главный Word-план](Troika_1.0_Launch_Plan_Final_Updated.docx)
 и решение владельца от 6 октября в [основном плане ремонта](../PRODUCTIZATION_PLAN.md).
 Проверки и дефекты: [аудит функций](TROIKA_FUNCTIONAL_AUDIT.md).
 
@@ -27,7 +27,7 @@ installed-client E2E или релизной готовности. `[-]` — ч�
 | 7. Сайт и аккаунт | [-] | Статический приватный сайт есть. Account form — demo; публичные download/registration/support/status/legal и activation funnel не готовы. |
 | 8. Billing/credits | [ ] | Дневной счётчик включён и проверен на production; профиль показывает тариф/расход/остаток/обновление. Предложена экономика Free/Plus/Pro; месячный cost engine, checkout/webhook/cancel/refund отсутствуют. |
 | 9. Backend | [ ] | Auth, owner stores, runs и tools существуют; весь раздел ещё не принят. |
-| 10. Голос/память/runtime | [ ] | Есть текущий agent loop и completion receipts; единый single/delegate/parallel/durable/verified Runtime не завершён. |
+| 10. Голос/память/runtime | [ ] | Есть текущий agent loop, completion receipts и общая opt-in автопамять с проверенной серверной синхронизацией; обновлённая APK установлена, сохранённый переключатель проверен на Samsung. Полный физический разговор Android/Windows и единый single/delegate/parallel/durable/verified Runtime не завершены. |
 | 11. Файлы | [ ] | Creation/download foundation есть; весь набор форматов, качество, edit/version и E2E ещё не принят. |
 | 12. Безопасность | [ ] | Есть tenant/approval/revoke/export/delete tests; полный production/backup scope не закрыт. |
 | 13. Production | [-] | VPS/API/STT/TLS работают; постоянный домен, production stores, backups/restore, metrics/alerts ещё нужны. |

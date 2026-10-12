@@ -1196,6 +1196,14 @@ class AccessRegistry:
             )
 
             optional_queries = {
+                "memory_preferences": (
+                    "troika_memory_preferences",
+                    "SELECT automatic_enabled, updated_at FROM troika_memory_preferences WHERE user_id = ?",
+                ),
+                "automatic_memory_state": (
+                    "troika_memory_automatic",
+                    "SELECT fact_key, memory_id, suppressed FROM troika_memory_automatic WHERE user_id = ?",
+                ),
                 "capability_preferences": (
                     "troika_capability_preferences",
                     "SELECT preferences_json, updated_at FROM troika_capability_preferences "
@@ -1355,6 +1363,8 @@ class AccessRegistry:
     def finalize_account_deletion(self, user_id: str) -> None:
         """Delete every product SQLite row for a prepared account atomically."""
         child_tables = (
+            "troika_memory_automatic",
+            "troika_memory_preferences",
             "troika_capability_preferences",
             "troika_memories",
             "troika_inbox_messages",

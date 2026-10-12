@@ -393,9 +393,28 @@ namespace Troika.Desktop {
         }
         private void RenderMemories(Dictionary<string, object> value) {
             panelContent.Children.Add(Label("Что Тройка помнит о вас", 16, text)); Gap(); var items = Json.Rows(value, "memories").ToList();
+            object rawPreferences; var preferences = value.TryGetValue("preferences", out rawPreferences) ? rawPreferences as Dictionary<string, object> : null;
+            if (preferences != null) {
+                bool automaticEnabled = Json.Flag(preferences, "automatic_enabled");
+                var automatic = new CheckBox { Content = "Автоматическая память", IsChecked = automaticEnabled, Foreground = text, Margin = new Thickness(0, 6, 0, 6) };
+                AccessibleName(automatic, "Автоматическая память для телефона и ПК");
+                panelContent.Children.Add(automatic);
+                panelContent.Children.Add(Label("Помнить прямо сказанные имя, город, работу, учёбу, проекты и устойчивые предпочтения. Не каждую реплику. Настройка общая для телефона и ПК. Секреты и чувствительные темы автоматически не сохраняются; старые разговоры не обрабатываются.", 12, muted));
+                RoutedEventHandler change = async (sender, args) => {
+                    bool desired = automatic.IsChecked == true; automatic.IsEnabled = false;
+                    await Safe(async () => {
+                        var result = await api.Call("PUT", "/v1/memory-preferences", new { automatic_enabled = desired }, CancellationToken.None);
+                        if (Json.Flag(result, "automatic_enabled") != desired) throw new InvalidDataException("Сервер не подтвердил настройку памяти.");
+                        automaticEnabled = desired;
+                        SetStatus(desired ? "Автоматическая память включена на всех устройствах" : "Автоматическая память отключена. Записи сохранены.", false);
+                    });
+                    automatic.IsChecked = automaticEnabled; automatic.IsEnabled = true;
+                };
+                automatic.Click += change; Gap();
+            } else panelContent.Children.Add(Label("Для автоматической памяти требуется обновление сервера.", 12, muted));
             AddPanelButton("Добавить запись", () => EditMemory(null), true); Gap();
             if (items.Count == 0) panelContent.Children.Add(Label("Память пока пуста. Скажите: «Запомни…»", 13, muted));
-            foreach (var item in items) { var memory = item; var id = Json.Text(item, "id"); var content = Json.Text(item, "content"); if (content.Length == 0) content = Json.Text(item, "text"); panelContent.Children.Add(Label(content, 14, text)); AddPanelButton("Изменить запись", () => EditMemory(memory), false); AddPanelButton("Удалить эту запись", () => {
+            foreach (var item in items) { var memory = item; var id = Json.Text(item, "id"); var content = Json.Text(item, "content"); if (content.Length == 0) content = Json.Text(item, "text"); panelContent.Children.Add(Label(content, 14, text)); if (Json.Text(item, "source") == "automatic") panelContent.Children.Add(Label("Сохранено автоматически", 11, muted)); AddPanelButton("Изменить запись", () => EditMemory(memory), false); AddPanelButton("Удалить эту запись", () => {
                     panelContent.Children.Clear(); panelContent.Children.Add(Label("Удалить эту запись из памяти аккаунта на всех устройствах?", 15, text)); Gap();
                     AddPanelButton("Удалить", () => { var task = Safe(async () => { await api.Call("DELETE", "/v1/memories/" + Uri.EscapeDataString(id), null, CancellationToken.None); await OpenPanelTask("Память"); }); }, true); AddPanelButton("Отмена", () => OpenPanel("Память"), false);
                 }, false); Gap(); }

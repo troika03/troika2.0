@@ -1,6 +1,7 @@
 import '../widgets/troika_page.dart';
 import 'package:flutter/material.dart';
 import '../services/troika_api_service.dart';
+import '../services/memory_service.dart';
 import '../theme/troika_theme.dart';
 
 class MemoryScreen extends StatefulWidget {
@@ -12,7 +13,11 @@ class MemoryScreen extends StatefulWidget {
 
 class _MemoryScreenState extends State<MemoryScreen> {
   final TroikaApiService _api = TroikaApiService();
+  final MemoryService _memoryService = MemoryService();
   List<TroikaMemory> _memories = const [];
+  Set<String> _automaticIds = const {};
+  bool _automaticEnabled = false;
+  bool _supportsAutomatic = false;
   bool _loading = true;
   bool _busy = false;
   String? _error;
@@ -29,10 +34,13 @@ class _MemoryScreenState extends State<MemoryScreen> {
       _error = null;
     });
     try {
-      final memories = await _api.listMemories();
+      final snapshot = await _memoryService.load();
       if (!mounted) return;
       setState(() {
-        _memories = memories;
+        _memories = snapshot.memories;
+        _automaticIds = snapshot.automaticIds;
+        _automaticEnabled = snapshot.automaticEnabled;
+        _supportsAutomatic = snapshot.supportsAutomatic;
         _loading = false;
       });
     } catch (error) {
@@ -41,6 +49,30 @@ class _MemoryScreenState extends State<MemoryScreen> {
         _loading = false;
         _error = error.toString();
       });
+    }
+  }
+
+  @override
+  void dispose() {
+    _memoryService.dispose();
+    super.dispose();
+  }
+
+  Future<void> _setAutomatic(bool enabled) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await _memoryService.setAutomaticEnabled(enabled);
+      if (!mounted) return;
+      setState(() => _automaticEnabled = enabled);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(enabled
+              ? 'Автоматическая память включена на всех устройствах.'
+              : 'Автоматическая память отключена. Сохранённые записи остаются.')));
+    } catch (error) {
+      _showError(error.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -308,6 +340,25 @@ class _MemoryScreenState extends State<MemoryScreen> {
                           onAction: _load)
                     ],
                     const SizedBox(height: 24),
+                    SwitchListTile.adaptive(
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 8),
+                        title: const Text('Автоматическая память'),
+                        subtitle: Text(_supportsAutomatic
+                            ? 'Сохранять прямо сказанные имя, город, работу, учёбу, проекты и устойчивые предпочтения. Не каждую реплику. Настройка общая для телефона и ПК.'
+                            : 'Для автоматической памяти требуется обновление сервера.'),
+                        value: _automaticEnabled,
+                        onChanged: _busy ||
+                                _loading ||
+                                _error != null ||
+                                !_supportsAutomatic
+                            ? null
+                            : _setAutomatic),
+                    const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 8),
+                        child: Text(
+                            'Пароли, платёжные данные и чувствительные темы автоматически не сохраняются. «Запомни» работает и без автопамяти. Старые разговоры не обрабатываются.')),
+                    const SizedBox(height: 24),
                     Row(children: [
                       Text('Сохранённое',
                           style: TextStyle(
@@ -330,6 +381,7 @@ class _MemoryScreenState extends State<MemoryScreen> {
                     for (final memory in _memories)
                       _MemoryCard(
                           memory: memory,
+                          automatic: _automaticIds.contains(memory.id),
                           onEdit: () => _edit(memory),
                           onDelete: () => _delete(memory))
                   ])));
@@ -369,9 +421,13 @@ class _StateCard extends StatelessWidget {
 
 class _MemoryCard extends StatelessWidget {
   final TroikaMemory memory;
+  final bool automatic;
   final VoidCallback onEdit, onDelete;
   const _MemoryCard(
-      {required this.memory, required this.onEdit, required this.onDelete});
+      {required this.memory,
+      required this.automatic,
+      required this.onEdit,
+      required this.onDelete});
 
   (String, IconData) get _kind => switch (memory.kind) {
         'preference' => ('Предпочтение', Icons.tune),
@@ -417,7 +473,13 @@ class _MemoryCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(memory.content,
               style: TextStyle(
-                  color: TroikaPalette.of(context).textMuted, height: 1.35))
+                  color: TroikaPalette.of(context).textMuted, height: 1.35)),
+          if (automatic) ...[
+            const SizedBox(height: 8),
+            Text('Сохранено автоматически',
+                style: TextStyle(
+                    color: TroikaPalette.of(context).textFaint, fontSize: 12)),
+          ],
         ])),
         PopupMenuButton<String>(
             tooltip: 'Действия',

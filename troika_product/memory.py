@@ -57,6 +57,7 @@ class MemoryEntry:
     content: str
     created_at: float
     updated_at: float
+    source: str = "user"
 
     def to_dict(self) -> dict[str, object]:
         result = asdict(self)
@@ -92,12 +93,28 @@ class MemoryStore:
                     idempotency_key TEXT,
                     created_at REAL NOT NULL,
                     updated_at REAL NOT NULL,
+                    source TEXT NOT NULL DEFAULT 'user',
                     UNIQUE(user_id, idempotency_key)
                 );
                 CREATE INDEX IF NOT EXISTS idx_troika_memories_user_updated
                     ON troika_memories(user_id, updated_at DESC, id);
+                CREATE TABLE IF NOT EXISTS troika_memory_preferences (
+                    user_id TEXT PRIMARY KEY REFERENCES troika_users(id),
+                    automatic_enabled INTEGER NOT NULL DEFAULT 0,
+                    updated_at REAL NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS troika_memory_automatic (
+                    user_id TEXT NOT NULL REFERENCES troika_users(id),
+                    fact_key TEXT NOT NULL,
+                    memory_id TEXT,
+                    suppressed INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(user_id, fact_key)
+                );
                 """
             )
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(troika_memories)")}
+            if "source" not in columns:
+                connection.execute("ALTER TABLE troika_memories ADD COLUMN source TEXT NOT NULL DEFAULT 'user'")
 
     @staticmethod
     def _require_principal(
@@ -125,7 +142,103 @@ class MemoryStore:
             content=str(row["content"]),
             created_at=float(row["created_at"]),
             updated_at=float(row["updated_at"]),
+            source=str(row["source"]),
         )
+
+    def preferences(self, principal: AccessPrincipal) -> dict[str, bool]:
+        with self._connect() as connection:
+            self._require_principal(connection, principal)
+            row = connection.execute(
+                "SELECT automatic_enabled FROM troika_memory_preferences WHERE user_id = ?",
+                (principal.user_id,),
+            ).fetchone()
+        return {"automatic_enabled": bool(row and row["automatic_enabled"])}
+
+    def set_preferences(self, principal: AccessPrincipal, *, automatic_enabled: object) -> dict[str, bool]:
+        if type(automatic_enabled) is not bool:
+            raise ValueError("automatic_enabled must be boolean")
+        with self._connect() as connection:
+            self._require_principal(connection, principal)
+            connection.execute(
+                "INSERT INTO troika_memory_preferences (user_id, automatic_enabled, updated_at) "
+                "VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET "
+                "automatic_enabled = excluded.automatic_enabled, updated_at = excluded.updated_at",
+                (principal.user_id, int(automatic_enabled), time.time()),
+            )
+        return {"automatic_enabled": automatic_enabled}
+
+    def capture(self, principal: AccessPrincipal, message: object) -> list[MemoryEntry]:
+        """Save only recognized self-descriptions after account-wide opt-in."""
+        from troika_product.automatic_memory import candidates
+        proposed = candidates(message)
+        saved: list[MemoryEntry] = []
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._require_principal(connection, principal)
+            preference = connection.execute(
+                "SELECT automatic_enabled FROM troika_memory_preferences WHERE user_id = ?",
+                (principal.user_id,),
+            ).fetchone()
+            if not preference or not preference["automatic_enabled"]:
+                return []
+            # The assistant capability switch remains an independent opt-out.
+            capability = connection.execute(
+                "SELECT preferences_json FROM troika_capability_preferences WHERE user_id = ?",
+                (principal.user_id,),
+            ).fetchone()
+            if capability and json.loads(capability["preferences_json"]).get("assistant") is False:
+                return []
+            for candidate in proposed:
+                state = connection.execute(
+                    "SELECT memory_id, suppressed FROM troika_memory_automatic WHERE user_id = ? AND fact_key = ?",
+                    (principal.user_id, candidate.key),
+                ).fetchone()
+                if state and state["suppressed"]:
+                    continue
+                existing = None
+                if state and state["memory_id"]:
+                    existing = connection.execute(
+                        "SELECT * FROM troika_memories WHERE user_id = ? AND id = ?",
+                        (principal.user_id, state["memory_id"]),
+                    ).fetchone()
+                if existing and existing["source"] != "automatic":
+                    continue
+                if existing and existing["content"] == candidate.content:
+                    continue
+                if not existing:
+                    duplicate = connection.execute(
+                        "SELECT id FROM troika_memories WHERE user_id = ? AND content = ?",
+                        (principal.user_id, candidate.content),
+                    ).fetchone()
+                    if duplicate:
+                        continue
+                    count = connection.execute(
+                        "SELECT COUNT(*) FROM troika_memories WHERE user_id = ?", (principal.user_id,),
+                    ).fetchone()[0]
+                    if count >= MAX_MEMORIES_PER_USER:
+                        continue
+                now = time.time()
+                memory_id = existing["id"] if existing else f"mem_{uuid.uuid4().hex}"
+                if existing:
+                    connection.execute(
+                        "UPDATE troika_memories SET content = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                        (candidate.content, now, memory_id, principal.user_id),
+                    )
+                else:
+                    connection.execute(
+                        "INSERT INTO troika_memories (id, user_id, kind, title, content, created_at, updated_at, source) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, 'automatic')",
+                        (memory_id, principal.user_id, candidate.kind, candidate.title, candidate.content, now, now),
+                    )
+                    connection.execute(
+                        "INSERT INTO troika_memory_automatic (user_id, fact_key, memory_id) VALUES (?, ?, ?) "
+                        "ON CONFLICT(user_id, fact_key) DO UPDATE SET memory_id = excluded.memory_id",
+                        (principal.user_id, candidate.key, memory_id),
+                    )
+                saved.append(self._entry(connection.execute(
+                    "SELECT * FROM troika_memories WHERE id = ? AND user_id = ?", (memory_id, principal.user_id),
+                ).fetchone()))
+        return saved
 
     def create_memory(
         self,
@@ -151,6 +264,20 @@ class MemoryStore:
                 ).fetchone()
                 if existing is not None:
                     return self._entry(existing)
+            duplicate = connection.execute(
+                "SELECT * FROM troika_memories WHERE user_id = ? AND content = ?",
+                (principal.user_id, clean_content),
+            ).fetchone()
+            if duplicate is not None and (clean_key is None or duplicate["idempotency_key"] is None):
+                connection.execute(
+                    "UPDATE troika_memories SET source = 'user', idempotency_key = COALESCE(idempotency_key, ?) "
+                    "WHERE user_id = ? AND id = ?",
+                    (clean_key, principal.user_id, duplicate["id"]),
+                )
+                return self._entry(connection.execute(
+                    "SELECT * FROM troika_memories WHERE user_id = ? AND id = ?",
+                    (principal.user_id, duplicate["id"]),
+                ).fetchone())
             count = connection.execute(
                 "SELECT COUNT(*) AS count FROM troika_memories WHERE user_id = ?",
                 (principal.user_id,),
@@ -227,6 +354,7 @@ class MemoryStore:
             assignments = [f"{name} = ?" for name in changes]
             values: list[object] = list(changes.values())
             assignments.append("updated_at = ?")
+            assignments.append("source = 'user'")
             values.extend((time.time(), clean_id, principal.user_id))
             connection.execute(
                 f"UPDATE troika_memories SET {', '.join(assignments)} "
@@ -256,28 +384,45 @@ class MemoryStore:
                 "DELETE FROM troika_memories WHERE id = ? AND user_id = ?",
                 (clean_id, principal.user_id),
             )
+            # Keep only an opaque/category key, never the deleted personal text.
+            connection.execute(
+                "UPDATE troika_memory_automatic SET memory_id = NULL, suppressed = 1 "
+                "WHERE user_id = ? AND memory_id = ?", (principal.user_id, clean_id),
+            )
         return self._entry(row)
 
-    def assistant_context(self, principal: AccessPrincipal) -> str:
+    def assistant_context(self, principal: AccessPrincipal, *, query: object = "") -> str:
         """Return a bounded, explicitly untrusted memory block for one owner."""
         with self._connect() as connection:
             self._require_principal(connection, principal)
             rows = connection.execute(
-                "SELECT id, kind, title, content FROM troika_memories "
-                "WHERE user_id = ? ORDER BY updated_at DESC, id LIMIT 12",
-                (principal.user_id,),
+                "SELECT id, kind, title, content, source FROM troika_memories "
+                "WHERE user_id = ? ORDER BY updated_at DESC, id LIMIT ?",
+                (principal.user_id, MAX_MEMORIES_PER_USER),
             ).fetchall()
-        if not rows:
+        preferences = self.preferences(principal)
+        if not rows and not preferences["automatic_enabled"]:
             return ""
+        # Retrieve older relevant facts instead of always forgetting everything
+        # beyond the twelve most recently edited records. Prefix matching covers
+        # common Russian inflections without sending data to another provider.
+        stop = {"какой", "какая", "какие", "меня", "мне", "тебя", "что", "как", "про", "это", "мой", "моя", "the", "what", "about", "with"}
+        terms = {word[:5] for word in re.findall(r"[\w]+", str(query).casefold()) if len(word) >= 3 and word not in stop}
+        def relevance(row: sqlite3.Row) -> int:
+            words = {word[:5] for word in re.findall(r"[\w]+", (row["title"] + " " + row["content"]).casefold())}
+            return len(terms & words)
+        selected = sorted(rows, key=relevance, reverse=True)[:12]
         payload = {
+            "automatic_enabled": preferences["automatic_enabled"],
             "memories": [
                 {
                     "id": str(row["id"]),
                     "kind": str(row["kind"]),
                     "title": str(row["title"]),
-                    "content": str(row["content"])[:600],
+                    "content": str(row["content"]),
+                    "source": str(row["source"]),
                 }
-                for row in rows
+                for row in selected
             ]
         }
         return (
@@ -287,5 +432,12 @@ class MemoryStore:
             "personalize the answer. Use troika_assistant memory actions to persist "
             "explicit user changes. Never store passwords, access tokens, payment "
             "credentials, or authentication secrets.\n"
+            "Automatic memory, when enabled, conservatively saves directly stated "
+            "names, cities, work/study, projects and preferences from the current "
+            "user message before this context is loaded. It does not remember "
+            "every sentence or infer personal facts. Do not claim other facts "
+            "were saved automatically. Explicit remember requests still require "
+            "a successful memory action. For missing older facts, list memories "
+            "through the assistant capability before claiming you forgot them.\n"
             + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         )

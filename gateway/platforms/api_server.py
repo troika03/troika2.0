@@ -1276,7 +1276,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 self._request_audit_log_suffix(request),
             )
 
-    def _assistant_context(self, request: "web.Request") -> str:
+    def _assistant_context(self, request: "web.Request", *, user_message: object = "") -> str:
         """Load bounded private and local-time context for this user only."""
         principal = self._product_principal(request)
         if principal is None:
@@ -1289,7 +1289,13 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             if store is None:
                 continue
             try:
-                context = store.assistant_context(principal)
+                if label == "memory":
+                    saved = store.capture(principal, user_message)
+                    if saved:
+                        self._record_product_audit(request, "memory.automatic_saved", details={"count": len(saved)})
+                    context = store.assistant_context(principal, query=user_message)
+                else:
+                    context = store.assistant_context(principal)
             except PermissionError:
                 return ""
             except Exception:
@@ -2596,7 +2602,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 items = self._memory_store.list_memories(
                     resolved, limit=int(raw_limit)
                 )
-                payload = {"memories": [item.to_dict() for item in items]}
+                payload = {"memories": [item.to_dict() for item in items],
+                           "preferences": self._memory_store.preferences(resolved)}
                 status = 200
                 event_type = ""
         except (ValueError, TypeError, UnicodeError):
@@ -2617,6 +2624,29 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         return web.json_response(
             payload, status=status, headers={"Cache-Control": "no-store"}
         )
+
+    async def _handle_memory_preferences(self, request: "web.Request") -> "web.Response":
+        """Change automatic memory only through an authenticated user action."""
+        principal = self._require_memory_principal(request)
+        if isinstance(principal, web.Response):
+            return principal
+        try:
+            if request.method == "PUT":
+                body = await request.json()
+                if not isinstance(body, dict) or set(body) != {"automatic_enabled"}:
+                    raise ValueError("invalid memory preferences")
+                value = self._memory_store.set_preferences(principal, **body)
+                self._record_product_audit(request, "memory.preferences_updated", details=value)
+            else:
+                value = self._memory_store.preferences(principal)
+            return web.json_response(value, headers={"Cache-Control": "no-store"})
+        except (ValueError, TypeError, UnicodeError):
+            return web.json_response(_openai_error("Invalid memory preferences"), status=400)
+        except PermissionError:
+            return web.json_response(_openai_error("Product authentication is required"), status=401)
+        except Exception:
+            logger.exception("Product memory preferences unavailable")
+            return web.json_response(_openai_error("Memory preferences are temporarily unavailable"), status=503)
 
     async def _handle_memory_item(self, request: "web.Request") -> "web.Response":
         """Update or delete one memory without revealing another owner."""
@@ -3533,11 +3563,6 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                     system_prompt = (system_prompt or "") + "\n\n" + _proj_summary
             except Exception as _e:
                 logger.debug("active_project injection skipped: %s", _e)
-        else:
-            private_project_context = self._assistant_context(request)
-            if private_project_context:
-                system_prompt = (system_prompt or "") + "\n\n" + private_project_context
-
         # Allow caller to continue an existing session by passing X-Hermes-Session-Id.
         # When provided, history is loaded from state.db instead of from the request body.
         #
@@ -3627,6 +3652,11 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         quota_err = self._consume_product_request_quota(request)
         if quota_err:
             return quota_err
+        if product_principal is not None:
+            memory_input = user_message if conversation_messages[-1].get("role") == "user" else ""
+            private_project_context = self._assistant_context(request, user_message=memory_input)
+            if private_project_context:
+                system_prompt = (system_prompt or "") + "\n\n" + private_project_context
         usage = request.get("troika_usage")
         if product_principal is not None:
             audit_details: Dict[str, Any] = {"endpoint": "chat_completions"}
@@ -5617,7 +5647,11 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
 
         approval_session_key = gateway_session_key or session_id or run_id
         principal = self._product_principal(request)
-        private_project_context = self._assistant_context(request)
+        memory_input = user_message if (
+            isinstance(raw_input, str)
+            or (isinstance(raw_input, list) and raw_input[-1].get("role", "user") == "user")
+        ) else ""
+        private_project_context = self._assistant_context(request, user_message=memory_input)
         ephemeral_system_prompt = instructions
         if private_project_context:
             ephemeral_system_prompt = (
@@ -6348,6 +6382,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             if self._memory_store is not None:
                 self._app.router.add_get("/v1/memories", self._handle_memories)
                 self._app.router.add_post("/v1/memories", self._handle_memories)
+                self._app.router.add_get("/v1/memory-preferences", self._handle_memory_preferences)
+                self._app.router.add_put("/v1/memory-preferences", self._handle_memory_preferences)
                 self._app.router.add_patch(
                     "/v1/memories/{memory_id}", self._handle_memory_item
                 )
