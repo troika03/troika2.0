@@ -1249,6 +1249,17 @@ class AccessRegistry:
                     "sha256_digest, created_at FROM troika_artifacts "
                     "WHERE user_id = ? ORDER BY created_at, id",
                 ),
+                "resource_grants": (
+                    "troika_resource_grants",
+                    "SELECT kind, plan, starts_at, expires_at, granted, available, reserved, spent, "
+                    "policy_version FROM troika_resource_grants WHERE user_id = ? ORDER BY starts_at, id",
+                ),
+                "resource_operations": (
+                    "troika_resource_operations",
+                    "SELECT kind, feature, state, reserved_tokens, charged_tokens, pricing_version, "
+                    "usage_json, created_at, settled_at FROM troika_resource_operations "
+                    "WHERE user_id = ? ORDER BY created_at, id",
+                ),
             }
             optional = {
                 key: rows(connection, query, (principal.user_id,))

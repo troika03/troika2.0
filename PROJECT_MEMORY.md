@@ -20,7 +20,7 @@
 - [Word-план](docs/Troika_1.0_Launch_Plan_Final_Updated.docx) — authority для scope/UX/цен/DoD. Порядок разделов 1–20 сохраняется; section 20 — release summary.
 - Troika 1.0 — voice-first Android/Windows, текст вторичен. Результат важнее перечисления tools.
 - Hosted subscription без model keys у обычного пользователя; BYOK/diagnostics — developer/Advanced scope.
-- Целевые тарифы: Free, Plus 790 ₽/месяц, Pro 1 490 ₽/месяц. По запросу владельца от 7 октября дневной счётчик AI-запросов включён по умолчанию и на production. Billing и месячные credits отсутствуют; безлимит не обещается. Экономические лимиты предложены в `docs/TROIKA_SUBSCRIPTION_ECONOMICS.md`, но ещё не утверждены и не применены.
+- 12 октября владелец согласовал Free 500 000, Plus 5 000 000 за 790 ₽/месяц и Pro 10 000 000 за 1 490 ₽/месяц расчётных AI-токенов. Один миллион соответствует максимум 30 ₽ переменных расходов. Welcome 1 000 000 на 14 дней после верификации; докупка 1 000 000 за 99 ₽ на 90 дней. Состав функций и правила сохранены в `docs/TROIKA_SUBSCRIPTION_ECONOMICS.md`, дополняющем раздел 8 Word-плана. Разработка разрешена. Production пока использует прежний дневной guard; billing и подключение месячного ресурса к реальным вызовам ещё не готовы.
 - Фоновое локальное пробуждение «Тройка» — P0 Android; OEM/Bluetooth/standby/expiry требуют E2E.
 - Данные принадлежат аккаунту. Сервер — основная копия; выбрано автоматическое восстановление после входа, а не невосстановимое E2EE. Production stores/backups должны шифроваться at rest.
 - Единый Run/Task/Worker runtime с до трёх specialist workers — целевая архитектура; текущий agent loop ещё не закрывает весь этот scope.
@@ -116,10 +116,17 @@ Pro — 10 000. Это временный дневной guard, не защит�
 0 errors/warnings, 38 info. Android debug/release и Windows debug собраны из
 изолированного клиента; profile/limits включены в текущую общую APK.
 Установленный E2E лимитов и native/reminder правок требует отдельной проверки.
-Предложение экономики: Free 300, Plus 3 000, Pro 6 000 credits/месяц при
-верхней учитываемой себестоимости 0,05 ₽/credit; welcome 700 credits однократно.
-Это не применённая политика: cost ledger, hard cap всех внутренних вызовов,
-anti-abuse, global Free budget и billing ещё требуют реализации.
+Прежнее предложение 300/3 000/6 000 credits заменено согласованной 12 октября
+политикой расчётных токенов. Добавлены `subscription_policy.py` и
+`resource_ledger.py`: общий транзакционный резерв, списание, идемпотентность,
+периоды, бонус/докупка, предметные квоты и export/delete. Считать весь input,
+включая сообщённый владельцем overhead 2–7 тыс. токенов на простое приветствие.
+Это ядро без production activation. Все LLM/auxiliary/voice/paid tools,
+concurrency, оценка/approval бюджета, API/UI, anti-abuse/global Free budget
+и billing ещё требуют подключения. Проверки: 313 product tests passed;
+после исправления гонки dispatch 31 новый ledger test passed, Ruff passed.
+Общий Windows baseline остаётся красным; состав проверок и ограничения —
+`docs/audit/RESOURCE_LEDGER_2026_10_12.md`.
 Полный default Python обнаружил 1237 файлов и завершился с exit 1; полный
 aggregate в сохранённом stdout отсутствует. Baseline остаётся красным;
 детали в `docs/audit/SUBSCRIPTION_LIMIT_CHECKS_2026_10_07.md`.

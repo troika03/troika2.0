@@ -18,7 +18,7 @@
 ## Рабочие инструкции и архитектура
 
 - [Запуск закрытой beta](TROIKA_CLOSED_BETA_SETUP.md): product mode, аккаунты, токены, локальные проверки.
-- [Экономика подписки](TROIKA_SUBSCRIPTION_ECONOMICS.md): предложение лимитов Free/Plus/Pro, стоимость credits и условия защиты бюджета; ещё не утверждённая тарифная политика.
+- [Политика подписки](TROIKA_SUBSCRIPTION_ECONOMICS.md): согласованные 12 октября тарифы Free/Plus/Pro, расчётные токены, состав функций, экономика и порядок перехода; production cost engine ещё не включён.
 - [Production](TROIKA_PRODUCTION_SERVER.md): ОС, сеть, единственный deployment path и незакрытые инфраструктурные требования.
 - [Синхронизация аккаунта](ACCOUNT_SYNC_ARCHITECTURE.md): реализованный серверный account scope и будущая офлайн-очередь.
 - [Память пользователя](TROIKA_USER_MEMORY.md): owner-scoped API и ограничения.

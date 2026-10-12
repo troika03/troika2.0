@@ -1,7 +1,8 @@
 # Troika 1.0: трекер реализации
 
-Обновлено 2026-10-12. Требования: [главный Word-план](Troika_1.0_Launch_Plan_Final_Updated.docx)
-и решение владельца от 6 октября в [основном плане ремонта](../PRODUCTIZATION_PLAN.md).
+Обновлено 2026-10-12. Требования: [главный Word-план](Troika_1.0_Launch_Plan_Final_Updated.docx),
+решение от 6 октября в [основном плане ремонта](../PRODUCTIZATION_PLAN.md)
+и [политика подписки](TROIKA_SUBSCRIPTION_ECONOMICS.md), согласованная 12 октября.
 Проверки и дефекты: [аудит функций](TROIKA_FUNCTIONAL_AUDIT.md).
 
 ## Правило статуса
@@ -25,7 +26,7 @@ installed-client E2E или релизной готовности. `[-]` — ч�
 | 5. Android | [-] | UI и голос реализованы, прежние Samsung проверки сохранены. Фоновый native refresh access token и свежий reminder/standby E2E не закрыты. |
 | 6. Windows | [-] | По решению владельца создан отдельный неоновый WPF-клиент: одно окно, compact/hotkey/allowlist, видимые функции, локальные файлы и проверки кода. Установлен, 30 tests и ограниченный live smoke прошли; разработка спрашивает место проверки и поддерживает до трёх исправлений. Микрофон/воспроизведение, полный installed-client E2E, background reminders после закрытия и signed installer не закрыты. |
 | 7. Сайт и аккаунт | [-] | Статический приватный сайт есть. Account form — demo; публичные download/registration/support/status/legal и activation funnel не готовы. |
-| 8. Billing/credits | [ ] | Дневной счётчик включён и проверен на production; профиль показывает тариф/расход/остаток/обновление. Предложена экономика Free/Plus/Pro; месячный cost engine, checkout/webhook/cancel/refund отсутствуют. |
+| 8. Billing/ресурс | [-] | Согласованы Free 500 тыс., Plus 5 млн, Pro 10 млн расчётных AI-токенов/месяц; добавлены политика и ядро transactional ledger. Подключение всех вызовов, concurrency, API/UI, billing, anti-abuse и миграция ещё нужны. Production сохраняет прежний дневной guard. Доказательства: [аудит](audit/RESOURCE_LEDGER_2026_10_12.md). |
 | 9. Backend | [ ] | Auth, owner stores, runs и tools существуют; весь раздел ещё не принят. |
 | 10. Голос/память/runtime | [ ] | Есть текущий agent loop, completion receipts и общая opt-in автопамять с проверенной серверной синхронизацией; обновлённая APK установлена, сохранённый переключатель проверен на Samsung. Полный физический разговор Android/Windows и единый single/delegate/parallel/durable/verified Runtime не завершены. |
 | 11. Файлы | [ ] | Creation/download foundation есть; весь набор форматов, качество, edit/version и E2E ещё не принят. |
