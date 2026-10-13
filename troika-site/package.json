@@ -1,0 +1,12 @@
+{
+  "name": "troika-site",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:hosting": "node scripts/build.mjs --hosting",
+    "test": "node --test tests/*.test.mjs",
+    "preview": "node scripts/preview.mjs"
+  }
+}
