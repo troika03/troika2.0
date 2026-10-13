@@ -1,5 +1,6 @@
 import '../widgets/troika_page.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -43,7 +44,8 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
   Directory? _directory;
   ProjectCheck? _check;
   String _status = '';
-  String _mode = 'python_tests';
+  String _mode = 'model_review';
+  String? _modelReport;
   bool _busy = false;
   bool _closing = false;
   int _operation = 0;
@@ -249,6 +251,44 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
       setState(() => _status = 'Опиши, что разработать.');
       return;
     }
+    if (_mode == 'model_review') {
+      Map<String, String>? sources;
+      if (selected && _selected?.localPath != null) {
+        sources = DevelopmentService.sourcesForModel(
+            await File(_selected!.localPath!).readAsBytes());
+      }
+      final project = await _agent.generate(
+          DevelopmentWorkflow.modelPrompt(
+              _task.text.trim().isEmpty
+                  ? 'Сохрани функции проекта, проверь и исправь ошибки.'
+                  : _task.text.trim(),
+              sources: sources), onStatus: (status) {
+        if (mounted && operation == _operation)
+          setState(() => _status = status);
+      });
+      if (!mounted || operation != _operation) return;
+      _verifyOwner();
+      final decoded = DevelopmentService.decodeProject(project.bytes);
+      final manifest =
+          json.decode(utf8.decode(decoded['troika-project.json']!));
+      final review = manifest['review'];
+      final reviewed = review is Map &&
+          review['method'] == 'api_model_review' &&
+          review['execution'] == 'not_run';
+      _showVersion(DevelopmentOutcome(project, null, null, 0));
+      setState(() {
+        _modelReport = !reviewed || decoded['MODEL_REVIEW.md'] == null
+            ? null
+            : utf8.decode(decoded['MODEL_REVIEW.md']!);
+        _status = reviewed
+            ? review['status'] == 'passed'
+                ? 'Проект сохранён. Модель проверила исходники. Тесты не запускались.'
+                : 'Проект сохранён. Ревью модели нашло ошибки; смотри отчёт.'
+            : 'Проект сохранён. Ревью модели не подтверждено.';
+      });
+      return;
+    }
+    _modelReport = null;
     final location = await _chooseLocation();
     if (location == null || !mounted || operation != _operation) return;
     if (location != 'none' && !await _approveLocal(location)) return;
@@ -363,7 +403,7 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
                       icon: Icons.code_rounded,
                       title: 'Дай идее форму',
                       subtitle:
-                          'Опиши проект. Тройка создаст код и тесты; место проверки выберешь перед запуском.'),
+                          'Опиши проект. Тройка напишет код, проверит исходники моделью и исправит ошибки через API.'),
                   TextField(
                       controller: _task,
                       enabled: !_busy,
@@ -380,6 +420,9 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
                       decoration:
                           const InputDecoration(labelText: 'Проверка проекта'),
                       items: const [
+                        DropdownMenuItem(
+                            value: 'model_review',
+                            child: Text('Модель: ревью и исправление')),
                         DropdownMenuItem(
                             value: 'python_tests',
                             child: Text('Python: тесты unittest')),
@@ -425,6 +468,15 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
                                   ? 'Вывод отсутствует.'
                                   : _check!.output))
                         ]),
+                  if (_modelReport != null)
+                    ExpansionTile(
+                        title: const Text('Ревью модели'),
+                        subtitle: const Text('Код и тесты не запускались'),
+                        children: [
+                          Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: SelectableText(_modelReport!))
+                        ]),
                   const SizedBox(height: 24),
                   Text('Сохранённые проекты',
                       style: Theme.of(context).textTheme.titleMedium),
@@ -444,6 +496,7 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
                                   _selected = value;
                                   _directory = null;
                                   _check = null;
+                                  _modelReport = null;
                                 })),
                   if (_selected != null) ...[
                     OutlinedButton(

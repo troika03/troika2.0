@@ -119,6 +119,12 @@ class CompletionEvidence:
                 self.filenames.add(str(artifact["filename"]).casefold())
                 self.device_file_pending |= artifact.get("storage") == "device"
                 self.code_project_prepared |= name == "troika_create_project"
+                review = _object(payload.get("review"))
+                if (name == "troika_create_project" and review.get("method") == "api_model_review"
+                        and review.get("execution") == "not_run" and review.get("reviewed_files")):
+                    for reviewed_domain in ("project", "file"):
+                        review_key = json.dumps([name, "model_review", artifact["id"], reviewed_domain])
+                        self.receipts[review_key] = (reviewed_domain, "read", True)
         elif name in {"troika_assistant", "troika_reminder"}:
             if name == "troika_reminder":
                 action = "reminder_schedule"

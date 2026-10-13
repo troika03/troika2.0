@@ -13,7 +13,8 @@ class ProjectCheck {
   final bool cancelled;
   final bool? _noTests;
   bool get noTests =>
-      _noTests == true || RegExp(r'Ran 0 tests?|# tests 0(?:\s|$)').hasMatch(output);
+      _noTests == true ||
+      RegExp(r'Ran 0 tests?|# tests 0(?:\s|$)').hasMatch(output);
   bool get passed => exitCode == 0 && !timedOut && !cancelled && !noTests;
   const ProjectCheck(this.exitCode, this.output, this.command,
       {this.timedOut = false, this.cancelled = false, bool? noTests})
@@ -45,6 +46,25 @@ class DevelopmentService {
   final String nodeExecutable;
   DevelopmentService(
       {this.pythonExecutable = 'python', this.nodeExecutable = 'node'});
+
+  static Map<String, String> sourcesForModel(Uint8List bytes) {
+    final sources = {
+      for (final entry in decodeProject(bytes).entries)
+        if (entry.key != 'troika-project.json')
+          entry.key: utf8.decode(entry.value),
+    };
+    if (utf8.encode(json.encode(sources)).length > 160000) {
+      throw const FormatException(
+          'Проект слишком большой для полного ревью модели.');
+    }
+    final secret = RegExp(
+        r'trk_(?:live|refresh)_[A-Za-z0-9_-]{16,}|sk-[A-Za-z0-9_-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----');
+    if (sources.values.any(secret.hasMatch)) {
+      throw const FormatException(
+          'Исходники содержат секрет. Удали секрет перед передачей ИИ.');
+    }
+    return sources;
+  }
 
   Future<void> stop() async {
     _cancelled = true;

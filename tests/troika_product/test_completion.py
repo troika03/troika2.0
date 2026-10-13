@@ -14,6 +14,18 @@ def test_ram_project_cannot_claim_device_save_or_executed_tests():
     assert not evidence.may_retry()
 
 
+def test_api_review_receipt_allows_source_review_but_not_execution_claims():
+    evidence = CompletionEvidence()
+    evidence.record("troika_create_project", {"title": "Код", "task": "Write"}, {
+        "ok": True, "artifact": {"id": "delivery_x", "filename": "code.zip", "storage": "device"},
+        "review": {"method": "api_model_review", "execution": "not_run", "reviewed_files": ["main.py"],
+                   "status": "passed"}})
+    assert not evidence.unsupported("Модель проверила проект.")
+    assert not evidence.unsupported("Модель проверила файлы.")
+    assert evidence.unsupported("Тесты прошли.")
+    assert evidence.unsupported("Проект сохранён на телефоне.")
+
+
 @pytest.mark.parametrize("text", [
     "Готово!", "Я создала документ.", "Файл сохранён.",
     "Напоминание установлено.", "Я запомнила это в памяти.",

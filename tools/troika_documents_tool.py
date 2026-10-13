@@ -165,13 +165,35 @@ def _handle_project(args: dict[str, Any], **kwargs: Any) -> str:
     if get_session_env("TROIKA_PRODUCT_DELIVERY_MODE", "server") != "device":
         return json.dumps({"ok": False, "error": "device_delivery_client_required"})
     try:
+        review = None
+        if args.get("task"):
+            from troika_product.development_agent import DevelopmentAgent
+            generated = DevelopmentAgent().run(args["task"], args.get("files"))
+            args = {**args, **generated}
+            review = generated["review"]
+        # Only the API workflow may attach a review; caller-supplied verdicts are untrusted.
+        args = {**args, "review": review}
         data, checks = build_project(args, require_complete=kwargs.get("source_project", True))
+        from tools.interrupt import is_interrupted
+        if is_interrupted():
+            raise InterruptedError("Development stopped")
         name = str(args.get("title") or "project")
         artifact = device_deliveries.create(identity[0], identity[1], name, "zip", "application/zip", data)
         return json.dumps({"ok": True, "artifact": artifact, "checks": checks,
-                           "execution": "not_run", "message": "Source project prepared. Only syntax checks ran; tests must run on the user's PC."}, ensure_ascii=False)
+                           "review": review, "execution": "not_run",
+                           "message": "Source project prepared. API model review is not test execution; see MODEL_REVIEW.md."
+                           if review else "Source project prepared. Only syntax checks ran; tests have not been executed."}, ensure_ascii=False)
+    except InterruptedError:
+        return json.dumps({"ok": False, "error": "development_stopped"})
     except ValueError as error:
         return json.dumps({"ok": False, "error": "project_generation_failed", "message": str(error)})
+    except Exception as error:
+        # Provider errors may contain request bodies or credentials. Do not log them.
+        if getattr(error, "status_code", None) == 404:
+            return json.dumps({"ok": False, "error": "development_model_unavailable",
+                               "message": "Модель разработки недоступна. Требуется обновить настройку модели на сервере."}, ensure_ascii=False)
+        return json.dumps({"ok": False, "error": "development_api_unavailable",
+                           "message": "Development API failed. No project was declared reviewed."})
 
 
 _SECTIONS = {
@@ -268,12 +290,13 @@ registry.register(
 registry.register(
     name="troika_create_project", toolset="troika_documents", handler=_handle_project,
     schema={"name": "troika_create_project",
-            "description": "Package COMPLETE source files you have written into a device ZIP; this tool does not generate code. Include the requested implementation, README.md with run instructions, and behavior tests. Empty or Hello World-only projects are rejected. For a web app include its browser UI and working logic, not a console substitute. Python/JSON syntax checks do not execute code or prove tests passed. Correct incomplete files and retry on failure. Never claim deployment or test success without local execution results.",
+            "description": "Develop a complete project through API: pass task to plan, write each file, review all sources and repair up to three times. Prefer task for development requests. Optional files supply an existing project to improve. Without task, files are packaged only. Results include README, tests and MODEL_REVIEW.md; execution is not_run. Model review does not prove tests passed. Save ZIP on the device; never claim deployment.",
             "parameters": {"type": "object", "properties": {
                 "title": {"type": "string"}, "instructions": {"type": "string"},
+                "task": {"type": "string", "description": "Full user task, requirements and desired stack. Starts API writing and model review; no device execution required.", "maxLength": 20000},
                 "files": {"type": "array", "items": {"type": "object", "properties": {
                     "path": {"type": "string", "description": "Relative project path; no absolute paths or .."},
                     "content": {"type": "string", "description": "Complete UTF-8 file contents, not a summary, filename or placeholder."}}, "required": ["path", "content"]}}},
-                "required": ["title", "files"]}},
+                "required": ["title"]}},
     check_fn=_documents_available,
 )

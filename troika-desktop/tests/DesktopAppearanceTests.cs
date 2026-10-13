@@ -69,7 +69,7 @@ public static class DesktopAppearanceTests {
                     await (Task)Call(window, "OpenPanelTask", "Разработка"); window.UpdateLayout();
                     var request = Descendants<TextBox>(window).Single(field => AutomationProperties.GetName(field) == "Какой проект создать");
                     request.Text = "Проект с несохранённым описанием";
-                    var choice = Descendants<ComboBox>(window).Single(); choice.SelectedIndex = 1; choice.IsDropDownOpen = true;
+                    var choice = Descendants<ComboBox>(window).Single(); choice.SelectedItem = "JavaScript: тесты"; choice.IsDropDownOpen = true;
                     await window.Dispatcher.InvokeAsync(new Action(window.UpdateLayout), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
                     var popup = (Popup)choice.Template.FindName("PART_Popup", choice);
                     Assert(popup != null && popup.IsOpen && popup.Child.RenderSize.Height > 0 && Convert.ToString(choice.SelectionBoxItem) == "JavaScript: тесты", "The themed selector fails: popup=" + (popup != null) + ", open=" + (popup != null && popup.IsOpen) + ", height=" + (popup == null ? 0 : popup.Child.RenderSize.Height) + ", selection=" + Convert.ToString(choice.SelectionBoxItem));

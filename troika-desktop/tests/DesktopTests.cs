@@ -41,6 +41,19 @@ namespace Troika.Desktop {
         static string Zip(string root, string name, string content) { var path = Path.Combine(root, Guid.NewGuid().ToString("N") + ".zip"); using (var zip = ZipFile.Open(path, ZipArchiveMode.Create)) { var entry = zip.CreateEntry(name); using (var writer = new StreamWriter(entry.Open(), Encoding.UTF8)) writer.Write(content); } return path; }
         static Dictionary<string, object> Delivery(byte[] bytes) { return Json.Parse(Json.Encode(new { id = "delivery_12345678901234567890123456789012", filename = "test.pdf", size = bytes.Length, sha256 = LocalStore.Hash(bytes) })); }
         static async Task RunAll() {
+            await Test("model review distinguishes source inspection from test execution", () => {
+                var root = Temporary();
+                try {
+                    var manifest = Path.Combine(root, "troika-project.json");
+                    File.WriteAllText(manifest, Json.Encode(new { review = new { method = "api_model_review", status = "passed", execution = "not_run" } }));
+                    Assert(DevelopmentWorkflow.ModelReviewStatus(root).Contains("Тесты не запускались"), "review misrepresented as execution");
+                    File.WriteAllText(manifest, Json.Encode(new { review = new { method = "api_model_review", status = "needs_changes", execution = "not_run" } }));
+                    Assert(DevelopmentWorkflow.ModelReviewStatus(root).Contains("нашло ошибки"), "blocking findings hidden");
+                    File.WriteAllText(manifest, "{}");
+                    Assert(DevelopmentWorkflow.ModelReviewStatus(root).Contains("не подтверждено"), "missing review accepted");
+                } finally { Directory.Delete(root, true); }
+                return Task.FromResult(0);
+            });
             await Test("streamed answer excludes private reasoning", async () => {
                 var events = Event(new { @event = "reasoning.available", text = "private" }) + Event(new { @event = "message.delta", delta = "Готово" }) + Event(new { @event = "run.completed" });
                 using (var api = Client(RunHandler(events, "{}"))) { var visible = new List<string>(); var answer = await api.Run("test", ev => visible.Add(Json.Text(ev, "event")), null, CancellationToken.None); Assert(answer == "Готово" && !visible.Contains("reasoning.available"), "reasoning leak"); }

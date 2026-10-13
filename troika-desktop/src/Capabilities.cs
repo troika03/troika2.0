@@ -132,9 +132,9 @@ namespace Troika.Desktop {
             panelContent.Children.Add(Label("Что разработать?", 12, muted));
             var request = Field("Какой проект создать", true); request.Text = developmentRequest; request.TextChanged += delegate { developmentRequest = request.Text; }; request.MinHeight = 84; panelContent.Children.Add(request);
             panelContent.Children.Add(Label("Способ проверки", 12, muted)); var kinds = new ComboBox { Margin = new Thickness(0, 8, 0, 8) }; AccessibleName(kinds, "Способ проверки проекта");
-            foreach (var kind in new[] { "Python: тесты", "JavaScript: тесты", "Python: синтаксис", "JavaScript: синтаксис" }) kinds.Items.Add(kind); kinds.SelectedIndex = 0; panelContent.Children.Add(kinds);
+            foreach (var kind in new[] { DevelopmentWorkflow.ModelReview, "Python: тесты", "JavaScript: тесты", "Python: синтаксис", "JavaScript: синтаксис" }) kinds.Items.Add(kind); kinds.SelectedIndex = 0; panelContent.Children.Add(kinds);
             AddPanelButton("Разработать проект", () => { var task = ChooseDevelopmentTarget(developmentRequest, Convert.ToString(kinds.SelectedItem), false); }, true);
-            SurfaceGroup(0, "От идеи до проверенного проекта", "Опишите результат. Тройка создаст исходники и тесты.", "code"); int imported = panelContent.Children.Count;
+            SurfaceGroup(0, "От идеи до проекта", "Тройка пишет код и проверяет исходники моделью через API. Тесты запускаются отдельно.", "code"); int imported = panelContent.Children.Count;
             Check("Принимать проверки с телефона", developmentRelay != null && developmentRelay.Enabled, enabled => { var task = ToggleDevelopmentWorker(enabled); });
             panelContent.Children.Add(Label("ПК появится на телефоне, пока этот раздел открыт и приём включён. Первый запуск подтверждается здесь.", 11, muted));
             AddPanelButton("Открыть ZIP с исходниками…", () => {
@@ -146,6 +146,12 @@ namespace Troika.Desktop {
             int project = panelContent.Children.Count;
             panelContent.Children.Add(Label("Исходники распакованы в новую папку. Оригинал сохранён.", 11, muted));
             AddPanelButton("Открыть папку проекта", () => { try { Process.Start(new ProcessStartInfo(projectFolder) { UseShellExecute = true }); } catch { SetStatus("Не удалось открыть папку.", true); } }, false); int checks = panelContent.Children.Count;
+            var modelReportPath = Path.Combine(projectFolder, "MODEL_REVIEW.md");
+            if (File.Exists(modelReportPath)) {
+                panelContent.Children.Add(Label("Ревью модели — код и тесты не запускались", 12, muted));
+                var modelReport = Field("Ревью модели", true); modelReport.IsReadOnly = true; modelReport.Text = File.ReadAllText(modelReportPath); modelReport.MaxHeight = 180; modelReport.FontSize = 12; panelContent.Children.Add(modelReport);
+            }
+            AddPanelButton("Проверить моделью и исправить", () => { var task = ReviewExistingDevelopment(); }, false);
             foreach (var kind in new[] { "Python: синтаксис", "Python: тесты", "JavaScript: синтаксис", "JavaScript: тесты" }) {
                 var selectedKind = kind; AddPanelButton(kind, () => ConfirmCheck(selectedKind), false);
             }

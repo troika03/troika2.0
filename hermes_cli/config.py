@@ -969,6 +969,24 @@ DEFAULT_CONFIG = {
     # Each aux task is independent — main-agent provider_routing and
     # openrouter.min_coding_score do NOT propagate to aux calls by design.
     "auxiliary": {
+        "development": {
+            "provider": "openrouter",
+            "model": "qwen/qwen3-coder-next",
+            "base_url": "",
+            "api_key": "",
+            "timeout": 120,
+            "structured_output": True,
+            "extra_body": {},
+        },
+        "development_review": {
+            "provider": "openrouter",
+            "model": "openai/gpt-5.4-mini",
+            "base_url": "",
+            "api_key": "",
+            "timeout": 120,
+            "structured_output": True,
+            "extra_body": {"reasoning": {"effort": "medium"}},
+        },
         "vision": {
             "provider": "auto",    # auto | openrouter | nous | codex | custom
             "model": "",           # e.g. "google/gemini-2.5-flash", "gpt-4o"

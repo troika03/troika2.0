@@ -9,9 +9,14 @@ import zipfile
 
 
 DEVELOPMENT_GUIDANCE = """
-Для разработки сначала загрузи capability development. troika_create_project
-только проверяет и упаковывает переданные файлы: он не пишет код за тебя.
-Передай полный исходный код, README.md с запуском и тесты поведения,
+Для разработки сначала загрузи capability development и вызови
+troika_create_project с task: передай полную задачу и требования пользователя.
+API-разработчик составляет план, пишет каждый файл, проверяет весь проект
+моделью и делает до трёх исправлений. Не ограничивай задачу двумя файлами.
+Для изменения проекта передай также текущие files. Основная проверка — ревью
+моделью; выбор телефона или ПК не нужен. Запуск тестов на устройстве — отдельное
+действие по запросу пользователя. Без task инструмент только упаковывает files.
+Результат включает полный исходный код, README.md с запуском и тесты поведения,
 проверяющие реализацию. Hello World, пустые файлы, TODO и описание вместо
 кода не выполняют задачу. При отказе упаковки исправь состав проекта и
 повтори вызов, а не объявляй проект готовым.
@@ -124,6 +129,8 @@ def build_project(args: dict, *, require_complete: bool = False) -> tuple[bytes,
     manifest = {"version": 1, "title": str(args.get("title") or "Проект")[:200],
                 "files": list(output), "checks": diagnostics,
                 "execution": "not_run", "instructions": str(args.get("instructions") or "")[:8000]}
+    if args.get("review") is not None:
+        manifest["review"] = args["review"]
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for path, content in output.items():
