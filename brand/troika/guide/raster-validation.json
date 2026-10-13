@@ -1,0 +1,371 @@
+{
+  "all_dimensions_match": true,
+  "png_count": 76,
+  "files": [
+    {
+      "file": "exports/png/logos/mark-amber.png",
+      "width": 112,
+      "height": 112
+    },
+    {
+      "file": "exports/png/logos/mark-ink.png",
+      "width": 112,
+      "height": 112
+    },
+    {
+      "file": "exports/png/logos/mark-white.png",
+      "width": 112,
+      "height": 112
+    },
+    {
+      "file": "exports/png/logos/logo-en-primary.png",
+      "width": 510,
+      "height": 160
+    },
+    {
+      "file": "exports/png/logos/logo-en-reverse.png",
+      "width": 510,
+      "height": 160
+    },
+    {
+      "file": "exports/png/logos/logo-en-mono-black.png",
+      "width": 510,
+      "height": 160
+    },
+    {
+      "file": "exports/png/logos/logo-en-mono-white.png",
+      "width": 510,
+      "height": 160
+    },
+    {
+      "file": "exports/png/logos/wordmark-en-black.png",
+      "width": 390,
+      "height": 130
+    },
+    {
+      "file": "exports/png/logos/wordmark-en-white.png",
+      "width": 390,
+      "height": 130
+    },
+    {
+      "file": "exports/png/logos/logo-ru-primary.png",
+      "width": 620,
+      "height": 160
+    },
+    {
+      "file": "exports/png/logos/logo-ru-reverse.png",
+      "width": 620,
+      "height": 160
+    },
+    {
+      "file": "exports/png/logos/logo-ru-mono-black.png",
+      "width": 620,
+      "height": 160
+    },
+    {
+      "file": "exports/png/logos/logo-ru-mono-white.png",
+      "width": 620,
+      "height": 160
+    },
+    {
+      "file": "exports/png/logos/wordmark-ru-black.png",
+      "width": 500,
+      "height": 130
+    },
+    {
+      "file": "exports/png/logos/wordmark-ru-white.png",
+      "width": 500,
+      "height": 130
+    },
+    {
+      "file": "exports/png/logos/logo-stacked.png",
+      "width": 440,
+      "height": 370
+    },
+    {
+      "file": "exports/png/icons/voice.png",
+      "width": 192,
+      "height": 192
+    },
+    {
+      "file": "exports/png/icons/text.png",
+      "width": 192,
+      "height": 192
+    },
+    {
+      "file": "exports/png/icons/tasks.png",
+      "width": 192,
+      "height": 192
+    },
+    {
+      "file": "exports/png/icons/files.png",
+      "width": 192,
+      "height": 192
+    },
+    {
+      "file": "exports/png/icons/memory.png",
+      "width": 192,
+      "height": 192
+    },
+    {
+      "file": "exports/png/icons/search.png",
+      "width": 192,
+      "height": 192
+    },
+    {
+      "file": "exports/png/icons/phone.png",
+      "width": 192,
+      "height": 192
+    },
+    {
+      "file": "exports/png/icons/desktop.png",
+      "width": 192,
+      "height": 192
+    },
+    {
+      "file": "exports/png/icons/settings.png",
+      "width": 192,
+      "height": 192
+    },
+    {
+      "file": "exports/png/icons/profile.png",
+      "width": 192,
+      "height": 192
+    },
+    {
+      "file": "exports/png/icons/stop.png",
+      "width": 192,
+      "height": 192
+    },
+    {
+      "file": "exports/png/icons/shield.png",
+      "width": 192,
+      "height": 192
+    },
+    {
+      "file": "exports/png/icons/share.png",
+      "width": 192,
+      "height": 192
+    },
+    {
+      "file": "exports/png/icons/download.png",
+      "width": 192,
+      "height": 192
+    },
+    {
+      "file": "exports/png/icons/code.png",
+      "width": 192,
+      "height": 192
+    },
+    {
+      "file": "exports/png/icons/reminder.png",
+      "width": 192,
+      "height": 192
+    },
+    {
+      "file": "exports/png/icons/add.png",
+      "width": 192,
+      "height": 192
+    },
+    {
+      "file": "exports/png/icons/check.png",
+      "width": 192,
+      "height": 192
+    },
+    {
+      "file": "exports/png/app/app-icon-dark.png",
+      "width": 1024,
+      "height": 1024
+    },
+    {
+      "file": "exports/png/app/avatar-dark.png",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "file": "exports/png/app/app-icon-light.png",
+      "width": 1024,
+      "height": 1024
+    },
+    {
+      "file": "exports/png/app/avatar-light.png",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "file": "exports/png/app/app-icon-amber.png",
+      "width": 1024,
+      "height": 1024
+    },
+    {
+      "file": "exports/png/app/avatar-amber.png",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "file": "exports/png/app/adaptive-foreground.png",
+      "width": 108,
+      "height": 108
+    },
+    {
+      "file": "exports/png/app/adaptive-monochrome.png",
+      "width": 108,
+      "height": 108
+    },
+    {
+      "file": "exports/png/app/favicon.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "file": "exports/png/banners/hero-1920x960.png",
+      "width": 1920,
+      "height": 960
+    },
+    {
+      "file": "exports/png/banners/social-1200x630.png",
+      "width": 1200,
+      "height": 630
+    },
+    {
+      "file": "exports/png/banners/post-1080x1080.png",
+      "width": 1080,
+      "height": 1080
+    },
+    {
+      "file": "exports/png/banners/post-1080x1350.png",
+      "width": 1080,
+      "height": 1350
+    },
+    {
+      "file": "exports/png/banners/story-1080x1920.png",
+      "width": 1080,
+      "height": 1920
+    },
+    {
+      "file": "exports/png/banners/cover-1590x530.png",
+      "width": 1590,
+      "height": 530
+    },
+    {
+      "file": "exports/png/banners/youtube-2560x1440.png",
+      "width": 2560,
+      "height": 1440
+    },
+    {
+      "file": "exports/png/banners/feature-1024x500.png",
+      "width": 1024,
+      "height": 500
+    },
+    {
+      "file": "exports/png/banners/web-1440x400.png",
+      "width": 1440,
+      "height": 400
+    },
+    {
+      "file": "exports/png/banners/email-1200x300.png",
+      "width": 1200,
+      "height": 300
+    },
+    {
+      "file": "exports/png/banners/desktop-1920x1080.png",
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "file": "exports/png/patterns/voice-tile.png",
+      "width": 448,
+      "height": 448
+    },
+    {
+      "file": "exports/png/patterns/voice-lines.png",
+      "width": 1440,
+      "height": 560
+    },
+    {
+      "file": "exports/png/preview/brand-board.png",
+      "width": 1600,
+      "height": 1240
+    },
+    {
+      "file": "exports/png/guide/pages/page-01.png",
+      "width": 893,
+      "height": 1263
+    },
+    {
+      "file": "exports/png/guide/pages/page-02.png",
+      "width": 893,
+      "height": 1263
+    },
+    {
+      "file": "exports/png/guide/pages/page-03.png",
+      "width": 893,
+      "height": 1263
+    },
+    {
+      "file": "exports/png/guide/pages/page-04.png",
+      "width": 893,
+      "height": 1263
+    },
+    {
+      "file": "exports/png/guide/pages/page-05.png",
+      "width": 893,
+      "height": 1263
+    },
+    {
+      "file": "exports/png/guide/pages/page-06.png",
+      "width": 893,
+      "height": 1263
+    },
+    {
+      "file": "exports/png/guide/pages/page-07.png",
+      "width": 893,
+      "height": 1263
+    },
+    {
+      "file": "exports/png/app/icon-16.png",
+      "width": 16,
+      "height": 16
+    },
+    {
+      "file": "exports/png/app/icon-24.png",
+      "width": 24,
+      "height": 24
+    },
+    {
+      "file": "exports/png/app/icon-32.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "file": "exports/png/app/icon-48.png",
+      "width": 48,
+      "height": 48
+    },
+    {
+      "file": "exports/png/app/icon-64.png",
+      "width": 64,
+      "height": 64
+    },
+    {
+      "file": "exports/png/app/icon-128.png",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "file": "exports/png/app/icon-192.png",
+      "width": 192,
+      "height": 192
+    },
+    {
+      "file": "exports/png/app/icon-256.png",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "exports/png/app/icon-512.png",
+      "width": 512,
+      "height": 512
+    }
+  ]
+}

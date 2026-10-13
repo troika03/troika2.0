@@ -1,0 +1,12 @@
+{
+  "svg_count": 76,
+  "outlined_masters_without_live_text": true,
+  "svg_no_raster_or_scripts": true,
+  "pdf_vector_verified": true,
+  "pdf_page_counts": {
+    "guide/Troika-Brand-Guide.pdf": 7,
+    "exports/pdf/Troika-Logos.pdf": 2,
+    "exports/pdf/Troika-Banners.pdf": 11
+  },
+  "android_xml_valid": true
+}

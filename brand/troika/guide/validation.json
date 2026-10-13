@@ -1,0 +1,12 @@
+{
+  "vector_scenes": 75,
+  "text_runs_checked": 216,
+  "all_text_within_artboards": true,
+  "font_sha256": "17bb58fb69aec2dfb047a2ebf52534023e9b688c97a6b7ac795b0a72912c2063",
+  "no_raster_in_vector_masters": true,
+  "pdf_outputs": {
+    "brand_guide_pages": 7,
+    "logo_pages": 2,
+    "banner_pages": 11
+  }
+}

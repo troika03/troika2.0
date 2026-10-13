@@ -1,0 +1,602 @@
+[
+  {
+    "file": "logos/mark-amber.svg",
+    "width": 112,
+    "height": 112,
+    "title": "Знак Troika, amber",
+    "category": "logos",
+    "editable_text": false
+  },
+  {
+    "file": "logos/mark-ink.svg",
+    "width": 112,
+    "height": 112,
+    "title": "Знак Troika, ink",
+    "category": "logos",
+    "editable_text": false
+  },
+  {
+    "file": "logos/mark-white.svg",
+    "width": 112,
+    "height": 112,
+    "title": "Знак Troika, white",
+    "category": "logos",
+    "editable_text": false
+  },
+  {
+    "file": "logos/logo-en-primary.svg",
+    "width": 510,
+    "height": 160,
+    "title": "Логотип Troika, en, primary",
+    "category": "logos",
+    "editable_text": false
+  },
+  {
+    "file": "logos/logo-en-reverse.svg",
+    "width": 510,
+    "height": 160,
+    "title": "Логотип Troika, en, reverse",
+    "category": "logos",
+    "editable_text": false
+  },
+  {
+    "file": "logos/logo-en-mono-black.svg",
+    "width": 510,
+    "height": 160,
+    "title": "Логотип Troika, en, mono-black",
+    "category": "logos",
+    "editable_text": false
+  },
+  {
+    "file": "logos/logo-en-mono-white.svg",
+    "width": 510,
+    "height": 160,
+    "title": "Логотип Troika, en, mono-white",
+    "category": "logos",
+    "editable_text": false
+  },
+  {
+    "file": "logos/wordmark-en-black.svg",
+    "width": 390,
+    "height": 130,
+    "title": "Словесный знак troika",
+    "category": "logos",
+    "editable_text": false
+  },
+  {
+    "file": "logos/wordmark-en-white.svg",
+    "width": 390,
+    "height": 130,
+    "title": "Словесный знак troika",
+    "category": "logos",
+    "editable_text": false
+  },
+  {
+    "file": "logos/logo-ru-primary.svg",
+    "width": 620,
+    "height": 160,
+    "title": "Логотип Troika, ru, primary",
+    "category": "logos",
+    "editable_text": false
+  },
+  {
+    "file": "logos/logo-ru-reverse.svg",
+    "width": 620,
+    "height": 160,
+    "title": "Логотип Troika, ru, reverse",
+    "category": "logos",
+    "editable_text": false
+  },
+  {
+    "file": "logos/logo-ru-mono-black.svg",
+    "width": 620,
+    "height": 160,
+    "title": "Логотип Troika, ru, mono-black",
+    "category": "logos",
+    "editable_text": false
+  },
+  {
+    "file": "logos/logo-ru-mono-white.svg",
+    "width": 620,
+    "height": 160,
+    "title": "Логотип Troika, ru, mono-white",
+    "category": "logos",
+    "editable_text": false
+  },
+  {
+    "file": "logos/wordmark-ru-black.svg",
+    "width": 500,
+    "height": 130,
+    "title": "Словесный знак тройка",
+    "category": "logos",
+    "editable_text": false
+  },
+  {
+    "file": "logos/wordmark-ru-white.svg",
+    "width": 500,
+    "height": 130,
+    "title": "Словесный знак тройка",
+    "category": "logos",
+    "editable_text": false
+  },
+  {
+    "file": "logos/logo-stacked.svg",
+    "width": 440,
+    "height": 370,
+    "title": "Вертикальный логотип Troika",
+    "category": "logos",
+    "editable_text": false
+  },
+  {
+    "file": "icons/voice.svg",
+    "width": 24,
+    "height": 24,
+    "title": "Troika: voice",
+    "category": "icons",
+    "editable_text": false
+  },
+  {
+    "file": "icons/text.svg",
+    "width": 24,
+    "height": 24,
+    "title": "Troika: text",
+    "category": "icons",
+    "editable_text": false
+  },
+  {
+    "file": "icons/tasks.svg",
+    "width": 24,
+    "height": 24,
+    "title": "Troika: tasks",
+    "category": "icons",
+    "editable_text": false
+  },
+  {
+    "file": "icons/files.svg",
+    "width": 24,
+    "height": 24,
+    "title": "Troika: files",
+    "category": "icons",
+    "editable_text": false
+  },
+  {
+    "file": "icons/memory.svg",
+    "width": 24,
+    "height": 24,
+    "title": "Troika: memory",
+    "category": "icons",
+    "editable_text": false
+  },
+  {
+    "file": "icons/search.svg",
+    "width": 24,
+    "height": 24,
+    "title": "Troika: search",
+    "category": "icons",
+    "editable_text": false
+  },
+  {
+    "file": "icons/phone.svg",
+    "width": 24,
+    "height": 24,
+    "title": "Troika: phone",
+    "category": "icons",
+    "editable_text": false
+  },
+  {
+    "file": "icons/desktop.svg",
+    "width": 24,
+    "height": 24,
+    "title": "Troika: desktop",
+    "category": "icons",
+    "editable_text": false
+  },
+  {
+    "file": "icons/settings.svg",
+    "width": 24,
+    "height": 24,
+    "title": "Troika: settings",
+    "category": "icons",
+    "editable_text": false
+  },
+  {
+    "file": "icons/profile.svg",
+    "width": 24,
+    "height": 24,
+    "title": "Troika: profile",
+    "category": "icons",
+    "editable_text": false
+  },
+  {
+    "file": "icons/stop.svg",
+    "width": 24,
+    "height": 24,
+    "title": "Troika: stop",
+    "category": "icons",
+    "editable_text": false
+  },
+  {
+    "file": "icons/shield.svg",
+    "width": 24,
+    "height": 24,
+    "title": "Troika: shield",
+    "category": "icons",
+    "editable_text": false
+  },
+  {
+    "file": "icons/share.svg",
+    "width": 24,
+    "height": 24,
+    "title": "Troika: share",
+    "category": "icons",
+    "editable_text": false
+  },
+  {
+    "file": "icons/download.svg",
+    "width": 24,
+    "height": 24,
+    "title": "Troika: download",
+    "category": "icons",
+    "editable_text": false
+  },
+  {
+    "file": "icons/code.svg",
+    "width": 24,
+    "height": 24,
+    "title": "Troika: code",
+    "category": "icons",
+    "editable_text": false
+  },
+  {
+    "file": "icons/reminder.svg",
+    "width": 24,
+    "height": 24,
+    "title": "Troika: reminder",
+    "category": "icons",
+    "editable_text": false
+  },
+  {
+    "file": "icons/add.svg",
+    "width": 24,
+    "height": 24,
+    "title": "Troika: add",
+    "category": "icons",
+    "editable_text": false
+  },
+  {
+    "file": "icons/check.svg",
+    "width": 24,
+    "height": 24,
+    "title": "Troika: check",
+    "category": "icons",
+    "editable_text": false
+  },
+  {
+    "file": "app/app-icon-dark.svg",
+    "width": 1024,
+    "height": 1024,
+    "title": "Иконка Troika, dark",
+    "category": "app",
+    "editable_text": false
+  },
+  {
+    "file": "app/avatar-dark.svg",
+    "width": 512,
+    "height": 512,
+    "title": "Аватар Troika, dark",
+    "category": "app",
+    "editable_text": false
+  },
+  {
+    "file": "app/app-icon-light.svg",
+    "width": 1024,
+    "height": 1024,
+    "title": "Иконка Troika, light",
+    "category": "app",
+    "editable_text": false
+  },
+  {
+    "file": "app/avatar-light.svg",
+    "width": 512,
+    "height": 512,
+    "title": "Аватар Troika, light",
+    "category": "app",
+    "editable_text": false
+  },
+  {
+    "file": "app/app-icon-amber.svg",
+    "width": 1024,
+    "height": 1024,
+    "title": "Иконка Troika, amber",
+    "category": "app",
+    "editable_text": false
+  },
+  {
+    "file": "app/avatar-amber.svg",
+    "width": 512,
+    "height": 512,
+    "title": "Аватар Troika, amber",
+    "category": "app",
+    "editable_text": false
+  },
+  {
+    "file": "app/adaptive-foreground.svg",
+    "width": 108,
+    "height": 108,
+    "title": "Android adaptive foreground, safe zone",
+    "category": "app",
+    "editable_text": false
+  },
+  {
+    "file": "app/adaptive-monochrome.svg",
+    "width": 108,
+    "height": 108,
+    "title": "Android adaptive monochrome",
+    "category": "app",
+    "editable_text": false
+  },
+  {
+    "file": "app/favicon.svg",
+    "width": 32,
+    "height": 32,
+    "title": "Favicon Troika",
+    "category": "app",
+    "editable_text": false
+  },
+  {
+    "file": "banners/hero-1920x960.svg",
+    "width": 1920,
+    "height": 960,
+    "title": "Главный баннер: Скажи, что нужно.",
+    "category": "banners",
+    "editable_text": false
+  },
+  {
+    "file": "editable/banners/hero-1920x960.svg",
+    "width": 1920,
+    "height": 960,
+    "title": "Главный баннер: Скажи, что нужно.",
+    "category": "editable",
+    "editable_text": true
+  },
+  {
+    "file": "banners/social-1200x630.svg",
+    "width": 1200,
+    "height": 630,
+    "title": "Социальная карточка Troika",
+    "category": "banners",
+    "editable_text": false
+  },
+  {
+    "file": "editable/banners/social-1200x630.svg",
+    "width": 1200,
+    "height": 630,
+    "title": "Социальная карточка Troika",
+    "category": "editable",
+    "editable_text": true
+  },
+  {
+    "file": "banners/post-1080x1080.svg",
+    "width": 1080,
+    "height": 1080,
+    "title": "Квадратная публикация Troika",
+    "category": "banners",
+    "editable_text": false
+  },
+  {
+    "file": "editable/banners/post-1080x1080.svg",
+    "width": 1080,
+    "height": 1080,
+    "title": "Квадратная публикация Troika",
+    "category": "editable",
+    "editable_text": true
+  },
+  {
+    "file": "banners/post-1080x1350.svg",
+    "width": 1080,
+    "height": 1350,
+    "title": "Вертикальная публикация Troika",
+    "category": "banners",
+    "editable_text": false
+  },
+  {
+    "file": "editable/banners/post-1080x1350.svg",
+    "width": 1080,
+    "height": 1350,
+    "title": "Вертикальная публикация Troika",
+    "category": "editable",
+    "editable_text": true
+  },
+  {
+    "file": "banners/story-1080x1920.svg",
+    "width": 1080,
+    "height": 1920,
+    "title": "История Troika, safe zone 250 px",
+    "category": "banners",
+    "editable_text": false
+  },
+  {
+    "file": "editable/banners/story-1080x1920.svg",
+    "width": 1080,
+    "height": 1920,
+    "title": "История Troika, safe zone 250 px",
+    "category": "editable",
+    "editable_text": true
+  },
+  {
+    "file": "banners/cover-1590x530.svg",
+    "width": 1590,
+    "height": 530,
+    "title": "Обложка сообщества Troika",
+    "category": "banners",
+    "editable_text": false
+  },
+  {
+    "file": "editable/banners/cover-1590x530.svg",
+    "width": 1590,
+    "height": 530,
+    "title": "Обложка сообщества Troika",
+    "category": "editable",
+    "editable_text": true
+  },
+  {
+    "file": "banners/youtube-2560x1440.svg",
+    "width": 2560,
+    "height": 1440,
+    "title": "Обложка видео: контент в центральной safe zone 1546 x 423",
+    "category": "banners",
+    "editable_text": false
+  },
+  {
+    "file": "editable/banners/youtube-2560x1440.svg",
+    "width": 2560,
+    "height": 1440,
+    "title": "Обложка видео: контент в центральной safe zone 1546 x 423",
+    "category": "editable",
+    "editable_text": true
+  },
+  {
+    "file": "banners/feature-1024x500.svg",
+    "width": 1024,
+    "height": 500,
+    "title": "Графика приложения Troika",
+    "category": "banners",
+    "editable_text": false
+  },
+  {
+    "file": "editable/banners/feature-1024x500.svg",
+    "width": 1024,
+    "height": 500,
+    "title": "Графика приложения Troika",
+    "category": "editable",
+    "editable_text": true
+  },
+  {
+    "file": "banners/web-1440x400.svg",
+    "width": 1440,
+    "height": 400,
+    "title": "Горизонтальный светлый баннер Troika",
+    "category": "banners",
+    "editable_text": false
+  },
+  {
+    "file": "editable/banners/web-1440x400.svg",
+    "width": 1440,
+    "height": 400,
+    "title": "Горизонтальный светлый баннер Troika",
+    "category": "editable",
+    "editable_text": true
+  },
+  {
+    "file": "banners/email-1200x300.svg",
+    "width": 1200,
+    "height": 300,
+    "title": "Заголовок письма Troika",
+    "category": "banners",
+    "editable_text": false
+  },
+  {
+    "file": "editable/banners/email-1200x300.svg",
+    "width": 1200,
+    "height": 300,
+    "title": "Заголовок письма Troika",
+    "category": "editable",
+    "editable_text": true
+  },
+  {
+    "file": "banners/desktop-1920x1080.svg",
+    "width": 1920,
+    "height": 1080,
+    "title": "Обои рабочего стола Troika",
+    "category": "banners",
+    "editable_text": false
+  },
+  {
+    "file": "editable/banners/desktop-1920x1080.svg",
+    "width": 1920,
+    "height": 1080,
+    "title": "Обои рабочего стола Troika",
+    "category": "editable",
+    "editable_text": true
+  },
+  {
+    "file": "patterns/voice-tile.svg",
+    "width": 448,
+    "height": 448,
+    "title": "Бесшовный паттерн Troika",
+    "category": "patterns",
+    "editable_text": false
+  },
+  {
+    "file": "patterns/voice-lines.svg",
+    "width": 1440,
+    "height": 560,
+    "title": "Фоновый мотив из логотипа",
+    "category": "patterns",
+    "editable_text": false
+  },
+  {
+    "file": "preview/brand-board.svg",
+    "width": 1600,
+    "height": 1240,
+    "title": "Troika: фирменный стиль",
+    "category": "preview",
+    "editable_text": false
+  },
+  {
+    "file": "guide/pages/page-01.svg",
+    "width": 595.28,
+    "height": 841.89,
+    "title": "Голос становится действием",
+    "category": "guide",
+    "editable_text": false
+  },
+  {
+    "file": "guide/pages/page-02.svg",
+    "width": 595.28,
+    "height": 841.89,
+    "title": "Логотип и варианты",
+    "category": "guide",
+    "editable_text": false
+  },
+  {
+    "file": "guide/pages/page-03.svg",
+    "width": 595.28,
+    "height": 841.89,
+    "title": "Размер и свободное поле",
+    "category": "guide",
+    "editable_text": false
+  },
+  {
+    "file": "guide/pages/page-04.svg",
+    "width": 595.28,
+    "height": 841.89,
+    "title": "Цвет и читаемость",
+    "category": "guide",
+    "editable_text": false
+  },
+  {
+    "file": "guide/pages/page-05.svg",
+    "width": 595.28,
+    "height": 841.89,
+    "title": "Шрифт и голос бренда",
+    "category": "guide",
+    "editable_text": false
+  },
+  {
+    "file": "guide/pages/page-06.svg",
+    "width": 595.28,
+    "height": 841.89,
+    "title": "Баннеры и форматы",
+    "category": "guide",
+    "editable_text": false
+  },
+  {
+    "file": "guide/pages/page-07.svg",
+    "width": 595.28,
+    "height": 841.89,
+    "title": "Иконки и приложение",
+    "category": "guide",
+    "editable_text": false
+  }
+]
