@@ -212,17 +212,14 @@ class PDFPen(BasePen):
         self.pdf_path.close()
 
 
-def draw_pdf_node(canvas, node):
+def draw_pdf_node(canvas, node, opacity=1):
     canvas.saveState()
     kind = node["kind"]
     if kind == "group":
         canvas.translate(node["x"], node["y"])
         canvas.scale(node["scale"], node["scale"])
-        if node["opacity"] != 1:
-            canvas.setFillAlpha(node["opacity"])
-            canvas.setStrokeAlpha(node["opacity"])
         for child in node["children"]:
-            draw_pdf_node(canvas, child)
+            draw_pdf_node(canvas, child, opacity * node["opacity"])
         canvas.restoreState()
         return
     if kind == "text":
@@ -233,6 +230,7 @@ def draw_pdf_node(canvas, node):
             canvas.translate(x, node["y"])
             canvas.scale(node["size"]/UPM, -node["size"]/UPM)
             canvas.setFillColor(HexColor(node["fill"]))
+            canvas.setFillAlpha(opacity)
             p = canvas.beginPath()
             parse_path(d, PDFPen(p))
             canvas.drawPath(p, fill=1, stroke=0, fillMode=1)
@@ -242,8 +240,10 @@ def draw_pdf_node(canvas, node):
     fill, stroke = node.get("fill"), node.get("stroke")
     if fill:
         canvas.setFillColor(HexColor(fill))
+        canvas.setFillAlpha(opacity)
     if stroke:
         canvas.setStrokeColor(HexColor(stroke))
+        canvas.setStrokeAlpha(opacity)
         canvas.setLineWidth(node["sw"])
         canvas.setLineCap(1)
         canvas.setLineJoin(1)

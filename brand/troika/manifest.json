@@ -201,13 +201,13 @@
   },
   {
     "file": "exports/pdf/Troika-Banners.pdf",
-    "bytes": 111956,
-    "sha256": "5c7ecb8c63a79573de124c839cc74abb7f4eed3271880f8cb9469d4a3d266146"
+    "bytes": 111904,
+    "sha256": "3591c4781707a89dd2429db12a149db8191ae923e5ad7f9fd095587ce6093b3a"
   },
   {
     "file": "exports/pdf/Troika-Logos.pdf",
     "bytes": 37938,
-    "sha256": "da270850fbf8610a59edebcc286ca4b7d7e15b825294d2c39d5f90cdf4412166"
+    "sha256": "39433e461ac79b3ec1efd4ba04a8ea14d75e5d49691336c51468a84ea10ca4ba"
   },
   {
     "file": "exports/png/app/adaptive-foreground.png",
@@ -652,7 +652,7 @@
   {
     "file": "guide/Troika-Brand-Guide.pdf",
     "bytes": 355896,
-    "sha256": "ef23e22b14509ded543b78a308c666d97f5d5d0ad75d456e2ba5c57206d6352a"
+    "sha256": "1fa3617dc90bebbbf54e3ca03bc0adbcdf87415c6549e87d1953f05c71d7d580"
   },
   {
     "file": "guide/validation.json",
@@ -876,8 +876,8 @@
   },
   {
     "file": "tools/build_brand.py",
-    "bytes": 36390,
-    "sha256": "195506eeaf8d901016534b4707d1af2df644abc3f408ea0b253cc73cd133ee54"
+    "bytes": 36412,
+    "sha256": "1acbacce0a1f50093f32b56f2c95c40861ab1e6cb85a1f237c6095934dd79814"
   },
   {
     "file": "tools/package_brand.py",
