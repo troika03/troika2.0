@@ -86,7 +86,7 @@ services:
       - ALL
 
   stt:
-    image: troika-production:${TROIKA_IMAGE_TAG:-local}
+    image: troika-production:${TROIKA_STT_IMAGE_TAG:-${TROIKA_IMAGE_TAG:-local}}
     restart: unless-stopped
     user: "1000:1000"
     env_file:
@@ -110,6 +110,7 @@ services:
       - groq
     volumes:
       - /srv/troika/data:/opt/troika
+      - ./config.yaml:/opt/troika/config.yaml:ro
     expose:
       - "8766"
     depends_on:

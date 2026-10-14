@@ -1,0 +1,63 @@
+# Closed-beta coefficients, reviewed 2026-10-13. Checkout remains disabled.
+# RUB conversion follows the approved scenario: 120 RUB/USD plus 15%.
+# These are published calculation coefficients, not an exchange-rate quote.
+product_resource_enabled: true
+product_byok_enabled: true
+product_resource_task_tokens: 250000
+product_resource_approval_tokens: 100000
+product_billing_enabled: false
+product_verification_enabled: false
+product_resource_subsidy_tokens: 13333333
+product_resource_prices:
+  openrouter/free:
+    provider: openrouter
+    version: beta-raw-free-2026-10-14
+    debit_mode: model_tokens
+    input_rub: 0
+    output_rub: 0
+    cache_read_rub: 0
+    cache_write_rub: 0
+    default_output_tokens: 8192
+    maximum_output_tokens: 65536
+    vision_input_tokens: 200000
+  google/gemini-3-flash-preview:
+    provider: openrouter
+    version: beta-2026-10-13
+    input_rub: 124.2
+    output_rub: 745.2
+    cache_read_rub: 12.42
+    cache_write_rub: 144.9
+    default_output_tokens: 8192
+    maximum_output_tokens: 65536
+    vision_input_tokens: 65536
+  qwen/qwen3-coder-next:
+    provider: openrouter
+    version: beta-2026-10-14
+    input_rub: 16.56
+    output_rub: 110.4
+    cache_read_rub: 9.66
+    cache_write_rub: 16.56
+    default_output_tokens: 8000
+    maximum_output_tokens: 65536
+  openai/gpt-5.4-mini:
+    provider: openrouter
+    version: beta-2026-10-14
+    input_rub: 207
+    output_rub: 1242
+    cache_read_rub: 20.7
+    cache_write_rub: 207
+    default_output_tokens: 8000
+    maximum_output_tokens: 65536
+product_resource_services:
+  groq:whisper-large-v3-turbo:
+    version: beta-whisper-turbo-2026-10-13
+    unit: seconds
+    rub_per_unit: 0.001533333333333333333333333333
+    minimum_units: 10
+    maximum_units: 180
+  edge:tts:
+    version: beta-edge-2026-10-13
+    unit: characters
+    rub_per_unit: 0
+    minimum_units: 0
+    maximum_units: 20000

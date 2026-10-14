@@ -17,6 +17,8 @@ import time
 import asyncio
 import hmac
 import io
+from contextvars import ContextVar
+import uuid
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -24,6 +26,10 @@ from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from hermes_constants import get_hermes_home
 from troika_product.voice import guarded_voice, read_audio_upload
+from agent.provider_metering import ProviderCallBlocked
+from troika_product.service_metering import ServiceMeter, audio_duration, resource_error_response
+
+_voice_meter = ContextVar("troika_stt_resource_meter", default=None)
 
 # Подгружаем .env из возможных мест. В Docker переменные уже приходят
 # через env_file/environment, а домашняя папка может быть недоступна
@@ -203,14 +209,21 @@ class _GroqRateLimited(RuntimeError):
 
 
 async def _groq_post(audio_bytes: bytes, filename: str, language: str, model: str, api_key: str) -> str:
+    meter = _voice_meter.get()
+    lease = None
+    if meter is not None:
+        # One second of frame rounding is reserved before dispatch.
+        duration = audio_duration(audio_bytes)
+        lease = meter.begin("groq:" + model, min(duration + 1, 180), kind="stt")
     form = FormData()
     form.add_field("file", audio_bytes, filename=filename, content_type="application/octet-stream")
     form.add_field("model", model)
     form.add_field("language", language)
-    form.add_field("response_format", "json")
+    form.add_field("response_format", "verbose_json" if lease else "json")
     form.add_field("temperature", "0")
     form.add_field("prompt", "")
-    async with ClientSession() as session:
+    try:
+      async with ClientSession() as session:
         async with session.post(
             GROQ_URL, data=form,
             headers={"Authorization": f"Bearer {api_key}"},
@@ -223,7 +236,13 @@ async def _groq_post(audio_bytes: bytes, filename: str, language: str, model: st
             if resp.status != 200:
                 raise RuntimeError(f"Groq {resp.status}")
             data = await resp.json()
+            if lease is not None:
+                lease.succeeded(data.get("duration"))
             return (data.get("text", "") or "").strip()
+    except BaseException as error:
+        if lease is not None:
+            lease.failed(error)
+        raise
 
 
 async def _transcribe_groq(audio_bytes: bytes, filename: str, language: str) -> tuple[str, dict]:
@@ -351,7 +370,18 @@ async def transcribe(request):
 
     async def operation():
         audio_data, language = await read_audio_upload(request)
-        return await _transcribe_audio(audio_data, language)
+        from troika_product.resource_runtime import resource_config, configured_ledger
+        config = resource_config() if PRODUCT_AUTH_ENABLED else {}
+        meter = None
+        if config.get("product_resource_enabled") is True:
+            meter = ServiceMeter(configured_ledger(ACCESS_REGISTRY, config), principal,
+                                 run_key=str(uuid.uuid4()), prices=config.get("product_resource_services", {}),
+                                 run_token_limit=config.get("product_resource_task_tokens", 250000))
+        context_token = _voice_meter.set(meter)
+        try:
+            return await _transcribe_audio(audio_data, language)
+        finally:
+            _voice_meter.reset(context_token)
 
     if PRODUCT_AUTH_ENABLED:
         return await guarded_voice(
@@ -384,6 +414,8 @@ async def _transcribe_audio(audio_data, language):
                 return web.json_response({"text": "", "meta": meta})
             log.info("[%s] transcription completed (%.1fs)", backend, meta["latency_s"])
             return web.json_response({"text": text, "meta": meta})
+        except ProviderCallBlocked as error:
+            return resource_error_response(error)
         except web.HTTPException:
             raise
         except Exception as e:

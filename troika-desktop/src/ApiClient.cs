@@ -19,6 +19,7 @@ namespace Troika.Desktop {
         public string SessionId = "";
         public Action<AccountSession> SaveSession;
         public string ActiveRun = "";
+        public PersonalProviderStore PersonalProviders;
         public ApiClient() : this(new HttpClientHandler { AllowAutoRedirect = false }, Production) { }
         public ApiClient(HttpMessageHandler handler, string endpoint) {
             origin = new Uri(endpoint.TrimEnd('/') + "/");
@@ -37,6 +38,9 @@ namespace Troika.Desktop {
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Account.Token);
                 request.Headers.Add("X-Hermes-Session-Key", SessionId);
                 request.Headers.Add("X-Hermes-Session-Id", SessionId);
+                if (method == "POST" && (path == "/v1/runs" || path == "/v1/chat/completions" || path == "/v1/responses")) {
+                    if (PersonalProviders != null) PersonalProviders.Apply(request, Account.Email);
+                }
             }
             return request;
         }
@@ -63,6 +67,16 @@ namespace Troika.Desktop {
             }
         }
         private static string Error(string body, int status) {
+            var resource = Json.Map(Json.Get(SafeParse(body), "error"));
+            switch (Json.Text(resource, "code")) {
+                case "monthly_resource_exhausted": return "Недостаточно AI-токенов. Остаток и время обновления указаны в аккаунте.";
+                case "resource_usage_unknown": return "Расход уточняется; резерв сохранён. Повтор остановлен.";
+                case "resource_budget_approval_required": return "Достигнут предел расходов задачи. Продолжение требует подтверждения.";
+                case "subscription_concurrency_exceeded": return "Сначала завершите текущую задачу на аккаунте.";
+                case "subscription_feature_not_available": return "Функция недоступна на тарифе или её лимит исчерпан.";
+                case "resource_price_unavailable": case "unmetered_provider_route": return "Учёт расходов этой функции ещё не подключён.";
+                case "resource_price_change_requires_approval": return "Коэффициенты изменились внутри оплаченного периода. Новое списание остановлено до согласования.";
+            }
             if (status == 401 || status == 403) return "Войдите в аккаунт заново: доступ истёк или отозван.";
             if (status == 429) {
                 var error = Json.Map(Json.Get(SafeParse(body), "error"));
@@ -79,6 +93,13 @@ namespace Troika.Desktop {
         }
         public async Task<Dictionary<string, object>> Call(string method, string path, object data, CancellationToken cancellation) {
             await EnsureSession(false, cancellation);
+            if (method == "POST" && (path == "/v1/runs" || path == "/v1/chat/completions" || path == "/v1/responses") && PersonalProviders != null && PersonalProviders.Load(Account.Email).Count > 0) {
+                using (var check = Request("GET", "/v1/subscription", null, true))
+                using (var response = await Send(check, HttpCompletionOption.ResponseContentRead, cancellation)) {
+                    await Check(response);
+                    if (!Json.Flag(Json.Map(Json.Get(Json.Parse(await response.Content.ReadAsStringAsync()), "subscription")), "byok_enabled")) throw new InvalidOperationException("Сервер не поддерживает личный API. Ключ Тройки не использован.");
+                }
+            }
             for (int attempt = 0; ; attempt++) {
                 using (var request = Request(method, path, Body(data), true))
                 using (var response = await Send(request, HttpCompletionOption.ResponseContentRead, cancellation)) {

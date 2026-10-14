@@ -1260,6 +1260,15 @@ class AccessRegistry:
                     "usage_json, created_at, settled_at FROM troika_resource_operations "
                     "WHERE user_id = ? ORDER BY created_at, id",
                 ),
+                "billing": (
+                    "troika_billing_intents",
+                    "SELECT id,sku,price_rub,state,created_at,starts_at,expires_at "
+                    "FROM troika_billing_intents WHERE user_id = ? ORDER BY created_at,id",
+                ),
+                "email_verification": (
+                    "troika_email_verification",
+                    "SELECT created_at,expires_at,attempts,verified_at FROM troika_email_verification WHERE user_id = ?",
+                ),
             }
             optional = {
                 key: rows(connection, query, (principal.user_id,))

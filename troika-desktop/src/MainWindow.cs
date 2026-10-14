@@ -55,7 +55,7 @@ namespace Troika.Desktop {
             MinWidth = 780; MinHeight = 540; WindowStartupLocation = WindowStartupLocation.CenterScreen;
             WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.CanResize; FontFamily = new FontFamily("Segoe UI"); FontSize = 14;
             var settings = store.Settings(); autoSpeak = Json.Get(settings, "auto_speak") == null || Json.Flag(settings, "auto_speak"); light = Json.Flag(settings, "light"); reducedMotion = Json.Flag(settings, "reduced_motion"); Topmost = Json.Flag(settings, "always_on_top"); interfaceAccent = Json.Text(settings, "interface_accent");
-            api.Account = preview ? new AccountSession() : store.LoadSession(); api.SessionId = api.Account.HomeSession; api.SaveSession = store.SaveSession;
+            api.Account = preview ? new AccountSession() : store.LoadSession(); api.SessionId = api.Account.HomeSession; api.SaveSession = store.SaveSession; api.PersonalProviders = new PersonalProviderStore(store.Root);
             Build();
             StartReminders();
             SizeChanged += delegate { if (voiceVisual != null) { voiceVisual.Height = Math.Max(130, Math.Min(232, ActualHeight - 450)); heroTitle.FontSize = ActualHeight < 600 ? 29 : 37; } };
@@ -364,7 +364,15 @@ namespace Troika.Desktop {
         private void RenderAccountDetails(string email, Dictionary<string, object> subscription) {
             int account = panelContent.Children.Count; panelContent.Children.Add(Label(email, 14, muted)); Gap();
             var plan = Json.Text(subscription, "plan"); panelContent.Children.Add(Label(plan.Length == 0 ? "Тариф недоступен" : char.ToUpper(plan[0]) + plan.Substring(1), 24, text));
-            if (Json.Flag(subscription, "quota_enforced")) { panelContent.Children.Add(Label("Осталось " + Json.Text(subscription, "remaining") + " из " + Json.Text(subscription, "daily_limit") + " запросов сегодня", 13, muted)); DateTime resets; if (DateTime.TryParse(Json.Text(subscription, "resets_at"), out resets)) panelContent.Children.Add(Label("Обновление: " + resets.ToLocalTime().ToString("d MMM, HH:mm"), 12, muted)); }
+            if (Json.Flag(subscription, "resource_enforced")) {
+                panelContent.Children.Add(Label("Осталось " + Json.Text(subscription, "remaining") + " расчётных AI-токенов", 13, muted));
+                panelContent.Children.Add(Label("Использовано: " + Json.Text(subscription, "spent") + " · В резерве: " + Json.Text(subscription, "reserved"), 12, muted));
+                DateTime resets; if (DateTime.TryParse(Json.Text(subscription, "resets_at"), out resets)) panelContent.Children.Add(Label("Обновление: " + resets.ToLocalTime().ToString("d MMM, HH:mm"), 12, muted));
+                panelContent.Children.Add(Label("Контекст, история, ответ и облачный голос входят в общий ресурс. Локальные команды бесплатны.", 12, muted));
+                AddPanelButton("Расход последних операций", () => ShowResourceDetails(subscription), false);
+            } else panelContent.Children.Add(Label("Месячный учёт AI-токенов ещё не включён. Баланс появится после подключения всех расходов.", 12, muted));
+            if (Json.Flag(subscription, "byok_enabled")) AddPanelButton("Свой API-ключ", ShowOwnApi, false);
+            AddBillingOptions(Json.Flag(subscription, "billing_enabled") && !Json.Flag(subscription, "billing_test"), Json.Flag(subscription, "verification_enabled"));
             SurfaceGroup(account, "Аккаунт и тариф", "", "profile"); int settings = panelContent.Children.Count;
             Check("Озвучивать ответы", autoSpeak, value => { autoSpeak = value; SaveSettings(); }); Check("Закрепить поверх окон", Topmost, value => { Topmost = value; SaveSettings(); }); Check("Меньше анимации", reducedMotion, value => { reducedMotion = value; orb.Motion = !value && SystemParameters.ClientAreaAnimation; orb.SetState(orb.State); SaveSettings(); });
             SurfaceGroup(settings, "На этом компьютере", "Голос и поведение окна", "home"); AddAppearanceSettings();

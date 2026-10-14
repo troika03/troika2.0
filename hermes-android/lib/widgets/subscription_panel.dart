@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../config/troika_config.dart';
 import '../services/subscription_usage.dart';
 import '../services/troika_api_service.dart';
+import 'billing_panel.dart';
+import 'own_api_panel.dart';
 
 /// Shows server-owned usage; never substitutes cached or invented allowances.
 class SubscriptionPanel extends StatefulWidget {
@@ -125,6 +127,8 @@ class _SubscriptionPanelState extends State<SubscriptionPanel>
               const SizedBox(height: 8),
               TextButton(onPressed: _load, child: const Text('Повторить')),
             ],
+            if (widget.load == null) const BillingPanel(),
+            if (widget.load == null) const OwnApiPanel(),
             if (value == null && _error == null)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 16),
@@ -142,6 +146,33 @@ class SubscriptionUsageView extends StatelessWidget {
 
   const SubscriptionUsageView({super.key, required this.subscription});
 
+  Widget _operationDetails(Map<String, dynamic> operation) {
+    final usage =
+        operation['usage'] is Map ? operation['usage'] as Map : const {};
+    final tokens = usage['tokens'] is Map ? usage['tokens'] as Map : null;
+    final service =
+        usage['service_usage'] is Map ? usage['service_usage'] as Map : null;
+    final charged = operation['charged_tokens'];
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(charged == null
+          ? 'Расход уточняется · резерв ${operation['reserved_tokens']} AI-токенов'
+          : 'Списано $charged расчётных AI-токенов'),
+      if (service?['tokens_upper_bound'] == 1)
+        Text('Бесплатная модель передала разные счётчики: '
+            'ответ ${service!['reported_completion_tokens']}, '
+            'рассуждения ${service['reported_reasoning_tokens']}. '
+            'Общее число — верхняя оценка. Вход и ответ учитываются без повторного сложения рассуждений.'),
+      if (tokens != null && service?['tokens_upper_bound'] != 1)
+        Text('Токены модели: вход ${tokens['input_tokens']}, '
+            'cache ${tokens['cache_read_tokens']}, cache write ${tokens['cache_write_tokens']}, ответ ${tokens['output_tokens']}. '
+            'Reasoning ${tokens['reasoning_tokens']} уже входит в ответ.'),
+      if (service != null)
+        Text('Расход по коэффициентам: ${service['cost_rub']} ₽ · '
+            '${service['units']} ${service['unit'] == 'seconds' ? 'секунд' : service['unit'] == 'characters' ? 'символов' : 'токенов модели'}'),
+      Text('Версия коэффициентов: ${operation['pricing_version']}'),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -155,8 +186,18 @@ class SubscriptionUsageView extends StatelessWidget {
       _ => value.plan,
     };
     final reset = value.resetsAt?.toLocal();
+    if (!value.resourceEnforced) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 16),
+        child: Text(
+            'Тройка $plan. Месячный учёт AI-токенов ещё не включён. '
+            'Текущий баланс станет доступен после подключения учёта всех расходов. '
+            'История, память и сохранённые файлы доступны.',
+            style: TextStyle(color: colors.onSurfaceVariant, height: 1.4)),
+      );
+    }
     final resetLabel = reset == null
-        ? 'Лимит обновляется ежедневно в 00:00 UTC'
+        ? 'Дата обновления уточняется на сервере'
         : 'Обновление ${reset.day.toString().padLeft(2, '0')}.'
             '${reset.month.toString().padLeft(2, '0')} в '
             '${reset.hour.toString().padLeft(2, '0')}:'
@@ -185,19 +226,22 @@ class SubscriptionUsageView extends StatelessWidget {
                     )),
             Padding(
               padding: const EdgeInsets.only(bottom: 4),
-              child: Text('из ${value.dailyLimit} AI-запросов осталось',
+              child: Text('расчётных AI-токенов осталось',
                   style: TextStyle(color: colors.onSurfaceVariant)),
             ),
           ],
         ),
         const SizedBox(height: 12),
         Semantics(
-          label: 'Использовано ${value.used} из ${value.dailyLimit} запросов',
+          label:
+              'Использовано ${value.used}, в резерве ${value.reserved} AI-токенов',
           child: ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
-              value: value.dailyLimit > 0
-                  ? (value.used / value.dailyLimit).clamp(0.0, 1.0)
+              value: value.remaining + value.used + value.reserved > 0
+                  ? ((value.used + value.reserved) /
+                          (value.remaining + value.used + value.reserved))
+                      .clamp(0.0, 1.0)
                   : 0,
               minHeight: 6,
               color: exhausted ? colors.error : colors.primary,
@@ -206,10 +250,21 @@ class SubscriptionUsageView extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        Text('Сегодня использовано: ${value.used}',
+        Text('Использовано: ${value.used} · В резерве: ${value.reserved}',
             style: TextStyle(color: colors.onSurfaceVariant)),
         const SizedBox(height: 4),
         Text(resetLabel, style: TextStyle(color: colors.onSurfaceVariant)),
+        if (value.operations.isNotEmpty)
+          ExpansionTile(
+            title: const Text('Расход последних операций'),
+            tilePadding: EdgeInsets.zero,
+            children: [
+              for (final operation in value.operations.take(5))
+                Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: _operationDetails(operation))
+            ],
+          ),
         if (!value.quotaEnforced) ...[
           const SizedBox(height: 12),
           Text('Ограничение отключено на сервере. Остаток справочный.',
@@ -217,14 +272,16 @@ class SubscriptionUsageView extends StatelessWidget {
         ],
         if (exhausted) ...[
           const SizedBox(height: 12),
-          Text('Дневной AI-лимит исчерпан',
+          Text('AI-токены исчерпаны. Данные и локальные команды доступны.',
               style: TextStyle(color: colors.error)),
         ],
         const SizedBox(height: 20),
         Divider(color: colors.outlineVariant.withValues(alpha: 0.5)),
         const SizedBox(height: 12),
         Text(
-            'Локальные команды не расходуют AI-лимит. '
+            'В ресурс входят контекст, история, инструменты, ответ и облачный голос. '
+            'Неиспользованный резерв возвращается после подтверждения расходов. '
+            'Локальные команды не расходуют AI-токены. '
             'История, память и сохранённые файлы остаются доступны.',
             style: TextStyle(color: colors.onSurfaceVariant, height: 1.4)),
       ],

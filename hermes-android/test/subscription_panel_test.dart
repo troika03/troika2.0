@@ -14,6 +14,8 @@ AccountSubscription usage({int remaining = 4}) => AccountSubscription(
       used: 5 - remaining,
       remaining: remaining,
       quotaEnforced: true,
+      resourceEnforced: true,
+      monthlyLimit: 5,
       resetsAt: DateTime.utc(2026, 10, 8),
     );
 
@@ -52,7 +54,9 @@ void main() {
     expect(find.text('4'), findsOneWidget);
     subscriptionUsageRevision.value++;
     await tester.pumpAndSettle();
-    expect(find.text('Дневной AI-лимит исчерпан'), findsOneWidget);
+    expect(
+        find.text('AI-токены исчерпаны. Данные и локальные команды доступны.'),
+        findsOneWidget);
     await tester.tap(find.byTooltip('Обновить лимиты'));
     await tester.pumpAndSettle();
     expect(find.text('Нет соединения'), findsOneWidget);

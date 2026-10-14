@@ -61,6 +61,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        OwnProviderSession.attach(flutterEngine)
         DevelopmentCheckBridge(this, flutterEngine)
         FlutterEngineCache.getInstance().put("main_engine", flutterEngine)
 

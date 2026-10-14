@@ -1,6 +1,6 @@
 # Troika: текущая память проекта
 
-Обновлено 2026-10-13. Краткий рабочий срез; история находится в Git и
+Обновлено 2026-10-14. Краткий рабочий срез; история находится в Git и
 [архиве](docs/archive/README.md). Результаты проверок и дефекты хранятся в
 [аудите функций](docs/TROIKA_FUNCTIONAL_AUDIT.md), без дублирования здесь.
 
@@ -20,7 +20,7 @@
 - [Word-план](docs/Troika_1.0_Launch_Plan_Final_Updated.docx) — authority для scope/UX/цен/DoD. Порядок разделов 1–20 сохраняется; section 20 — release summary.
 - Troika 1.0 — voice-first Android/Windows, текст вторичен. Результат важнее перечисления tools.
 - Hosted subscription без model keys у обычного пользователя; BYOK/diagnostics — developer/Advanced scope.
-- 12 октября владелец согласовал Free 500 000, Plus 5 000 000 за 790 ₽/месяц и Pro 10 000 000 за 1 490 ₽/месяц расчётных AI-токенов. Один миллион соответствует максимум 30 ₽ переменных расходов. Welcome 1 000 000 на 14 дней после верификации; докупка 1 000 000 за 99 ₽ на 90 дней. Состав функций и правила сохранены в `docs/TROIKA_SUBSCRIPTION_ECONOMICS.md`, дополняющем раздел 8 Word-плана. Разработка разрешена. Production пока использует прежний дневной guard; billing и подключение месячного ресурса к реальным вызовам ещё не готовы.
+- 12 октября согласованы Free 500 000, Plus 5 млн за 790 ₽ и Pro 10 млн за 1 490 ₽/месяц. 14 октября уточнено: корпоративная бесплатная модель списывает prompt + completion; личный API пользователя не списывает токены подписки за модель. Месячный runtime и личный API включены; оплату и почту владелец отложил. Состав и ограничения сохранены в docs/TROIKA_SUBSCRIPTION_ECONOMICS.md.
 - Фоновое локальное пробуждение «Тройка» — P0 Android; OEM/Bluetooth/standby/expiry требуют E2E.
 - Данные принадлежат аккаунту. Сервер — основная копия; выбрано автоматическое восстановление после входа, а не невосстановимое E2EE. Production stores/backups должны шифроваться at rest.
 - Единый Run/Task/Worker runtime с до трёх specialist workers — целевая архитектура; текущий agent loop ещё не закрывает весь этот scope.
@@ -66,81 +66,65 @@ FCM/push отсутствуют. Наличие кода refresh не закры
 approval, sources, receipts и device file delivery сохранены. Legacy media
 tools с общим phone bridge исключены из ordinary product; проверенные
 возможности сохранены. Детали и проверки: `docs/TROIKA_CAPABILITIES_AUDIT_20261008.md`.
-Серверная часть каталога развёрнута 2026-10-08 поверх текущего development API.
-Новый образ — `troika-production:capabilities-20261008`; добавлены 12 runtime
-файлов и закреплённые зависимости JSON Schema. Серверные исправления разработки
-сохранены. Пересоздан только API через production Compose; STT и SearXNG не менялись.
-В отдельном контейнере прошли 25 тестов. Live HTTP: health 200, каталог 200
-с девятью разделами, без авторизации 401; настройки сохраняются и изолированы
-по аккаунтам, неверный patch отклоняется. Временные аккаунты удалены.
-На телефоне каталог в момент проверки не был открыт; его загрузка на устройстве
-и фактические provider usage ещё требуют проверки. Детали:
+Каталог входит в текущий production API. Исторические проверки каталога:
 `docs/audit/CAPABILITIES_DEPLOYMENT_2026_10_08.md`.
 
-Текущий APK на Samsung SM-A225F — release сборка с обновлёнными вторичными
-карточками, установленная 2026-10-12 через `adb install -r`, без сброса данных:
-`work/glass-design/Troika-2026-10-12.apk` (114 810 601 байт).
-SHA-256 установленного base.apk совпадает:
-`0de9cef65d108595273b9dba1aabe41538e08214595e37f9bc2ac42661a3e959`.
-Версия 1.0.0+1, прежняя Android Debug key, MainActivity уже работает.
-Сборка содержит актуальные native reminder правки другой сессии; они не
-включены в commit оформления и не объявляются проверенными этой задачей.
-APK считана с телефона и проверена по SHA-256; запуск успешен, процесс остаётся
-активным, crash buffer не содержит падений этого процесса. UID приложения и
-дата первой установки не изменились. Полный voice/reminder/file E2E не закрыт.
+Текущий Android APK установлен 14 октября на Samsung SM-A225F без сброса данных:
+`_logs/resource-20261013/Troika-subscriptions-2026-10-14.apk`, 115 406 669 байт,
+SHA-256 `cda823a142f86fba38d71601f761d360faa404326ec9ead85f6ea403233c931e`.
+Подпись, UID и первая дата установки прежние; установленный hash совпадает.
+На телефоне открыты действующий месячный ресурс и форма «Свой API-ключ».
+Пользовательский ключ не вводился. Device build сохраняет native/reminder WIP
+другой задачи; этот WIP не включён в commit подписки. Полный phone voice/reminder
+E2E не объявляется завершённым.
 
-## Реальная среда на 2026-10-08
+## Реальная среда на 2026-10-14
 
-Production API использует `troika-production:capabilities-20261008`
-(добавочный слой поверх `development-20261008`, с сохранением runtime fixes), STT —
-`troika-production:bf92c78`; API healthy;
-`https://api.zhulebino-teahouse.ru/health` отвечает 200. Deployment path:
-`deploy/production/compose.yaml`. API опубликован через loopback 8765/Nginx;
-STT — private Docker network. ОС/TLS foundation существуют; остальная
-production готовность не закрыта.
+API: `troika-production:resource-context-20261014-api`, STT:
+`troika-production:resource-personal-20261014-stt`. API healthy, публичный HTTPS
+работает. Путь deployment прежний: `deploy/production/compose.yaml`, отдельные
+API/STT tags сохранены в серверном `resource-images.env`; config общий read-only.
+Месячный ресурс включён, прежний дневной guard подписки заменён; rate limit
+остаётся. Merchant, почта, checkout и verification выключены.
+Два существующих Pro получили операторскую beta-выдачу по 10 млн до 14 ноября;
+платежи/intents не создавались, данные и старые остатки не сбрасывались.
 
-Живой quota smoke подтвердил: Free-запрос принят, расход 1/1 виден в
-`/v1/subscription`; повторные `/v1/runs` и `/v1/chat/completions` возвращают
-429 с `daily_request_limit_exceeded`, остатком, `resets_at` и `Retry-After`.
-Доступ к списку устройств после исчерпания сохранён; временный аккаунт удалён.
-Существующие entitlements не изменены: при диагностике Free имел 1 запрос/сутки,
-Pro — 10 000. Это временный дневной guard, не защита себестоимости подписки.
-2026-10-08 по прямому запросу владельца одному существующему активному аккаунту
-вручную выдан Pro с лимитом 10 000 запросов/сутки через `set_entitlement`.
-Тариф и лимит повторно проверены в production; текущий расход не сбрасывался.
-Новый профиль показывает тариф, расход, остаток и локальное время обновления,
-обновляется после облачного запроса/возврата приложения и раз в минуту;
-ошибка загрузки скрывает устаревший остаток. Светлая/тёмная темы просмотрены.
-Целевые Python: 355 passed, 1 skipped в текущем checkout, включая 9 тестов
-незавершённой работы с напоминаниями. Собственные quota/access tests — 41 passed.
-Изолированный клиент с этим исправлением: 74 passed, 2 skips; analyze —
-0 errors/warnings, 38 info. Android debug/release и Windows debug собраны из
-изолированного клиента; profile/limits включены в текущую общую APK.
-Установленный E2E лимитов и native/reminder правок требует отдельной проверки.
-Прежнее предложение 300/3 000/6 000 credits заменено согласованной 12 октября
-политикой расчётных токенов. Добавлены `subscription_policy.py` и
-`resource_ledger.py`: общий транзакционный резерв, списание, идемпотентность,
-периоды, бонус/докупка, предметные квоты и export/delete. Считать весь input,
-включая сообщённый владельцем overhead 2–7 тыс. токенов на простое приветствие.
-Добавлен staged text adapter: основные и центральные auxiliary SDK calls,
-sync/async streaming, account/Run scope в runtime и workers, фактический полный
-input/cache/reasoning и остановка повторов при неизвестном расходе. Проверки:
-Подготовленный Git tree без чужого WIP: 497 passed, 0 failed в девяти файлах,
-включая 46 adapter, 13 runtime/hosted и 176 legacy auxiliary checks;
-313 product и 31 ledger checks
-первого этапа passed. Ruff и compileall passed. Флаг выключен, production
-сохраняет прежний дневной guard. Native/voice/vision/paid tools, reconciliation,
-concurrency, оценка/approval бюджета, API/UI, anti-abuse/global Free budget
-и billing ещё открыты. Доказательства и границы —
-`docs/audit/RESOURCE_LEDGER_2026_10_12.md` и
-`docs/audit/LLM_RESOURCE_METERING_2026_10_12.md`.
-Общий default Python 12 октября: 1 246 файлов. Первый прогон оборвался без
-summary после результатов 940 файлов (частичный счётчик 18 462 passed,
-306 failed); остальные 306 дали полный summary 6 894 passed, 124 failed.
-Обёртка остатка получила KeyboardInterrupt после summary, успешный exit не
-заявляется. Это покрытие файлов двух запусков общего checkout; baseline
-красный. Регрессия экрана настроек от новых defaults исправлена, восемь schema
-checks прошли. Состав и ограничения — в аудите учёта LLM.
+Прежние request/credit предложения заменены месячным AI-ресурсом. Через ключ
+Тройки Free-модель расходует полный prompt + completion, в том числе cache,
+history/memory/tools; reasoning не прибавляется повторно. Платные модели
+учитываются по операторским коэффициентам. Reserve возвращается после сверки;
+неизвестный расход сохраняется без автоматического повтора.
+
+Личный API поддержан в Android/WPF и всех основных/auxiliary Chat SDK вызовах.
+Его ключ и выбранная модель заменяют корпоративные SDK; токены подписки за
+модель не списываются, в том числе при исчерпании баланса. Ошибка личного API
+не допускает корпоративный fallback. Права тарифа/concurrency сохраняются;
+платный голос сервиса учитывается отдельно. Android хранит key в RAM, режим и
+модель — на устройстве; после restart требуется key, а не молчаливый переход
+на корпоративный API. Native voice также проверяет личный режим. WPF хранит
+key через DPAPI CurrentUser отдельно для аккаунта. Сервер не сохраняет его.
+
+Есть whole-Run квоты, concurrency 1/1/3 с heartbeat, бюджет/approval, Groq STT,
+Edge TTS, bounded SDK vision, subscription details, export/delete. Старый Edge
+403 исправлен обновлением до 7.3.1; M4A проверяется в RAM через PyAV 17.
+Free/Welcome фонд 13 333 333 вместе с 20 млн существующей beta-выдачи сохраняет
+начальный бюджет до 1 000 ₽ по коэффициенту. Автоматический фонд от выручки
+не завершён. Checkout/канонические refunds и SMTP/HMAC есть в коде, flags false.
+
+Свежие целевые Python: 822 passed, 0 failed в 32 файлах; Flutter 101 passed,
+2 skips; WPF 44 checks/build; анализ 0 errors/warnings, 46 info. В public HTTPS
+обычные Free обращения после сокращения списали 6 303 токена; личный режим 0, ошибочный ключ
+409 без corporate fallback. Временный аккаунт удалён. Voice/двухустройственный
+баланс и исчерпание/export проверены отдельно на том же resource runtime.
+Общий старый default прогон остаётся красным/неполным и не выдаётся за full
+pass финального кода. Доказательства, APK и незавершённые критерии продажи:
+`docs/audit/SUBSCRIPTION_RUNTIME_2026_10_13.md`, `docs/development/SUBSCRIPTION_SETUP.md`.
+
+На сервере подтверждены две схемы каталога, без automatic skill list и
+pre_llm_call context hooks. Сокращение входа включено: полный раздел разработки перенесён из постоянной личности
+в discovery development. Локально cl100k_base: 3 303 до 2 674 токенов,
+без изменения личности, памяти и истории. Это не весь prompt и не счётчик
+провайдера. План дальнейшего сжатия: docs/development/INPUT_TOKEN_PLAN.md.
 
 На production единственный загруженный поисковый provider — SearXNG
 2026.10.4-d48c4b555, закреплённый digest в Compose. Сервис доступен только

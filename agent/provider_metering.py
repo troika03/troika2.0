@@ -84,6 +84,9 @@ def wrap_provider_client(client, *, provider=None, async_mode=False):
             return client
         client = client._original
     # Hidden SDK retries would send several billable attempts under one hold.
+    prepare = getattr(guard, "prepare_client", None)
+    if prepare is not None:
+        client = prepare(client, async_mode=async_mode)
     if getattr(client, "max_retries", None) != 0:
         raise ProviderCallBlocked(
             "unmetered_sdk_retries",

@@ -12,13 +12,13 @@ $sources = Get-ChildItem -LiteralPath (Join-Path $root 'src') -Filter '*.cs' | F
 if ($LASTEXITCODE -ne 0) { throw 'Desktop build failed.' }
 Copy-Item -LiteralPath (Join-Path $root 'TroikaDesktop.exe.config') -Destination $output -Force
 if ($Test) {
-    $testSources = @('Json.cs','ApiClient.cs','LocalStore.cs','Voice.cs','Development.cs','DevelopmentRelay.cs','DevelopmentWorkflow.cs') | ForEach-Object { Join-Path $root ('src\' + $_) }
+    $testSources = @('OwnApi.cs','Json.cs','ApiClient.cs','LocalStore.cs','Voice.cs','Development.cs','DevelopmentRelay.cs','DevelopmentWorkflow.cs') | ForEach-Object { Join-Path $root ('src\' + $_) }
     $testSources += Join-Path $root 'tests\DesktopTests.cs'
     & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'DesktopTests.exe')) $references $testSources
     if ($LASTEXITCODE -ne 0) { throw 'Test build failed.' }
     & (Join-Path $output 'DesktopTests.exe')
     if ($LASTEXITCODE -ne 0) { throw 'Desktop tests failed.' }
-    $capabilityTestSources = @('Json.cs','ApiClient.cs','CapabilityCatalogueService.cs') | ForEach-Object { Join-Path $root ('src\' + $_) }
+    $capabilityTestSources = @('OwnApi.cs','LocalStore.cs','Json.cs','ApiClient.cs','CapabilityCatalogueService.cs') | ForEach-Object { Join-Path $root ('src\' + $_) }
     $capabilityTestSources += Join-Path $root 'tests\CapabilityCatalogueTests.cs'
     & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'CapabilityCatalogueTests.exe')) $references $capabilityTestSources
     if ($LASTEXITCODE -ne 0) { throw 'Capability catalogue test build failed.' }
@@ -29,5 +29,15 @@ if ($Test) {
     if ($LASTEXITCODE -ne 0) { throw 'Appearance test build failed.' }
     & (Join-Path $output 'DesktopAppearanceTests.exe')
     if ($LASTEXITCODE -ne 0) { throw 'Appearance tests failed.' }
+    & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'BillingTests.exe')) ('/reference:' + (Join-Path $output 'TroikaDesktop.exe')) $references (Join-Path $root 'tests\BillingTests.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Billing test build failed.' }
+    & (Join-Path $output 'BillingTests.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'Billing tests failed.' }
+}
+if ($Test) {
+    & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'OwnApiTests.exe')) ('/reference:' + (Join-Path $output 'TroikaDesktop.exe')) $references (Join-Path $root 'tests\OwnApiTests.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Personal API test build failed.' }
+    & (Join-Path $output 'OwnApiTests.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'Personal API tests failed.' }
 }
 Write-Output ('Built: ' + (Join-Path $output 'TroikaDesktop.exe'))

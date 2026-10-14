@@ -1,6 +1,6 @@
 # Troika 1.0: трекер реализации
 
-Обновлено 2026-10-13. Требования: [главный Word-план](Troika_1.0_Launch_Plan_Final_Updated.docx),
+Обновлено 2026-10-14. Требования: [главный Word-план](Troika_1.0_Launch_Plan_Final_Updated.docx),
 решение от 6 октября в [основном плане ремонта](../PRODUCTIZATION_PLAN.md)
 и [политика подписки](TROIKA_SUBSCRIPTION_ECONOMICS.md), согласованная 12 октября.
 Проверки и дефекты: [аудит функций](TROIKA_FUNCTIONAL_AUDIT.md).
@@ -26,7 +26,7 @@ installed-client E2E или релизной готовности. `[-]` — ч�
 | 5. Android | [-] | UI и голос реализованы, прежние Samsung проверки сохранены. Фоновый native refresh access token и свежий reminder/standby E2E не закрыты. |
 | 6. Windows | [-] | Отдельный WPF-клиент: одно окно, compact/hotkey/allowlist, локальные файлы и проверки кода. Прежняя версия установлена; 13 октября новый source получил основной API-цикл записи файлов и ревью модели без выбора устройства, сборка и 31 функциональная/6 UI-проверок прошли. Обновление установленной версии, микрофон/воспроизведение, полный installed-client E2E, background reminders после закрытия и signed installer не закрыты. |
 | 7. Сайт и аккаунт | [-] | Сайт обновлён с фирменным оформлением; веб-вход/регистрация, кабинет, устройства, память, export/delete, D1-поддержка и R2-загрузки работают. 12 локальных и 32 hosted checks passed, файлы сверены по SHA-256. Доступ владельцу сохранён. Оплата, recovery/verification, реквизиты/legal и публичный запуск остаются открытыми. [Аудит](audit/WEBSITE_2026_10_13.md). |
-| 8. Billing/ресурс | [-] | Согласованы Free 500 тыс., Plus 5 млн, Pro 10 млн расчётных AI-токенов/месяц; добавлены политика, transactional ledger и staged text adapter основных/auxiliary SDK calls, включая streaming. Флаг выключен. Native/voice/vision/paid tools, reconciliation, concurrency, API/UI, billing, anti-abuse и миграция ещё нужны. Production сохраняет прежний дневной guard. Доказательства: [ядро](audit/RESOURCE_LEDGER_2026_10_12.md), [учёт LLM](audit/LLM_RESOURCE_METERING_2026_10_12.md). |
+| 8. Billing/ресурс | [-] | Месячный runtime и личный API включены 14 октября. Corporate Free: prompt + completion; личный ключ: 0 за модель без corporate fallback. Free 500 тыс., Plus 5 млн, Pro 10 млн; Run/voice/API/Android/WPF, две Pro beta-выдачи, public HTTPS E2E, APK установлен без сброса. Оплата/почта отложены; checkout/verification/refund в коде, flags false. До продаж остаются финансовые lifecycle/unknown bills/anti-abuse. [Проверки](audit/SUBSCRIPTION_RUNTIME_2026_10_13.md), [настройка](development/SUBSCRIPTION_SETUP.md). |
 | 9. Backend | [ ] | Auth, owner stores, runs и tools существуют; весь раздел ещё не принят. |
 | 10. Голос/память/runtime | [ ] | Есть текущий agent loop, completion receipts и общая opt-in автопамять с проверенной серверной синхронизацией; обновлённая APK установлена, сохранённый переключатель проверен на Samsung. Полный физический разговор Android/Windows и единый single/delegate/parallel/durable/verified Runtime не завершены. |
 | 11. Файлы | [ ] | Creation/download foundation есть; весь набор форматов, качество, edit/version и E2E ещё не принят. |

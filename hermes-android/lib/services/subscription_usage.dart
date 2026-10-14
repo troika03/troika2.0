@@ -6,6 +6,29 @@ import 'package:flutter/foundation.dart';
 final subscriptionUsageRevision = ValueNotifier<int>(0);
 
 String cloudRequestError(int status, String body) {
+  try {
+    final payload = jsonDecode(body) as Map<String, dynamic>;
+    final code = payload['error'] is Map ? payload['error']['code'] : null;
+    final message = switch (code) {
+      'monthly_resource_exhausted' =>
+        'Недостаточно AI-токенов. Остаток и обновление — в профиле. Локальные команды и данные доступны.',
+      'resource_usage_unknown' =>
+        'Расход вызова уточняется. Резерв сохранён; повтор временно остановлен.',
+      'resource_budget_approval_required' =>
+        'Достигнут предел расходов задачи. Продолжение требует подтверждения.',
+      'subscription_concurrency_exceeded' =>
+        'Сначала заверши текущую задачу на аккаунте.',
+      'subscription_feature_not_available' =>
+        'Эта функция недоступна на тарифе или её лимит исчерпан.',
+      'resource_price_unavailable' ||
+      'unmetered_provider_route' =>
+        'Учёт расходов этой функции ещё не подключён.',
+      'resource_price_change_requires_approval' =>
+        'Коэффициенты изменились внутри текущего периода. Новое списание остановлено до согласования.',
+      _ => null,
+    };
+    if (message != null) return message;
+  } catch (_) {}
   if (status == 429) {
     try {
       final payload = jsonDecode(body) as Map<String, dynamic>;

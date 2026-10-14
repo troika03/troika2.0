@@ -1741,6 +1741,23 @@ DEFAULT_CONFIG = {
                 # are enabled by an empty, server-owned price catalogue.
                 "product_resource_text_enabled": False,
                 "product_resource_prices": {},
+                "product_resource_enabled": False,
+                "product_byok_enabled": False,
+                "product_resource_services": {},
+                "product_resource_task_tokens": 250000,
+                "product_resource_approval_tokens": 100000,
+                "product_resource_subsidy_tokens": 33333333,
+                "product_billing_enabled": False,
+                "product_billing_return_url": "",
+                "product_billing_test": True,
+                "product_billing_shop_id": "",
+                "product_verification_enabled": False,
+                "product_verification_smtp_host": "",
+                "product_verification_smtp_port": 465,
+                "product_verification_smtp_ssl": True,
+                "product_verification_smtp_username": "",
+                "product_verification_sender": "",
+                "product_verification_reviewed_users": [],
             },
         },
     },
@@ -1982,6 +1999,15 @@ REQUIRED_ENV_VARS = {}
 
 # Optional environment variables that enhance functionality
 OPTIONAL_ENV_VARS = {
+    "TROIKA_SMTP_PASSWORD": {"description": "Password for Troika verification mail", "prompt": "SMTP password", "password": True, "category": "tool"},
+    "TROIKA_EMAIL_VERIFICATION_SECRET": {"description": "HMAC secret for Troika email verification", "prompt": "Email verification secret (32+ characters)", "password": True, "category": "tool"},
+    "YOOKASSA_SECRET_KEY": {
+        "description": "YooKassa merchant secret for hosted Troika payments",
+        "prompt": "YooKassa secret key",
+        "url": "https://yookassa.ru/my",
+        "password": True,
+        "category": "tool",
+    },
     # ── Provider (handled in provider selection, not shown in checklists) ──
     "NOUS_BASE_URL": {
         "description": "Nous Portal base URL override",

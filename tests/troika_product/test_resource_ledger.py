@@ -41,7 +41,7 @@ def reserve(ledger, principal, key="call", tokens=100_000, **kwargs):
     return ledger.reserve(
         principal,
         operation_key=key,
-        run_key="run",
+        run_key=kwargs.pop("run_key", "run"),
         kind="llm",
         tokens=tokens,
         pricing_version="test-v1",
@@ -205,17 +205,17 @@ def test_expired_month_cannot_leak_or_debit_next_month(account):
 def test_feature_cap_counts_pending_and_success_but_returns_failed_slot(account):
     _, ledger, principal = account
     holds = [
-        reserve(ledger, principal, key=str(i), tokens=1, feature="documents")
+        reserve(ledger, principal, key=str(i), run_key=str(i), tokens=1, feature="documents")
         for i in range(3)
     ]
     with pytest.raises(FeatureLimitExceeded):
-        reserve(ledger, principal, key="fourth", tokens=1, feature="documents")
+        reserve(ledger, principal, key="fourth", run_key="fourth", tokens=1, feature="documents")
     settle(ledger, principal, holds[0], charged=0, successful=False)
-    last = reserve(ledger, principal, key="replacement", tokens=1, feature="documents")
+    last = reserve(ledger, principal, key="replacement", run_key="replacement", tokens=1, feature="documents")
     for hold in (*holds[1:], last):
         settle(ledger, principal, hold, charged=1)
     with pytest.raises(FeatureLimitExceeded):
-        reserve(ledger, principal, key="fifth", tokens=1, feature="documents")
+        reserve(ledger, principal, key="fifth", run_key="fifth", tokens=1, feature="documents")
     assert ledger.summary(principal, now=NOW)["feature_usage"]["documents"] == 3
     fresh = ledger.reserve(
         principal,

@@ -1553,6 +1553,7 @@ class HermesListenerService : Service() {
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 // One random session identity per app installation; Flutter sends
                 // the same values so voice and text share only this user's history.
+                OwnProviderSession.headers(this@HermesListenerService, url, apiKey).forEach { (name, value) -> setRequestProperty(name, value) }
                 setRequestProperty("X-Hermes-Session-Key", resolvedSessionKey(prefs))
                 setRequestProperty("X-Hermes-Session-Id", resolvedSessionId(prefs))
                 // Контекст устройства для режима «где я» — Wi-Fi BSSID,

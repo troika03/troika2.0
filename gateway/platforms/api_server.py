@@ -955,6 +955,9 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             extra.get("product_resource_text_enabled", False)
         )
         self._product_resource_prices = extra.get("product_resource_prices", {})
+        self._product_resource_enabled = _coerce_config_bool(extra.get("product_resource_enabled", False))
+        self._product_resource_config = extra
+        self._billing_notifications = asyncio.Semaphore(4)
         self._product_voice_enabled = _coerce_config_bool(
             extra.get(
                 "product_voice_enabled",
@@ -1400,6 +1403,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         """Reserve one paid/beta request before starting agent work."""
         if self._access_registry is None or not self._product_quotas_enabled:
             return None
+        if self._product_resource_enabled:
+            return None
         principal = self._product_principal(request)
         if principal is None:
             return web.json_response(
@@ -1504,6 +1509,13 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             principal = self._access_registry.authenticate(token)
             if principal is not None:
                 request["troika_product_principal"] = principal
+                from troika_product.own_provider import bind_request
+                from agent.provider_metering import ProviderCallBlocked
+                try:
+                    bind_request(request.headers, enabled=self._product_resource_config.get("product_byok_enabled"))
+                except ProviderCallBlocked as error:
+                    from troika_product.service_metering import resource_error_response
+                    return resource_error_response(error)
                 return None
         elif not self._api_key:
             return None  # No key configured — allow all (local-only use)
@@ -1807,10 +1819,13 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         from contextlib import contextmanager
         from agent.provider_metering import ProviderCallBlocked, provider_metering_scope
 
+        from troika_product.own_provider import current_credentials
+        own_credentials = current_credentials()
+
         @contextmanager
         def scope():
             meter = None
-            if self._product_resource_text_enabled:
+            if self._product_resource_text_enabled or self._product_resource_enabled:
                 if principal is None or self._access_registry is None:
                     raise ProviderCallBlocked("resource_identity_required", "Для учёта ресурса нужен подтверждённый аккаунт.")
                 from troika_product.llm_metering import LLMMeter, PriceCatalogue
@@ -1821,8 +1836,24 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                     run_key=run_key,
                     catalogue=PriceCatalogue.from_config(self._product_resource_prices),
                 )
+                if self._product_resource_enabled:
+                    from troika_product.billing import BillingService
+                    BillingService(self._access_registry, None).refresh(principal)
+                    from troika_product.resource_runtime import ResourceRuntime
+                    if own_credentials is not None:
+                        from troika_product.own_provider import OwnProviderRuntime
+                        meter = OwnProviderRuntime(self._access_registry, principal, run_key=run_key,
+                                                   config=self._product_resource_config, credentials=own_credentials)
+                    else:
+                        meter = ResourceRuntime(self._access_registry, principal, run_key=run_key,
+                                                config=self._product_resource_config)
+                    meter.start()
             with provider_metering_scope(meter):
-                yield
+                try:
+                    yield
+                finally:
+                    if self._product_resource_enabled and meter is not None:
+                        meter.finish()
 
         return scope()
 
@@ -1875,6 +1906,14 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         # Load fallback provider chain so the API server platform has the
         # same fallback behaviour as Telegram/Discord/Slack (fixes #4954).
         fallback_model = GatewayRunner._load_fallback_model()
+        from agent.provider_metering import current_provider_guard
+        own = getattr(current_provider_guard(), "credentials", None)
+        if own is not None:
+            from troika_product.own_provider import ENDPOINTS
+            model = own.model
+            runtime_kwargs.update(api_key=own.key, provider=own.provider,
+                                  base_url=ENDPOINTS[own.provider], api_mode="chat_completions")
+            fallback_model = None
 
         agent = AIAgent(
             model=model,
@@ -2148,6 +2187,13 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             )
         try:
             subscription = self._access_registry.subscription_summary(principal)
+            if self._product_resource_enabled:
+                from troika_product.billing import BillingService
+                BillingService(self._access_registry, None).refresh(principal)
+                from troika_product.resource_runtime import configured_ledger
+                subscription = {**subscription,
+                                **configured_ledger(self._access_registry, self._product_resource_config).summary(principal),
+                                "resource_enforced": True}
         except PermissionError:
             return web.json_response(
                 _openai_error("Product authentication is required"), status=401
@@ -2156,15 +2202,133 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             return web.json_response(
                 _openai_error("Subscription status is unavailable"), status=503
             )
+        try:
+            billing = self._billing_service()
+            subscription.update(billing_enabled=True, billing_test=billing.provider.test)
+        except ValueError:
+            subscription.update(billing_enabled=False, billing_test=True)
         return web.json_response(
             {
                 "subscription": {
                     **subscription,
-                    "quota_enforced": self._product_quotas_enabled,
+                    "quota_enforced": self._product_resource_enabled or self._product_quotas_enabled,
+                    "verification_enabled": self._product_resource_config.get("product_verification_enabled") is True,
+                    "byok_enabled": self._product_resource_config.get("product_byok_enabled") is True,
                 }
             },
             headers={"Cache-Control": "private, no-store"},
         )
+
+    async def _handle_email_verification(self, request):
+        error = self._check_auth(request)
+        if error is not None:
+            return error
+        principal = self._product_principal(request)
+        if principal is None:
+            return web.json_response({"error": "Product authentication required"}, status=401)
+        try:
+            from troika_product.verification import VerificationService
+            service = VerificationService.from_config(self._access_registry, self._product_resource_config)
+            action = request.match_info.get("action", "")
+            if request.method == "GET":
+                result = service.status(principal)
+            elif action == "request":
+                result = await service.request(principal)
+            elif action == "welcome":
+                result = service.claim_welcome(principal)
+            elif action == "confirm":
+                body = await request.json()
+                result = service.confirm(principal, identifier=body.get("id"), code=body.get("code"))
+            else:
+                raise ValueError("unknown verification action")
+            return web.json_response(result, headers={"Cache-Control": "private, no-store"})
+        except PermissionError:
+            return web.json_response({"error": "Verification access denied"}, status=403)
+        except (ValueError, TypeError):
+            return web.json_response({"error": "Verification unavailable or confirmation invalid"}, status=400)
+        except Exception:
+            return web.json_response({"error": "Verification email delivery unavailable"}, status=503)
+
+    def _billing_service(self):
+        if not self._product_resource_enabled or self._access_registry is None:
+            raise ValueError("monthly resource accounting is not enabled")
+        from troika_product.billing import BillingService
+        return BillingService.from_config(self._access_registry, self._product_resource_config)
+
+    async def _handle_billing_catalogue(self, request):
+        error = self._check_auth(request)
+        if error is not None:
+            return error
+        from troika_product.billing import SKUS
+        try:
+            service = self._billing_service()
+            enabled, test = True, service.provider.test
+        except ValueError:
+            enabled, test = False, True
+        return web.json_response({"enabled": enabled, "test": test, "automatic_renewal": False,
+                                  "verification_enabled": self._product_resource_config.get("product_verification_enabled") is True,
+                                  "offers": [{"sku": sku, "price_rub": price, "tokens": tokens,
+                                              "days": 90 if sku == "top_up" else None}
+                                             for sku, (price, tokens) in SKUS.items()]},
+                                 headers={"Cache-Control": "private, no-store"})
+
+    async def _handle_billing_checkout(self, request):
+        error = self._check_auth(request)
+        if error is not None:
+            return error
+        principal = self._product_principal(request)
+        if principal is None:
+            return web.json_response({"error": "Product authentication required"}, status=401)
+        try:
+            body = await request.json()
+            result = await self._billing_service().checkout(principal, sku=body.get("sku"),
+                                                            key=body.get("idempotency_key"))
+            return web.json_response(result, headers={"Cache-Control": "private, no-store"})
+        except PermissionError:
+            return web.json_response({"error": "Payment account unavailable"}, status=403)
+        except (ValueError, TypeError):
+            return web.json_response({"error": "Payment unavailable or invalid selection"}, status=400)
+        except Exception:
+            return web.json_response({"error": "Payment needs reconciliation; reuse the same payment key"}, status=503)
+
+    async def _handle_billing_status(self, request):
+        error = self._check_auth(request)
+        if error is not None:
+            return error
+        try:
+            status = self._billing_service().status(self._product_principal(request), request.match_info["intent_id"])
+            return web.json_response(status, headers={"Cache-Control": "private, no-store"})
+        except PermissionError:
+            return web.json_response({"error": "Payment unavailable"}, status=404)
+        except ValueError:
+            return web.json_response({"error": "Billing unavailable"}, status=503)
+
+    async def _handle_billing_webhook(self, request):
+        # No caller-provided payment status is accepted. Unknown IDs never
+        # trigger a provider request, so public notifications cannot enumerate it.
+        try:
+            raw = await request.content.read(16385)
+            if len(raw) > 16384:
+                return web.json_response({"error": "Notification too large"}, status=413)
+            body = json.loads(raw)
+            if body.get("event") not in {"payment.succeeded", "refund.succeeded"}:
+                return web.json_response({"ok": True})
+            payment_id = body.get("object", {}).get("id")
+            if not isinstance(payment_id, str) or not 1 <= len(payment_id) <= 64:
+                raise ValueError("invalid payment ID")
+            service = self._billing_service()
+            if self._billing_notifications.locked():
+                return web.json_response({"error": "Reconciliation busy"}, status=429)
+            async with self._billing_notifications:
+                if body["event"] == "refund.succeeded":
+                    await service.reconcile_refund(payment_id)
+                else:
+                    await service.reconcile(payment_id)
+            return web.json_response({"ok": True})
+        except (ValueError, TypeError):
+            return web.json_response({"error": "Invalid notification or billing unavailable"}, status=400)
+        except Exception:
+            return web.json_response({"error": "Payment reconciliation temporarily unavailable"}, status=503)
 
     async def _handle_revoke_account_device(
         self, request: "web.Request"
@@ -3265,7 +3429,13 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                         headers=headers, allow_redirects=False,
                     ) as response:
                         if response.status != 200:
-                            status = response.status if response.status in {400, 401, 403, 413, 503, 504} else 502
+                            status = response.status if response.status in {400, 401, 403, 409, 413, 429, 503, 504} else 502
+                            if status in {409, 429}:
+                                failure = await response.content.read(8193)
+                                if len(failure) <= 8192:
+                                    parsed = json.loads(failure)
+                                    if isinstance(parsed.get("error"), dict) and str(parsed["error"].get("code", "")).startswith(("resource_", "monthly_resource_")):
+                                        return web.json_response(parsed, status=status)
                             return web.json_response({"error": "Speech recognition unavailable"}, status=status)
                         body = bytearray()
                         async for chunk in response.content.iter_chunked(8192):
@@ -3412,8 +3582,21 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         fish_key = _os_tts.getenv("FISH_API_KEY", "").strip()
         fish_voice = (body.get("fish_voice_id") or _os_tts.getenv("FISH_VOICE_ID", "")).strip()
 
+        voice_meter = None
+        if self._product_resource_enabled:
+            from troika_product.resource_runtime import configured_ledger
+            from troika_product.service_metering import ServiceMeter, resource_error_response
+            from agent.provider_metering import ProviderCallBlocked
+            voice_meter = ServiceMeter(configured_ledger(self._access_registry, self._product_resource_config),
+                                       self._product_principal(request), run_key=str(uuid.uuid4()),
+                                       prices=self._product_resource_config.get("product_resource_services", {}),
+                                       run_token_limit=self._product_resource_config.get("product_resource_task_tokens", 250000))
+
         if backend == "fish" and fish_key and fish_voice:
+            lease = None
             try:
+                if voice_meter is not None:
+                    lease = voice_meter.begin("fish:tts", len(text), kind="tts")
                 import aiohttp
                 payload = {
                     "text": text,
@@ -3435,14 +3618,31 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                             audio = await resp.read()
                             if len(audio) > 10 * 1024 * 1024:
                                 raise ValueError("Speech output too large")
+                            if not audio:
+                                raise ValueError("Empty speech output")
+                            if lease is not None:
+                                lease.succeeded(len(text))
                             return web.Response(body=audio, content_type="audio/mpeg")
+                        if lease is not None:
+                            raise RuntimeError("Speech provider did not confirm usage")
                         logger.warning(
                             "Fish TTS %s — fallback to Edge", resp.status
                         )
             except Exception as e:
+                if voice_meter is not None:
+                    if lease is not None:
+                        try:
+                            lease.failed(e)
+                        except ProviderCallBlocked as error:
+                            return resource_error_response(error)
+                    if isinstance(e, ProviderCallBlocked):
+                        return resource_error_response(e)
                 logger.warning("Fish TTS error (%s) — fallback to Edge", type(e).__name__)
 
+        edge_lease = None
         try:
+            if voice_meter is not None:
+                edge_lease = voice_meter.begin("edge:tts", len(text), kind="tts")
             import edge_tts
             communicate = edge_tts.Communicate(
                 text, voice=voice, rate=rate, pitch=pitch, volume=volume
@@ -3453,8 +3653,20 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                     audio.extend(chunk["data"])
                     if len(audio) > 10 * 1024 * 1024:
                         raise ValueError("Speech output too large")
+            if edge_lease is not None:
+                if not audio:
+                    raise ValueError("Empty speech output")
+                edge_lease.succeeded(len(text))
             return web.Response(body=bytes(audio), content_type="audio/mpeg")
         except Exception as e:
+            if voice_meter is not None:
+                if edge_lease is not None:
+                    try:
+                        edge_lease.failed(e)
+                    except ProviderCallBlocked as error:
+                        return resource_error_response(error)
+                if isinstance(e, ProviderCallBlocked):
+                    return resource_error_response(e)
             logger.error("Edge TTS error (%s)", type(e).__name__)
             return web.json_response({"error": "Speech synthesis unavailable"}, status=503)
 
@@ -3837,6 +4049,10 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         is_failed = bool(result.get("failed"))
         completed = bool(result.get("completed", True))
         err_msg = result.get("error")
+        resource_code = result.get("error_code", "")
+        if resource_code.startswith(("resource_", "monthly_resource_", "subscription_", "unmetered_provider_")):
+            return web.json_response(_openai_error(err_msg or final_response or "AI resource call stopped", code=resource_code),
+                                     status=429 if resource_code == "monthly_resource_exhausted" else 409)
 
         # Decide finish_reason. OpenAI uses "length" for truncation, "stop"
         # for normal completion, and downstream SDKs accept "error" / custom
@@ -4009,9 +4225,13 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
 
             # Get usage from completed agent
             usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+            stream_failed = False
+            stream_error = None
             try:
                 result, agent_usage = await agent_task
                 usage = agent_usage or usage
+                stream_failed = bool(result.get("failed") or result.get("error_code") or result.get("completed") is False)
+                stream_error = result.get("error_code")
                 if self._product_principal(request) is not None:
                     # All product text is withheld until runtime verification.
                     # Emit exactly the checked final response, including for
@@ -4020,19 +4240,23 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                     if final_text:
                         await _emit(final_text)
             except Exception as exc:
+                stream_failed = True
+                stream_error = getattr(exc, "code", "agent_error")
                 logger.warning("Agent task %s failed, usage data lost: %s", completion_id, exc)
 
             # Finish chunk
             finish_chunk = {
                 "id": completion_id, "object": "chat.completion.chunk",
                 "created": created, "model": model,
-                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                "choices": [{"index": 0, "delta": {}, "finish_reason": "error" if stream_failed else "stop"}],
                 "usage": {
                     "prompt_tokens": usage.get("input_tokens", 0),
                     "completion_tokens": usage.get("output_tokens", 0),
                     "total_tokens": usage.get("total_tokens", 0),
                 },
             }
+            if stream_failed:
+                finish_chunk["hermes"] = {"completed": False, "error_code": stream_error or "agent_error"}
             await response.write(f"data: {json.dumps(finish_chunk)}\n\n".encode())
             await response.write(b"data: [DONE]\n\n")
         except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError):
@@ -5909,10 +6133,12 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 # Check for structured failure (non-retryable client errors like
                 # 401/400 return failed=True instead of raising, so the except
                 # block below never fires — issue #15561).
-                if isinstance(result, dict) and result.get("failed"):
+                if isinstance(result, dict) and (result.get("failed") or result.get("error_code")):
                     internal_error = result.get("error") or "agent run failed"
+                    resource_code = str(result.get("error_code", ""))
                     error_msg = (
-                        "Тройка не смогла выполнить задачу. Попробуй ещё раз."
+                        (internal_error if resource_code.startswith(("resource_", "monthly_resource_", "subscription_", "unmetered_provider_"))
+                         else "Тройка не смогла выполнить задачу. Попробуй ещё раз.")
                         if principal is not None
                         else internal_error
                     )
@@ -5921,6 +6147,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                         "run_id": run_id,
                         "timestamp": time.time(),
                         "error": error_msg,
+                        "error_code": resource_code,
                     })
                     self._set_run_status(
                         run_id,
@@ -5968,8 +6195,9 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 raise
             except Exception as exc:
                 logger.exception("[api_server] run %s failed", run_id)
+                from agent.provider_metering import ProviderCallBlocked
                 public_error = (
-                    "Тройка не смогла выполнить задачу. Попробуй ещё раз."
+                    (str(exc) if isinstance(exc, ProviderCallBlocked) else "Тройка не смогла выполнить задачу. Попробуй ещё раз.")
                     if principal is not None
                     else str(exc)
                 )
@@ -6405,6 +6633,12 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 self._app.router.add_get(
                     "/v1/subscription", self._handle_subscription
                 )
+                self._app.router.add_get("/v1/billing", self._handle_billing_catalogue)
+                self._app.router.add_post("/v1/billing/checkout", self._handle_billing_checkout)
+                self._app.router.add_get("/v1/billing/{intent_id}", self._handle_billing_status)
+                self._app.router.add_post("/v1/billing/webhook", self._handle_billing_webhook)
+                self._app.router.add_get("/v1/account/verification", self._handle_email_verification)
+                self._app.router.add_post("/v1/account/verification/{action}", self._handle_email_verification)
                 self._app.router.add_delete(
                     "/v1/account/devices/{device_id}",
                     self._handle_revoke_account_device,

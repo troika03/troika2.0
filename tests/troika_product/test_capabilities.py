@@ -105,6 +105,25 @@ def test_discovery_loads_only_requested_tools_without_execution(owner, monkeypat
     assert json.loads(cap.discover({"capability": "web", "tool": "troika_create_docx"}))["ok"] is False
 
 
+def test_development_instructions_arrive_on_discovery_not_every_greeting(owner, monkeypatch):
+    from troika_product.development import DEVELOPMENT_GUIDANCE
+    from troika_product.persona import load_troika_persona
+
+    monkeypatch.setattr(cap, "available_schemas", lambda: {
+        "troika_create_project": schema("troika_create_project"),
+    })
+    # Ordinary conversation keeps the original identity and discovery route,
+    # while the complete instructions remain available before a project call.
+    persona = load_troika_persona()
+    assert "Ты — **Тройка**" in persona
+    assert "capability development" in persona
+    assert DEVELOPMENT_GUIDANCE.strip() not in persona
+    result = json.loads(cap.discover({"capability": "development"}))
+    assert result["ok"] is True
+    assert result["skill"] == DEVELOPMENT_GUIDANCE
+    assert result["tools"][0]["name"] == "troika_create_project"
+
+
 def test_disabling_a_capability_blocks_discovery_and_old_schema_execution(owner, monkeypatch):
     registry, _, principal = owner
     monkeypatch.setattr(cap, "available_schemas", lambda: {"web_search": schema("web_search")})

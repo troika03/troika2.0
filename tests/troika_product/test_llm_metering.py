@@ -20,7 +20,7 @@ from agent.provider_metering import (
 from troika_product.access import AccessRegistry
 from troika_product.llm_metering import LLMMeter, ModelPrice, PriceCatalogue
 from troika_product.resource_ledger import ResourceLedger
-from troika_product.subscription_policy import TokenPrices
+from troika_product.subscription_policy import TokenPrices, TokenUsage
 
 
 MODEL = "test/full-context"
@@ -32,6 +32,78 @@ PAYLOAD = {
     "messages": [{"role": "user", "content": "Привет"}],
     "max_tokens": 1000,
 }
+
+
+def test_vision_uses_confirmed_image_bound_and_actual_prompt_receipt(meter):
+    meter.catalogue = PriceCatalogue({
+        ("openrouter", MODEL): ModelPrice(PRICES, vision_input_tokens=128000)
+    })
+    sdk = Client(response(prompt=130000, output=500))
+    with provider_metering_scope(meter):
+        wrap_provider_client(sdk).chat.completions.create(**{
+            **PAYLOAD,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Опиши разрешённый снимок"},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "data:image/jpeg;base64,AAAA"},
+                        },
+                    ],
+                }
+            ],
+        })
+    actual_cost, charged = PRICES.quote(TokenUsage(130000, 500))
+    assert meter.ledger.summary(meter.principal)["spent"] == charged
+    assert len(sdk.calls) == 1
+    receipt = meter.ledger.export_rows(meter.principal)["operations"][0]
+    assert receipt["reserved_tokens"] > charged
+    assert json.loads(receipt["usage_json"])["service_usage"]["cost_rub"] == str(
+        actual_cost
+    )
+
+
+def test_development_json_schema_is_metered_without_allowing_provider_routing(meter):
+    sdk = Client()
+    formatting = {"type": "json_schema", "json_schema": {
+        "name": "project", "strict": True,
+        "schema": {"type": "object", "properties": {"content": {"type": "string"}},
+                   "required": ["content"], "additionalProperties": False}}}
+    with provider_metering_scope(meter):
+        wrap_provider_client(sdk).chat.completions.create(
+            **PAYLOAD, extra_body={"response_format": formatting})
+    assert sdk.calls[0]["extra_body"]["response_format"] == formatting
+    assert meter.ledger.summary(meter.principal)["spent"] > 0
+
+
+def test_confirmed_free_bill_preserves_incompatible_reasoning_counters(meter):
+    meter.catalogue = PriceCatalogue({("openrouter", MODEL): ModelPrice(TokenPrices(
+        "free-v1", Decimal(0), Decimal(0), Decimal(0), Decimal(0)))})
+    reply = response(output=45, reasoning=48)
+    reply.usage.cost = 0
+    invoke(meter, Client(reply))
+    summary = meter.ledger.summary(meter.principal)
+    assert summary["spent"] == summary["reserved"] == 0
+    details = summary["recent_operations"][0]["usage"]["service_usage"]
+    assert details["reported_completion_tokens"] == 45
+    assert details["reported_reasoning_tokens"] == 48
+    assert details["tokens_upper_bound"] == 1
+    assert summary["recent_operations"][0]["usage"]["tokens"]["output_tokens"] == 93
+
+
+@pytest.mark.parametrize("cached,reasoning", [(7000, 200), (0, 501)])
+def test_company_free_model_debits_full_native_input_and_output_once(meter, cached, reasoning):
+    meter.catalogue = PriceCatalogue({("openrouter", MODEL): ModelPrice(TokenPrices(
+        "raw-free-v1", Decimal(0), Decimal(0), Decimal(0), Decimal(0)), debit_mode="model_tokens")})
+    reply = response(cached=cached, reasoning=reasoning)
+    reply.usage.cost = 0
+    invoke(meter, Client(reply))
+    balance = meter.ledger.summary(meter.principal)
+    assert balance["spent"] == 7500
+    assert balance["reserved"] == 0
+    assert balance["recent_operations"][0]["usage"]["service_usage"]["cost_rub"] == "0"
 
 
 def response(prompt=7000, output=500, cached=0, reasoning=0):

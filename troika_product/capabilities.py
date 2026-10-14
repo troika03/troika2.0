@@ -298,8 +298,16 @@ def execute(args: dict, **kwargs: Any) -> str:
         if not Draft7Validator(schemas[tool].get("parameters", {})).is_valid(arguments):
             return _error("invalid_tool_arguments")
         from model_tools import handle_function_call
-        result = handle_function_call(tool, arguments, task_id=kwargs.get("task_id"),
-                                      enabled_tools=list(schemas))
+        from agent.provider_metering import current_provider_guard
+        guard = current_provider_guard()
+        hold = guard.begin_tool(tool, arguments) if hasattr(guard, "begin_tool") else None
+        try:
+            result = handle_function_call(tool, arguments, task_id=kwargs.get("task_id"),
+                                          enabled_tools=list(schemas))
+        except BaseException:
+            if hold is not None:
+                guard.finish_tool(hold, successful=False)
+            raise
         try:
             payload = json.loads(result)
         except (ValueError, TypeError):
@@ -307,6 +315,8 @@ def execute(args: dict, **kwargs: Any) -> str:
         failed = isinstance(payload, dict) and (
             payload.get("error") or payload.get("ok") is False or payload.get("success") is False
         )
+        if hold is not None:
+            guard.finish_tool(hold, successful=not bool(failed))
         envelope = json.dumps({"ok": not bool(failed), "routed_tool": tool, "result": payload},
                               ensure_ascii=False)
         # Retain the existing external-data boundary even though dispatch now

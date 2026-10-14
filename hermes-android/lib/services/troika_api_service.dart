@@ -8,6 +8,7 @@ import 'files_service.dart';
 import '../config/troika_config.dart';
 import 'account_service.dart';
 import 'subscription_usage.dart';
+import 'own_api_service.dart';
 
 /// Repeats an HTTP operation only when TLS negotiation failed before the
 /// request could be sent. Rebuilding the request in [operation] is required.
@@ -139,6 +140,11 @@ class AccountSubscription {
   final int remaining;
   final bool quotaEnforced;
   final DateTime? resetsAt;
+  final bool resourceEnforced;
+  final bool byokEnabled;
+  final int reserved;
+  final int monthlyLimit;
+  final List<Map<String, dynamic>> operations;
 
   const AccountSubscription({
     required this.plan,
@@ -148,6 +154,11 @@ class AccountSubscription {
     required this.remaining,
     required this.quotaEnforced,
     this.resetsAt,
+    this.resourceEnforced = false,
+    this.byokEnabled = false,
+    this.reserved = 0,
+    this.monthlyLimit = 0,
+    this.operations = const [],
   });
 
   factory AccountSubscription.fromJson(Map<String, dynamic> json) {
@@ -155,9 +166,15 @@ class AccountSubscription {
       plan: (json['plan'] ?? 'free').toString(),
       status: (json['status'] ?? 'active').toString(),
       dailyLimit: (json['daily_limit'] as num?)?.toInt() ?? 0,
-      used: (json['used'] as num?)?.toInt() ?? 0,
+      used: (json['spent'] as num?)?.toInt() ?? (json['used'] as num?)?.toInt() ?? 0,
       remaining: (json['remaining'] as num?)?.toInt() ?? 0,
       quotaEnforced: json['quota_enforced'] == true,
+      resourceEnforced: json['resource_enforced'] == true,
+      byokEnabled: json['byok_enabled'] == true,
+      reserved: (json['reserved'] as num?)?.toInt() ?? 0,
+      monthlyLimit: (json['monthly_limit'] as num?)?.toInt() ?? 0,
+      operations: (json['recent_operations'] as List? ?? const [])
+          .whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList(),
       resetsAt: DateTime.tryParse((json['resets_at'] ?? '').toString()),
     );
   }
@@ -506,6 +523,10 @@ class TroikaApiService {
       // запросом. Иначе Тройка не знает координат Миши пока не пройдёт
       // wake-word диалог (Kotlin шлёт header только оттуда).
       final chatHdrs = await TroikaConfig.chatHeadersAsync();
+      chatHdrs.addAll(await OwnApiService.headers(TroikaConfig.accountEmail));
+      if (chatHdrs.containsKey('X-Troika-Provider-Key') && !(await getSubscription()).byokEnabled) {
+        throw StateError('Сервер не поддерживает личный API. Ключ Тройки не использован.');
+      }
       final response = await http
           .post(uri, headers: chatHdrs, body: json.encode(bodyMap))
           .timeout(_timeout);
@@ -574,6 +595,10 @@ class TroikaApiService {
       await _ensureDeviceDeliverySupport(client);
       // Async headers — с device_context (GPS) для streaming-пути тоже.
       final chatHdrs = await TroikaConfig.chatHeadersAsync();
+      chatHdrs.addAll(await OwnApiService.headers(TroikaConfig.accountEmail));
+      if (chatHdrs.containsKey('X-Troika-Provider-Key') && !(await getSubscription()).byokEnabled) {
+        throw StateError('Сервер не поддерживает личный API. Ключ Тройки не использован.');
+      }
       final startResp = await retryTlsHandshake(() {
         final request = http.Request('POST', Uri.parse(TroikaConfig.runsUrl))
           ..headers.addAll(chatHdrs)

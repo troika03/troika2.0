@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
-TROIKA_PERSONA_MARKER = "[TROIKA_PERSONA_VERSION:4]"
+TROIKA_PERSONA_MARKER = "[TROIKA_PERSONA_VERSION:5]"
 
 
 TROIKA_PERSONA_FALLBACK = """# Тройка — кто ты
@@ -64,7 +64,8 @@ def load_troika_persona() -> str:
 попроси открыть «Файлы» в течение 10 минут, чтобы завершить передачу.
 """
     from troika_product.capabilities import ROUTING_GUIDANCE
-    from troika_product.development import DEVELOPMENT_GUIDANCE
     text += "\n\n" + ROUTING_GUIDANCE
-    text += "\n\n" + DEVELOPMENT_GUIDANCE
+    # Detailed development instructions already arrive with the discovered
+    # capability. Keep ordinary conversation free of that duplicate payload.
+    text += "\n\nДля разработки загрузи capability development; её инструкции и схему используй для полного проекта, ревью и исправлений."
     return text + "\n\n" + TROIKA_PERSONA_MARKER
