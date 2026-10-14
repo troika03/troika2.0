@@ -19,6 +19,7 @@ class TtsService {
     await _tts.setSpeechRate(0.65); // комфортная скорость
     await _tts.setVolume(1.0);
     await _tts.setPitch(1.0);
+    await _tts.awaitSpeakCompletion(true);
 
     final prefs = await SharedPreferences.getInstance();
     final savedName = prefs.getString(voiceNameKey);

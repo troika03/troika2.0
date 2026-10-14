@@ -218,7 +218,7 @@ def test_task_tool_delivers_reviewed_project_only_to_own_device(monkeypatch):
     monkeypatch.setattr("troika_product.development_agent._api", Model())
     # Default arguments bind at definition; supply the model through the factory.
     monkeypatch.setattr("troika_product.development_agent.DevelopmentAgent", lambda: DevelopmentAgent(Model()))
-    overrides = {"TROIKA_PRODUCT_MODE": "1", "TROIKA_PRODUCT_DELIVERY_MODE": "device",
+    overrides = {"TROIKA_PRODUCT_MODE": "1", "TROIKA_PRODUCT_PLAN": "pro", "TROIKA_PRODUCT_DELIVERY_MODE": "device",
                  "TROIKA_PRODUCT_USER_ID": "owner", "TROIKA_PRODUCT_DEVICE_ID": "phone",
                  "TROIKA_PRODUCT_TOKEN_ID": "token"}
     try:
@@ -249,7 +249,7 @@ def test_no_api_calls_without_product_identity(monkeypatch):
 def test_model_cannot_inject_a_positive_review_into_packaging(monkeypatch):
     store = DeviceDeliveryStore()
     monkeypatch.setattr(troika_documents_tool, "device_deliveries", store)
-    overrides = {"TROIKA_PRODUCT_MODE": "1", "TROIKA_PRODUCT_DELIVERY_MODE": "device",
+    overrides = {"TROIKA_PRODUCT_MODE": "1", "TROIKA_PRODUCT_PLAN": "pro", "TROIKA_PRODUCT_DELIVERY_MODE": "device",
                  "TROIKA_PRODUCT_USER_ID": "owner", "TROIKA_PRODUCT_DEVICE_ID": "phone",
                  "TROIKA_PRODUCT_TOKEN_ID": "token"}
     try:
@@ -290,7 +290,7 @@ def test_unavailable_api_model_returns_actionable_error_without_provider_body(mo
         def run(self, *args):
             raise ProviderError("private request body and credentials")
     monkeypatch.setattr("troika_product.development_agent.DevelopmentAgent", Broken)
-    overrides = {"TROIKA_PRODUCT_MODE": "1", "TROIKA_PRODUCT_DELIVERY_MODE": "device",
+    overrides = {"TROIKA_PRODUCT_MODE": "1", "TROIKA_PRODUCT_PLAN": "pro", "TROIKA_PRODUCT_DELIVERY_MODE": "device",
                  "TROIKA_PRODUCT_USER_ID": "owner", "TROIKA_PRODUCT_DEVICE_ID": "phone",
                  "TROIKA_PRODUCT_TOKEN_ID": "token"}
     try:

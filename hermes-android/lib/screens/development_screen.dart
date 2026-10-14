@@ -7,6 +7,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../services/development_agent_service.dart';
+import '../services/development_autopilot_service.dart';
+import '../widgets/development_autopilot_panel.dart';
 import '../services/development_remote_service.dart';
 import '../services/development_service.dart';
 import '../services/development_workflow.dart';
@@ -15,6 +17,7 @@ import '../config/troika_config.dart';
 
 class DevelopmentScreen extends StatefulWidget {
   final DevelopmentAgentService? agent;
+  final DevelopmentAutopilotService? autopilot;
   final FilesService? files;
   final DevelopmentService? runner;
   final DevelopmentRemoteService? remote;
@@ -23,6 +26,7 @@ class DevelopmentScreen extends StatefulWidget {
   const DevelopmentScreen(
       {super.key,
       this.agent,
+      this.autopilot,
       this.files,
       this.runner,
       this.remote,
@@ -35,6 +39,7 @@ class DevelopmentScreen extends StatefulWidget {
 class _DevelopmentScreenState extends State<DevelopmentScreen> {
   final _task = TextEditingController();
   late final DevelopmentAgentService _agent;
+  DevelopmentAutopilotService? _background;
   late final FilesService _files;
   late final DevelopmentService _runner;
   late final DevelopmentRemoteService _remote;
@@ -58,6 +63,9 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
     super.initState();
     _owner = TroikaConfig.accountEmail;
     _agent = widget.agent ?? DevelopmentAgentService();
+    _background = widget.autopilot ??
+        (widget.agent == null ? DevelopmentAutopilotService.instance : null);
+    if (_background != null) unawaited(_background!.observe());
     _files = widget.files ?? FilesService();
     _runner = widget.runner ?? DevelopmentService();
     _remote = (widget.remote ??
@@ -257,6 +265,18 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
         sources = DevelopmentService.sourcesForModel(
             await File(_selected!.localPath!).readAsBytes());
       }
+      if (_background != null) {
+        await _background!.start(
+            _task.text.trim().isEmpty
+                ? 'Сохрани функции проекта, проверь и исправь ошибки.'
+                : _task.text.trim(),
+            sources: sources);
+        if (mounted) {
+          setState(() => _status =
+              'Автопилот запущен. Можно вернуться к разговору; проект продолжает работу.');
+        }
+        return;
+      }
       final project = await _agent.generate(
           DevelopmentWorkflow.modelPrompt(
               _task.text.trim().isEmpty
@@ -453,6 +473,28 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
                     Padding(
                         padding: const EdgeInsets.only(top: 16),
                         child: SelectableText(_status)),
+                  if (_background != null)
+                    DevelopmentAutopilotPanel(
+                        controller: _background!,
+                        onOpen: (file) => unawaited(_perform(() async {
+                              _verifyOwner();
+                              if (file.ext != 'zip') {
+                                await _files.openFile(file);
+                                return;
+                              }
+                              final bytes =
+                                  await File(file.localPath!).readAsBytes();
+                              final decoded =
+                                  DevelopmentService.decodeProject(bytes);
+                              _selected = file;
+                              _modelReport = decoded['MODEL_REVIEW.md'] == null
+                                  ? null
+                                  : utf8.decode(decoded['MODEL_REVIEW.md']!);
+                              if (!_projects.any((p) => p.id == file.id)) {
+                                _projects.insert(0, file);
+                              }
+                              if (mounted) setState(() {});
+                            }))),
                   if (_directory != null)
                     Padding(
                         padding: const EdgeInsets.only(top: 8),

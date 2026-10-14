@@ -22,7 +22,7 @@ def test_device_mode_never_writes_artifact_store(tmp_path, monkeypatch, handler,
     store = DeviceDeliveryStore()
     monkeypatch.setattr(troika_documents_tool, "device_deliveries", store)
     monkeypatch.setattr(troika_documents_tool, "_artifact_store", lambda: pytest.fail("permanent file store accessed"))
-    overrides = {"TROIKA_PRODUCT_MODE": "1", "TROIKA_PRODUCT_DELIVERY_MODE": "device",
+    overrides = {"TROIKA_PRODUCT_MODE": "1", "TROIKA_PRODUCT_PLAN": "pro", "TROIKA_PRODUCT_DELIVERY_MODE": "device",
                  "TROIKA_PRODUCT_USER_ID": "one", "TROIKA_PRODUCT_DEVICE_ID": "phone",
                  "TROIKA_PRODUCT_TOKEN_ID": "token", "TROIKA_PRODUCT_ARTIFACTS_AVAILABLE": "0"}
     try:
@@ -45,7 +45,7 @@ def test_device_workspace_write_is_delivered_without_a_server_directory(monkeypa
     store = DeviceDeliveryStore()
     monkeypatch.setattr(troika_documents_tool, "device_deliveries", store)
     monkeypatch.setattr(troika_workspace_tool, "_store", lambda: pytest.fail("server workspace accessed"))
-    overrides = {"TROIKA_PRODUCT_MODE": "1", "TROIKA_PRODUCT_DELIVERY_MODE": "device",
+    overrides = {"TROIKA_PRODUCT_MODE": "1", "TROIKA_PRODUCT_PLAN": "pro", "TROIKA_PRODUCT_DELIVERY_MODE": "device",
                  "TROIKA_PRODUCT_USER_ID": "one", "TROIKA_PRODUCT_DEVICE_ID": "phone",
                  "TROIKA_PRODUCT_TOKEN_ID": "token"}
     try:

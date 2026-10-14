@@ -135,6 +135,9 @@ namespace Troika.Desktop {
             foreach (var kind in new[] { DevelopmentWorkflow.ModelReview, "Python: тесты", "JavaScript: тесты", "Python: синтаксис", "JavaScript: синтаксис" }) kinds.Items.Add(kind); kinds.SelectedIndex = 0; panelContent.Children.Add(kinds);
             AddPanelButton("Разработать проект", () => { var task = ChooseDevelopmentTarget(developmentRequest, Convert.ToString(kinds.SelectedItem), false); }, true);
             SurfaceGroup(0, "От идеи до проекта", "Тройка пишет код и проверяет исходники моделью через API. Тесты запускаются отдельно.", "code"); int imported = panelContent.Children.Count;
+            Check("Голосовые отчёты по проектам", Autopilot.VoiceReports, enabled => { Autopilot.SetVoice(enabled); if (!enabled && projectSpeech != null) projectSpeech.Cancel(); });
+            panelContent.Children.Add(Label("Важные этапы и результат. Во время разговора Тройка подождёт.", 11, muted));
+            autopilotCards = new StackPanel(); panelContent.Children.Add(autopilotCards); ObserveAutopilot(); RenderAutopilotCards();
             Check("Принимать проверки с телефона", developmentRelay != null && developmentRelay.Enabled, enabled => { var task = ToggleDevelopmentWorker(enabled); });
             panelContent.Children.Add(Label("ПК появится на телефоне, пока этот раздел открыт и приём включён. Первый запуск подтверждается здесь.", 11, muted));
             AddPanelButton("Открыть ZIP с исходниками…", () => {

@@ -10,6 +10,7 @@ import 'audio_recorder_service.dart';
 import 'assistant_result.dart';
 import 'stt_service.dart';
 import 'tts_service.dart';
+import 'development_autopilot_service.dart';
 import 'troika_api_service.dart';
 import 'wake_word_service.dart';
 import 'local_command_service.dart';
@@ -66,6 +67,38 @@ class AssistantService extends ChangeNotifier {
   bool _historyLoaded = false;
   Timer? _accountSyncTimer;
   bool _accountSyncInFlight = false;
+  bool _projectReportSpeaking = false;
+  bool _projectReportInterrupted = false;
+
+  Future<bool> speakProjectReport(String text) async {
+    if (_state != AssistantState.idle ||
+        _actionInProgress ||
+        _pendingApproval != null ||
+        _tts.isSpeaking ||
+        _projectReportSpeaking) {
+      return false;
+    }
+    _projectReportSpeaking = true;
+    _projectReportInterrupted = false;
+    _setState(AssistantState.speaking);
+    try {
+      await _tts.speak(text);
+      return true; // An interrupted announcement remains visible; do not repeat it.
+    } finally {
+      _projectReportSpeaking = false;
+      if (_state == AssistantState.speaking && !_projectReportInterrupted) {
+        _setState(AssistantState.idle);
+      }
+    }
+  }
+
+  Future<void> stopProjectReport() async {
+    if (!_projectReportSpeaking) return;
+    _projectReportInterrupted = true;
+    await _tts.stop();
+    if (_state == AssistantState.speaking) _setState(AssistantState.idle);
+  }
+
 
   // Скрытый тег эмоции [emo:...] управляет интонацией голоса. В тексте чата и
   // в произношении локального TTS его быть не должно — вырезаем.
@@ -125,6 +158,11 @@ class AssistantService extends ChangeNotifier {
   Future<void> init() async {
     await _restoreLastResult();
     await _tts.init();
+    DevelopmentAutopilotService.instance.speakWhenIdle = speakProjectReport;
+    DevelopmentAutopilotService.instance.stopSpeakingReport = stopProjectReport;
+    if (TroikaConfig.signedIn) {
+      unawaited(DevelopmentAutopilotService.instance.observe());
+    }
     _wakeWordEnabled = TroikaConfig.wakeWordEnabled;
 
     _wakeWord.onWakeWordDetected = _onWakeWordConfirmed;
@@ -172,6 +210,9 @@ class AssistantService extends ChangeNotifier {
   }
 
   Future<void> _syncAccountConversation() async {
+    if (TroikaConfig.signedIn) {
+      unawaited(DevelopmentAutopilotService.instance.observe());
+    }
     if (!TroikaConfig.signedIn ||
         _accountSyncInFlight ||
         _state != AssistantState.idle ||
@@ -760,6 +801,13 @@ class AssistantService extends ChangeNotifier {
   }
 
   void _setState(AssistantState s) {
+    if (_projectReportSpeaking &&
+        (s == AssistantState.recording ||
+            s == AssistantState.processing ||
+            s == AssistantState.wakeDetected)) {
+      _projectReportInterrupted = true;
+      unawaited(_tts.stop());
+    }
     _state = s;
     notifyListeners();
   }
@@ -780,6 +828,8 @@ class AssistantService extends ChangeNotifier {
 
   @override
   void dispose() {
+    DevelopmentAutopilotService.instance.speakWhenIdle = null;
+    DevelopmentAutopilotService.instance.stopSpeakingReport = null;
     _accountSyncTimer?.cancel();
     resolvePendingApproval('deny');
     _recorder.dispose();

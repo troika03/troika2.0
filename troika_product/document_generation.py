@@ -193,17 +193,18 @@ def generate_pptx(args: dict[str, Any]) -> bytes:
     if len(title) > 160:
         raise ValueError("presentation title is too long; use a concise title")
 
-    cover = presentation.slides.add_slide(presentation.slide_layouts[6])
-    cover.background.fill.solid()
-    cover.background.fill.fore_color.rgb = background_color
-    cover_title = cover.shapes.add_textbox(Inches(1), Inches(2.3), Inches(11.3), Inches(1.5))
-    cover_paragraph = cover_title.text_frame.paragraphs[0]
-    cover_paragraph.text = title or "Презентация"
-    cover_paragraph.alignment = PP_ALIGN.CENTER
-    cover_paragraph.font.name = "Arial"
-    cover_paragraph.font.size = Pt(34)
-    cover_paragraph.font.bold = True
-    cover_paragraph.font.color.rgb = text_color
+    if args.get('include_cover', True):
+        cover = presentation.slides.add_slide(presentation.slide_layouts[6])
+        cover.background.fill.solid()
+        cover.background.fill.fore_color.rgb = background_color
+        cover_title = cover.shapes.add_textbox(Inches(1), Inches(2.3), Inches(11.3), Inches(1.5))
+        cover_paragraph = cover_title.text_frame.paragraphs[0]
+        cover_paragraph.text = title or "Презентация"
+        cover_paragraph.alignment = PP_ALIGN.CENTER
+        cover_paragraph.font.name = "Arial"
+        cover_paragraph.font.size = Pt(34)
+        cover_paragraph.font.bold = True
+        cover_paragraph.font.color.rgb = text_color
 
     for index, raw in enumerate(raw_slides, start=1):
         if not isinstance(raw, dict):

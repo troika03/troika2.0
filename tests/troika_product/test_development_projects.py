@@ -40,7 +40,7 @@ def project(**changes):
 def test_incomplete_source_is_not_delivered(monkeypatch, files):
     store = DeviceDeliveryStore()
     monkeypatch.setattr(troika_documents_tool, "device_deliveries", store)
-    overrides = {"TROIKA_PRODUCT_MODE": "1", "TROIKA_PRODUCT_DELIVERY_MODE": "device",
+    overrides = {"TROIKA_PRODUCT_MODE": "1", "TROIKA_PRODUCT_PLAN": "pro", "TROIKA_PRODUCT_DELIVERY_MODE": "device",
                  "TROIKA_PRODUCT_USER_ID": "owner", "TROIKA_PRODUCT_DEVICE_ID": "phone",
                  "TROIKA_PRODUCT_TOKEN_ID": "token"}
     try:
@@ -89,3 +89,16 @@ def test_browser_tests_can_use_the_conventional_test_js_name():
         if entry["path"] == "test_calories.js":
             entry["path"] = "test.js"
     build_project(args, require_complete=True)
+@pytest.mark.parametrize('plan', ['free', 'plus', ''])
+def test_legacy_project_tool_denies_non_pro_before_packing_or_model_calls(monkeypatch, plan):
+    def forbidden(*args, **kwargs): raise AssertionError('Generation reached before Pro gate')
+    monkeypatch.setattr(troika_documents_tool, 'build_project', forbidden)
+    overrides = {'TROIKA_PRODUCT_MODE': '1', 'TROIKA_PRODUCT_PLAN': plan,
+        'TROIKA_PRODUCT_DELIVERY_MODE': 'device', 'TROIKA_PRODUCT_USER_ID': 'owner',
+        'TROIKA_PRODUCT_DEVICE_ID': 'phone', 'TROIKA_PRODUCT_TOKEN_ID': 'token'}
+    try:
+        for key, value in overrides.items(): set_session_override(key, value)
+        result = json.loads(troika_documents_tool._handle_project({'task': 'Build a website'}))
+    finally:
+        for key in overrides: clear_session_override(key)
+    assert result['error'] == 'development_pro_required' and not result['ok']

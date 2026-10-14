@@ -40,4 +40,10 @@ if ($Test) {
     & (Join-Path $output 'OwnApiTests.exe')
     if ($LASTEXITCODE -ne 0) { throw 'Personal API tests failed.' }
 }
+if ($Test) {
+    & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'AutopilotTests.exe')) ('/reference:' + (Join-Path $output 'TroikaDesktop.exe')) $references (Join-Path $root 'tests\AutopilotTests.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Autopilot test build failed.' }
+    & (Join-Path $output 'AutopilotTests.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'Autopilot tests failed.' }
+}
 Write-Output ('Built: ' + (Join-Path $output 'TroikaDesktop.exe'))

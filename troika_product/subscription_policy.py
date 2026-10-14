@@ -74,13 +74,13 @@ PLANS = MappingProxyType({
         MappingProxyType({**_BASE, "search": 10, "documents": 3, "snapshot": 5}),
     ),
     "plus": SubscriptionPlan(
-        "plus", 790, 5_000_000, 1, MappingProxyType({**_BASE, "development": None})
+        "plus", 790, 5_000_000, 1, MappingProxyType(dict(_BASE))
     ),
     "pro": SubscriptionPlan(
         "pro",
         1490,
         10_000_000,
-        3,
+        5,
         MappingProxyType({feature: None for feature in FEATURES}),
     ),
 })

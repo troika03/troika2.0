@@ -162,6 +162,9 @@ def _handle_project(args: dict[str, Any], **kwargs: Any) -> str:
     identity = _product_identity()
     if identity is None:
         return json.dumps({"ok": False, "error": "product_identity_required"})
+    if get_session_env("TROIKA_PRODUCT_PLAN", "") != "pro":
+        return json.dumps({"ok": False, "error": "development_pro_required",
+                           "message": "Разработка доступна только в Pro."}, ensure_ascii=False)
     if get_session_env("TROIKA_PRODUCT_DELIVERY_MODE", "server") != "device":
         return json.dumps({"ok": False, "error": "device_delivery_client_required"})
     try:

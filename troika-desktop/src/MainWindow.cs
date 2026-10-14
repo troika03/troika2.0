@@ -85,6 +85,7 @@ namespace Troika.Desktop {
                 if (closed) return;
                 e.Cancel = true;
                 await Stop(); closed = true; recordingLimit.Stop(); reminderTimer.Stop(); recorder.Dispose(); StopPlayback();
+                DisposeAutopilotObserver();
                 if (hotkeyRegistered) UnregisterHotKey(handle, 17);
                 api.Dispose(); var closing = Dispatcher.BeginInvoke(new Action(Close));
             };
@@ -227,11 +228,13 @@ namespace Troika.Desktop {
             });
         }
         private async Task RefreshAccount() {
+            ObserveAutopilot();
             var value = await api.Get("/v1/sessions?limit=30", CancellationToken.None); sessions.Clear(); sessions.AddRange(Json.Rows(value, "sessions")); RenderHistory(); profile.Content = "Аккаунт";
             if (transcript.Children.Count == 0 && api.SessionId.Length > 0) await LoadConversation(api.SessionId);
             await ReceiveFiles();
         }
         private async Task Send() {
+            if (projectSpeech != null) projectSpeech.Cancel();
             if (busy || recorder.Recording || localCheck != null || developmentRelay != null && developmentRelay.Checking) return;
             StopPlayback(); var input = composer.Text.Trim(); if (input.Length == 0) { composer.Focus(); return; }
             try { var local = TryLocalAction(input); if (local != null) { composer.Clear(); AddMessage("user", input); AddMessage("assistant", local); SetStatus("Готово на этом ПК", false); return; } } catch (Exception error) { SetStatus(error.Message, true); return; }
@@ -259,6 +262,10 @@ namespace Troika.Desktop {
         }
         private static string ToolStatus(string tool) { if (tool.Contains("search") || tool.Contains("research")) return "Ищу источники…"; if (tool.Contains("document") || tool.Contains("presentation")) return "Создаю файл…"; if (tool.Contains("assistant") || tool.Contains("remind")) return "Обновляю дела…"; return "Выполняю задачу…"; }
         private async Task ToggleVoice() {
+            if (projectSpeech != null) {
+                projectSpeech.Cancel();
+                var report = Autopilot.NextReport(true); if (report != null) Autopilot.ReportSpoken(report);
+            }
             await Safe(async () => {
                 if (busy) { await Stop(); return; }
                 if (speaking) { StopPlayback(); Idle(); return; }
@@ -282,6 +289,7 @@ namespace Troika.Desktop {
         }
         private void StopPlayback() { player.Stop(); player.Close(); speaking = false; if (audioFile.Length > 0) { try { File.Delete(audioFile); } catch { } audioFile = ""; } }
         private async Task Stop() {
+            if (projectSpeech != null) projectSpeech.Cancel();
             if (localCheck != null) localCheck.Cancel();
             if (developmentConsent != null) developmentConsent.TrySetResult(false);
             if (developmentRelay != null) await developmentRelay.Disable();

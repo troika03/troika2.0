@@ -5597,6 +5597,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 # never from model arguments or caller-controlled headers.
                 # ContextVars propagate into parallel tool workers.
                 set_session_override("TROIKA_PRODUCT_MODE", "1")
+                set_session_override("TROIKA_PRODUCT_PLAN", self._access_registry.subscription_summary(product_principal)["plan"])
                 set_session_override("TROIKA_PRODUCT_DELIVERY_MODE", delivery_mode)
                 set_session_override(
                     "TROIKA_PRODUCT_USER_ID", product_principal.user_id
@@ -5626,6 +5627,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 product_override_names.extend(
                     [
                         "TROIKA_PRODUCT_MODE",
+                        "TROIKA_PRODUCT_PLAN",
                         "TROIKA_PRODUCT_DELIVERY_MODE",
                         "TROIKA_PRODUCT_USER_ID",
                         "TROIKA_PRODUCT_DEVICE_ID",
@@ -5798,13 +5800,32 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         if auth_err:
             return auth_err
 
+        # A development Run owns its own session and specialists; it must not
+        # borrow the foreground conversation or depend on an attached SSE tab.
+        try:
+            workflow_body = await request.json()
+        except Exception:
+            workflow_body = {}
+        if isinstance(workflow_body, dict) and workflow_body.get("workflow") == "development":
+            from troika_product.development_runtime import start_development_run
+            return await start_development_run(self, request, workflow_body)
+
         # Long-term memory scope header (see chat_completions for details).
         gateway_session_key, key_err = self._parse_session_key_header(request)
         if key_err is not None:
             return key_err
 
-        # Enforce concurrency limit
-        if len(self._run_streams) >= self._MAX_CONCURRENT_RUNS:
+        # Completed background deliveries do not occupy a conversation slot.
+        from troika_product.development_runtime import check_foreground_capacity
+        capacity_error = check_foreground_capacity(self, request)
+        if capacity_error is not None:
+            return capacity_error
+        active_streams = sum(
+            not (self._run_statuses.get(run, {}).get("workflow") == "development"
+                 and self._run_statuses[run].get("status") in {"completed", "failed", "cancelled"})
+            for run in self._run_streams
+        )
+        if active_streams >= self._MAX_CONCURRENT_RUNS:
             return web.json_response(
                 _openai_error(f"Too many concurrent runs (max {self._MAX_CONCURRENT_RUNS})", code="rate_limit_exceeded"),
                 status=429,
@@ -6023,6 +6044,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                             # availability checks and all tool workers see the
                             # same server-derived device scope.
                             set_session_override("TROIKA_PRODUCT_MODE", "1")
+                            set_session_override("TROIKA_PRODUCT_PLAN", self._access_registry.subscription_summary(principal)["plan"])
                             set_session_override(
                                 "TROIKA_PRODUCT_USER_ID", principal.user_id
                             )
@@ -6052,6 +6074,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                             product_override_names.extend(
                                 [
                                     "TROIKA_PRODUCT_MODE",
+                                    "TROIKA_PRODUCT_PLAN",
                                     "TROIKA_PRODUCT_USER_ID",
                                     "TROIKA_PRODUCT_DEVICE_ID",
                                     "TROIKA_PRODUCT_TOKEN_ID",
@@ -6498,6 +6521,10 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 if now - created_at > self._RUN_STREAM_TTL
             ]
             for run_id in stale:
+                if (self._run_statuses.get(run_id, {}).get("workflow") == "development"
+                        and run_id in self._active_run_tasks
+                        and not self._active_run_tasks[run_id].done()):
+                    continue
                 logger.debug("[api_server] sweeping orphaned run %s", run_id)
                 try:
                     from tools.approval import unregister_gateway_notify
@@ -6735,6 +6762,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 self._app.router.add_post("/api/jobs/{job_id}/run", self._handle_run_job)
             # Structured event streaming
             self._app.router.add_post("/v1/runs", self._handle_runs)
+            from troika_product.development_runtime import register_autopilot_routes
+            register_autopilot_routes(self._app, self)
             self._app.router.add_get("/v1/runs/{run_id}", self._handle_get_run)
             self._app.router.add_get("/v1/runs/{run_id}/events", self._handle_run_events)
             self._app.router.add_post("/v1/runs/{run_id}/approval", self._handle_run_approval)
