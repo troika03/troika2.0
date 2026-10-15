@@ -296,3 +296,41 @@ def test_original_reader_is_discovered_without_widening_initial_model_tools(scop
                 set_session_override(key, old[key])
             else:
                 clear_session_override(key)
+
+
+def test_rotated_archive_indexes_and_cache_stay_with_their_originals(scoped):
+    _, _, guard = scoped
+    client, _ = sdk_client()
+    guard.context.archive_messages = [{"role": "user", "content": "Earlier session REF-ARCHIVE-A."}]
+    derived = guard.context.prepare(payload(), client=client)
+    summary = json.loads(derived["messages"][1]["content"].splitlines()[1])
+    assert summary["original_range"][0] == 2
+    for item in summary["summary"]["items"]:
+        page = guard.context.retrieve({"action": "history_read", "index": item["index"]})
+        assert page["text"].startswith(item["excerpt"])
+    guard.context.archive_messages = [{"role": "user", "content": "Different session REF-ARCHIVE-B."}]
+    guard.context.prepare(payload(), client=client)
+    assert guard.context.stats["cache_hits"] == 0
+    assert "REF-ARCHIVE-B" in guard.context.retrieve({"action": "history_read", "index": 1})["text"]
+
+
+def test_social_turn_rejects_forced_router_actions(scoped, monkeypatch):
+    registry, _, guard = scoped
+    from gateway.session_context import clear_session_override, set_session_override
+    from troika_product.capabilities import discover, execute
+    guard.context.conversation_only = True
+    values = {"TROIKA_PRODUCT_MODE": "1", "TROIKA_PRODUCT_ACCESS_DB": str(registry.database_path),
+              "TROIKA_PRODUCT_USER_ID": guard.principal.user_id,
+              "TROIKA_PRODUCT_DEVICE_ID": guard.principal.device_id,
+              "TROIKA_PRODUCT_TOKEN_ID": guard.principal.token_id}
+    for key, value in values.items():
+        set_session_override(key, value)
+    try:
+        calls = []
+        monkeypatch.setattr("model_tools.handle_function_call", lambda *a, **kw: calls.append(a))
+        assert json.loads(discover({"capability": "development"}))["error"] == "no_action_requested"
+        assert json.loads(execute({"tool": "troika_create_project", "arguments": {}}))["error"] == "no_action_requested"
+        assert not calls
+    finally:
+        for key in values:
+            clear_session_override(key)

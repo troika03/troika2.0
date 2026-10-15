@@ -1248,6 +1248,27 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             return None
         return request.get("troika_product_principal")
 
+    def _prepare_product_conversation(self, request, session_id, message, history):
+        """Keep a stable account timeline while rotating the active context."""
+        principal = self._product_principal(request)
+        if principal is None:
+            return session_id, history
+        from troika_product.conversation_sessions import ConversationSessions, conversation_only
+        # Rotation needs the original-history reader. Legacy profiles with
+        # compact context disabled retain their complete replay behavior.
+        if not self._product_resource_enabled or not self._product_resource_config.get("product_compact_context_enabled", False):
+            return session_id, [] if conversation_only(message) else history
+        db = self._ensure_session_db()
+        if db is None:
+            raise RuntimeError("conversation storage unavailable")
+        effective_id, history, reason = ConversationSessions(
+            self._access_registry, db
+        ).resolve(principal, session_id, message, history)
+        if reason:
+            self._record_product_audit(request, "session.rotated", session_id=effective_id,
+                                       details={"reason": reason})
+        return effective_id, history
+
     def _product_device_context_allowed(self, request: "web.Request") -> bool:
         """Require explicit app consent before product device context is accepted."""
         if self._access_registry is None:
@@ -1296,6 +1317,9 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             ("memory", self._memory_store),
         ):
             if store is None:
+                continue
+            from troika_product.conversation_sessions import conversation_only
+            if label == "project" and conversation_only(user_message):
                 continue
             try:
                 if label == "memory":
@@ -1866,6 +1890,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         tool_start_callback=None,
         tool_complete_callback=None,
         gateway_session_key: Optional[str] = None,
+        current_user_message: Any = None,
     ) -> Any:
         """
         Create an AIAgent instance using the gateway's runtime config.
@@ -1900,6 +1925,12 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
 
             enabled_toolsets = [ROUTER_TOOLSET]
             tool_progress_callback = wrap_progress(tool_progress_callback)
+            from troika_product.conversation_sessions import CONVERSATION_RULE, conversation_only
+            ephemeral_system_prompt = (ephemeral_system_prompt or "") + "\n\n" + CONVERSATION_RULE
+            if conversation_only(current_user_message):
+                # A social turn cannot authorize any old tool action, even if
+                # a provider tries to revive it from a cached prompt.
+                enabled_toolsets = []
 
         max_iterations = int(os.getenv("HERMES_MAX_ITERATIONS", "90"))
 
@@ -1908,6 +1939,13 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         fallback_model = GatewayRunner._load_fallback_model()
         from agent.provider_metering import current_provider_guard
         own = getattr(current_provider_guard(), "credentials", None)
+        context = getattr(current_provider_guard(), "context", None)
+        if self._access_registry is not None and context is not None and session_id:
+            from troika_product.conversation_sessions import ConversationSessions, conversation_only
+            context.conversation_only = conversation_only(current_user_message)
+            context.archive_messages = ConversationSessions(
+                self._access_registry, self._ensure_session_db()
+            ).archive(current_provider_guard().principal, session_id)
         if own is not None:
             from troika_product.own_provider import ENDPOINTS
             model = own.model
@@ -3326,7 +3364,12 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             return web.json_response({"error": "session_db_unavailable"}, status=503)
 
         try:
-            rows = db.get_messages(session_id)
+            principal = self._product_principal(request)
+            if principal is not None:
+                from troika_product.conversation_sessions import ConversationSessions
+                rows = ConversationSessions(self._access_registry, db).timeline(principal, session_id)
+            else:
+                rows = db.get_messages(session_id)
         except Exception as e:
             logger.error("get_messages failed for %s: %s", session_id, e, exc_info=True)
             return web.json_response({"error": f"load_failed: {e}"}, status=500)
@@ -3894,6 +3937,10 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         )
         if session_auth_err:
             return session_auth_err
+
+        session_id, history = self._prepare_product_conversation(
+            request, session_id, user_message, history
+        )
 
         quota_err = self._consume_product_request_quota(request)
         if quota_err:
@@ -5668,6 +5715,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 agent = self._create_agent(
                     ephemeral_system_prompt=ephemeral_system_prompt,
                     session_id=session_id,
+                    current_user_message=user_message,
                     # Product narration must pass the completion guard before
                     # the client displays it or speaks it. The SSE writer emits
                     # the validated final answer when no deltas were forwarded.
@@ -5907,6 +5955,10 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         if session_auth_err:
             return session_auth_err
 
+        session_id, conversation_history = self._prepare_product_conversation(
+            request, str(session_id), user_message, conversation_history
+        )
+
         quota_err = self._consume_product_request_quota(request)
         if quota_err:
             return quota_err
@@ -6123,6 +6175,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                         agent = self._create_agent(
                             ephemeral_system_prompt=ephemeral_system_prompt,
                             session_id=session_id,
+                            current_user_message=user_message,
                             stream_delta_callback=None if principal is not None else _text_cb,
                             tool_progress_callback=event_cb,
                             gateway_session_key=gateway_session_key,

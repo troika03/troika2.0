@@ -256,6 +256,9 @@ def catalogue(preferences: dict[str, bool], schemas: dict[str, dict]) -> dict:
 def discover(args: dict, **_: Any) -> str:
     try:
         registry, principal = session_identity()
+        from agent.provider_metering import current_provider_guard
+        if getattr(getattr(current_provider_guard(), "context", None), "conversation_only", False):
+            return _error("no_action_requested")
         preferences = CapabilityStore(registry).preferences(principal)
         capability = args.get("capability")
         if capability == "catalog":
@@ -295,6 +298,9 @@ def _error(code: str) -> str:
 def execute(args: dict, **kwargs: Any) -> str:
     try:
         registry, principal = session_identity()
+        from agent.provider_metering import current_provider_guard
+        if getattr(getattr(current_provider_guard(), "context", None), "conversation_only", False):
+            return _error("no_action_requested")
         preferences = CapabilityStore(registry).preferences(principal)
         tool, arguments = args.get("tool"), args.get("arguments")
         if not isinstance(tool, str) or tool not in TOOL_CAPABILITY or tool in FORBIDDEN_PRODUCT_TOOLS:
