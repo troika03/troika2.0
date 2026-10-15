@@ -17,3 +17,11 @@ def register(ctx):
                       schema=SEARCH_SCHEMA, handler=discover, check_fn=product_mode)
     ctx.register_tool(name=CALL_TOOL, toolset=ROUTER_TOOLSET,
                       schema=CALL_SCHEMA, handler=execute, check_fn=product_mode)
+    from troika_product.working_context import CONTEXT_SCHEMA, compact_enabled, context_tool
+
+    def context_available():
+        return product_mode() and compact_enabled() and get_session_env("TROIKA_CONTEXT_DISCOVERY", "") == "1"
+
+    context_available._hermes_skip_availability_cache = True
+    ctx.register_tool(name="troika_context", toolset=ROUTER_TOOLSET,
+                      schema=CONTEXT_SCHEMA, handler=context_tool, check_fn=context_available)

@@ -1750,6 +1750,7 @@ DEFAULT_CONFIG = {
                 "product_resource_prices": {},
                 "product_resource_enabled": False,
                 "product_byok_enabled": False,
+                "product_compact_context_enabled": False,
                 "product_resource_services": {},
                 "product_resource_task_tokens": 250000,
                 "product_resource_approval_tokens": 100000,

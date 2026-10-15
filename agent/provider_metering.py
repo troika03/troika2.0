@@ -156,6 +156,9 @@ class _GuardedClient:
 
     def _begin(self, kwargs):
         self._check_scope()
+        prepare = getattr(self._guard, "prepare_payload", None)
+        if prepare is not None:
+            kwargs = prepare(kwargs, client=self)
         return self._guard.begin_call(
             kwargs,
             provider=self._provider,

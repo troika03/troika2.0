@@ -40,6 +40,10 @@ class ResourceRuntime(LLMMeter):
             run_token_limit=ceiling,
         )
         self._heartbeat_stop = threading.Event()
+        from troika_product.working_context import WorkingContext
+        self.context = WorkingContext(
+            self, enabled=config.get("product_compact_context_enabled", False)
+        )
         self._budget_lock = threading.Lock()
         self._expensive_approved = False
         self._expensive_threshold = config.get(
@@ -121,6 +125,18 @@ class ResourceRuntime(LLMMeter):
 
     def finish(self):
         self.stopped = True
+        self.context.clear()
+        if self.context.enabled:
+            try:
+                self.ledger.registry.record_audit_event(
+                    "context.prepared", principal=self.principal, run_id=self.run_key,
+                    details=dict(self.context.stats),
+                )
+            except Exception:
+                # Optional numeric diagnostics must not prevent releasing the
+                # run lease. No message text or exception body is logged.
+                import logging
+                logging.getLogger(__name__).warning("Context counters unavailable")
         self._heartbeat_stop.set()
         try:
             self.ledger.finish_run(self.principal, self.run_key)
@@ -140,6 +156,11 @@ class ResourceRuntime(LLMMeter):
                 "Срок активной задачи истёк; новые вызовы остановлены.",
             ) from error
         return super().begin_call(*args, **kwargs)
+
+    def prepare_payload(self, payload, *, client):
+        if self.stopped:
+            raise ProviderCallBlocked("resource_run_stopped", "Задача остановлена.")
+        return self.context.prepare(payload, client=client)
 
     def begin_tool(self, name, arguments):
         if self.stopped:

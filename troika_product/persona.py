@@ -1,10 +1,10 @@
 """The user-facing identity used by the Troika product runtime.
 
 The upstream engine is still called Hermes internally, but that implementation
-name must never become the product assistant's identity. The source prompt is
-kept in ``docker/SOUL.md`` so Docker images and local development share one
-editable file; the fallback below keeps product mode safe when the source tree
-is not present in an installed package.
+name must never become the product assistant's identity. The complete source
+remains in ``docker/SOUL.md`` with a package fallback below. Enabled product
+scopes use the checked compact projection in ``context_guidance.py``; task
+recipes and the original identity stay available through capability discovery.
 """
 
 from __future__ import annotations
@@ -12,7 +12,12 @@ from __future__ import annotations
 from pathlib import Path
 
 
-TROIKA_PERSONA_MARKER = "[TROIKA_PERSONA_VERSION:5]"
+TROIKA_PERSONA_MARKER = "[TROIKA_PERSONA_VERSION:6]"
+
+
+def current_persona_marker() -> str:
+    from troika_product.working_context import compact_enabled
+    return TROIKA_PERSONA_MARKER if compact_enabled() else "[TROIKA_PERSONA_VERSION:5]"
 
 
 TROIKA_PERSONA_FALLBACK = """# Тройка — кто ты
@@ -37,9 +42,8 @@ TROIKA_PERSONA_FALLBACK = """# Тройка — кто ты
 """
 
 
-def load_troika_persona() -> str:
-    """Load the product persona from the repository, with a safe fallback."""
-
+def original_persona() -> str:
+    """Retain the complete source identity independently of the compact view."""
     source = Path(__file__).resolve().parents[1] / "docker" / "SOUL.md"
     try:
         text = source.read_text(encoding="utf-8").strip()
@@ -49,7 +53,20 @@ def load_troika_persona() -> str:
     # identity. The fallback is deliberately self-contained and short.
     if not text or "Тройка" not in text or "You are Hermes Agent" in text:
         text = TROIKA_PERSONA_FALLBACK
+    return text
+
+
+def load_troika_persona() -> str:
+    """Render a compact working identity only in an enabled product scope."""
+    from troika_product.working_context import compact_enabled
     from gateway.session_context import get_session_env
+    if compact_enabled():
+        from troika_product.context_guidance import CORE_PERSONA
+        text = CORE_PERSONA.strip()
+        if get_session_env("TROIKA_PRODUCT_DELIVERY_MODE", "server") == "device":
+            text += "\n\nГотовые файлы — на устройстве; подробности в files/documents/development. «Файл подготовлен» не означает сохранение: его подтверждает приложение."
+        return text + "\n\n" + current_persona_marker()
+    text = original_persona()
     if get_session_env("TROIKA_PRODUCT_DELIVERY_MODE", "server") == "device":
         text += """
 
@@ -68,4 +85,4 @@ def load_troika_persona() -> str:
     # Detailed development instructions already arrive with the discovered
     # capability. Keep ordinary conversation free of that duplicate payload.
     text += "\n\nДля разработки загрузи capability development; её инструкции и схему используй для полного проекта, ревью и исправлений."
-    return text + "\n\n" + TROIKA_PERSONA_MARKER
+    return text + "\n\n" + current_persona_marker()

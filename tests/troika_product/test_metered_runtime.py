@@ -106,6 +106,8 @@ def agent(monkeypatch, sdk):
     # The primary mock follows the same request factory boundary as real SDKs.
     monkeypatch.setattr(AIAgent, "_ensure_primary_openai_client", lambda *a, **k: sdk)
     monkeypatch.setattr("agent.agent_init.fetch_model_metadata", lambda: {})
+    # Synthetic SDK tests must not wait for the external model catalogue.
+    monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
     result = AIAgent(
         api_key="fake-test-key",
         base_url=sdk.base_url,

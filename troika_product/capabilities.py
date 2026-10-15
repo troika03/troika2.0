@@ -34,7 +34,7 @@ class Capability:
 
 CAPABILITIES = (
     Capability("assistant", "Дела и память", "Задачи, заметки, проекты и напоминания.",
-               ("troika_assistant", "troika_reminder"),
+               ("troika_assistant", "troika_reminder", "troika_context"),
                "Сохранять дела и напоминания, помнить подтверждённые предпочтения."),
     Capability("web", "Поиск в интернете", "Находить информацию и источники.",
                ("web_search", "web_extract", "web_research"),
@@ -67,6 +67,7 @@ TOOL_CAPABILITY = {tool: item.id for item in CAPABILITIES for tool in item.tools
 TOOL_TITLES = {
     "troika_assistant": "Задачи, проекты, заметки и память",
     "troika_reminder": "Напоминания",
+    "troika_context": "Исходная история и инструкции",
     "web_search": "Поиск страниц", "web_extract": "Чтение страниц",
     "web_research": "Исследование с источниками",
     "troika_create_docx": "Документ Word", "troika_create_pdf": "Документ PDF",
@@ -184,13 +185,23 @@ def session_identity() -> tuple[AccessRegistry, AccessPrincipal]:
 def available_schemas() -> dict[str, dict]:
     """Reuse reviewed toolset resolution, including both screen feature gates."""
     from model_tools import get_tool_definitions
-    schemas = get_tool_definitions(
-        enabled_toolsets=product_toolsets(
+    from troika_product.working_context import compact_enabled
+    toolsets = product_toolsets(
             screen_snapshot_enabled=get_session_env("TROIKA_PRODUCT_SCREEN_SNAPSHOT_ENABLED", "") == "1",
             external_vision_enabled=get_session_env("TROIKA_PRODUCT_SCREEN_EXTERNAL_VISION_ENABLED", "") == "1",
-        ),
-        quiet_mode=True,
-    )
+        )
+    previous = get_session_overrides()
+    if compact_enabled():
+        toolsets.append(ROUTER_TOOLSET)
+        set_session_override("TROIKA_CONTEXT_DISCOVERY", "1")
+    try:
+        schemas = get_tool_definitions(enabled_toolsets=toolsets, quiet_mode=True)
+    finally:
+        if compact_enabled():
+            if "TROIKA_CONTEXT_DISCOVERY" in previous:
+                set_session_override("TROIKA_CONTEXT_DISCOVERY", previous["TROIKA_CONTEXT_DISCOVERY"])
+            else:
+                clear_session_override("TROIKA_CONTEXT_DISCOVERY")
     result = {schema["function"]["name"]: schema["function"] for schema in schemas
               if schema["function"]["name"] in TOOL_CAPABILITY
               and schema["function"]["name"] not in FORBIDDEN_PRODUCT_TOOLS}
@@ -266,7 +277,10 @@ def discover(args: dict, **_: Any) -> str:
         selected = [schemas[name] for name in item.tools if name in schemas and (not tool or name == tool)]
         if not selected:
             return _error("capability_unavailable")
+        from troika_product.context_guidance import capability_guidance
+        guidance = capability_guidance(item.id, device=get_session_env("TROIKA_PRODUCT_DELIVERY_MODE", "server") == "device")
         return json.dumps({"ok": True, "capability": item.id, "skill": item.skill,
+                           "guidance": guidance,
                            "tools": selected, "call_via": CALL_TOOL}, ensure_ascii=False)
     except PermissionError:
         return _error("product_identity_required")

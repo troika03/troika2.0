@@ -1021,7 +1021,7 @@ class ProactiveStore:
             ).fetchone()
         return self._message(row)
 
-    def assistant_context(self, principal: AccessPrincipal) -> str:
+    def assistant_context(self, principal: AccessPrincipal, *, query: object = "", compact: bool | None = None) -> str:
         """Return bounded private context for references to the active project."""
         with self._connect() as connection:
             self._require_principal(connection, principal)
@@ -1044,6 +1044,20 @@ class ProactiveStore:
                 "AND project_id = ? ORDER BY created_at DESC LIMIT 8",
                 (principal.user_id, project["id"]),
             ).fetchall()
+        from troika_product.working_context import compact_enabled
+        compact = compact_enabled() if compact is None else compact
+        if type(compact) is not bool:
+            raise ValueError("invalid compact project flag")
+        if compact:
+            import re
+            words = {s[:5] for s in re.findall(r"\w+", str(query).casefold()) if len(s) > 3}
+            project_words = {s[:5] for s in re.findall(r"\w+", (project["name"] + " " + project["summary"]).casefold()) if len(s) > 3}
+            follow_up = bool(re.search(r"продолж|проект|наш\w* план|этот|решени|задач|continue|project", str(query), re.I))
+            if not follow_up and not words.intersection(project_words):
+                return ""
+            if not follow_up:
+                notes = [n for n in notes if any(w in n["content"].casefold() for w in words)][:4]
+                tasks = [t for t in tasks if any(w in t["title"].casefold() for w in words)][:6]
         payload = {
             "active_project": {
                 "name": project["name"],

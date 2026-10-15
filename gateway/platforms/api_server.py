@@ -1302,9 +1302,9 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                     saved = store.capture(principal, user_message)
                     if saved:
                         self._record_product_audit(request, "memory.automatic_saved", details={"count": len(saved)})
-                    context = store.assistant_context(principal, query=user_message)
+                    context = store.assistant_context(principal, query=user_message, compact=True) if self._product_resource_config.get("product_compact_context_enabled", False) else store.assistant_context(principal, query=user_message)
                 else:
-                    context = store.assistant_context(principal)
+                    context = store.assistant_context(principal, query=user_message, compact=True) if self._product_resource_config.get("product_compact_context_enabled", False) else store.assistant_context(principal)
             except PermissionError:
                 return ""
             except Exception:
@@ -1941,6 +1941,9 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         # Product conversations can contain voice transcripts and private
         # document text. Keep raw user content out of the operator logs.
         agent._redact_content_logs = self._access_registry is not None
+        if getattr(getattr(current_provider_guard(), "context", None), "enabled", False):
+            # The SDK prepares a derived context while this agent persists all originals.
+            agent.compression_enabled = False
         return agent
 
     # ------------------------------------------------------------------
@@ -1972,6 +1975,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         """Purge external local stores, then atomically remove product rows."""
         from troika_product.device_delivery import device_deliveries
         device_deliveries.purge_owner(user_id)
+        from troika_product.working_context import purge_owner
+        purge_owner(user_id)
         from troika_product.development_checks import development_checks
         development_checks.purge(user_id)
         if self._access_registry is None:
@@ -3846,7 +3851,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                         _hlim = int(os.environ.get("TROIKA_HISTORY_LIMIT", "20"))
                     except (TypeError, ValueError):
                         _hlim = 20
-                    if _hlim > 0 and len(history) > _hlim:
+                    if not self._product_resource_config.get("product_compact_context_enabled", False) and _hlim > 0 and len(history) > _hlim:
                         # Стрипаем висящие tool-сообщения в начале — у LLM это
                         # ломает контекст (tool_call_id без предыдущего
                         # assistant с tool_calls). Берём более широкий хвост и
