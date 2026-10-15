@@ -1,0 +1,73 @@
+{
+  "javascriptErrors": [],
+  "overflow": [],
+  "checks": [
+    {
+      "platform": "android",
+      "name": "Animated contour changes geometry",
+      "passed": true
+    },
+    {
+      "platform": "android",
+      "name": "Reduced motion renders one static canvas",
+      "passed": true
+    },
+    {
+      "platform": "android",
+      "name": "Enter appends a local demonstration message",
+      "passed": true
+    },
+    {
+      "platform": "android",
+      "name": "File opens its design details page",
+      "passed": true
+    },
+    {
+      "platform": "desktop",
+      "name": "Animated contour changes geometry",
+      "passed": true
+    },
+    {
+      "platform": "desktop",
+      "name": "Reduced motion renders one static canvas",
+      "passed": true
+    },
+    {
+      "platform": "desktop",
+      "name": "Enter appends a local demonstration message",
+      "passed": true
+    },
+    {
+      "platform": "desktop",
+      "name": "File opens its design details page",
+      "passed": true
+    },
+    {
+      "name": "Gallery filters Android dark / desktop both themes",
+      "passed": true
+    }
+  ],
+  "svgSamples": [
+    {
+      "source": "svg/android/dark/05-home.svg",
+      "preview": "review/vector-05-home-dark.png"
+    },
+    {
+      "source": "svg/android/light/05-home.svg",
+      "preview": "review/vector-05-home-light.png"
+    },
+    {
+      "source": "svg/desktop/dark/11-file-detail.svg",
+      "preview": "review/vector-11-file-detail-dark.png"
+    },
+    {
+      "source": "components/voice-idle.svg",
+      "preview": "review/vector-voice-idle-dark.png"
+    },
+    {
+      "source": "components/voice-listening.svg",
+      "preview": "review/vector-voice-listening-dark.png"
+    }
+  ],
+  "actualFigmaImportVerified": false
+}

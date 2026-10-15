@@ -1,0 +1,103 @@
+{
+  "date": "2026-10-15",
+  "screens": 144,
+  "android": 72,
+  "desktop": 72,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "voiceComponents": 8,
+  "svgFiles": 156,
+  "svgTextElements": 6189,
+  "svgVectorPaths": 12977,
+  "rasterImagesInSvg": 0,
+  "javascriptErrors": [],
+  "horizontalOverflow": [],
+  "browserChecks": [
+    {
+      "platform": "android",
+      "name": "Animated contour changes geometry",
+      "passed": true
+    },
+    {
+      "platform": "android",
+      "name": "Reduced motion renders one static canvas",
+      "passed": true
+    },
+    {
+      "platform": "android",
+      "name": "Enter appends a local demonstration message",
+      "passed": true
+    },
+    {
+      "platform": "android",
+      "name": "File opens its design details page",
+      "passed": true
+    },
+    {
+      "platform": "desktop",
+      "name": "Animated contour changes geometry",
+      "passed": true
+    },
+    {
+      "platform": "desktop",
+      "name": "Reduced motion renders one static canvas",
+      "passed": true
+    },
+    {
+      "platform": "desktop",
+      "name": "Enter appends a local demonstration message",
+      "passed": true
+    },
+    {
+      "platform": "desktop",
+      "name": "File opens its design details page",
+      "passed": true
+    },
+    {
+      "name": "Gallery filters Android dark / desktop both themes",
+      "passed": true
+    }
+  ],
+  "nativeFigmaApiModel": {
+    "method": "Local Figma API model; not an actual Figma import",
+    "results": [
+      {
+        "platform": "android",
+        "theme": "dark",
+        "fontFailure": false,
+        "pages": 1,
+        "frames": 36,
+        "textLayers": 551,
+        "svgLayers": 466
+      },
+      {
+        "platform": "all",
+        "theme": "all",
+        "fontFailure": false,
+        "pages": 5,
+        "frames": 152,
+        "textLayers": 3025,
+        "svgLayers": 1821
+      },
+      {
+        "platform": "android",
+        "theme": "dark",
+        "fontFailure": true,
+        "pages": 0,
+        "frames": 0,
+        "textLayers": 0,
+        "svgLayers": 0
+      }
+    ]
+  },
+  "actualFigmaImportVerified": false,
+  "nativeClientsModified": false,
+  "fontMatchesBrandSource": true,
+  "notes": [
+    "SVG text may be converted into vector outlines by Figma. The local importer creates native Text nodes.",
+    "SVG and Figma voice components are static. Continuous animation remains in the interactive prototypes.",
+    "No accounts, keys, private conversations or device recordings are used in the design examples."
+  ]
+}

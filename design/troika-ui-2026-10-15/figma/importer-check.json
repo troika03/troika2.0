@@ -1,0 +1,32 @@
+{
+  "method": "Local Figma API model; not an actual Figma import",
+  "results": [
+    {
+      "platform": "android",
+      "theme": "dark",
+      "fontFailure": false,
+      "pages": 1,
+      "frames": 36,
+      "textLayers": 551,
+      "svgLayers": 466
+    },
+    {
+      "platform": "all",
+      "theme": "all",
+      "fontFailure": false,
+      "pages": 5,
+      "frames": 152,
+      "textLayers": 3025,
+      "svgLayers": 1821
+    },
+    {
+      "platform": "android",
+      "theme": "dark",
+      "fontFailure": true,
+      "pages": 0,
+      "frames": 0,
+      "textLayers": 0,
+      "svgLayers": 0
+    }
+  ]
+}
