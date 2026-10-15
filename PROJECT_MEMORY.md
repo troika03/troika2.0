@@ -69,14 +69,20 @@ tools с общим phone bridge исключены из ordinary product; пр�
 Каталог входит в текущий production API. Исторические проверки каталога:
 `docs/audit/CAPABILITIES_DEPLOYMENT_2026_10_08.md`.
 
-Текущий Android APK установлен 14 октября на Samsung SM-A225F без сброса данных:
-`_logs/resource-20261013/Troika-subscriptions-2026-10-14.apk`, 115 406 669 байт,
-SHA-256 `cda823a142f86fba38d71601f761d360faa404326ec9ead85f6ea403233c931e`.
-Подпись, UID и первая дата установки прежние; установленный hash совпадает.
-На телефоне открыты действующий месячный ресурс и форма «Свой API-ключ».
-Пользовательский ключ не вводился. Device build сохраняет native/reminder WIP
-другой задачи; этот WIP не включён в commit подписки. Полный phone voice/reminder
-E2E не объявляется завершённым.
+Текущий Android APK обновлён 15 октября на Samsung SM-A225F без удаления
+приложения: `work/phone-autopilot-20261014/Troika-autopilot-device-2026-10-15.apk`, 115504973 байт,
+SHA-256 `3b5c216daef43bbf31a6d511e76592652a5e7241e6342693ca80969a3b5aa54e`.
+Сборка накладывает шесть committed Android-изменений автопилота 24e945f на
+исходники ранее установленного device artifact; native/reminder код сохранён.
+Это отдельная device-сборка; native WIP не включён в commit автопилота.
+Проверены подпись, совпадение установленного hash, сохранение UID и первой
+даты установки. Flutter: 113 passed/2 skipped; analyze 0 errors/warnings,
+48 info; Android release собран offline. Приложение не удалялось,
+разрешения автоматически не выдавались. История/файлы не очищались.
+Production `/v1/development/projects` пока отвечает 404: клиент установлен,
+но для запуска автопилота требуется серверный выпуск. Physical voice/reminder
+и полноценный установленный autopilot E2E не подтверждены.
+Подробности: `docs/audit/AUTOPILOT_ANDROID_INSTALL_2026_10_15.md`.
 
 ## Реальная среда на 2026-10-14
 
@@ -433,14 +439,8 @@ fallback нет. Корпоративные вызовы проходят дей
 Финальные team/runtime: 27 passed. Release EXE и APK собраны; реальный пример
 прошёл 12 Node-проверок, фильтр, форму и узкую навигацию в браузере. Артефакты фиксируются в
 `docs/audit/DEVELOPMENT_AUTOPILOT_2026_10_14.md`.
-15 октября подготовлена отдельная device APK с сохранённым native/reminder
-кодом установленной версии: `work/phone-autopilot-20261014/Troika-autopilot-device-2026-10-15.apk`,
-115504973 байт, SHA-256 `3b5c216daef43bbf31a6d511e76592652a5e7241e6342693ca80969a3b5aa54e`.
-Flutter 113 passed/2 skipped; analyze 0 errors/warnings, 48 info; offline
-release собран, подпись совпадает с прежней. Установка не выполнена: ADB
-не видит телефон. Ранее установленная APK и данные не заменялись.
-Production development endpoint остаётся 404. Проверки и следующий шаг:
-`docs/audit/AUTOPILOT_ANDROID_DEVICE_CANDIDATE_2026_10_15.md`.
+15 октября device APK установлена; подтверждение и ограничения:
+`docs/audit/AUTOPILOT_ANDROID_INSTALL_2026_10_15.md`.
 
 Живой free API создал сайт вымышленной студии «Север»: код, дизайн, README,
 тесты и отчёт; найденные при локальной проверке ошибки передавались модели,
@@ -452,8 +452,9 @@ Production development endpoint остаётся 404. Проверки и сле
 находятся в RAM; device delivery TTL 600 секунд. Durable resume/checkpoints,
 пауза, уточнение активного проекта и голос при полностью закрытом приложении
 не реализованы. При исчерпании бюджета задача останавливается; отдельного
-согласования продолжения в карточке проекта пока нет. Этот автопилот ещё
-не развёрнут на production и не проверен в установленном клиенте.
+согласования продолжения в карточке проекта пока нет. Android-клиент установлен отдельной
+device-сборкой; серверный автопилот не развёрнут (404), полный installed E2E
+не выполнен.
 Полный upstream suite на Windows не зелёный; попытка полного прогона была
 неполной. Чужие незавершённые native/reminder/context правки не включены.
 Архитектура: `docs/development/DEVELOPMENT_AUTOPILOT.md`.
