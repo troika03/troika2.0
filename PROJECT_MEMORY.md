@@ -79,14 +79,14 @@ SHA-256 `3b5c216daef43bbf31a6d511e76592652a5e7241e6342693ca80969a3b5aa54e`.
 даты установки. Flutter: 113 passed/2 skipped; analyze 0 errors/warnings,
 48 info; Android release собран offline. Приложение не удалялось,
 разрешения автоматически не выдавались. История/файлы не очищались.
-Production `/v1/development/projects` пока отвечает 404: клиент установлен,
-но для запуска автопилота требуется серверный выпуск. Physical voice/reminder
-и полноценный установленный autopilot E2E не подтверждены.
+Production автопилот включён 15 октября; API-создание проекта, разговор
+параллельно, Stop и передача ZIP проверены через публичный HTTPS. Physical
+voice/reminder и полный E2E установленного Android ещё не подтверждены.
 Подробности: `docs/audit/AUTOPILOT_ANDROID_INSTALL_2026_10_15.md`.
 
-## Реальная среда на 2026-10-14
+## Реальная среда на 2026-10-15
 
-API: `troika-production:compact-20261014-api`, STT:
+API: `troika-production:autopilot-20261015-api`, STT:
 `troika-production:resource-personal-20261014-stt`. API healthy, публичный HTTPS
 работает. Путь deployment прежний: `deploy/production/compose.yaml`, отдельные
 API/STT tags сохранены в серверном `resource-images.env`; config общий read-only.
@@ -110,7 +110,7 @@ history/memory/tools; reasoning не прибавляется повторно. 
 на корпоративный API. Native voice также проверяет личный режим. WPF хранит
 key через DPAPI CurrentUser отдельно для аккаунта. Сервер не сохраняет его.
 
-Есть whole-Run квоты, concurrency 1/1/3 с heartbeat, бюджет/approval, Groq STT,
+Есть whole-Run квоты, concurrency 1/1/5 с heartbeat, бюджет/approval, Groq STT,
 Edge TTS, bounded SDK vision, subscription details, export/delete. Старый Edge
 403 исправлен обновлением до 7.3.1; M4A проверяется в RAM через PyAV 17.
 Free/Welcome фонд 13 333 333 вместе с 20 млн существующей beta-выдачи сохраняет
@@ -406,14 +406,14 @@ analyze 0 errors/warnings, 38 info; WPF: 31/3/6 checks passed. APK и EXE соб
 Общий Windows Python baseline остаётся красным; единого зелёного full run нет.
 
 Проверки и ограничения записаны в
-`docs/audit/API_DEVELOPMENT_2026_10_13.md`. Новый runtime пока не развёрнут;
-новые клиенты не установлены. Требуются согласованное обновление API/клиентов
-и свежий installed-client E2E. Предыдущая диагностика слабого упаковочного
+`docs/audit/API_DEVELOPMENT_2026_10_13.md`. Серверный runtime и Android
+обновлены; WPF-автопилот собран, но ещё не установлен. Полный installed-client
+E2E остаётся открытым. Предыдущая диагностика слабого упаковочного
 пути остаётся в `docs/audit/DEVELOPMENT_PROJECT_QUALITY_2026_10_09.md`.
 
 ## Автопилот разработки — 14 октября 2026 года
 
-Реализован в исходниках и собран для Android/WPF. Только Pro: пять активных
+Развёрнут на сервере и установлен на Android; WPF собран. Только Pro: пять активных
 Run на аккаунт, до четырёх фоновых проектов; один слот остаётся для разговора.
 Сервер проверяет право до квоты и модели. У проекта отдельные session_id,
 run_id и Stop; уход со вкладки не отменяет работу. До трёх API-specialists
@@ -453,11 +453,23 @@ fallback нет. Корпоративные вызовы проходят дей
 пауза, уточнение активного проекта и голос при полностью закрытом приложении
 не реализованы. При исчерпании бюджета задача останавливается; отдельного
 согласования продолжения в карточке проекта пока нет. Android-клиент установлен отдельной
-device-сборкой; серверный автопилот не развёрнут (404), полный installed E2E
-не выполнен.
+device-сборкой, серверный автопилот развёрнут; полный installed E2E не выполнен.
 Полный upstream suite на Windows не зелёный; попытка полного прогона была
 неполной. Чужие незавершённые native/reminder/context правки не включены.
 Архитектура: `docs/development/DEVELOPMENT_AUTOPILOT.md`.
+
+15 октября API обновлён поверх compact image без замены STT/SearXNG и config.
+Digest: `sha256:3c78d14f23804cf8cc1b25208a5185aaf4a3eb8bdc29bbb73ef5f71d22a25b89`.
+Сохранены данные и защищённые SQLite backups; предусмотрен откат только образа.
+874 целевых Python проверки прошли, 1 skip. На отдельном экземпляре и через
+публичный HTTPS бесплатная модель создала завершённый Python-проект с планом,
+дизайном, README, тестами и ревью. Обычный разговор выполнялся параллельно.
+Проверены Pro gate, повтор без дубля, изоляция устройств, Stop, SHA-256 ZIP,
+получение/подтверждение файла и ошибочный личный ключ без corporate fallback.
+Синтетический голосовой отчёт сформирован TTS в RAM; воспроизведение на телефоне
+этим не подтверждается. Пример: 7 файлов, ревью passed,
+execution=not_run/visual_review=not_checked. Тестовые аккаунты удалены.
+Доказательства и ограничения: `docs/audit/AUTOPILOT_SERVER_2026_10_15.md`.
 
 ## Общий стиль Android и ПК — 12 октября 2026
 
