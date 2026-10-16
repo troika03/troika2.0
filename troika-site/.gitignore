@@ -1,4 +1,5 @@
 /build/
+/build-timeweb/
 /node_modules/
 .env*
 !.env.example

@@ -1,0 +1,21 @@
+Options -Indexes
+DirectoryIndex index.html
+RewriteEngine On
+RewriteCond %{HTTPS} !=on
+RewriteCond %{HTTP:X-Forwarded-Proto} !^https$ [NC]
+RewriteRule ^ https://cm444726.tw1.ru%{REQUEST_URI} [R=302,L,NE]
+RewriteRule ^(?:api|downloads)/ transfer.php [L,QSA]
+ErrorDocument 404 /404.html
+<Files "application.php">
+  Require all denied
+</Files>
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "same-origin"
+  Header always set X-Frame-Options "DENY"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'; frame-ancestors 'none'"
+</IfModule>
+<FilesMatch "^(?:.*\.json|.*\.zip|.*\.tar\.gz|.*\.log|.*\.env)$">
+  Require all denied
+</FilesMatch>
