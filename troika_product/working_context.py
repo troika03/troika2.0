@@ -102,7 +102,8 @@ class WorkingContext:
         self.messages = []
         self.archive_messages = []
         self._lock = threading.RLock()
-        self.stats = {"summary_calls": 0, "index_builds": 0, "cache_hits": 0, "original_tokens": 0, "sent_tokens": 0}
+        self.stats = {"summary_calls": 0, "index_builds": 0, "cache_hits": 0, "original_tokens": 0, "sent_tokens": 0,
+                      "tool_result_projections": 0}
 
     def clear(self):
         with self._lock:
@@ -166,7 +167,9 @@ class WorkingContext:
             return payload
         with self._lock:
             self.messages = deepcopy([m for m in raw if m.get("role") not in {"system", "developer"}])
-            messages = self.messages
+            from troika_product.tool_result_context import project_results
+            messages, projections = project_results(self.messages, archive_count=len(self.archive_messages))
+            self.stats["tool_result_projections"] += projections
             tokens = token_count(raw)
             self.stats["original_tokens"] += tokens
             opening = next((_text(m) for m in messages if m.get("role") == "user"), "")
@@ -183,7 +186,7 @@ class WorkingContext:
                 }] + messages[size:]
             if entry:
                 self.stats["cache_hits"] += 1
-            prepared = candidate() if entry else raw
+            prepared = candidate() if entry else systems + messages if projections else raw
             if token_count(prepared) > self.threshold:
                 positions = [i for i, m in enumerate(messages) if m.get("role") == "user"]
                 # Prefer four complete turns. Large completed tool traces may
@@ -192,7 +195,7 @@ class WorkingContext:
                     cut = positions[-keep] if len(positions) > keep else 0
                     if cut <= size or cut < 2:
                         continue
-                    merged = self._outline(messages[:cut])
+                    merged = self._outline(self.messages[:cut])
                     proposed = systems + [{"role": "user", "content": json.dumps(merged, ensure_ascii=False)}] + messages[cut:]
                     if token_count(proposed) < token_count(prepared) * .85:
                         size, summary = cut, merged
@@ -237,8 +240,20 @@ class WorkingContext:
             terms = query.split()
             matches = [(sum(t in _text(m).casefold() for t in terms), i, m) for i, m in enumerate(history)]
             matches.sort(key=lambda value: (value[0], value[1]), reverse=True)
-            return {"matches": [{"index": i + 1, "role": m["role"], "preview": _text(m)[:300]}
-                                for score, i, m in matches[:8] if score], "total_messages": len(history)}
+            found = []
+            for score, i, message in matches[:8]:
+                if not score:
+                    continue
+                text = _text(message)
+                match = re.search(re.escape(query), text, re.I)
+                if match is None:
+                    match = next((term_match for term in sorted(terms, key=len, reverse=True)
+                                  if (term_match := re.search(re.escape(term), text, re.I))), None)
+                # Offsets refer to original characters, never casefolded text.
+                offset = max(0, (match.start() if match else 0) - 120)
+                found.append({"index": i + 1, "role": message["role"], "offset": offset,
+                              "preview": text[offset:offset + 300]})
+            return {"matches": found, "total_messages": len(history)}
         if action == "history_recent":
             recent = [(i, m) for i, m in enumerate(history)
                       if m.get("role") in {"user", "assistant"} and _text(m) and not m.get("tool_calls")]

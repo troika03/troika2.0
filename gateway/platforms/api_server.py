@@ -1108,6 +1108,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         self._run_streams_created: Dict[str, float] = {}
         # Active run agent/task references for stop support
         self._active_run_agents: Dict[str, Any] = {}
+        self._active_resource_guards: Dict[str, Any] = {}
         self._active_run_tasks: Dict[str, "asyncio.Task"] = {}
         # Pollable run status for dashboards and external control-plane UIs.
         self._run_statuses: Dict[str, Dict[str, Any]] = {}
@@ -1873,11 +1874,19 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                                                 config=self._product_resource_config)
                     meter.start()
             with provider_metering_scope(meter):
+                if meter is not None:
+                    self._active_resource_guards[run_key] = meter
+                    if self._run_statuses.get(run_key, {}).get("status") in {"stopping", "cancelled"}:
+                        meter.block_pending_calls()
                 try:
                     yield
                 finally:
                     if self._product_resource_enabled and meter is not None:
                         meter.finish()
+                    if meter is not None and run_key in self._run_statuses:
+                        self._run_statuses[run_key].setdefault("usage", {})["diagnostics"] = meter.diagnostics.snapshot()
+                    if self._active_resource_guards.get(run_key) is meter:
+                        self._active_resource_guards.pop(run_key, None)
 
         return scope()
 
@@ -2085,6 +2094,9 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             if owner[0] == user_id
         ]
         for run_id in owned_run_ids:
+            guard = self._active_resource_guards.get(run_id)
+            if guard is not None:
+                guard.block_pending_calls()
             agent = self._active_run_agents.get(run_id)
             if agent is not None:
                 try:
@@ -2140,6 +2152,9 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         ]
         tasks: list["asyncio.Task[Any]"] = []
         for run_id in run_ids:
+            guard = self._active_resource_guards.get(run_id)
+            if guard is not None:
+                guard.block_pending_calls()
             approval_key = self._run_approval_sessions.pop(run_id, None)
             if approval_key:
                 try:
@@ -4163,6 +4178,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 "prompt_tokens": usage.get("input_tokens", 0),
                 "completion_tokens": usage.get("output_tokens", 0),
                 "total_tokens": usage.get("total_tokens", 0),
+                **({"diagnostics": usage["diagnostics"]} if "diagnostics" in usage else {}),
             },
         }
         if is_partial or is_failed or not completed:
@@ -4305,6 +4321,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                     "prompt_tokens": usage.get("input_tokens", 0),
                     "completion_tokens": usage.get("output_tokens", 0),
                     "total_tokens": usage.get("total_tokens", 0),
+                    **({"diagnostics": usage["diagnostics"]} if "diagnostics" in usage else {}),
                 },
             }
             if stream_failed:
@@ -4499,6 +4516,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 "input_tokens": usage.get("input_tokens", 0),
                 "output_tokens": usage.get("output_tokens", 0),
                 "total_tokens": usage.get("total_tokens", 0),
+                **({"diagnostics": usage["diagnostics"]} if "diagnostics" in usage else {}),
             }
             incomplete_history = list(conversation_history)
             incomplete_history.append({"role": "user", "content": user_message})
@@ -4842,6 +4860,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                     "input_tokens": usage.get("input_tokens", 0),
                     "output_tokens": usage.get("output_tokens", 0),
                     "total_tokens": usage.get("total_tokens", 0),
+                    **({"diagnostics": usage["diagnostics"]} if "diagnostics" in usage else {}),
                 }
                 _failed_history = list(conversation_history)
                 _failed_history.append({"role": "user", "content": user_message})
@@ -4866,6 +4885,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                     "input_tokens": usage.get("input_tokens", 0),
                     "output_tokens": usage.get("output_tokens", 0),
                     "total_tokens": usage.get("total_tokens", 0),
+                    **({"diagnostics": usage["diagnostics"]} if "diagnostics" in usage else {}),
                 }
                 full_history = self._build_response_conversation_history(
                     conversation_history,
@@ -4932,6 +4952,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                     "input_tokens": usage.get("input_tokens", 0),
                     "output_tokens": usage.get("output_tokens", 0),
                     "total_tokens": usage.get("total_tokens", 0),
+                    **({"diagnostics": usage["diagnostics"]} if "diagnostics" in usage else {}),
                 }
                 await _write_event("response.failed", {
                     "type": "response.failed",
@@ -5211,6 +5232,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 "input_tokens": usage.get("input_tokens", 0),
                 "output_tokens": usage.get("output_tokens", 0),
                 "total_tokens": usage.get("total_tokens", 0),
+                **({"diagnostics": usage["diagnostics"]} if "diagnostics" in usage else {}),
             },
         }
 
@@ -5740,6 +5762,10 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                     "output_tokens": getattr(agent, "session_completion_tokens", 0) or 0,
                     "total_tokens": getattr(agent, "session_total_tokens", 0) or 0,
                 }
+                from troika_product.token_diagnostics import current_diagnostics
+                diagnostics = current_diagnostics()
+                if diagnostics is not None:
+                    usage["diagnostics"] = diagnostics
                 # Include the effective session ID in the result so callers
                 # (e.g. X-Hermes-Session-Id header) can track compression-
                 # triggered session rotations. (#16938)
@@ -6208,6 +6234,10 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                         "output_tokens": getattr(agent, "session_completion_tokens", 0) or 0,
                         "total_tokens": getattr(agent, "session_total_tokens", 0) or 0,
                     }
+                    from troika_product.token_diagnostics import current_diagnostics
+                    diagnostics = current_diagnostics()
+                    if diagnostics is not None:
+                        u["diagnostics"] = diagnostics
                     return r, u
 
                 result, usage = await asyncio.get_running_loop().run_in_executor(None, _run_sync)
@@ -6541,6 +6571,9 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             return web.json_response(_openai_error(f"Run not found: {run_id}", code="run_not_found"), status=404)
 
         self._set_run_status(run_id, "stopping", last_event="run.stopping")
+        guard = self._active_resource_guards.get(run_id)
+        if guard is not None:
+            guard.block_pending_calls()
         self._record_product_audit(request, "run.stop_requested", run_id=run_id)
 
         if agent is not None:

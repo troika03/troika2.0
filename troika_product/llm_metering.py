@@ -225,6 +225,8 @@ class LLMMeter:
         self.run_key, self.catalogue = run_key, catalogue
         self.stopped = False
         self.run_token_limit = run_token_limit
+        from troika_product.token_diagnostics import TokenDiagnostics
+        self.diagnostics = TokenDiagnostics()
 
     def block_pending_calls(self):
         self.stopped = True
@@ -430,6 +432,7 @@ class LLMMeter:
                 "resource_access_revoked",
                 "Доступ аккаунта или устройства отозван; вызов модели остановлен.",
             ) from error
+        self.diagnostics.dispatched(bounded)
         return _Lease(self, hold, entry.prices, input_bound, output_bound, entry.debit_mode), bounded
 
 
@@ -441,6 +444,8 @@ class _Lease:
         self.settled = False
 
     def succeeded(self, response):
+        if self.settled:
+            return
         raw = _get(response, "usage")
         zero_cost = (
             all(value == 0 for value in (
@@ -487,6 +492,7 @@ class _Lease:
             },
         )
         self.settled = True
+        self.meter.diagnostics.received(response, charged=charged)
 
     def failed(self, error):
         # No inference-cost claim is made from an exception or missing usage.

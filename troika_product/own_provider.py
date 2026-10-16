@@ -40,10 +40,14 @@ def current_credentials():
 
 
 class _PersonalLease:
-    settled = True
+    def __init__(self, diagnostics):
+        self.diagnostics = diagnostics
+        self.settled = False
 
     def succeeded(self, response):
-        pass
+        if not self.settled:
+            self.diagnostics.received(response)
+            self.settled = True
 
     def require_settled(self):
         pass
@@ -81,7 +85,10 @@ class OwnProviderRuntime(ResourceRuntime):
         bounded.setdefault("max_tokens", 8192)
         bounded.pop("extra_headers", None)
         bounded.pop("extra_query", None)
-        return _PersonalLease(), bounded
+        if bounded.get("stream"):
+            bounded["stream_options"] = {**(bounded.get("stream_options") or {}), "include_usage": True}
+        self.diagnostics.dispatched(bounded)
+        return _PersonalLease(self.diagnostics), bounded
 
     def finish(self):
         super().finish()

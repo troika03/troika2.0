@@ -126,6 +126,15 @@ class ResourceRuntime(LLMMeter):
     def finish(self):
         self.stopped = True
         self.context.clear()
+        try:
+            for event, counts in self.diagnostics.audit_events().items():
+                self.ledger.registry.record_audit_event(
+                    event, principal=self.principal, run_id=self.run_key, details=counts,
+                )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning("Token counters unavailable")
+        self.diagnostics.clear()
         if self.context.enabled:
             try:
                 self.ledger.registry.record_audit_event(
