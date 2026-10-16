@@ -6,7 +6,7 @@ await mkdir(`${root}/assets`,{recursive:true});
 for(const[slug,page]of Object.entries(pages)){
   const file=slug==='home'?'index.html':slug==='404'?'404.html':`${slug}/index.html`;
   await mkdir(`${root}/${slug==='home'||slug==='404'?'':slug}`,{recursive:true});
-  await writeFile(`${root}/${file}`,documentHTML(slug,page).replaceAll('https://troika-voice-assistant.mihailkamihaa.chatgpt.site',origin));
+  await writeFile(`${root}/${file}`,documentHTML(slug,page,origin));
 }
 await cp('src/brand',`${root}/assets/brand`,{recursive:true});
 await cp('src/styles.css',`${root}/assets/styles.css`);
