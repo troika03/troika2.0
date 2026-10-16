@@ -93,6 +93,47 @@
     ]
   },
   "actualFigmaImportVerified": false,
+  "actualFigmaImport": {
+    "date": "2026-10-16",
+    "status": "partial",
+    "fileUrl": "https://www.figma.com/design/zJ6BhvNM0UrHURsWOh3PmK?node-id=5-216",
+    "importedScreenCount": 134,
+    "android": 72,
+    "desktop": 62,
+    "voiceStatesImported": 0,
+    "pendingScreenIds": [
+      "desktop-light-privacy",
+      "desktop-light-export",
+      "desktop-light-advanced",
+      "desktop-light-api",
+      "desktop-light-diagnostics",
+      "desktop-light-help",
+      "desktop-light-support",
+      "desktop-light-approval",
+      "desktop-light-offline",
+      "desktop-light-compact"
+    ],
+    "pendingVoiceStateIds": [
+      "voice-idle",
+      "voice-listening",
+      "voice-thinking",
+      "voice-acting",
+      "voice-approval",
+      "voice-speaking",
+      "voice-done",
+      "voice-error"
+    ],
+    "checks": {
+      "nativeTextFontFamilies": [
+        "Golos Text"
+      ],
+      "fullScreenRasterImages": 0,
+      "geometryErrors": [],
+      "firstSixGeometryCorrectionCount": 38,
+      "visualReview": "Android home rechecked in the actual editor after button geometry correction. Full final visual review is still incomplete."
+    },
+    "blocker": "Figma MCP Starter plan tool call limit reached."
+  },
   "nativeClientsModified": false,
   "fontMatchesBrandSource": true,
   "notes": [

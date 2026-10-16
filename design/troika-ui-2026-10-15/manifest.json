@@ -1636,7 +1636,13 @@
   "figma": {
     "nativeTextImporter": "figma/code.js",
     "nativeFigmaImportVerified": false,
-    "svgTextMayImportAsVectors": true
+    "svgTextMayImportAsVectors": true,
+    "liveFileUrl": "https://www.figma.com/design/zJ6BhvNM0UrHURsWOh3PmK?node-id=5-216",
+    "liveImportStatus": "partial",
+    "importedScreens": 134,
+    "pendingScreens": 10,
+    "pendingVoiceStates": 8,
+    "remainingImporter": "figma/finish-import/code.js"
   },
   "animation": {
     "source": "hermes-android/lib/widgets/status_orb.dart",

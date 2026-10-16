@@ -9,6 +9,8 @@ root=Path(__file__).resolve().parents[1]
 manifest=json.loads((root/'manifest.json').read_text(encoding='utf-8'))
 visuals=json.loads((root/'quality-visuals.json').read_text(encoding='utf-8'))
 importer=json.loads((root/'figma/importer-check.json').read_text(encoding='utf-8'))
+live_path=root/'figma/live-import-state.json'
+live=json.loads(live_path.read_text(encoding='utf-8')) if live_path.exists() else None
 assert not manifest['validation']['javascriptErrors']
 assert not manifest['validation']['overflow']
 assert not visuals['javascriptErrors'] and not visuals['overflow']
@@ -58,7 +60,8 @@ report={
     'horizontalOverflow':[],
     'browserChecks':visuals['checks'],
     'nativeFigmaApiModel':importer,
-    'actualFigmaImportVerified':False,
+    'actualFigmaImportVerified':bool(live and live['status']=='complete'),
+    'actualFigmaImport':({key:live[key] for key in ['date','status','fileUrl','importedScreenCount','android','desktop','voiceStatesImported','pendingScreenIds','pendingVoiceStateIds','checks','blocker']} if live else None),
     'nativeClientsModified':False,
     'fontMatchesBrandSource':True,
     'notes':['SVG text may be converted into vector outlines by Figma. The local importer creates native Text nodes.',
