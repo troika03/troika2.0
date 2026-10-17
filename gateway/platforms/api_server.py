@@ -1941,6 +1941,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 # A social turn cannot authorize any old tool action, even if
                 # a provider tries to revive it from a cached prompt.
                 enabled_toolsets = []
+                # A complete greeting needs neither tools nor a reasoning pass.
+                reasoning_config = {"enabled": False}
 
         max_iterations = int(os.getenv("HERMES_MAX_ITERATIONS", "90"))
 
@@ -1962,6 +1964,10 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             runtime_kwargs.update(api_key=own.key, provider=own.provider,
                                   base_url=ENDPOINTS[own.provider], api_mode="chat_completions")
             fallback_model = None
+
+        if self._access_registry is not None and own is None and reasoning_config is None:
+            # Keep explicit operator settings; make ordinary hosted chat responsive.
+            reasoning_config = {"effort": "low"}
 
         agent = AIAgent(
             model=model,
@@ -4318,10 +4324,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 usage = agent_usage or usage
                 stream_failed = bool(result.get("failed") or result.get("error_code") or result.get("completed") is False)
                 stream_error = result.get("error_code")
-                if self._product_principal(request) is not None:
-                    # All product text is withheld until runtime verification.
-                    # Emit exactly the checked final response, including for
-                    # providers that never call the delta callback.
+                if self._product_principal(request) is not None and not result.get("_product_streamed"):
+                    # Compatibility for runtimes without the guarded live stream.
                     final_text = result.get("final_response", "") if isinstance(result, dict) else ""
                     if final_text:
                         await _emit(final_text)
@@ -5752,16 +5756,15 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 )
                 product_override_names.append("TROIKA_PRODUCT_WORKSPACE_ROOT")
             try:
+                product_stream = None
+                if product_principal is not None and stream_delta_callback is not None:
+                    from troika_product.streaming import GuardedTextStream
+                    product_stream = GuardedTextStream(stream_delta_callback, user_message)
                 agent = self._create_agent(
                     ephemeral_system_prompt=ephemeral_system_prompt,
                     session_id=session_id,
                     current_user_message=user_message,
-                    # Product narration must pass the completion guard before
-                    # the client displays it or speaks it. The SSE writer emits
-                    # the validated final answer when no deltas were forwarded.
-                    stream_delta_callback=(
-                        None if product_principal is not None else stream_delta_callback
-                    ),
+                    stream_delta_callback=(product_stream.feed if product_stream else stream_delta_callback),
                     tool_progress_callback=tool_progress_callback,
                     tool_start_callback=tool_start_callback,
                     tool_complete_callback=tool_complete_callback,
@@ -5775,6 +5778,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                     conversation_history=conversation_history,
                     task_id=effective_task_id,
                 )
+                if product_stream is not None:
+                    product_stream.finish_result(result)
                 usage = {
                     "input_tokens": getattr(agent, "session_prompt_tokens", 0) or 0,
                     "output_tokens": getattr(agent, "session_completion_tokens", 0) or 0,
@@ -6216,11 +6221,15 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                             product_override_names.append(
                                 "TROIKA_PRODUCT_WORKSPACE_ROOT"
                             )
+                        product_stream = None
+                        if principal is not None:
+                            from troika_product.streaming import GuardedTextStream
+                            product_stream = GuardedTextStream(_text_cb, user_message)
                         agent = self._create_agent(
                             ephemeral_system_prompt=ephemeral_system_prompt,
                             session_id=session_id,
                             current_user_message=user_message,
-                            stream_delta_callback=None if principal is not None else _text_cb,
+                            stream_delta_callback=product_stream.feed if product_stream else _text_cb,
                             tool_progress_callback=event_cb,
                             gateway_session_key=gateway_session_key,
                         )
@@ -6231,6 +6240,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                             conversation_history=conversation_history,
                             task_id=effective_task_id,
                         )
+                        if product_stream is not None:
+                            product_stream.finish_result(r)
                     finally:
                         try:
                             unregister_gateway_notify(approval_session_key)
@@ -6286,7 +6297,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                     )
                 else:
                     final_response = result.get("final_response", "") if isinstance(result, dict) else ""
-                    if principal is not None and final_response:
+                    if principal is not None and final_response and not result.get("_product_streamed"):
                         q.put_nowait({
                             "event": "message.delta",
                             "run_id": run_id,
