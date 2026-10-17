@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../theme/troika_theme.dart';
+import 'troika_brand.dart';
 
 /// Визуальные состояния главного voice orb из плана Troika 1.0.
 enum VoiceOrbState {
@@ -34,6 +35,7 @@ class StatusOrb extends StatefulWidget {
 class _StatusOrbState extends State<StatusOrb> with TickerProviderStateMixin {
   late final AnimationController _breath;
   late final AnimationController _motion;
+  bool _reducedMotion = false;
 
   @override
   void initState() {
@@ -55,6 +57,16 @@ class _StatusOrbState extends State<StatusOrb> with TickerProviderStateMixin {
     if (oldWidget.state != widget.state) _applyState();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
+    if (_reducedMotion != reducedMotion) {
+      _reducedMotion = reducedMotion;
+      _applyState();
+    }
+  }
+
   void _applyState() {
     final breathDuration = switch (widget.state) {
       VoiceOrbState.listening => const Duration(milliseconds: 760),
@@ -73,12 +85,17 @@ class _StatusOrbState extends State<StatusOrb> with TickerProviderStateMixin {
     };
     _breath
       ..stop()
-      ..duration = breathDuration
-      ..repeat(reverse: true);
+      ..duration = breathDuration;
     _motion
       ..stop()
-      ..duration = motionDuration
-      ..repeat();
+      ..duration = motionDuration;
+    if (_reducedMotion) {
+      _breath.value = 0;
+      _motion.value = 0;
+    } else {
+      _breath.repeat(reverse: true);
+      _motion.repeat();
+    }
   }
 
   @override
@@ -151,7 +168,9 @@ class _StatusOrbState extends State<StatusOrb> with TickerProviderStateMixin {
                   ),
                 ),
                 AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 220),
+                  duration: _reducedMotion
+                      ? Duration.zero
+                      : const Duration(milliseconds: 220),
                   child: _CenterSignal(
                     key: ValueKey(widget.state),
                     state: widget.state,
@@ -204,11 +223,17 @@ class _CenterSignal extends StatelessWidget {
       return SizedBox(
         width: size * 0.18,
         height: size * 0.18,
-        child: const CircularProgressIndicator(
+        child: CircularProgressIndicator(
+          value: MediaQuery.disableAnimationsOf(context) ? 0.72 : null,
           strokeWidth: 2.5,
           color: Colors.white,
         ),
       );
+    }
+
+    if (state == VoiceOrbState.idle) {
+      return TroikaSvgIcon('mic',
+          color: const Color(0xFFFFF8E7), size: size * 36 / 260);
     }
 
     final icon = switch (state) {
@@ -219,7 +244,7 @@ class _CenterSignal extends StatelessWidget {
       VoiceOrbState.error => Icons.priority_high_rounded,
       _ => Icons.circle,
     };
-    return Icon(icon, color: Colors.white, size: size * 0.2);
+    return Icon(icon, color: Colors.white, size: size * 36 / 260);
   }
 }
 
@@ -299,11 +324,6 @@ class _OrbContourPainter extends CustomPainter {
 Color _orbColor(BuildContext context, VoiceOrbState state) {
   return switch (state) {
     VoiceOrbState.error => TroikaColors.error,
-    VoiceOrbState.approval => Theme.of(context).colorScheme.primary,
-    VoiceOrbState.done => Theme.of(context).colorScheme.primary,
-    VoiceOrbState.listening ||
-    VoiceOrbState.speaking =>
-      Theme.of(context).colorScheme.primary,
-    _ => Theme.of(context).colorScheme.primary,
+    _ => TroikaColors.brand,
   };
 }

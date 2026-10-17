@@ -17,6 +17,7 @@
 
 ## Рабочие инструкции и архитектура
 
+- [Разработка по макетам](development/UI_IMPLEMENTATION_GUIDE.md): источники Figma, цвета, шрифт, голосовые состояния, порядок внедрения Android и Windows и проверка сходства.
 - [Запуск закрытой beta](TROIKA_CLOSED_BETA_SETUP.md): product mode, аккаунты, токены, локальные проверки.
 - [Политика подписки](TROIKA_SUBSCRIPTION_ECONOMICS.md): согласованные 12 октября тарифы Free/Plus/Pro, расчётные токены, состав функций, экономика и порядок перехода; production cost engine ещё не включён.
 - [Production](TROIKA_PRODUCTION_SERVER.md): ОС, сеть, единственный deployment path и незакрытые инфраструктурные требования.

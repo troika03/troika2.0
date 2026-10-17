@@ -35,9 +35,9 @@ void main() {
     await tester.pump();
 
     expect(find.byType(StatusOrb), findsOneWidget);
-    expect(find.text('Что сделать?'), findsOneWidget);
-    expect(find.text('Готова'), findsOneWidget);
-    expect(find.text('Нажми и скажи, что сделать'), findsOneWidget);
+    expect(find.text('Скажи, что нужно'), findsOneWidget);
+    expect(find.text('Нажми и говори'), findsOneWidget);
+    expect(find.text('Можно начать с любой задачи'), findsOneWidget);
     expect(_orb(tester).state, VoiceOrbState.idle);
     expect(find.text('Текст'), findsOneWidget);
     expect(find.byType(ChatScreen), findsNothing);
@@ -68,7 +68,7 @@ void main() {
     await tester.pump();
 
     expect(find.byType(StatusOrb), findsOneWidget);
-    expect(find.text('Что сделать?'), findsOneWidget);
+    expect(find.text('Скажи, что нужно'), findsOneWidget);
     expect(find.text('Текст'), findsOneWidget);
     expect(find.byType(ChatScreen), findsNothing);
     expect(find.byType(NavigationBar), findsNothing);
@@ -345,7 +345,7 @@ void main() {
     final theme = buildTroikaLightTheme();
 
     expect(theme.brightness, Brightness.light);
-    expect(theme.colorScheme.primary, TroikaColors.brandDeep);
+    expect(theme.colorScheme.primary, const Color(0xFF8E5419));
     expect(theme.scaffoldBackgroundColor, TroikaLightColors.bg);
     expect(theme.textTheme.bodyLarge?.color, TroikaLightColors.text);
   });

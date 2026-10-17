@@ -57,6 +57,14 @@
 - Не ломать prompt caching: прошлую history/toolsets/system state не менять посреди разговора, кроме supported compression/invalidation.
 - Не строить второй React chat/composer вместо embedded Ink TUI; supporting panels допустимы.
 
+## Интерфейс
+
+При изменении интерфейса Android или Windows сначала читать
+`docs/development/UI_IMPLEMENTATION_GUIDE.md`: утверждённые макеты, шрифт,
+цвета, голосовые состояния, этапы переноса и критерии сравнения. Запрос владельца
+от 16 октября разрешает внедрение макетов. Готовность отдельных страниц
+фиксировать по фактическим проверкам; наличие макета не означает готовый клиент.
+
 ## Зависимости
 
 - Python dependency: lower и upper bound; post-1.0 `<next_major`, pre-1.0 `<0.(minor+2)`.

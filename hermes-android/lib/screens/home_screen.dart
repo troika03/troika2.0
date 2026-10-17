@@ -14,6 +14,7 @@ import '../services/windows_shell_service.dart';
 import '../theme/troika_theme.dart';
 import '../widgets/status_orb.dart';
 import '../widgets/troika_page.dart';
+import '../widgets/troika_brand.dart';
 import '../widgets/web_sources_view.dart';
 import 'chat_screen.dart';
 import 'commands_screen.dart';
@@ -366,35 +367,38 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       bottomNavigationBar: wide
           ? null
-          : NavigationBar(
-              height: 64,
-              selectedIndex: _isWindows ? 0 : _mobileTab,
-              backgroundColor: Theme.of(context).colorScheme.surface,
-              indicatorColor:
-                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.16),
-              onDestinationSelected: (index) {
-                setState(() => _mobileTab = index);
-              },
-              destinations: const [
-                NavigationDestination(
-                  icon: Icon(Icons.home_outlined),
-                  selectedIcon: Icon(Icons.home),
-                  label: 'Главная',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.checklist_rounded),
-                  label: 'Дела',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.folder_outlined),
-                  label: 'Файлы',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.person_outline),
-                  label: 'Профиль',
-                ),
-              ],
-            ),
+          : Container(
+              decoration: BoxDecoration(
+                  border: Border(
+                      top: BorderSide(
+                          color: Theme.of(context).colorScheme.outline))),
+              child: NavigationBar(
+                height: 77,
+                selectedIndex: _isWindows ? 0 : _mobileTab,
+                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                indicatorColor: Colors.transparent,
+                onDestinationSelected: (index) {
+                  setState(() => _mobileTab = index);
+                },
+                destinations: const [
+                  NavigationDestination(
+                    icon: TroikaSvgIcon('audio-lines'),
+                    label: 'Главная',
+                  ),
+                  NavigationDestination(
+                    icon: TroikaSvgIcon('circle-check'),
+                    label: 'Дела',
+                  ),
+                  NavigationDestination(
+                    icon: TroikaSvgIcon('folder'),
+                    label: 'Файлы',
+                  ),
+                  NavigationDestination(
+                    icon: TroikaSvgIcon('sliders-horizontal'),
+                    label: 'Профиль',
+                  ),
+                ],
+              )),
     );
   }
 }
@@ -414,34 +418,12 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = state == AssistantState.error
-        ? TroikaColors.error
-        : Theme.of(context).colorScheme.primary;
     return Container(
-      height: 62,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(
-        border:
-            Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
-      ),
+      height: 72,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
         children: [
-          Container(
-            width: 9,
-            height: 9,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: accent),
-          ),
-          const SizedBox(width: 11),
-          const Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Тройка',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
+          const TroikaBrand(),
           const Spacer(),
           if (onCompact != null)
             TextButton.icon(
@@ -456,11 +438,16 @@ class _Header extends StatelessWidget {
               fontSize: 12,
             ),
           ),
-          const SizedBox(width: 4),
-          IconButton(
+          const SizedBox(width: 8),
+          IconButton.filledTonal(
+            style: IconButton.styleFrom(
+              backgroundColor: TroikaPalette.of(context).surfaceHi,
+              foregroundColor: Theme.of(context).colorScheme.onSurface,
+              fixedSize: const Size(44, 44),
+            ),
             tooltip: 'Профиль и настройки',
             onPressed: onSettings,
-            icon: const Icon(Icons.account_circle_outlined),
+            icon: const TroikaSvgIcon('user-round'),
           ),
         ],
       ),
@@ -488,9 +475,9 @@ class _VoiceHome extends StatelessWidget {
     final hint = _voiceStateHint(assistant, orbState);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final orbSize = constraints.maxHeight < 650 ? 200.0 : 230.0;
+        final orbSize = constraints.maxWidth < 340 ? 230.0 : 260.0;
         return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
           child: Center(
             child: ConstrainedBox(
               constraints: BoxConstraints(
@@ -502,47 +489,67 @@ class _VoiceHome extends StatelessWidget {
               child: Column(
                 children: [
                   Text(
-                    'Что сделать?',
+                    'Скажи, что нужно',
+                    textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.displaySmall,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   Text(
-                    label,
+                    'От слов к делу.',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 14,
+                    ),
+                  ),
+                  _OrbButton(
+                    assistant: assistant,
+                    orbState: orbState,
+                    size: orbSize,
+                  ),
+                  Text(
+                    orbState == VoiceOrbState.idle ? 'Нажми и говори' : label,
                     key: const ValueKey('voice-state-label'),
                     style: TextStyle(
-                      color: _voiceAccent(context, orbState),
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                        color: orbState == VoiceOrbState.idle
+                            ? Theme.of(context).colorScheme.onSurface
+                            : _voiceAccent(context, orbState),
+                        fontSize: 14),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    hint,
+                    orbState == VoiceOrbState.idle
+                        ? 'Можно начать с любой задачи'
+                        : hint,
                     key: ValueKey(
                       assistant.liveTranscript.isEmpty
                           ? 'voice-state-hint'
                           : 'voice-live-transcript',
                     ),
                     textAlign: TextAlign.center,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 14,
+                      fontSize: 12,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  _OrbButton(
-                    assistant: assistant,
-                    orbState: orbState,
-                    size: orbSize,
+                  const SizedBox(height: 24),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                          onPressed: onOpenText,
+                          icon: const TroikaSvgIcon('message-square'),
+                          label: const Text('Текст')),
+                      OutlinedButton.icon(
+                          onPressed: onOpenSaved,
+                          icon: const TroikaSvgIcon('circle-check'),
+                          label: const Text('Мои дела')),
+                    ],
                   ),
-                  TextButton.icon(
-                    onPressed: onOpenText,
-                    icon: const Icon(Icons.keyboard_outlined, size: 18),
-                    label: const Text('Текст'),
-                  ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 24),
                   _CurrentCards(
                     assistant: assistant,
                     onOpenText: onOpenText,

@@ -12,6 +12,7 @@ foreach ($name in @('TroikaDesktop.exe', 'TroikaDesktop.exe.config')) {
     $same = (Test-Path -LiteralPath $target) -and ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $inputFile -Algorithm SHA256).Hash)
     if (!$same) { Copy-Item -LiteralPath $inputFile -Destination $target -Force }
 }
+Copy-Item -LiteralPath (Join-Path $source 'assets') -Destination $destination -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'README.md') -Destination $destination -Force
 Copy-Item -LiteralPath (Join-Path (Split-Path $PSScriptRoot) 'LICENSE') -Destination $destination -Force
 $shell = New-Object -ComObject WScript.Shell

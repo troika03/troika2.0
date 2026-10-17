@@ -53,12 +53,12 @@ namespace Troika.Desktop {
             Title = "Тройка — для Windows";
             Width = Math.Min(960, SystemParameters.WorkArea.Width * .9); Height = Math.Min(680, SystemParameters.WorkArea.Height * .9);
             MinWidth = 780; MinHeight = 540; WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.CanResize; FontFamily = new FontFamily("Segoe UI"); FontSize = 14;
+            WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.CanResize; FontFamily = BrandAssets.Font; FontSize = 14;
             var settings = store.Settings(); autoSpeak = Json.Get(settings, "auto_speak") == null || Json.Flag(settings, "auto_speak"); light = Json.Flag(settings, "light"); reducedMotion = Json.Flag(settings, "reduced_motion"); Topmost = Json.Flag(settings, "always_on_top"); interfaceAccent = Json.Text(settings, "interface_accent");
             api.Account = preview ? new AccountSession() : store.LoadSession(); api.SessionId = api.Account.HomeSession; api.SaveSession = store.SaveSession; api.PersonalProviders = new PersonalProviderStore(store.Root);
             Build();
             StartReminders();
-            SizeChanged += delegate { if (voiceVisual != null) { voiceVisual.Height = Math.Max(130, Math.Min(232, ActualHeight - 450)); heroTitle.FontSize = ActualHeight < 600 ? 29 : 37; } };
+            SizeChanged += delegate { if (voiceVisual != null) { voiceVisual.Height = Math.Max(180, Math.Min(260, ActualHeight - 380)); heroTitle.FontSize = 24; } };
             WindowChrome.SetWindowChrome(this, new WindowChrome { CaptionHeight = 0, ResizeBorderThickness = new Thickness(6), CornerRadius = new CornerRadius(14), GlassFrameThickness = new Thickness(0) });
             SourceInitialized += delegate {
                 handle = new WindowInteropHelper(this).Handle;
@@ -127,14 +127,12 @@ namespace Troika.Desktop {
             var style = new Style(typeof(ScrollViewer)); style.Setters.Add(new Setter(ScrollViewer.PanningModeProperty, PanningMode.VerticalOnly)); Resources[typeof(ScrollViewer)] = style;
             Resources[SystemParameters.VerticalScrollBarWidthKey] = 6.0;
             Resources[typeof(System.Windows.Controls.Primitives.ScrollBar)] = System.Windows.Markup.XamlReader.Parse(@"<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='{x:Type ScrollBar}'><Setter Property='Width' Value='8'/><Setter Property='Background' Value='Transparent'/><Setter Property='Template'><Setter.Value><ControlTemplate TargetType='{x:Type ScrollBar}'><Track x:Name='PART_Track' IsDirectionReversed='True' Orientation='{TemplateBinding Orientation}' Minimum='{TemplateBinding Minimum}' Maximum='{TemplateBinding Maximum}' ViewportSize='{TemplateBinding ViewportSize}' Value='{Binding Value, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}'><Track.Thumb><Thumb><Thumb.Template><ControlTemplate TargetType='{x:Type Thumb}'><Border Background='#786F61' CornerRadius='4' Margin='2,0,0,0'/></ControlTemplate></Thumb.Template></Thumb></Track.Thumb></Track></ControlTemplate></Setter.Value></Setter></Style>");
-            var atmosphere = new LinearGradientBrush(); atmosphere.StartPoint = new Point(0, 0); atmosphere.EndPoint = new Point(1, 1); atmosphere.GradientStops.Add(new GradientStop(((SolidColorBrush)background).Color, 0)); atmosphere.GradientStops.Add(new GradientStop(((SolidColorBrush)background).Color, .55)); atmosphere.GradientStops.Add(new GradientStop((System.Windows.Media.Color)ColorConverter.ConvertFromString(light ? "#EEE5D8" : "#292218"), 1));
-            root = new Grid { Background = atmosphere }; root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(58) }); root.RowDefinitions.Add(new RowDefinition());
+            root = new Grid { Background = background }; root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(58) }); root.RowDefinitions.Add(new RowDefinition());
             var outline = new Border { BorderBrush = line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(14), Child = root, ClipToBounds = true }; Content = outline;
             var titlebar = new Grid { Margin = new Thickness(21, 0, 9, 0) }; titlebar.ColumnDefinitions.Add(new ColumnDefinition()); titlebar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             titlebar.MouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e) { if (e.Source is Button) return; if (e.ClickCount == 2) WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized; else if (e.LeftButton == MouseButtonState.Pressed) DragMove(); };
             var brand = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            var mark = Label("≋", 31, accent); mark.Margin = new Thickness(0, -4, 10, 0); brand.Children.Add(mark);
-            var word = Label("тройка", 21, text); word.FontWeight = FontWeights.SemiBold; brand.Children.Add(word);
+            brand.Children.Add(BrandAssets.Logo(light));
             status = Label("Подключаюсь", 11, muted); status.Margin = new Thickness(17, 5, 0, 0); status.MaxWidth = 220; status.TextTrimming = TextTrimming.CharacterEllipsis; brand.Children.Add(status); titlebar.Children.Add(brand);
             var controls = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
             controls.Children.Add(Button("▱", ToggleCompact, false)); controls.Children.Add(Button("—", () => WindowState = WindowState.Minimized, false)); controls.Children.Add(Button("□", () => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized, false)); controls.Children.Add(Button("×", Close, false));
@@ -168,12 +166,12 @@ namespace Troika.Desktop {
             utilities.Children.Add(Button("Текст", () => composer.Focus(), false)); tools.Children.Add(utilities); var section = Label("Голосовой помощник", 14, muted); section.VerticalAlignment = VerticalAlignment.Center; tools.Children.Add(section); center.Children.Add(tools);
             var work = new Grid(); Grid.SetRow(work, 1); center.Children.Add(work);
             hero = new Grid { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 0, 10) }; hero.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); hero.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); hero.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); hero.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            var visual = new Grid { Width = 264, Height = 242, HorizontalAlignment = HorizontalAlignment.Center };
-            voiceVisual = visual; visual.Height = Math.Max(130, Math.Min(232, Height - 450));
+            var visual = new Grid { Width = 260, Height = 260, HorizontalAlignment = HorizontalAlignment.Center };
+            voiceVisual = visual; visual.Height = Math.Max(180, Math.Min(260, Height - 380));
             orb = new Orb { Motion = !reducedMotion && SystemParameters.ClientAreaAnimation }; visual.Children.Add(orb);
-            var orbButton = Button("", () => { var task = ToggleVoice(); }, false); orbButton.Background = Brushes.Transparent; orbButton.BorderThickness = new Thickness(0); orbButton.Margin = new Thickness(0); orbButton.Width = 150; orbButton.Height = 150; orbButton.ToolTip = "Нажмите и скажите задачу"; AccessibleName(orbButton, "Начать или остановить голосовой запрос"); visual.Children.Add(orbButton); Grid.SetRow(visual, 2); hero.Children.Add(visual);
-            heroTitle = Label("Что сделать?", 32, text); heroTitle.FontWeight = FontWeights.SemiBold; heroTitle.HorizontalAlignment = HorizontalAlignment.Center; heroTitle.Margin = new Thickness(0, 0, 0, 12); Grid.SetRow(heroTitle, 0); hero.Children.Add(heroTitle);
-            heroHint = Label("Нажмите на сферу и скажите задачу.", 14, muted); heroHint.HorizontalAlignment = HorizontalAlignment.Center; heroHint.TextAlignment = TextAlignment.Center; Grid.SetRow(heroHint, 1); hero.Children.Add(heroHint);
+            var orbButton = Button("", () => { var task = ToggleVoice(); }, false); orbButton.Background = Brushes.Transparent; orbButton.BorderThickness = new Thickness(0); orbButton.Margin = new Thickness(0); orbButton.HorizontalAlignment = HorizontalAlignment.Stretch; orbButton.VerticalAlignment = VerticalAlignment.Stretch; orbButton.ToolTip = "Нажмите и скажите задачу"; AccessibleName(orbButton, "Начать или остановить голосовой запрос"); visual.Children.Add(orbButton); Grid.SetRow(visual, 2); hero.Children.Add(visual);
+            heroTitle = Label("Скажи, что нужно", 24, text); heroTitle.FontWeight = FontWeights.Medium; heroTitle.HorizontalAlignment = HorizontalAlignment.Center; heroTitle.Margin = new Thickness(0, 0, 0, 12); Grid.SetRow(heroTitle, 0); hero.Children.Add(heroTitle);
+            heroHint = Label("Нажмите и говорите. Можно просто сказать задачу.", 14, muted); heroHint.HorizontalAlignment = HorizontalAlignment.Center; heroHint.TextAlignment = TextAlignment.Center; Grid.SetRow(heroHint, 1); hero.Children.Add(heroHint);
             var shortcuts = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 21, 0, 0), MaxWidth = 490 };
             shortcuts.Children.Add(Button("Поиск", () => Prepare("Найди и сравни "), false)); shortcuts.Children.Add(Button("Документ", () => Prepare("Создай DOCX: "), false)); shortcuts.Children.Add(Button("Презентация", () => Prepare("Создай PPTX: "), false)); shortcuts.Children.Add(Button("Код", () => OpenPanel("Разработка"), false)); Grid.SetRow(shortcuts, 3); hero.Children.Add(shortcuts); work.Children.Add(hero);
             transcript = new StackPanel { Margin = new Thickness(5, 15, 12, 12) }; conversationScroll = new ScrollViewer { Content = transcript, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Visibility = Visibility.Collapsed }; work.Children.Add(conversationScroll);
@@ -199,7 +197,7 @@ namespace Troika.Desktop {
         }
         private void SetStatus(string value, bool error) { status.Text = value; status.Foreground = error ? Color(light ? "#A84632" : "#F0A994") : muted; status.ToolTip = value; UpdateStop(); }
         private void UpdateStop() { if (stop != null) stop.Visibility = busy || recorder.Recording || speaking || localCheck != null ? Visibility.Visible : Visibility.Collapsed; }
-        private void Idle() { orb.SetState("idle"); microphone.Content = "Говорить"; send.IsEnabled = !busy; UpdateStop(); if (hero.Visibility == Visibility.Visible) { heroTitle.Text = "Что сделать?"; heroHint.Text = "Нажмите на сферу и скажите задачу."; } }
+        private void Idle() { orb.SetState("idle"); microphone.Content = "Говорить"; send.IsEnabled = !busy; UpdateStop(); if (hero.Visibility == Visibility.Visible) { heroTitle.Text = "Скажи, что нужно"; heroHint.Text = "Нажмите и говорите. Можно просто сказать задачу."; } }
         private async Task Safe(Func<Task> work) {
             try { await work(); }
             catch (OperationCanceledException) { if (!closed) SetStatus("Остановлено", false); }

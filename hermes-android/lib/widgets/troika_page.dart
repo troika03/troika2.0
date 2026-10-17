@@ -9,21 +9,21 @@ class TroikaPalette {
   factory TroikaPalette.of(BuildContext context) =>
       TroikaPalette(Theme.of(context).brightness == Brightness.dark);
 
-  Color get bg => dark ? const Color(0xFF121110) : const Color(0xFFF7F4EF);
-  Color get surface => dark ? const Color(0xFF1E1C19) : Colors.white;
+  Color get bg => dark ? TroikaColors.bg : TroikaLightColors.bg;
+  Color get surface => dark ? TroikaColors.surface : TroikaLightColors.surface;
   Color get surfaceHi =>
-      dark ? const Color(0xFF2B2721) : const Color(0xFFF0E9DD);
-  Color get text => dark ? const Color(0xFFF5F1EA) : const Color(0xFF29241D);
+      dark ? TroikaColors.surfaceHi : TroikaLightColors.surfaceHi;
+  Color get text => dark ? TroikaColors.text : TroikaLightColors.text;
   Color get textMuted =>
-      dark ? const Color(0xFFB6AEA1) : const Color(0xFF6F665B);
+      dark ? TroikaColors.textMuted : TroikaLightColors.textMuted;
   Color get textFaint => textMuted;
-  Color get line => dark ? const Color(0xFF39342D) : const Color(0xFFE6DFD4);
+  Color get line => dark ? const Color(0xFF36362E) : const Color(0xFFDEDBD1);
   Color get accent =>
       TroikaColors.accentFor(TroikaConfig.interfaceAccent, dark: dark);
   Color get tint => accent.withValues(alpha: dark ? 0.16 : 0.11);
 }
 
-/// Translucency belongs to the surface, so text and controls stay fully opaque.
+/// Shared solid surface from the approved light and dark designs.
 class TroikaGlass extends StatelessWidget {
   final Widget child;
   final double radius;
@@ -34,16 +34,9 @@ class TroikaGlass extends StatelessWidget {
     final p = TroikaPalette.of(context);
     final content = DecoratedBox(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            p.surface.withValues(alpha: p.dark ? 0.94 : 0.96),
-            p.surface.withValues(alpha: p.dark ? 0.78 : 0.84),
-          ],
-        ),
+        color: p.surface,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: p.line.withValues(alpha: 0.72)),
+        border: Border.all(color: p.line),
       ),
       child: child,
     );

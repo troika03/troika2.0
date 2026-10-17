@@ -14,13 +14,13 @@ namespace Troika.Desktop {
         private Brush glass, tint;
 
         private void ApplyPalette() {
-            background = Color(light ? "#F7F4EF" : "#121110");
-            surface = Color(light ? "#FFFFFF" : "#1E1C19");
-            text = Color(light ? "#29241D" : "#F5F1EA");
-            muted = Color(light ? "#6F665B" : "#B6AEA1");
-            line = Color(light ? "#E6DFD4" : "#39342D");
+            background = Color(light ? "#F3F0EA" : "#0C0B0A");
+            surface = Color(light ? "#FFFFFF" : "#21211D");
+            text = Color(light ? "#0C0B0A" : "#F3F0EA");
+            muted = Color(light ? "#68675E" : "#B2B0A3");
+            line = Color(light ? "#DEDBD1" : "#36362E");
             var accents = new Dictionary<string, string[]> {
-                { "amber", new[] { "#E08A12", "#F5A623" } },
+                { "amber", new[] { "#8E5419", "#F5A623" } },
                 { "teal", new[] { "#00695C", "#65C8B9" } },
                 { "blue", new[] { "#245B9A", "#82B9F5" } },
                 { "violet", new[] { "#6246A3", "#B6A2F4" } },
@@ -30,7 +30,7 @@ namespace Troika.Desktop {
             if (!accents.ContainsKey(interfaceAccent)) interfaceAccent = "amber";
             accent = Color(accents[interfaceAccent][light ? 0 : 1]);
             accentText = Color(light ? "#FFFFFF" : "#211A11");
-            glass = Color(light ? "#D9FFFFFF" : "#D91E1C19");
+            glass = surface;
             var tone = ((SolidColorBrush)accent).Color;
             tint = new SolidColorBrush(System.Windows.Media.Color.FromArgb(light ? (byte)24 : (byte)40, tone.R, tone.G, tone.B));
         }

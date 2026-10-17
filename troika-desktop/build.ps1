@@ -6,6 +6,7 @@ $compiler = Join-Path $framework 'csc.exe'
 if (!(Test-Path -LiteralPath $compiler)) { throw 'Install the Windows .NET Framework 4.8 developer tools.' }
 $output = if ($OutputDirectory) { [IO.Path]::GetFullPath($OutputDirectory) } else { Join-Path $root 'build' }
 New-Item -ItemType Directory -Path $output -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $root 'assets') -Destination $output -Recurse -Force
 $references = @('System.dll','System.Core.dll','System.Net.Http.dll','System.Web.Extensions.dll','System.Security.dll','System.IO.Compression.dll','System.IO.Compression.FileSystem.dll','WPF\WindowsBase.dll','WPF\PresentationCore.dll','WPF\PresentationFramework.dll','System.Xaml.dll') | ForEach-Object { '/reference:' + (Join-Path $framework $_) }
 $sources = Get-ChildItem -LiteralPath (Join-Path $root 'src') -Filter '*.cs' | ForEach-Object { $_.FullName }
 & $compiler /nologo /target:winexe /platform:x64 /optimize+ /utf8output ('/win32manifest:' + (Join-Path $root 'app.manifest')) ('/out:' + (Join-Path $output 'TroikaDesktop.exe')) $references $sources
@@ -47,3 +48,9 @@ if ($Test) {
     if ($LASTEXITCODE -ne 0) { throw 'Autopilot tests failed.' }
 }
 Write-Output ('Built: ' + (Join-Path $output 'TroikaDesktop.exe'))
+if ($Test) {
+    & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'DesignReferenceTests.exe')) ('/reference:' + (Join-Path $output 'TroikaDesktop.exe')) $references (Join-Path $root 'tests\DesignReferenceTests.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Design reference test build failed.' }
+    & (Join-Path $output 'DesignReferenceTests.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'Design reference tests failed.' }
+}
