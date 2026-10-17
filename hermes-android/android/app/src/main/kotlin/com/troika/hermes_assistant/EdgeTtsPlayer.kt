@@ -37,6 +37,15 @@ class EdgeTtsPlayer(
     private val legacyCacheDir = File(ctx.cacheDir, "edge_tts")
     private val currentDoneCallback = AtomicReference<(() -> Unit)?>(null)
     private val streamCancelled = AtomicBoolean(false)
+    private val speechRequests = java.util.concurrent.ConcurrentHashMap.newKeySet<HttpURLConnection>()
+
+    /** Prepare the next phrase while the preceding phrase is playing. */
+    fun prepareSpeech(text: String): ByteArray? = synthesize(text)
+
+    fun playPreparedSpeech(audio: ByteArray, onDone: () -> Unit) {
+        val myGen = beginPlayback(onDone)
+        if (audio.isEmpty()) invokeDoneOnce(myGen) else playBytes(audio, myGen)
+    }
 
     // Эмоция текущей озвучки. Мозг ставит [emo:joy] в начале ПОЛНОГО ответа;
     // мы вырезаем тег один раз и прикладываем тон ко ВСЕМ предложениям этого
@@ -123,6 +132,7 @@ class EdgeTtsPlayer(
 
     /** Прервать текущее воспроизведение. Вызовет onDone из текущего speak(), если он ещё не отстрелял. */
     fun stop() {
+        speechRequests.forEach { try { it.disconnect() } catch (_: Exception) {} }
         // Инкремент поколения — любой in-flight синтез/проигрывание увидит, что
         // устарел, и не запустит звук.
         generation.incrementAndGet()
@@ -294,6 +304,7 @@ class EdgeTtsPlayer(
             player.set(mp)
             currentSource.set(source)
             mp.setVolume(1.0f, 1.0f)
+            try { mp.playbackParams = android.media.PlaybackParams().setSpeed(1.10f).setPitch(1.0f) } catch (_: Exception) {}
             mp.start()
             synchronized(done) {
                 val deadline = System.currentTimeMillis() + 120_000L
@@ -338,6 +349,7 @@ class EdgeTtsPlayer(
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
             setRequestProperty("Accept", "audio/mpeg")
         }
+        speechRequests.add(conn)
         try {
             conn.outputStream.use { it.write(body) }
 
@@ -360,6 +372,7 @@ class EdgeTtsPlayer(
             }
             return output.toByteArray()
         } finally {
+            speechRequests.remove(conn)
             conn.disconnect()
         }
     }
@@ -409,6 +422,7 @@ class EdgeTtsPlayer(
             }
             player.set(mp)
             currentSource.set(source)
+            try { mp.playbackParams = android.media.PlaybackParams().setSpeed(1.10f).setPitch(1.0f) } catch (_: Exception) {}
             mp.start()
         } catch (e: Exception) {
             Log.e(tag, "play error: ${e.message}", e)

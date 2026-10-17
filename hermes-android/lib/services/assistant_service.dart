@@ -639,6 +639,8 @@ class AssistantService extends ChangeNotifier {
       // появляются в пузыре в реальном времени, пока Тройка работает.
       final successfulTools = <String>[];
       RunActionResult? structuredResult;
+      final voiceText = StringBuffer();
+      if (speak) _tts.beginReply();
       final response = await _troika.streamMessage(
         userMsg,
         recent: _recentContext(),
@@ -673,6 +675,10 @@ class AssistantService extends ChangeNotifier {
           }
         },
         onDelta: (d) {
+          if (speak) {
+            voiceText.write(d);
+            _tts.addReplyDelta(d);
+          }
           // Чистим накопленный текст от тега на каждом апдейте, чтобы
           // [emo:...] не мелькал в пузыре пока идёт стрим.
           pending.text = _stripEmoTag(pending.text + d);
@@ -709,10 +715,22 @@ class AssistantService extends ChangeNotifier {
 
       if (speak) {
         _setState(AssistantState.speaking);
-        await _tts.speak(cleanResponse);
+        final streamed = _stripEmoTag(voiceText.toString());
+        if (streamed.isEmpty) {
+          _tts.addReplyDelta(cleanResponse);
+        } else if (cleanResponse.startsWith(streamed)) {
+          _tts.addReplyDelta(cleanResponse.substring(streamed.length));
+        }
+        try {
+          await _tts.finishReply();
+        } catch (_) {
+          // Keep the received result visible when audio delivery fails.
+          _errorMessage = 'Ответ получен. Голос сейчас недоступен.';
+        }
       }
       _setState(AssistantState.idle);
     } catch (e) {
+      if (speak) await _tts.stop();
       _messages.remove(pending);
       _setError(safeErrorMessage(e));
     } finally {

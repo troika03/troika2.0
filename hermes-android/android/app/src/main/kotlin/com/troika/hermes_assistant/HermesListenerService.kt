@@ -279,6 +279,8 @@ class HermesListenerService : Service() {
      * паттерн speak(x) + speak("") {wait}, который запускал ДВЕ озвучки подряд
      * и накладывал голоса. Один speak — одно ожидание.
      */
+    private val voiceReplyConnection = java.util.concurrent.atomic.AtomicReference<HttpURLConnection?>(null)
+
     private fun speakBlocking(text: String, timeoutMs: Long = 120000) {
         val cleaned = text.replace(Regex("[*#`]+"), "").trim()
         if (cleaned.isEmpty()) return
@@ -338,6 +340,7 @@ class HermesListenerService : Service() {
             // barge-in сработал: рубим TTS и будим runDialog
             try { edgeTts?.stop() } catch (_: Exception) {}
             try { tts?.stop() } catch (_: Exception) {}
+            try { voiceReplyConnection.getAndSet(null)?.disconnect() } catch (_: Exception) {}
             synchronized(ttsDone) { ttsDone.notify() }
         }
         monitor.start()
@@ -1296,8 +1299,33 @@ class HermesListenerService : Service() {
                     put("content", currentDatePrefix() + rawQuestion)
                 })
                 sendChatToFlutter("user", rawQuestion)
-                val answer = chatWithHermesHistory(history)
+                val ttsDone = Object()
+                val bargeMonitor = java.util.concurrent.atomic.AtomicReference<BargeInMonitor?>(null)
+                val speechStarted = java.util.concurrent.atomic.AtomicBoolean(false)
+                val voicePlayer = edgeTts
+                val replySpeech = NativeSpeechQueue(
+                    speak = { phrase, done ->
+                        if (speechStarted.compareAndSet(false, true)) {
+                            bargeMonitor.set(startBargeInMonitor(ttsDone))
+                        }
+                        speak(phrase, done)
+                    },
+                    shouldStop = { !isInDialog.get() || bargeMonitor.get()?.wasTriggered() == true },
+                    prepare = if (voicePlayer == null) null else { phrase -> voicePlayer.prepareSpeech(phrase) },
+                    playPrepared = { audio, done ->
+                        if (speechStarted.compareAndSet(false, true)) {
+                            bargeMonitor.set(startBargeInMonitor(ttsDone))
+                        }
+                        voicePlayer?.playPreparedSpeech(audio, done) ?: done()
+                    },
+                )
+                val answer = chatWithHermesHistory(history, replySpeech::add) {
+                    !isInDialog.get() || bargeMonitor.get()?.wasTriggered() == true
+                }
                 if (answer.isEmpty()) {
+                    replySpeech.cancel()
+                    edgeTts?.stop()
+                    bargeMonitor.get()?.stop()
                     HermesOverlay.get(this).updateStatus("Тройка не ответила")
                     Thread.sleep(1500)
                     break
@@ -1309,13 +1337,9 @@ class HermesListenerService : Service() {
                 sendChatToFlutter("assistant", answer)
 
                 HermesOverlay.get(this).updateStatus(answer.take(120))
-                val ttsDone = Object()
-                val bargeMon = startBargeInMonitor(ttsDone)
-                speak(answer) { synchronized(ttsDone) { ttsDone.notify() } }
-                // Длинные ответы (особенно после инструментов) могут озвучиваться до 2 минут
-                synchronized(ttsDone) { try { ttsDone.wait(120000) } catch (_: Exception) {} }
-                val bargedIn = bargeMon?.wasTriggered() == true
-                bargeMon?.stop()
+                replySpeech.finish()
+                val bargedIn = bargeMonitor.get()?.wasTriggered() == true
+                bargeMonitor.get()?.stop()
                 if (!bargedIn) Thread.sleep(300)
 
                 // Async-задача: Тройка озвучила "Принял, делаю в фоне" → выходим из continuous.
@@ -1478,7 +1502,11 @@ class HermesListenerService : Service() {
     }
 
     /** Запрос к Hermes /v1/chat/completions с историей сообщений (для continuous-режима) */
-    private fun chatWithHermesHistory(history: List<JSONObject>): String {
+    private fun chatWithHermesHistory(
+        history: List<JSONObject>,
+        onDelta: ((String) -> Unit)? = null,
+        shouldStop: () -> Boolean = { false },
+    ): String {
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val serverUrl = resolvedUrl(prefs)
         if (serverUrl.isBlank()) {
@@ -1538,7 +1566,7 @@ class HermesListenerService : Service() {
                     })
                     for (msg in history) put(msg)
                 })
-                put("stream", false)
+                put("stream", onDelta != null)
             }
 
             val conn = (URL(url).openConnection() as HttpURLConnection).apply {
@@ -1565,23 +1593,48 @@ class HermesListenerService : Service() {
                     }
                 } catch (_: Exception) {}
             }
+            voiceReplyConnection.set(conn)
             conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
 
             if (conn.responseCode == 200) {
-                val resp = conn.inputStream.bufferedReader(Charsets.UTF_8).readText()
-                val json = JSONObject(resp)
-                val choices = json.optJSONArray("choices") ?: return ""
-                if (choices.length() == 0) return ""
-                val msg = choices.getJSONObject(0).optJSONObject("message")
-                msg?.optString("content", "") ?: ""
+                val content = if (onDelta != null) {
+                    val answer = StringBuilder()
+                    var completed = false
+                    conn.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
+                        while (true) {
+                            if (shouldStop()) break
+                            val line = try { reader.readLine() } catch (error: Exception) {
+                                if (shouldStop()) break else throw error
+                            } ?: break
+                            if (!line.startsWith("data:")) continue
+                            val data = line.removePrefix("data:").trim()
+                            if (data == "[DONE]") { completed = true; break }
+                            val chunk = JSONObject(data)
+                            if (chunk.has("error")) throw IllegalStateException("Voice response interrupted")
+                            val choice = chunk.optJSONArray("choices")?.optJSONObject(0) ?: continue
+                            if (choice.optString("finish_reason") == "error") throw IllegalStateException("Voice response interrupted")
+                            val delta = choice.optJSONObject("delta")?.optString("content", "") ?: ""
+                            if (delta.isNotEmpty() && !shouldStop()) { answer.append(delta); onDelta(delta) }
+                        }
+                    }
+                    if (!completed && !shouldStop()) throw IllegalStateException("Voice response incomplete")
+                    answer.toString()
+                } else {
+                    val json = JSONObject(conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
+                    json.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")?.optString("content", "") ?: ""
+                }
+                conn.disconnect()
+                content
             } else {
-                val err = conn.errorStream?.bufferedReader()?.readText() ?: ""
-                android.util.Log.e("HermesListener", "Chat ${conn.responseCode}: $err")
+                android.util.Log.e("HermesListener", "Chat HTTP ${conn.responseCode}")
+                conn.disconnect()
                 ""
             }
         } catch (e: Exception) {
-            android.util.Log.e("HermesListener", "Chat err: ${e.message}")
+            android.util.Log.e("HermesListener", "Voice response unavailable: ${e.javaClass.simpleName}")
             ""
+        } finally {
+            try { voiceReplyConnection.getAndSet(null)?.disconnect() } catch (_: Exception) {}
         }
     }
 

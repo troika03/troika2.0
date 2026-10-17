@@ -21,7 +21,9 @@ namespace Troika.Desktop {
         private readonly ApiClient api = new ApiClient();
         private readonly LocalStore store;
         private readonly VoiceRecorder recorder = new VoiceRecorder();
-        private readonly MediaPlayer player = new MediaPlayer();
+        private readonly MediaPlayer player = new MediaPlayer { SpeedRatio = 1.10 };
+        private PhraseSpeech replySpeech;
+        private TaskCompletionSource<bool> phrasePlayback;
         private readonly DispatcherTimer recordingLimit = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
         private CancellationTokenSource operation;
         private TaskCompletionSource<string> pendingApproval;
@@ -76,7 +78,7 @@ namespace Troika.Desktop {
             };
             recordingLimit.Tick += async delegate { recordingLimit.Stop(); await ToggleVoice(); };
             player.MediaEnded += delegate { StopPlayback(); Idle(); };
-            player.MediaFailed += delegate { StopPlayback(); SetStatus("Ответ получен. Windows не смогла воспроизвести звук.", true); Idle(); };
+            player.MediaFailed += delegate { if (phrasePlayback != null) phrasePlayback.TrySetException(new InvalidOperationException("Не удалось воспроизвести ответ.")); StopPlayback(); SetStatus("Ответ получен. Windows не смогла воспроизвести звук.", true); Idle(); };
             PreviewKeyDown += async delegate(object sender, KeyEventArgs e) {
                 if (e.Key == Key.Escape) { e.Handled = true; if (busy || recorder.Recording || speaking || localCheck != null || developmentConsent != null) await Stop(); else if (openPanel.Length > 0) ClosePanel(); else if (compact) ToggleCompact(); }
                 if (e.Key == Key.N && Keyboard.Modifiers == ModifierKeys.Control) { e.Handled = true; NewConversation(); }
@@ -240,16 +242,26 @@ namespace Troika.Desktop {
             composer.Clear(); AddMessage("user", input); answer = AddMessage("assistant", ""); sourceList = new StackPanel(); sources.Clear(); transcript.Children.Add(sourceList);
             busy = true; send.IsEnabled = false; microphone.Content = "Стоп"; operation = new CancellationTokenSource(TimeSpan.FromMinutes(10)); var cancellation = operation.Token; SetStatus("Разбираюсь…", false); orb.SetState("thinking");
             await Safe(async () => {
+                var speechText = new System.Text.StringBuilder();
+                var speechOwner = api.Account.Email;
+                replySpeech = autoSpeak ? new PhraseSpeech(api.Speech, async (bytes, token) => {
+                    if (api.Account.Email != speechOwner || !api.Account.SignedIn) throw new OperationCanceledException();
+                    await PlayPhrase(bytes, token);
+                }, cancellation) : null;
                 var result = await api.Run(input, ev => {
                     if (closed) return;
                     var kind = Json.Text(ev, "event");
-                    if (kind == "message.delta") { answer.Text += Json.Text(ev, "delta"); conversationScroll.ScrollToEnd(); }
+                    if (kind == "message.delta") { var delta = Json.Text(ev, "delta"); answer.Text += delta; speechText.Append(delta); if (replySpeech != null) replySpeech.Add(delta); conversationScroll.ScrollToEnd(); }
                     if (kind == "tool.started") { SetStatus(ToolStatus(Json.Text(ev, "tool")), false); orb.SetState("acting"); }
                     RenderSources(Json.Map(Json.Get(ev, "web_activity")), sourceList, sources);
                 }, AskApproval, cancellation);
                 answer.Text = result; await ReceiveFiles(); SetStatus("Готово", false);
-                if (autoSpeak) await Speak(result, cancellation);
+                if (replySpeech != null) {
+                    if (speechText.Length == 0) replySpeech.Add(result);
+                    try { await replySpeech.Finish(); } catch (OperationCanceledException) { } catch { SetStatus("Ответ получен. Голос сейчас недоступен.", true); }
+                }
             });
+            if (replySpeech != null) { replySpeech.Dispose(); replySpeech = null; }
             if (api.ActiveRun.Length > 0) {
                 using (var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(12))) {
                     try { await api.Stop(deadline.Token); } catch { SetStatus("Ответ не завершён. Сервер не подтвердил остановку; проверьте историю.", true); }
@@ -285,8 +297,21 @@ namespace Troika.Desktop {
             StopPlayback(); var folder = Path.Combine(store.Root, "audio"); Directory.CreateDirectory(folder); audioFile = Path.Combine(folder, Guid.NewGuid().ToString("N") + ".mp3"); File.WriteAllBytes(audioFile, bytes); Array.Clear(bytes, 0, bytes.Length);
             speaking = true; player.Open(new Uri(audioFile)); player.Play(); orb.SetState("speaking"); microphone.Content = "Прервать";
         }
-        private void StopPlayback() { player.Stop(); player.Close(); speaking = false; if (audioFile.Length > 0) { try { File.Delete(audioFile); } catch { } audioFile = ""; } }
+        private async Task PlayPhrase(byte[] bytes, CancellationToken cancellation) {
+            cancellation.ThrowIfCancellationRequested(); StopPlayback();
+            var folder = Path.Combine(store.Root, "audio"); Directory.CreateDirectory(folder);
+            audioFile = Path.Combine(folder, Guid.NewGuid().ToString("N") + ".mp3"); File.WriteAllBytes(audioFile, bytes);
+            var done = new TaskCompletionSource<bool>(); phrasePlayback = done;
+            using (cancellation.Register(() => Dispatcher.BeginInvoke(new Action(() => { done.TrySetCanceled(); StopPlayback(); })))) {
+                speaking = true; player.Open(new Uri(audioFile)); player.Play(); orb.SetState("speaking"); microphone.Content = "Прервать";
+                var deadline = Task.Delay(TimeSpan.FromSeconds(90), cancellation);
+                if (await Task.WhenAny(done.Task, deadline) != done.Task) { StopPlayback(); cancellation.ThrowIfCancellationRequested(); throw new TimeoutException(); }
+                await done.Task;
+            }
+        }
+        private void StopPlayback() { player.Stop(); player.Close(); speaking = false; if (audioFile.Length > 0) { try { File.Delete(audioFile); } catch { } audioFile = ""; } var done = phrasePlayback; phrasePlayback = null; if (done != null) done.TrySetResult(true); }
         private async Task Stop() {
+            if (replySpeech != null) replySpeech.Cancel();
             if (projectSpeech != null) projectSpeech.Cancel();
             if (localCheck != null) localCheck.Cancel();
             if (developmentConsent != null) developmentConsent.TrySetResult(false);

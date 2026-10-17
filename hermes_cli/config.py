@@ -1752,6 +1752,7 @@ DEFAULT_CONFIG = {
                 "product_byok_enabled": False,
                 "product_compact_context_enabled": False,
                 "product_resource_services": {},
+                "product_speech": {"backend": "edge", "voice": ""},
                 "product_resource_task_tokens": 250000,
                 "product_resource_approval_tokens": 100000,
                 "product_resource_subsidy_tokens": 33333333,

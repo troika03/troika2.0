@@ -958,6 +958,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         self._product_resource_enabled = _coerce_config_bool(extra.get("product_resource_enabled", False))
         self._product_resource_config = extra
         self._billing_notifications = asyncio.Semaphore(4)
+        self._product_speech = None
         self._product_voice_enabled = _coerce_config_bool(
             extra.get(
                 "product_voice_enabled",
@@ -3541,7 +3542,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         return await self._synthesize_audio_speech(request)
 
     async def _synthesize_audio_speech(self, request: "web.Request") -> "web.Response":
-        """POST /v1/audio/speech — Edge TTS (OpenAI-compatible body, MP3 response).
+        """POST /v1/audio/speech — hosted voice (OpenAI-compatible MP3 response).
 
         Body: {"input": "текст", "voice": "ru-RU-SvetlanaNeural", "speed": 1.0}
         Default voice: ru-RU-SvetlanaNeural (мягкий женский, нейросетевой).
@@ -3654,6 +3655,23 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                                        self._product_principal(request), run_key=str(uuid.uuid4()),
                                        prices=self._product_resource_config.get("product_resource_services", {}),
                                        run_token_limit=self._product_resource_config.get("product_resource_task_tokens", 250000))
+
+        speech_settings = self._product_resource_config.get("product_speech", {})
+        if isinstance(speech_settings, dict) and speech_settings.get("backend") == "openrouter":
+            from troika_product.speech import OpenRouterSpeech, SpeechUnavailable
+            from agent.provider_metering import ProviderCallBlocked
+            from troika_product.service_metering import resource_error_response
+            if self._product_speech is None:
+                self._product_speech = OpenRouterSpeech(speech_settings)
+            try:
+                return await self._product_speech.render(
+                    request, text, tone, meter=voice_meter, stream=body.get("stream") is True,
+                )
+            except SpeechUnavailable:
+                # Only the existing free Edge route may replace unavailable Fish.
+                backend = "edge"
+            except ProviderCallBlocked as error:
+                return resource_error_response(error)
 
         if backend == "fish" and fish_key and fish_voice:
             lease = None

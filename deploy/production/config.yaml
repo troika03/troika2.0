@@ -15,6 +15,15 @@ platforms:
     enabled: true
     extra:
       product_voice_enabled: true
+      product_speech:
+        backend: openrouter
+        voice: ""
+      product_resource_services:
+        "openrouter:fish-audio/s2.1-pro-free:free":
+          version: fish-openrouter-free-20261016
+          unit: characters
+          rub_per_unit: "0"
+          maximum_units: 5000
       product_screen_snapshot_enabled: false
       product_screen_external_vision_enabled: false
       product_retention_enabled: true

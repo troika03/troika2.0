@@ -84,9 +84,38 @@ Production автопилот включён 15 октября; API-создан
 voice/reminder и полный E2E установленного Android ещё не подтверждены.
 Подробности: `docs/audit/AUTOPILOT_ANDROID_INSTALL_2026_10_15.md`.
 
-## Реальная среда на 2026-10-16
+## Разговорный голос — 17 октября 2026 года
 
-API: `troika-production:tokens-20261015-v4-api`, STT:
+На production подключён бесплатный Fish S2.1 Pro через OpenRouter,
+русский разговорный голос Sasha. Перед использованием проверяются нулевые
+цены и аудиовыход; платного fallback нет, резервный голос — бесплатный Edge.
+Android/Flutter, native Android и WPF начинают готовить завершённые фразы
+во время ответа модели, готовят следующие фразы заранее и соблюдают отмену.
+Темп клиента 1,10; native Android сохраняет pitch 1,0 при поддержке устройства.
+
+Публичный HTTPS на speech v4 подтвердил Fish, первые потоковые байты
+за 1,839/0,844 с, полное короткое аудио за 3,074/2,193 с, списание ресурса 0.
+Это время TTS на сервере, не полный путь от вопроса до звука телефона.
+Бесплатный провайдер не гарантирует постоянную задержку или доступность.
+
+Чистый кандидат: Python 537 passed; финальные voice 29 passed; после
+объединения с UI commit 7fdb817 Flutter 121 passed/2 skipped; WPF собран,
+55 проверок и 3 проверки очереди прошли. Native Kotlin/JUnit: 3 passed.
+Финальный Flutter analyze: 0 errors/warnings, 48 info.
+Общий Python-прогон неполный и красный (последний счётчик
+17 576 passed/277 failed). Android release собран, подпись совпадает.
+Готовая APK: `work/voice-openrouter-20261016/Troika-voice-20261017.apk`,
+115441517 байт, SHA-256
+`4f7f941e3e7d07b84b10bbbc0910b57c6f152c5d07513fff087e084ed5f9e489`.
+Установка ожидает завершения параллельной физической проверки автопилота;
+тестовую APK этой задачи голоса не перезаписывали. Текущая обычная версия
+телефона указана выше. Субъективное качество требует прослушивания владельцем.
+WPF этой задачи собран, новый EXE автоматически не устанавливался.
+Доказательства и откат: `docs/audit/OPENROUTER_VOICE_2026_10_16.md`.
+
+## Реальная среда на 2026-10-17
+
+API: `troika-production:autopilot-release-20261017-api`, STT:
 `troika-production:resource-personal-20261014-stt`. API healthy, публичный HTTPS
 работает. Путь deployment прежний: `deploy/production/compose.yaml`, отдельные
 API/STT tags сохранены в серверном `resource-images.env`; config общий read-only.
@@ -111,7 +140,7 @@ history/memory/tools; reasoning не прибавляется повторно. 
 key через DPAPI CurrentUser отдельно для аккаунта. Сервер не сохраняет его.
 
 Есть whole-Run квоты, concurrency 1/1/5 с heartbeat, бюджет/approval, Groq STT,
-Edge TTS, bounded SDK vision, subscription details, export/delete. Старый Edge
+OpenRouter Fish TTS с бесплатным Edge fallback, bounded SDK vision, subscription details, export/delete. Старый Edge
 403 исправлен обновлением до 7.3.1; M4A проверяется в RAM через PyAV 17.
 Free/Welcome фонд 13 333 333 вместе с 20 млн существующей beta-выдачи сохраняет
 начальный бюджет до 1 000 ₽ по коэффициенту. Автоматический фонд от выручки
