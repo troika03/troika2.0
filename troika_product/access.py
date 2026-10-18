@@ -1269,6 +1269,15 @@ class AccessRegistry:
                     "troika_email_verification",
                     "SELECT created_at,expires_at,attempts,verified_at FROM troika_email_verification WHERE user_id = ?",
                 ),
+                "development_projects": (
+                    "troika_development_projects",
+                    "SELECT id,device_id,run_id,state,revision,confirmed,attempt,budget_tokens,created_at,updated_at "
+                    "FROM troika_development_projects WHERE user_id = ? ORDER BY created_at,id",
+                ),
+                "development_requests": (
+                    "troika_development_requests",
+                    "SELECT project_id,device_id,run_id FROM troika_development_requests WHERE user_id=? ORDER BY project_id,run_id",
+                ),
             }
             optional = {
                 key: rows(connection, query, (principal.user_id,))

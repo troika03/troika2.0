@@ -1,0 +1,24 @@
+[Unit]
+Description=Troika isolated development checks
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+Environment=HOME=/tmp
+ExecStart=/usr/bin/python3 /srv/troika/releases/preview-20261015/supervisor.py --host 172.18.0.1 --port 18770 --token-file /srv/troika/data/preview-token --image PREVIEW_IMAGE_DIGEST --seccomp /srv/troika/releases/preview-20261015/seccomp_profile.json
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_INET AF_UNIX AF_NETLINK
+MemoryMax=192M
+TasksMax=32
+StandardOutput=null
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

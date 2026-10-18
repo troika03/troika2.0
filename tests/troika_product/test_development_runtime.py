@@ -11,51 +11,85 @@ from aiohttp.test_utils import TestClient, TestServer
 import pytest
 
 from troika_product.access import AccessRegistry
-from troika_product.development_runtime import register_autopilot_routes, start_development_run
+from troika_product.development_runtime import (
+    register_autopilot_routes,
+    start_development_run,
+)
 
 
 @pytest.mark.asyncio
-async def test_background_run_leaves_conversation_available_and_stop_is_project_scoped(tmp_path):
+async def test_background_run_leaves_conversation_available_and_stop_is_project_scoped(
+    tmp_path,
+):
     registry = AccessRegistry(tmp_path / "access.db")
     tokens = {}
     for plan in ("free", "plus", "pro"):
         user = registry.create_user(plan + "@example.com", plan=plan)
         device = registry.create_device(user, name="phone", platform="android")
         tokens[plan] = registry.issue_device_token(device)
+
     def auth(request):
-        principal = registry.authenticate(request.headers.get("Authorization", "").removeprefix("Bearer "))
+        principal = registry.authenticate(
+            request.headers.get("Authorization", "").removeprefix("Bearer ")
+        )
         if principal is None:
             return web.json_response({}, status=401)
         request["principal"] = principal
-    adapter = SimpleNamespace(_access_registry=registry, _check_auth=auth,
-        _product_principal=lambda r: r.get("principal"), _run_statuses={}, _run_owners={},
-        _run_streams={}, _run_streams_created={}, _active_run_agents={}, _active_run_tasks={},
-        _background_tasks=set(), _MAX_CONCURRENT_RUNS=10,
+
+    adapter = SimpleNamespace(
+        _access_registry=registry,
+        _check_auth=auth,
+        _product_principal=lambda r: r.get("principal"),
+        _run_statuses={},
+        _run_owners={},
+        _run_streams={},
+        _run_streams_created={},
+        _active_run_agents={},
+        _active_run_tasks={},
+        _background_tasks=set(),
+        _MAX_CONCURRENT_RUNS=10,
         _consume_product_request_quota=lambda r: None,
         _authorize_product_session=lambda *a, **kw: None,
-        _resource_call_scope=lambda *a: nullcontext())
+        _resource_call_scope=lambda *a: nullcontext(),
+    )
+
     def status(run, state, **fields):
         value = adapter._run_statuses.setdefault(run, {"run_id": run, "created_at": 1})
         value.update(status=state, **fields)
+
     adapter._set_run_status = status
     entered = threading.Event()
+
     class Team:
         def __init__(self, cancelled, progress, max_workers):
             self.cancelled, self.progress = cancelled, progress
+
         def run(self, task, initial):
-            self.progress(stage="planning", role="planner", worker_id="planner",
-                          worker_state="running", message="Planning", report="", calls=1)
+            self.progress(
+                stage="planning",
+                role="planner",
+                worker_id="planner",
+                worker_state="running",
+                message="Planning",
+                report="",
+                calls=1,
+            )
             entered.set()
             while not self.cancelled():
-                time.sleep(.01)
+                time.sleep(0.01)
             raise InterruptedError()
+
     async def start(request):
         denied = auth(request)
         if denied is not None:
             return denied
-        return await start_development_run(adapter, request, await request.json(), team_factory=Team)
+        return await start_development_run(
+            adapter, request, await request.json(), team_factory=Team
+        )
+
     async def conversation(request):
         return web.json_response({"answer": "Conversation is available"})
+
     app = web.Application()
     register_autopilot_routes(app, adapter)
     app.router.add_post("/v1/runs", start)
@@ -63,7 +97,12 @@ async def test_background_run_leaves_conversation_available_and_stop_is_project_
     client = TestClient(TestServer(app))
     await client.start_server()
     headers = lambda plan: {"Authorization": "Bearer " + tokens[plan]}
-    body = {"workflow": "development", "input": "Build a site", "idempotency_key": "unique-project", "free_only": True}
+    body = {
+        "workflow": "development",
+        "input": "Build a site",
+        "idempotency_key": "unique-project",
+        "free_only": True,
+    }
     try:
         for plan in ("free", "plus"):
             response = await client.post("/v1/runs", headers=headers(plan), json=body)
@@ -77,7 +116,9 @@ async def test_background_run_leaves_conversation_available_and_stop_is_project_
         replay = await client.post("/v1/runs", headers=headers("pro"), json=body)
         assert (await replay.json())["run_id"] == data["run_id"]
         assert len(adapter._active_run_tasks) == 1
-        other = await (await client.get("/v1/development/projects", headers=headers("plus"))).json()
+        other = await (
+            await client.get("/v1/development/projects", headers=headers("plus"))
+        ).json()
         assert other["projects"] == []
         adapter._active_run_agents[data["run_id"]].interrupt()
         await asyncio.wait_for(asyncio.gather(*list(adapter._background_tasks)), 2)
@@ -88,153 +129,439 @@ async def test_background_run_leaves_conversation_available_and_stop_is_project_
             handle.interrupt()
         await asyncio.gather(*list(adapter._background_tasks), return_exceptions=True)
         await client.close()
+
+
 from contextlib import asynccontextmanager
+
 
 @asynccontextmanager
 async def runtime_client(tmp_path, team_factory):
-    registry = AccessRegistry(tmp_path / 'runtime.db')
-    user = registry.create_user('autopilot@example.com', plan='pro')
-    device = registry.create_device(user, name='phone', platform='android')
+    registry = AccessRegistry(tmp_path / "runtime.db")
+    user = registry.create_user("autopilot@example.com", plan="pro")
+    device = registry.create_device(user, name="phone", platform="android")
     token = registry.issue_device_token(device)
+
     def auth(request):
-        request['principal'] = registry.authenticate(request.headers.get('Authorization', '').removeprefix('Bearer '))
-        if request['principal'] is None:
+        request["principal"] = registry.authenticate(
+            request.headers.get("Authorization", "").removeprefix("Bearer ")
+        )
+        if request["principal"] is None:
             return web.json_response({}, status=401)
-    adapter = SimpleNamespace(_access_registry=registry, _check_auth=auth,
-        _product_principal=lambda r: r.get('principal'), _run_statuses={}, _run_owners={},
-        _run_streams={}, _run_streams_created={}, _active_run_agents={}, _active_run_tasks={},
-        _background_tasks=set(), _MAX_CONCURRENT_RUNS=10,
+
+    adapter = SimpleNamespace(
+        _access_registry=registry,
+        _check_auth=auth,
+        _product_principal=lambda r: r.get("principal"),
+        _run_statuses={},
+        _run_owners={},
+        _run_streams={},
+        _run_streams_created={},
+        _active_run_agents={},
+        _active_run_tasks={},
+        _background_tasks=set(),
+        _MAX_CONCURRENT_RUNS=10,
         _consume_product_request_quota=lambda r: None,
         _authorize_product_session=lambda *a, **kw: None,
-        _resource_call_scope=lambda *a: nullcontext())
+        _resource_call_scope=lambda *a: nullcontext(),
+    )
+
     def status(run, state, **fields):
-        adapter._run_statuses.setdefault(run, {'run_id': run, 'created_at': 1}).update(status=state, **fields)
+        adapter._run_statuses.setdefault(run, {"run_id": run, "created_at": 1}).update(
+            status=state, **fields
+        )
+
     adapter._set_run_status = status
+
     async def start(request):
         denied = auth(request)
-        if denied is not None: return denied
-        return await start_development_run(adapter, request, await request.json(), team_factory=team_factory)
+        if denied is not None:
+            return denied
+        return await start_development_run(
+            adapter, request, await request.json(), team_factory=team_factory
+        )
+
     app = web.Application()
     register_autopilot_routes(app, adapter)
-    app.router.add_post('/v1/runs', start)
+    app.router.add_post("/v1/runs", start)
     client = TestClient(TestServer(app))
     await client.start_server()
     try:
-        yield client, adapter, {'Authorization': 'Bearer ' + token}, registry, user, device
+        yield (
+            client,
+            adapter,
+            {"Authorization": "Bearer " + token},
+            registry,
+            user,
+            device,
+        )
     finally:
-        for handle in list(adapter._active_run_agents.values()): handle.interrupt()
+        for handle in list(adapter._active_run_agents.values()):
+            handle.interrupt()
         await asyncio.gather(*list(adapter._background_tasks), return_exceptions=True)
         await client.close()
         from troika_product.device_delivery import device_deliveries
+
         device_deliveries.purge_owner(user)
 
+
 class HoldingTeam:
-    def __init__(self, cancelled, **kwargs): self.cancelled = cancelled
+    def __init__(self, cancelled, **kwargs):
+        self.cancelled = cancelled
+
     def run(self, *args):
-        while not self.cancelled(): time.sleep(.01)
+        while not self.cancelled():
+            time.sleep(0.01)
         raise InterruptedError()
 
-def request_body(key='example-project'):
-    return {'input': 'Build a site', 'idempotency_key': key, 'free_only': True}
+
+def request_body(key="example-project"):
+    return {"input": "Build a site", "idempotency_key": key, "free_only": True}
+
 
 @pytest.mark.asyncio
 async def test_four_background_projects_leave_the_fifth_slot_for_chat(tmp_path):
-    async with runtime_client(tmp_path, HoldingTeam) as (client, adapter, headers, _, user, device):
+    async with runtime_client(tmp_path, HoldingTeam) as (
+        client,
+        adapter,
+        headers,
+        _,
+        user,
+        device,
+    ):
         for i in range(4):
-            assert (await client.post('/v1/runs', headers=headers, json=request_body('project-key-' + str(i)))).status == 202
-        response = await client.post('/v1/runs', headers=headers, json=request_body('project-key-5'))
+            assert (
+                await client.post(
+                    "/v1/runs",
+                    headers=headers,
+                    json=request_body("project-key-" + str(i)),
+                )
+            ).status == 202
+        response = await client.post(
+            "/v1/runs", headers=headers, json=request_body("project-key-5")
+        )
         assert response.status == 429 and len(adapter._active_run_tasks) == 4
-        assert (await response.json())['error']['code'] == 'development_capacity'
+        assert (await response.json())["error"]["code"] == "development_capacity"
         first = next(iter(adapter._active_run_tasks))
         adapter._active_run_agents[first].interrupt()
         await adapter._active_run_tasks[first]
         assert len(adapter._active_run_tasks) == 3
-        assert all(v['status'] == 'queued' for k, v in adapter._run_statuses.items() if k != first)
+        assert all(
+            v["status"] == "queued"
+            for k, v in adapter._run_statuses.items()
+            if k != first
+        )
+
 
 @pytest.mark.asyncio
 async def test_owner_limit_includes_normal_runs_and_secrets_never_reach_model(tmp_path):
-    async with runtime_client(tmp_path, HoldingTeam) as (client, adapter, headers, _, user, device):
+    async with runtime_client(tmp_path, HoldingTeam) as (
+        client,
+        adapter,
+        headers,
+        _,
+        user,
+        device,
+    ):
         body = request_body()
-        body['input'] = 'Use sk-' + 'a' * 30
-        denied = await client.post('/v1/runs', headers=headers, json=body)
+        body["input"] = "Use sk-" + "a" * 30
+        denied = await client.post("/v1/runs", headers=headers, json=body)
         assert denied.status == 400 and not adapter._active_run_tasks
         for i in range(5):
-            adapter._run_statuses[str(i)] = {'status': 'running'}
+            adapter._run_statuses[str(i)] = {"status": "running"}
             adapter._run_owners[str(i)] = (user, device)
-        denied = await client.post('/v1/runs', headers=headers, json=request_body())
+        denied = await client.post("/v1/runs", headers=headers, json=request_body())
         assert denied.status == 429 and not adapter._active_run_tasks
+
 
 @pytest.mark.asyncio
 async def test_changed_retry_is_rejected_and_revoked_account_stops_work(tmp_path):
-    async with runtime_client(tmp_path, HoldingTeam) as (client, adapter, headers, registry, user, device):
-        first = await client.post('/v1/runs', headers=headers, json=request_body())
-        run = (await first.json())['run_id']
-        changed = {**request_body(), 'input': 'A different project'}
-        assert (await client.post('/v1/runs', headers=headers, json=changed)).status == 409
-        principal = registry.authenticate(headers['Authorization'].removeprefix('Bearer '))
+    async with runtime_client(tmp_path, HoldingTeam) as (
+        client,
+        adapter,
+        headers,
+        registry,
+        user,
+        device,
+    ):
+        first = await client.post("/v1/runs", headers=headers, json=request_body())
+        run = (await first.json())["run_id"]
+        changed = {**request_body(), "input": "A different project"}
+        assert (
+            await client.post("/v1/runs", headers=headers, json=changed)
+        ).status == 409
+        principal = registry.authenticate(
+            headers["Authorization"].removeprefix("Bearer ")
+        )
         registry.revoke_device(principal, device)
         await asyncio.wait_for(asyncio.gather(*list(adapter._background_tasks)), 2)
-        assert adapter._run_statuses[run]['status'] == 'cancelled'
-        assert 'artifact' not in adapter._run_statuses[run]
-        assert adapter._run_statuses[run]['reports'][-1]['stage'] == 'cancelled'
+        assert adapter._run_statuses[run]["status"] == "cancelled"
+        assert "artifact" not in adapter._run_statuses[run]
+        assert adapter._run_statuses[run]["reports"][-1]["stage"] == "cancelled"
+
 
 @pytest.mark.asyncio
-async def test_complete_document_emits_report_and_delivers_only_to_owner_device(tmp_path):
+async def test_complete_document_emits_report_and_delivers_only_to_owner_device(
+    tmp_path,
+):
     class DocumentTeam:
-        def __init__(self, progress, **kwargs): self.progress = progress
+        def __init__(self, progress, **kwargs):
+            self.progress = progress
+
         def run(self, *args):
-            self.progress(stage='designing', role='designer', worker_id='designer', worker_state='running',
-                          message='', report='Design chosen', calls=2)
-            return {'document': {'kind': 'docx', 'args': {'title': 'Public example', 'sections': [
-                {'heading': 'Result', 'body': 'A complete paragraph.', 'bullets': []}]}},
-                'files': [{'path': 'content.json', 'content': '{}'}],
-                'review': {'status': 'passed', 'visual_review': 'not_checked'}}
-    async with runtime_client(tmp_path, DocumentTeam) as (client, adapter, headers, _, user, device):
-        created = await client.post('/v1/runs', headers=headers, json=request_body())
-        run = (await created.json())['run_id']
+            self.progress(
+                stage="designing",
+                role="designer",
+                worker_id="designer",
+                worker_state="running",
+                message="",
+                report="Design chosen",
+                calls=2,
+            )
+            return {
+                "document": {
+                    "kind": "docx",
+                    "args": {
+                        "title": "Public example",
+                        "sections": [
+                            {
+                                "heading": "Result",
+                                "body": "A complete paragraph.",
+                                "bullets": [],
+                            }
+                        ],
+                    },
+                },
+                "files": [{"path": "content.json", "content": "{}"}],
+                "review": {"status": "passed", "visual_review": "not_checked"},
+            }
+
+    async with runtime_client(tmp_path, DocumentTeam) as (
+        client,
+        adapter,
+        headers,
+        _,
+        user,
+        device,
+    ):
+        created = await client.post("/v1/runs", headers=headers, json=request_body())
+        run = (await created.json())["run_id"]
         await asyncio.gather(*list(adapter._background_tasks))
         snapshot = adapter._run_statuses[run]
-        assert snapshot['status'] == 'completed' and snapshot['execution'] == 'not_run'
-        assert snapshot['reports'][-1]['stage'] == 'completed'
-        assert snapshot['workers'][0]['status'] == 'completed'
+        assert snapshot["status"] == "completed" and snapshot["execution"] == "not_run"
+        assert snapshot["reports"][-1]["stage"] == "completed"
+        assert snapshot["workers"][0]["status"] == "completed"
         events = []
         while not adapter._run_streams[run].empty():
             events.append(adapter._run_streams[run].get_nowait())
-        assert events[-2]['event'] == 'run.completed' and events[-1] is None
+        assert events[-2]["event"] == "run.completed" and events[-1] is None
         from troika_product.device_delivery import device_deliveries
-        delivery = device_deliveries.get(snapshot['artifact']['id'], user, device)
-        assert delivery is not None and delivery.data.startswith(b'PK')
-        assert device_deliveries.get(snapshot['artifact']['id'], user, 'another-device') is None
+
+        delivery = device_deliveries.get(snapshot["artifact"]["id"], user, device)
+        assert delivery is not None and delivery.data.startswith(b"PK")
+        assert (
+            device_deliveries.get(snapshot["artifact"]["id"], user, "another-device")
+            is None
+        )
+
+
 @pytest.mark.asyncio
 async def test_foreground_can_use_fifth_slot_but_not_a_sixth(tmp_path):
     from troika_product.development_runtime import check_foreground_capacity
-    async with runtime_client(tmp_path, HoldingTeam) as (client, adapter, headers, registry, user, device):
-        principal = registry.authenticate(headers['Authorization'].removeprefix('Bearer '))
-        request = {'principal': principal}
+
+    async with runtime_client(tmp_path, HoldingTeam) as (
+        client,
+        adapter,
+        headers,
+        registry,
+        user,
+        device,
+    ):
+        principal = registry.authenticate(
+            headers["Authorization"].removeprefix("Bearer ")
+        )
+        request = {"principal": principal}
         for i in range(4):
-            adapter._run_statuses[str(i)] = {'status': 'running', 'workflow': 'development'}
+            adapter._run_statuses[str(i)] = {
+                "status": "running",
+                "workflow": "development",
+            }
             adapter._run_owners[str(i)] = (user, device)
         assert check_foreground_capacity(adapter, request) is None
-        adapter._run_statuses['chat'] = {'status': 'running'}
-        adapter._run_owners['chat'] = (user, device)
+        adapter._run_statuses["chat"] = {"status": "running"}
+        adapter._run_owners["chat"] = (user, device)
         assert check_foreground_capacity(adapter, request).status == 429
-        adapter._run_statuses['chat']['status'] = 'completed'
+        adapter._run_statuses["chat"]["status"] = "completed"
         assert check_foreground_capacity(adapter, request) is None
 
+
 @pytest.mark.asyncio
-async def test_private_provider_failure_preserves_safe_code_without_leaking_exception(tmp_path):
+async def test_private_provider_failure_preserves_safe_code_without_leaking_exception(
+    tmp_path,
+):
     from agent.provider_metering import ProviderCallBlocked
+
     class FailedTeam:
-        def __init__(self, **kwargs): pass
+        def __init__(self, **kwargs):
+            pass
+
         def run(self, *args):
-            raise ProviderCallBlocked('resource_byok_request_failed', 'secret-provider-key-must-not-leak')
+            raise ProviderCallBlocked(
+                "resource_byok_request_failed", "secret-provider-key-must-not-leak"
+            )
+
     async with runtime_client(tmp_path, FailedTeam) as (client, adapter, headers, *_):
-        reply = await client.post('/v1/runs', headers=headers, json=request_body())
-        run = (await reply.json())['run_id']
+        reply = await client.post("/v1/runs", headers=headers, json=request_body())
+        run = (await reply.json())["run_id"]
         await asyncio.gather(*list(adapter._background_tasks))
         snapshot = adapter._run_statuses[run]
-        assert snapshot['status'] == 'failed'
-        assert snapshot['error']['code'] == 'resource_byok_request_failed'
-        assert 'secret-provider-key' not in str(snapshot)
-        assert snapshot['reports'][-1]['stage'] == 'failed'
-        assert snapshot.get('artifact') is None
+        assert snapshot["status"] == "failed"
+        assert snapshot["error"]["code"] == "resource_byok_request_failed"
+        assert "secret-provider-key" not in str(snapshot)
+        assert snapshot["reports"][-1]["stage"] == "failed"
+        assert snapshot.get("artifact") is None
+
+
+@pytest.mark.asyncio
+async def test_pause_checkpoint_ack_and_restart_resume_use_only_the_approved_budget(
+    tmp_path, monkeypatch
+):
+    import troika_product.development_runtime as runtime
+    from troika_product.development_sessions import DevelopmentSessions
+
+    class CheckpointTeam(HoldingTeam):
+        def configure_checkpoint(self, callback, state=None):
+            self.callback = callback
+
+    monkeypatch.setattr(runtime, "DevelopmentTeam", CheckpointTeam)
+    async with runtime_client(tmp_path, CheckpointTeam) as (
+        client,
+        adapter,
+        headers,
+        registry,
+        user,
+        device,
+    ):
+        principal = registry.authenticate(
+            headers["Authorization"].removeprefix("Bearer ")
+        )
+        started = await client.post("/v1/runs", headers=headers, json=request_body())
+        run = (await started.json())["run_id"]
+        base = "/v1/development/projects/" + run
+        value = await (await client.get(base + "/checkpoint", headers=headers)).json()
+        assert value["checkpoint"]["files"] == []
+        assert (
+            await client.post(
+                base + "/checkpoint/received",
+                headers=headers,
+                json={"revision": value["revision"], "digest": value["digest"]},
+            )
+        ).status == 200
+        assert (
+            await client.post(
+                base + "/control", headers=headers, json={"action": "pause"}
+            )
+        ).status == 202
+        await asyncio.gather(*list(adapter._background_tasks))
+        assert adapter._run_statuses[run]["status"] == "paused"
+        sessions = DevelopmentSessions(registry)
+        sessions.state(principal, run, run, "running")
+        adapter._run_statuses.clear()
+        adapter._run_owners.clear()
+        adapter._development_snapshots.clear()
+        projects = await (
+            await client.get("/v1/development/projects", headers=headers)
+        ).json()
+        assert projects["projects"][0]["status"] == "interrupted"
+        d = registry.create_device(user, name="Other", platform="android")
+        other = {"Authorization": "Bearer " + registry.issue_device_token(d)}
+        assert (await client.get(base + "/checkpoint", headers=other)).status == 404
+        resume = {
+            "checkpoint": value["checkpoint"],
+            "revision": value["revision"],
+            "reuse_budget": True,
+            "idempotency_key": "resume-after-restart",
+        }
+        tampered = {
+            **resume,
+            "checkpoint": {**value["checkpoint"], "task": "Different task"},
+        }
+        assert (
+            await client.post(base + "/resume", headers=headers, json=tampered)
+        ).status == 409
+        response = await client.post(base + "/resume", headers=headers, json=resume)
+        assert response.status == 202
+        new = (await response.json())["run_id"]
+        assert new != run and adapter._run_statuses[new]["project_id"] == run
+        record = sessions.get(principal, run)
+        assert record["budget_tokens"] == 250000 and not record["budget_approved"]
+        assert record["attempt"] == 2
+        again = await client.post(base + "/resume", headers=headers, json=resume)
+        assert again.status == 202 and (await again.json())["run_id"] == new
+        assert sessions.get(principal, run)["attempt"] == 2
+
+
+@pytest.mark.asyncio
+async def test_time_slice_retains_a_recoverable_checkpoint_without_a_false_result(
+    tmp_path,
+):
+    class SlicedTeam:
+        def __init__(self, **kwargs):
+            pass
+
+        def configure_checkpoint(self, callback, state=None):
+            self.callback = callback
+
+        def run(self, *args):
+            raise ValueError("Development API timeout")
+
+    async with runtime_client(tmp_path, SlicedTeam) as (client, adapter, headers, *_):
+        started = await client.post("/v1/runs", headers=headers, json=request_body())
+        run = (await started.json())["run_id"]
+        await asyncio.gather(*list(adapter._background_tasks))
+        state = adapter._run_statuses[run]
+        assert state["status"] == "interrupted" and state.get("artifact") is None
+        assert state["error"]["code"] == "development_checkpoint_continuation"
+        saved = await client.get(
+            "/v1/development/projects/" + run + "/checkpoint", headers=headers
+        )
+        assert (
+            saved.status == 200
+            and (await saved.json())["checkpoint"]["task"] == request_body()["input"]
+        )
+
+
+@pytest.mark.asyncio
+async def test_stop_overrides_an_inflight_pause(tmp_path):
+    import threading, time
+
+    release = threading.Event()
+
+    class PausingTeam:
+        def __init__(self, cancelled, **kwargs):
+            self.cancelled = cancelled
+
+        def run(self, *args):
+            while not self.cancelled():
+                time.sleep(0.005)
+            release.wait(4)
+            raise InterruptedError()
+
+    async with runtime_client(tmp_path, PausingTeam) as (client, adapter, headers, *_):
+        response = await client.post("/v1/runs", headers=headers, json=request_body())
+        run = (await response.json())["run_id"]
+        base = "/v1/development/projects/" + run
+        try:
+            assert (
+                await client.post(
+                    base + "/control", headers=headers, json={"action": "pause"}
+                )
+            ).status == 202
+            assert (
+                await client.post(
+                    base + "/control", headers=headers, json={"action": "stop"}
+                )
+            ).status == 202
+        finally:
+            release.set()
+        await asyncio.gather(*list(adapter._background_tasks))
+        assert adapter._run_statuses[run]["status"] == "cancelled"

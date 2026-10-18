@@ -13,8 +13,16 @@ namespace Troika.Desktop {
             if (!System.IO.File.Exists(path)) return "Проект сохранён. Ревью модели не подтверждено.";
             var manifest = Json.Parse(System.IO.File.ReadAllText(path));
             var review = Json.Map(Json.Get(manifest, "review"));
-            if (Json.Text(review, "method") != "api_model_review" || Json.Text(review, "execution") != "not_run") return "Проект сохранён. Ревью модели не подтверждено.";
-            return Json.Text(review, "status") == "passed" ? "Проект сохранён. Модель проверила исходники. Тесты не запускались." : "Проект сохранён. Ревью модели нашло ошибки; смотрите отчёт.";
+            if (Json.Text(review, "method") != "api_model_review") return "Проект сохранён. Ревью модели не подтверждено.";
+            var result = Json.Text(review, "status") == "passed" ? "Проект сохранён. Модель проверила исходники." : "Проект сохранён. Ревью модели нашло ошибки; смотрите отчёт.";
+            switch (Json.Text(review, "execution")) {
+                case "passed": result += " Тесты прошли в изолированной среде."; break;
+                case "failed": result += " Тесты завершились с ошибками."; break;
+                case "not_run": result += " Тесты не запускались."; break;
+                default: result += " Исполнение тестов не подтверждено."; break;
+            }
+            if (Json.Text(review,"visual_review")=="passed") result += " Визуальная проверка пройдена.";
+            return result;
         }
         public static async Task Run(string prompt, string kind, bool execute, Func<string, CancellationToken, Task<string>> generate, Func<string, string, CancellationToken, Task<CheckReport>> check, Action<string, CheckReport> version, CancellationToken token) {
             string folder = "", previous = "";

@@ -10,6 +10,8 @@
     <!-- Работа в фоне (wake-word сервис) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"/>
     <!-- Уведомления (статус wake-word сервиса) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
@@ -87,6 +89,9 @@
         </activity>
 
         <!-- ── Фоновый сервис wake-word (нативный Kotlin) ──────────── -->
+        <service android:name=".DevelopmentService"
+            android:foregroundServiceType="dataSync|mediaPlayback"
+            android:exported="false"/>
         <service
             android:name=".HermesListenerService"
             android:foregroundServiceType="microphone|location"

@@ -122,6 +122,10 @@ def test_document_author_and_independent_verifier_preserve_paragraphs_and_bullet
         data = json.loads(messages[1]["content"])
         calls.append(data)
         if "design_task" in data:
+            assert data["renderer"]["format"] == kind
+            assert data["renderer"]["font"] == "Arial"
+            if kind == "pptx":
+                assert set(data["renderer"]["layouts"]) == {"cover", "content", "split", "statement"}
             value = {k: "White background, readable dark type" for k in (
                 "direction", "audience", "typography", "palette", "layout", "interaction", "review_criteria")}
         elif "document_task" in data:

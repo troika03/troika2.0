@@ -86,7 +86,10 @@ namespace Troika.Desktop {
             Closing += async delegate(object sender, System.ComponentModel.CancelEventArgs e) {
                 if (closed) return;
                 e.Cancel = true;
-                await Stop(); closed = true; recordingLimit.Stop(); reminderTimer.Stop(); recorder.Dispose(); StopPlayback();
+                await Stop();
+                if (KeepProjectsInBackground()) return;
+                closed = true; recordingLimit.Stop(); reminderTimer.Stop(); recorder.Dispose(); StopPlayback();
+                DisposeProjectTray();
                 DisposeAutopilotObserver();
                 if (hotkeyRegistered) UnregisterHotKey(handle, 17);
                 api.Dispose(); var closing = Dispatcher.BeginInvoke(new Action(Close));

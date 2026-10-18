@@ -53,14 +53,88 @@ Map<String, dynamic> project(
       'workers': [],
       'reports': reports,
     };
+
+void pauseApp() {
+  final binding = TestWidgetsFlutterBinding.instance;
+  binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+  binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+  binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+}
+
+void resumeApp() {
+  final binding = TestWidgetsFlutterBinding.instance;
+  if (binding.lifecycleState == AppLifecycleState.paused) {
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+  }
+  if (binding.lifecycleState == AppLifecycleState.hidden) {
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+  }
+  binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() async {
+    resumeApp();
     SharedPreferences.setMockInitialValues({
       'troika_account_email': 'owner@example.com',
       'troika_session_id': 'conversation'
     });
     await TroikaConfig.init();
+  });
+  test('observer created after background transition waits for foreground',
+      () async {
+    var requests = 0;
+    pauseApp();
+    final controller =
+        DevelopmentAutopilotService(requestForTesting: (_, __, ___) async {
+      requests++;
+      return {'enabled': true, 'projects': []};
+    });
+    addTearDown(() {
+      controller.dispose();
+      resumeApp();
+    });
+    await controller.observe();
+    expect(requests, 0);
+    expect(controller.needsBackgroundObservation, true);
+    resumeApp();
+    await controller.refresh();
+    expect(requests, greaterThan(0));
+    expect(controller.needsBackgroundObservation, false);
+  });
+  test('start accepted after leaving the app still hands off to native worker',
+      () async {
+    final accepted = Completer<Map<String, dynamic>>();
+    final posted = Completer<void>();
+    var snapshot = project('completed', []);
+    final controller = DevelopmentAutopilotService(
+        requestForTesting: (method, path, body) async {
+      if (method == 'POST') {
+        posted.complete();
+        return accepted.future;
+      }
+      return {
+        'enabled': true,
+        'projects': [snapshot]
+      };
+    });
+    addTearDown(() {
+      controller.dispose();
+      resumeApp();
+    });
+    await controller.observe();
+    final start = controller.start('Background project');
+    await posted.future;
+    pauseApp();
+    accepted.complete({'run_id': 'run_new'});
+    await start;
+    expect(controller.projects.single['run_id'], 'run_project');
+    expect(controller.needsBackgroundObservation, true);
+    snapshot = {...project('completed', []), 'run_id': 'run_new'};
+    resumeApp();
+    await controller.refresh();
+    expect(controller.needsBackgroundObservation, false);
   });
   test(
       'background start preserves conversation and retries unknown delivery with same key',
@@ -129,6 +203,35 @@ void main() {
     await controller.drainReports();
     await controller.refresh();
     expect(spoken, ['Example. Project ready']);
+  });
+  test(
+      'resumed attempt retires the old pause report before announcing completion',
+      () async {
+    var snapshot = project('paused', [
+      {'id': 1, 'text': 'Old pause'}
+    ]);
+    final controller = DevelopmentAutopilotService(
+        requestForTesting: (_, __, ___) async => {
+              'enabled': true,
+              'projects': [snapshot]
+            });
+    addTearDown(controller.dispose);
+    await controller.observe();
+    snapshot = {
+      ...project('completed', [
+        {'id': 1, 'text': 'New result'}
+      ]),
+      'run_id': 'new_attempt'
+    };
+    final spoken = <String>[];
+    controller.speakWhenIdle = (text) async {
+      spoken.add(text);
+      return true;
+    };
+    await controller.refresh();
+    await controller.drainReports();
+    await controller.refresh();
+    expect(spoken, ['Example. New result']);
   });
   test('mute clears announcements and cancels active project voice', () async {
     var stopped = 0;
@@ -238,6 +341,12 @@ void main() {
             windowsForTesting: false)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
+    await tester.scrollUntilVisible(find.text('Example'), 200,
+        scrollable: find
+            .descendant(
+                of: find.byType(ListView).first,
+                matching: find.byType(Scrollable))
+            .first);
     expect(find.text('Example'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     await tester.pump();

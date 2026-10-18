@@ -30,7 +30,8 @@ namespace Troika.Desktop {
         public void ForgetSession() { var file = Path.Combine(Root, "session.dat"); if (File.Exists(file)) File.Delete(file); }
         public static void WriteAtomic(string path, byte[] data) {
             Directory.CreateDirectory(Path.GetDirectoryName(path));
-            var temporary = path + "." + Guid.NewGuid().ToString("N") + ".part";
+            // Keep atomic writes on the same volume without extending long artifact names.
+            var temporary = Path.Combine(Path.GetDirectoryName(path), Guid.NewGuid().ToString("N") + ".part");
             try {
                 using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None)) { stream.Write(data, 0, data.Length); stream.Flush(true); }
                 if (File.Exists(path)) File.Replace(temporary, path, null); else File.Move(temporary, path);
@@ -58,7 +59,8 @@ namespace Troika.Desktop {
                 WriteAtomic(path, bytes);
             }
             // Durable local file comes before ACK. Retry recognizes a saved delivery after a lost ACK.
-            await api.Call("POST", "/v1/device-files/" + id + "/received", new { }, cancellation);
+            try { await api.Call("POST", "/v1/device-files/" + id + "/received", new { }, cancellation); }
+            catch (ApiException error) { if (error.Status != 404) throw; /* Verified local bytes survive an already removed RAM handoff. */ }
             return path;
         }
         public IEnumerable<string> Files(string owner) {

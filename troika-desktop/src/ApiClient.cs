@@ -38,7 +38,7 @@ namespace Troika.Desktop {
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Account.Token);
                 request.Headers.Add("X-Hermes-Session-Key", SessionId);
                 request.Headers.Add("X-Hermes-Session-Id", SessionId);
-                if (method == "POST" && (path == "/v1/runs" || path == "/v1/chat/completions" || path == "/v1/responses")) {
+                if (method == "POST" && (path == "/v1/runs" || path == "/v1/chat/completions" || path == "/v1/responses" || path.EndsWith("/resume", StringComparison.Ordinal))) {
                     if (PersonalProviders != null) PersonalProviders.Apply(request, Account.Email);
                 }
             }
@@ -93,7 +93,7 @@ namespace Troika.Desktop {
         }
         public async Task<Dictionary<string, object>> Call(string method, string path, object data, CancellationToken cancellation) {
             await EnsureSession(false, cancellation);
-            if (method == "POST" && (path == "/v1/runs" || path == "/v1/chat/completions" || path == "/v1/responses") && PersonalProviders != null && PersonalProviders.Load(Account.Email).Count > 0) {
+            if (method == "POST" && (path == "/v1/runs" || path == "/v1/chat/completions" || path == "/v1/responses" || path.EndsWith("/resume", StringComparison.Ordinal)) && PersonalProviders != null && PersonalProviders.Load(Account.Email).Count > 0) {
                 using (var check = Request("GET", "/v1/subscription", null, true))
                 using (var response = await Send(check, HttpCompletionOption.ResponseContentRead, cancellation)) {
                     await Check(response);

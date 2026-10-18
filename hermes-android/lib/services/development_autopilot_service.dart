@@ -2,12 +2,15 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter/services.dart';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/troika_config.dart';
 import 'account_service.dart';
+import 'development_checkpoint_store.dart';
 import 'files_service.dart';
 import 'own_api_service.dart';
 
@@ -19,10 +22,14 @@ class DevelopmentAutopilotService extends ChangeNotifier {
   static final instance = DevelopmentAutopilotService();
   final ProjectRequest? requestForTesting;
   final FilesService files;
+  late final DevelopmentCheckpointStore checkpoints;
   final Map<String, TroikaFile> results = {};
   List<Map<String, dynamic>> projects = [];
   bool isPro = false;
   bool voiceReports = true;
+  bool backgroundReports = true;
+  bool _foreground = true;
+  AppLifecycleListener? _lifecycle;
   String error = '';
   String _owner = '';
   Timer? _timer;
@@ -34,24 +41,48 @@ class DevelopmentAutopilotService extends ChangeNotifier {
   Future<void> Function()? stopSpeakingReport;
   final Map<String, String> _startKeys = {};
   bool _speaking = false;
+  final Set<String> _resuming = {};
+  final Map<String, DateTime> _resumeAfter = {};
+  final Set<String> _pendingHandoffs = {};
 
-  DevelopmentAutopilotService({this.requestForTesting, FilesService? files})
-      : files = files ?? FilesService();
+  bool get needsBackgroundObservation =>
+      _pendingHandoffs.isNotEmpty ||
+      (!_foreground && projects.isEmpty && _owner.isNotEmpty) ||
+      projects.any((p) => ![
+            'completed',
+            'failed',
+            'cancelled',
+            'paused',
+            'waiting_budget'
+          ].contains(p['status'])) ||
+      _reports.isNotEmpty;
+
+  DevelopmentAutopilotService(
+      {this.requestForTesting,
+      FilesService? files,
+      DevelopmentCheckpointStore? checkpointStore})
+      : files = files ?? FilesService() {
+    checkpoints = checkpointStore ?? DevelopmentCheckpointStore(this.files);
+  }
 
   Future<Map<String, dynamic>> _request(
       String method, String path, Map<String, dynamic>? body) async {
     if (requestForTesting != null)
       return requestForTesting!(method, path, body);
+    final requestOwner = TroikaConfig.accountEmail;
     await AccountService().ensureFreshSession();
+    if (requestOwner != TroikaConfig.accountEmail)
+      throw StateError('Аккаунт изменился.');
     final uri = Uri.parse('${TroikaConfig.serverUrl}$path');
     final headers = {...TroikaConfig.headers};
-    if (method == 'POST' && path == '/v1/runs') {
+    if (method == 'POST' && (path == '/v1/runs' || path.endsWith('/resume'))) {
       headers.addAll(await OwnApiService.headers(TroikaConfig.accountEmail));
     }
+    if (requestOwner != TroikaConfig.accountEmail)
+      throw StateError('Аккаунт изменился.');
     final response = await (method == 'GET'
             ? http.get(uri, headers: headers)
-            : http.post(uri,
-                headers: headers, body: jsonEncode(body)))
+            : http.post(uri, headers: headers, body: jsonEncode(body)))
         .timeout(const Duration(seconds: 30));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       if (response.statusCode == 404) {
@@ -67,6 +98,17 @@ class DevelopmentAutopilotService extends ChangeNotifier {
   }
 
   Future<void> observe() async {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      if (_lifecycle == null) {
+        final initial = WidgetsBinding.instance.lifecycleState;
+        _foreground = initial == null || initial == AppLifecycleState.resumed;
+        _lifecycle = AppLifecycleListener(onStateChange: (state) {
+          _foreground = state == AppLifecycleState.resumed;
+          unawaited(_syncBackground());
+          if (_foreground) unawaited(refresh());
+        });
+      }
+    }
     final owner = TroikaConfig.accountEmail;
     if (_owner != owner) {
       if (_owner.isNotEmpty) {
@@ -80,9 +122,14 @@ class DevelopmentAutopilotService extends ChangeNotifier {
       _reports.clear();
       _spoken.clear();
       _startKeys.clear();
+      _resuming.clear();
+      _resumeAfter.clear();
+      _pendingHandoffs.clear();
       if (requestForTesting == null) {
         final preferences = await SharedPreferences.getInstance();
         voiceReports = preferences.getBool('project_voice:$owner') ?? true;
+        backgroundReports =
+            preferences.getBool('project_background:$owner') ?? true;
         _spoken
             .addAll(preferences.getStringList('project_reports:$owner') ?? []);
       }
@@ -92,6 +139,7 @@ class DevelopmentAutopilotService extends ChangeNotifier {
       unawaited(drainReports());
     });
     await refresh();
+    if (!_foreground) await _syncBackground();
   }
 
   Future<void> refresh() async {
@@ -104,10 +152,12 @@ class DevelopmentAutopilotService extends ChangeNotifier {
       results.clear();
       _reports.clear();
       isPro = false;
+      await _syncBackground();
       notifyListeners();
       return;
     }
-    if (_refreshing || _owner.isEmpty) return;
+    if (_refreshing || _owner.isEmpty || !_foreground && backgroundReports)
+      return;
     _refreshing = true;
     final owner = _owner;
     try {
@@ -118,9 +168,80 @@ class DevelopmentAutopilotService extends ChangeNotifier {
           .whereType<Map>()
           .map((p) => Map<String, dynamic>.from(p))
           .toList();
+      final visibleRuns = projects.map((p) => p['run_id'].toString()).toSet();
+      _pendingHandoffs.removeWhere(visibleRuns.contains);
+      _reports.removeWhere(
+          (report) => !visibleRuns.contains(report.key.split(':').first));
       error = '';
       for (final project in projects) {
         final id = project['run_id'].toString();
+        final projectId = (project['project_id'] ?? id).toString();
+        if (project['checkpoint_revision'] is int) {
+          try {
+            var local = await checkpoints.read(projectId, owner: owner);
+            if ((project['checkpoint_revision'] as int) >
+                (local?['revision'] as int? ?? 0)) {
+              try {
+                final value = await _request('GET',
+                    '/v1/development/projects/$projectId/checkpoint', null);
+                if (owner != TroikaConfig.accountEmail) return;
+                await checkpoints.save(
+                    projectId,
+                    {
+                      ...?local,
+                      ...value,
+                      'title': project['title'] ?? local?['title'],
+                      'run_id': id
+                    },
+                    owner: owner);
+                local = await checkpoints.read(projectId, owner: owner);
+                await _request(
+                    'POST',
+                    '/v1/development/projects/$projectId/checkpoint/received',
+                    {'revision': value['revision'], 'digest': value['digest']});
+              } catch (_) {
+                project['checkpoint_error'] =
+                    'Последняя копия ещё не сохранена. Ранее сохранённые файлы доступны.';
+              }
+            }
+            if ((project['title'] ?? '').toString().isEmpty)
+              project['title'] = local?['title'] ?? 'Проект';
+            project['local_checkpoint'] = local != null;
+            if (local != null &&
+                local['revision'] == project['checkpoint_revision'] &&
+                (project['checkpoint_confirmed'] as int? ?? 0) <
+                    (local['revision'] as int)) {
+              await _request(
+                  'POST',
+                  '/v1/development/projects/$projectId/checkpoint/received',
+                  {'revision': local['revision'], 'digest': local['digest']});
+            }
+            final pending = project['status'] == 'paused' &&
+                local?['pending_instruction'] is String;
+            if ((project['status'] == 'interrupted' || pending) &&
+                local != null &&
+                !_resuming.contains(projectId) &&
+                DateTime.now()
+                    .isAfter(_resumeAfter[projectId] ?? DateTime(2000))) {
+              _resuming.add(projectId);
+              _resumeAfter[projectId] =
+                  DateTime.now().add(const Duration(seconds: 30));
+              try {
+                await _resume(project, local,
+                    reuseBudget: !pending,
+                    instruction:
+                        pending ? local['pending_instruction'] as String : '',
+                    budgetTokens:
+                        pending ? local['pending_budget'] as int : 100000);
+              } finally {
+                _resuming.remove(projectId);
+              }
+            }
+          } catch (_) {
+            project['checkpoint_error'] =
+                'Для продолжения откройте локальную контрольную копию и подтвердите бюджет.';
+          }
+        }
         if (project['status'] == 'completed' &&
             project['artifact'] is Map &&
             !results.containsKey(id) &&
@@ -139,7 +260,14 @@ class DevelopmentAutopilotService extends ChangeNotifier {
         }
         var reportList =
             (project['reports'] as List? ?? []).whereType<Map>().toList();
-        if (['completed', 'failed', 'cancelled'].contains(project['status']) &&
+        if ([
+              'completed',
+              'failed',
+              'cancelled',
+              'paused',
+              'waiting_budget',
+              'interrupted'
+            ].contains(project['status']) &&
             reportList.isNotEmpty) {
           final latestKey = '$id:${reportList.last['id']}';
           final stale = _reports
@@ -169,6 +297,7 @@ class DevelopmentAutopilotService extends ChangeNotifier {
         }
       }
       notifyListeners();
+      await _syncBackground();
       await drainReports();
     } catch (exception) {
       if (owner == TroikaConfig.accountEmail) {
@@ -198,6 +327,8 @@ class DevelopmentAutopilotService extends ChangeNotifier {
       'input': task,
       'title': task.length > 70 ? task.substring(0, 70) : task,
       'free_only': true,
+      'budget_tokens': 250000,
+      'budget_approved': true,
       'artifact_delivery': 'device',
       'idempotency_key': key,
       if (sources != null)
@@ -210,13 +341,95 @@ class DevelopmentAutopilotService extends ChangeNotifier {
       throw StateError('Аккаунт изменился.');
     }
     _startKeys.remove(fingerprint);
+    _pendingHandoffs.add(result['run_id'].toString());
     await refresh();
+    await _syncBackground();
     return result['run_id'].toString();
   }
 
   Future<void> stopProject(String id) async {
-    await _request('POST', '/v1/runs/${Uri.encodeComponent(id)}/stop', {});
+    final project = projects.where((p) => p['run_id'] == id).firstOrNull;
+    if (project?['project_id'] != null) {
+      await _request(
+          'POST',
+          '/v1/development/projects/${project!['project_id']}/control',
+          {'action': 'stop'});
+    } else {
+      await _request('POST', '/v1/runs/${Uri.encodeComponent(id)}/stop', {});
+    }
     await refresh();
+  }
+
+  Future<void> pauseProject(Map<String, dynamic> project) async {
+    final id = project['project_id'] ?? project['run_id'];
+    await _request(
+        'POST', '/v1/development/projects/$id/control', {'action': 'pause'});
+    await refresh();
+  }
+
+  Future<void> resumeProject(Map<String, dynamic> project,
+      {String instruction = '', int budgetTokens = 100000}) async {
+    final id = (project['project_id'] ?? project['run_id']).toString();
+    final local = await checkpoints.read(id, owner: _owner);
+    if (local == null)
+      throw StateError('На устройстве нет контрольной копии проекта.');
+    await _resume(project, local,
+        instruction: instruction, budgetTokens: budgetTokens);
+    await refresh();
+  }
+
+  Future<void> clarifyProject(Map<String, dynamic> project, String instruction,
+      int budgetTokens) async {
+    final id = (project['project_id'] ?? project['run_id']).toString();
+    final owner = _owner;
+    final local = await checkpoints.read(id, owner: owner);
+    if (local == null)
+      throw StateError('Дождитесь сохранения первой контрольной копии.');
+    await checkpoints.save(
+        id,
+        {
+          ...local,
+          'pending_instruction': instruction,
+          'pending_budget': budgetTokens
+        },
+        owner: owner);
+    await pauseProject(project);
+  }
+
+  Future<void> _resume(Map<String, dynamic> project, Map<String, dynamic> local,
+      {String instruction = '',
+      int budgetTokens = 100000,
+      bool reuseBudget = false}) async {
+    final id = (project['project_id'] ?? project['run_id']).toString();
+    final owner = _owner;
+    if (owner != TroikaConfig.accountEmail)
+      throw StateError('Аккаунт изменился.');
+    final fingerprint = sha256
+        .convert(utf8.encode(jsonEncode(
+            [id, local['revision'], instruction, budgetTokens, reuseBudget])))
+        .toString();
+    final key = _startKeys.putIfAbsent(
+        fingerprint, () => 'resume-${DateTime.now().microsecondsSinceEpoch}');
+    final started =
+        await _request('POST', '/v1/development/projects/$id/resume', {
+      'checkpoint': local['checkpoint'],
+      'revision': local['revision'],
+      'title': local['title'],
+      'instruction': instruction,
+      'budget_tokens': budgetTokens,
+      'reuse_budget': reuseBudget,
+      'idempotency_key': key,
+    });
+    _startKeys.remove(fingerprint);
+    if (owner != TroikaConfig.accountEmail) return;
+    _pendingHandoffs.add(started['run_id'].toString());
+    await _syncBackground();
+    final current = await checkpoints.read(id, owner: owner);
+    if (current != null && current['pending_instruction'] == instruction) {
+      current.remove('pending_instruction');
+      current.remove('pending_budget');
+      await checkpoints.save(id, current, owner: owner);
+    }
   }
 
   Future<void> setVoiceReports(bool enabled) async {
@@ -231,10 +444,49 @@ class DevelopmentAutopilotService extends ChangeNotifier {
       _reports.clear();
     }
     notifyListeners();
+    await _syncBackground();
+  }
+
+  Future<void> setBackgroundReports(bool enabled) async {
+    backgroundReports = enabled;
+    if (requestForTesting == null) {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setBool('project_background:$_owner', enabled);
+    }
+    await _syncBackground();
+    notifyListeners();
+  }
+
+  Future<void> _syncBackground() async {
+    if (requestForTesting != null ||
+        kIsWeb ||
+        defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      final response = await DevelopmentCheckpointStore.channel
+          .invokeMapMethod<String, dynamic>('configure', {
+        'owner': TroikaConfig.accountEmail,
+        'server': TroikaConfig.serverUrl,
+        'files_root': (await files.localRoot()).path,
+        'foreground': _foreground,
+        'enabled': backgroundReports && _owner == TroikaConfig.accountEmail,
+        'active': needsBackgroundObservation,
+        'seen': _spoken.toList().take(400).toList(),
+      });
+      if (response != null) {
+        backgroundReports = response['enabled'] == true;
+        _spoken.addAll((response['seen'] as List? ?? []).whereType<String>());
+        _reports.removeWhere((r) => _spoken.contains(r.key));
+      }
+    } on MissingPluginException {
+      /* Other desktop clients own their background observer. */
+    } catch (_) {
+      error = 'Фоновое наблюдение Android недоступно. Откройте Тройку снова.';
+    }
   }
 
   Future<void> drainReports() async {
     if (_speaking ||
+        !_foreground && backgroundReports ||
         !voiceReports ||
         speakWhenIdle == null ||
         _reports.isEmpty ||
@@ -263,6 +515,7 @@ class DevelopmentAutopilotService extends ChangeNotifier {
   @override
   void dispose() {
     _timer?.cancel();
+    _lifecycle?.dispose();
     _timer = null;
     speakWhenIdle = null;
     stopSpeakingReport = null;
@@ -276,10 +529,16 @@ String projectStage(String stage) => switch (stage) {
       'designing' => 'Дизайн',
       'implementing' => 'Создание проекта',
       'reviewing' => 'Проверка исходников',
+      'testing' => 'Запускаю тесты в изолированной среде',
+      'visual_review' => 'Проверяю готовый дизайн',
       'repairing' => 'Исправление',
       'waiting_limit' => 'Жду лимит бесплатной модели',
       'completed' => 'Результат готов',
       'cancelled' => 'Остановлено',
       'failed' => 'Требуется внимание',
+      'pausing' => 'Сохраняю и ставлю на паузу',
+      'paused' => 'На паузе',
+      'waiting_budget' => 'Нужно подтвердить продолжение',
+      'interrupted' => 'Восстанавливаю из локальной копии',
       _ => 'Выполняется',
     };

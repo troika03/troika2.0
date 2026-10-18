@@ -15,7 +15,7 @@ namespace Troika.Desktop {
     }
     static class AutopilotTests {
         static void Assert(bool value, string message) { if (!value) throw new Exception(message); }
-        static string Snapshot(bool pro, string state, int reportId, string report) { return Json.Encode(new { enabled = pro, projects = new[] { new { run_id = "project", title = "Example", status = state, stage = state, workers = new object[0], reports = reportId == 0 ? new object[0] : new object[] { new { id = reportId, stage = state, text = report } } } } }); }
+        static string Snapshot(bool pro, string state, int reportId, string report, string runId = "project") { return Json.Encode(new { enabled = pro, projects = new[] { new { run_id = runId, title = "Example", status = state, stage = state, workers = new object[0], reports = reportId == 0 ? new object[0] : new object[] { new { id = reportId, stage = state, text = report } } } } }); }
         static async Task Run(string folder) {
             bool pro = true, unavailable = false, failPost = true; int posts = 0; string state = "running", report = "Plan ready"; int reportId = 1; var keys = new List<string>();
             var handler = new AutopilotHandler { Route = async request => {
@@ -50,8 +50,41 @@ namespace Troika.Desktop {
         }
         public static int Main() {
             var folder = Path.Combine(Path.GetTempPath(), "troika-autopilot-test-" + Guid.NewGuid().ToString("N"));
-            try { Run(folder).GetAwaiter().GetResult(); return 0; } catch (Exception error) { Console.Error.WriteLine(error.Message); return 1; }
+            try { Run(folder).GetAwaiter().GetResult(); Durability(folder).GetAwaiter().GetResult(); return 0; } catch (Exception error) { Console.Error.WriteLine(error.Message); return 1; }
             finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
+        }
+        static async Task Durability(string folder) {
+            var store=new LocalStore(Path.Combine(folder,"durability")); var copies=new DevelopmentCheckpoints(store);
+            var project="run_"+new string('a',32); var owner="owner@example.com";
+            var payload=Encoding.UTF8.GetBytes(Json.Encode(new { version=1,task="Synthetic private task",files=new object[0] }));
+            var copy=new Dictionary<string,object> { {"payload",Convert.ToBase64String(payload)}, {"digest",LocalStore.Hash(payload)}, {"revision",1}, {"title","Synthetic"} };
+            copies.Save(owner,project,copy); Assert(copies.Read(owner,project)!=null,"restart lost checkpoint");
+            Assert(copies.Read("other@example.com",project)==null,"foreign account read checkpoint");
+            copy["revision"]=2; copies.Save(owner,project,copy);
+            var path=Directory.GetFiles(Path.Combine(store.Root,"checkpoints"),"*.dat",SearchOption.AllDirectories)[0];
+            Assert(!Encoding.UTF8.GetString(File.ReadAllBytes(path)).Contains("Synthetic private task"),"checkpoint stored as plaintext");
+            File.WriteAllText(path,"corrupted"); Assert(Json.Number(copies.Read(owner,project),"revision")==1,"previous complete checkpoint lost");
+            int resumes=0;
+            var handler=new AutopilotHandler { Route=async request => {
+                if (request.Method.Method=="GET") return AutopilotHandler.Reply(Json.Encode(new {enabled=true,projects=new[] {new {run_id=project,project_id=project,status="interrupted",stage="interrupted",checkpoint_revision=1,checkpoint_confirmed=1,reports=new object[0]}}}));
+                var body=Json.Parse(await request.Content.ReadAsStringAsync());
+                Assert(request.RequestUri.AbsolutePath.EndsWith("/resume") && Json.Flag(body,"reuse_budget"),"recovery added a new allowance");
+                Assert(Json.Number(body,"revision")==1,"recovery sent a different revision");resumes++;
+                return AutopilotHandler.Reply("{}",202);
+            }};
+            using (var api=new ApiClient(handler,"https://example.test") { ActiveRun="foreground",Account=new AccountSession {Email=owner,Token="trk_live_test",RefreshToken="trk_refresh_test",HomeSession="home_test",ExpiresAt=9999999999} }) {
+                var service=new DevelopmentAutopilot(api,store); await service.Refresh(CancellationToken.None); await service.Refresh(CancellationToken.None);
+                Assert(resumes==1 && api.ActiveRun=="foreground","recovery duplicated work or replaced conversation");
+            }
+            bool continued=false;
+            var reportHandler=new AutopilotHandler { Route=request=>Task.FromResult(AutopilotHandler.Reply(Snapshot(true,continued?"completed":"paused",1,continued?"New result":"Old pause",continued?"new_attempt":"old_attempt"))) };
+            using (var api=new ApiClient(reportHandler,"https://example.test") {Account=new AccountSession {Email=owner,Token="trk_live_test",RefreshToken="trk_refresh_test",HomeSession="home_test",ExpiresAt=9999999999}}) {
+                var service=new DevelopmentAutopilot(api,new LocalStore(Path.Combine(folder,"report-recovery"))); await service.Refresh(CancellationToken.None);
+                continued=true; await service.Refresh(CancellationToken.None);
+                var report=service.NextReport(true); Assert(report!=null && report.RunId=="new_attempt","old pause report survived continuation");
+                service.ReportSpoken(report); await service.Refresh(CancellationToken.None); Assert(service.NextReport(true)==null,"final report repeated after continuation");
+            }
+            Console.WriteLine("5 checkpoint checks passed: encrypted restart copy, account isolation, corruption fallback, bounded continuation, retired attempt reports.");
         }
     }
 }

@@ -47,6 +47,8 @@ namespace Troika.Desktop {
                     var manifest = Path.Combine(root, "troika-project.json");
                     File.WriteAllText(manifest, Json.Encode(new { review = new { method = "api_model_review", status = "passed", execution = "not_run" } }));
                     Assert(DevelopmentWorkflow.ModelReviewStatus(root).Contains("Тесты не запускались"), "review misrepresented as execution");
+                    File.WriteAllText(manifest, Json.Encode(new { review = new { method = "api_model_review", status = "passed", execution = "passed", visual_review = "passed" } }));
+                    Assert(DevelopmentWorkflow.ModelReviewStatus(root).Contains("Тесты прошли") && DevelopmentWorkflow.ModelReviewStatus(root).Contains("Визуальная проверка пройдена"), "executed checks hidden");
                     File.WriteAllText(manifest, Json.Encode(new { review = new { method = "api_model_review", status = "needs_changes", execution = "not_run" } }));
                     Assert(DevelopmentWorkflow.ModelReviewStatus(root).Contains("нашло ошибки"), "blocking findings hidden");
                     File.WriteAllText(manifest, "{}");
@@ -102,8 +104,8 @@ namespace Troika.Desktop {
                 var path = Temporary(); try { var bytes = Encoding.ASCII.GetBytes("%PDF-test"); var delivery = Delivery(bytes); var handler = new FakeHandler { Route = request => FakeHandler.Value("corrupt", 200) }; using (var api = Client(handler)) await ExpectError(async () => { await new LocalStore(path).Receive(api, delivery, CancellationToken.None); }, "повреждён"); Assert(!handler.Requests.Any(r => r.EndsWith("/received")), "corrupt ACK"); } finally { Directory.Delete(path, true); }
             });
             await Test("save precedes ACK and lost ACK retries without duplicate", async () => {
-                var path = Temporary(); try { var bytes = Encoding.ASCII.GetBytes("%PDF-test"); var delivery = Delivery(bytes); var store = new LocalStore(path); int downloads = 0, acknowledgements = 0;
-                    var handler = new FakeHandler { Route = request => { if (request.Method == HttpMethod.Get) { downloads++; var reply = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) }; return Task.FromResult(reply); } acknowledgements++; Assert(store.Files(Session().Email).Count() == 1, "ACK before save"); return FakeHandler.Value("{}", acknowledgements == 1 ? 503 : 200); } };
+                var path = Temporary(); try { var bytes = Encoding.ASCII.GetBytes("%PDF-test"); var delivery = Delivery(bytes); var store = new LocalStore(path); var parent = Path.Combine(store.FilesFolder(Session().Email), Json.Text(delivery, "id")); delivery["filename"] = new string('a', Math.Min(130, 245 - parent.Length - 5)) + ".pdf"; int downloads = 0, acknowledgements = 0;
+                    var handler = new FakeHandler { Route = request => { if (request.Method == HttpMethod.Get) { downloads++; var reply = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) }; return Task.FromResult(reply); } acknowledgements++; Assert(store.Files(Session().Email).Count() == 1, "ACK before save"); return FakeHandler.Value("{}", acknowledgements == 1 ? 503 : 404); } };
                     using (var api = Client(handler)) { await ExpectError(async () => { await store.Receive(api, delivery, CancellationToken.None); }, "503"); var saved = await store.Receive(api, delivery, CancellationToken.None); Assert(File.ReadAllBytes(saved).SequenceEqual(bytes), "invalid saved bytes"); } Assert(downloads == 1 && acknowledgements == 2 && store.Files(Session().Email).Count() == 1, "duplicate delivery");
                 } finally { Directory.Delete(path, true); }
             });

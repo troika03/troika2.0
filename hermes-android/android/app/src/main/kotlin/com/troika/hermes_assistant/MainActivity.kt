@@ -63,6 +63,7 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         OwnProviderSession.attach(flutterEngine)
         DevelopmentCheckBridge(this, flutterEngine)
+        DevelopmentBridge(this, flutterEngine)
         FlutterEngineCache.getInstance().put("main_engine", flutterEngine)
 
         methodChannel = MethodChannel(

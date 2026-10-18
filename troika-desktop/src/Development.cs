@@ -131,7 +131,7 @@ namespace Troika.Desktop {
                 if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0) throw new InvalidDataException("Файл является ссылкой.");
                 var name = file.Substring(folder.Length).TrimStart(Path.DirectorySeparatorChar).Replace('\\', '/');
                 ValidateSource(name, File.ReadAllText(file)); var content = File.ReadAllText(file); bytes += Encoding.UTF8.GetByteCount(content);
-                if (bytes > 120000 || result.Count >= 100) throw new InvalidDataException("Проект больше 120 КБ или 100 файлов."); result.Add(name, content);
+                if (bytes > 2*1024*1024 || result.Count >= 96) throw new InvalidDataException("Проект больше 2 МБ или 96 исходных файлов."); result.Add(name, content);
             }
             return result;
         }

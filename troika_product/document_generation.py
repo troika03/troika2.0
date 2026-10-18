@@ -26,9 +26,7 @@ def _normalized_sections(args: dict[str, Any]) -> tuple[str, list[tuple[str, str
         for raw in raw_sections:
             if not isinstance(raw, dict):
                 raise ValueError("each section must be an object")
-            heading = _clean_text(
-                raw.get("heading") or raw.get("title"), max_chars=500
-            )
+            heading = _clean_text(raw.get("heading") or raw.get("title"), max_chars=500)
             body = _clean_text(raw.get("body") or raw.get("content"), max_chars=500_000)
             if heading or body:
                 sections.append((heading, body))
@@ -164,7 +162,9 @@ def generate_pdf(args: dict[str, Any]) -> bytes:
         for paragraph_text in body.split("\n\n"):
             paragraph_text = paragraph_text.strip()
             if paragraph_text:
-                safe_paragraph = "<br/>".join(escape(line) for line in paragraph_text.splitlines())
+                safe_paragraph = "<br/>".join(
+                    escape(line) for line in paragraph_text.splitlines()
+                )
                 story.extend((Paragraph(safe_paragraph, body_style), Spacer(1, 2)))
     document.build(story)
     return buffer.getvalue()
@@ -193,11 +193,13 @@ def generate_pptx(args: dict[str, Any]) -> bytes:
     if len(title) > 160:
         raise ValueError("presentation title is too long; use a concise title")
 
-    if args.get('include_cover', True):
+    if args.get("include_cover", True):
         cover = presentation.slides.add_slide(presentation.slide_layouts[6])
         cover.background.fill.solid()
         cover.background.fill.fore_color.rgb = background_color
-        cover_title = cover.shapes.add_textbox(Inches(1), Inches(2.3), Inches(11.3), Inches(1.5))
+        cover_title = cover.shapes.add_textbox(
+            Inches(1), Inches(2.3), Inches(11.3), Inches(1.5)
+        )
         cover_paragraph = cover_title.text_frame.paragraphs[0]
         cover_paragraph.text = title or "Презентация"
         cover_paragraph.alignment = PP_ALIGN.CENTER
@@ -216,18 +218,23 @@ def generate_pptx(args: dict[str, Any]) -> bytes:
         if bullets_value:
             body_lines = [_clean_text(item, max_chars=5_000) for item in bullets_value]
         else:
-            content = _clean_text(raw.get("content"), max_chars=30_000)
+            content = _clean_text(raw.get("content", raw.get("body")), max_chars=30_000)
             body_lines = [line.strip() for line in content.splitlines() if line.strip()]
 
-        estimated_lines = sum(max(1, (len(part) + 64) // 65)
-                              for line in body_lines for part in line.splitlines())
+        estimated_lines = sum(
+            max(1, (len(part) + 64) // 65)
+            for line in body_lines
+            for part in line.splitlines()
+        )
         if len(slide_title) > 120 or len(body_lines) > 6 or estimated_lines > 8:
             raise ValueError("slide has too much text; split it into multiple slides")
         slide = presentation.slides.add_slide(presentation.slide_layouts[6])
         slide.background.fill.solid()
         slide.background.fill.fore_color.rgb = background_color
 
-        title_box = slide.shapes.add_textbox(Inches(1), Inches(0.62), Inches(11.4), Inches(1.2))
+        title_box = slide.shapes.add_textbox(
+            Inches(1), Inches(0.62), Inches(11.4), Inches(1.2)
+        )
         title_paragraph = title_box.text_frame.paragraphs[0]
         title_paragraph.text = slide_title or f"Слайд {index}"
         title_paragraph.font.name = "Arial"
@@ -235,20 +242,54 @@ def generate_pptx(args: dict[str, Any]) -> bytes:
         title_paragraph.font.bold = True
         title_paragraph.font.color.rgb = text_color
 
-        body_box = slide.shapes.add_textbox(Inches(1), Inches(2), Inches(11.2), Inches(4.4))
+        layout = raw.get("layout", "content")
+        if layout not in {"cover", "content", "split", "statement"}:
+            raise ValueError("unsupported slide layout")
+        if layout == "cover":
+            title_box.top = Inches(2.0)
+            title_box.height = Inches(1.6)
+            title_paragraph.font.size = Pt(38 if len(slide_title) < 70 else 32)
+
+        body_box = slide.shapes.add_textbox(
+            Inches(1),
+            Inches(4.2 if layout == "cover" else 2),
+            Inches(11.2),
+            Inches(2.0 if layout == "cover" else 4.4),
+        )
         frame = body_box.text_frame
         frame.word_wrap = True
         frame.clear()
-        for line_index, line in enumerate(body_lines or [""]):
-            paragraph = frame.paragraphs[0] if line_index == 0 else frame.add_paragraph()
-            paragraph.text = line
-            paragraph.font.name = "Arial"
-            paragraph.font.size = Pt(21)
-            paragraph.font.color.rgb = text_color if line_index == 0 else muted
-            paragraph.space_after = Pt(13)
-            paragraph.level = 0
+        if layout == "split" and len(body_lines) > 1:
+            split = (len(body_lines) + 1) // 2
+            columns = [body_lines[:split], body_lines[split:]]
+            body_box.width = Inches(5.2)
+        else:
+            columns = [body_lines or [""]]
+        for column_index, lines in enumerate(columns):
+            if column_index:
+                frame = slide.shapes.add_textbox(
+                    Inches(7.0), Inches(2), Inches(5.2), Inches(4.4)
+                ).text_frame
+                frame.word_wrap = True
+                frame.clear()
+            for line_index, line in enumerate(lines):
+                paragraph = (
+                    frame.paragraphs[0] if line_index == 0 else frame.add_paragraph()
+                )
+                paragraph.text = line
+                paragraph.font.name = "Arial"
+                paragraph.font.size = Pt(
+                    30
+                    if layout == "statement" and len(line) < 90 and line_index == 0
+                    else 21
+                )
+                paragraph.font.color.rgb = text_color if line_index == 0 else muted
+                paragraph.space_after = Pt(18 if layout == "statement" else 13)
+                paragraph.level = 0
 
-        number = slide.shapes.add_textbox(Inches(11.9), Inches(6.75), Inches(0.7), Inches(0.35))
+        number = slide.shapes.add_textbox(
+            Inches(11.9), Inches(6.75), Inches(0.7), Inches(0.35)
+        )
         number_p = number.text_frame.paragraphs[0]
         number_p.text = str(index)
         number_p.alignment = PP_ALIGN.RIGHT

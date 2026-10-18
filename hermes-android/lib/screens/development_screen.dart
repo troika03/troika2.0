@@ -463,6 +463,11 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
                   FilledButton(
                       onPressed: _busy ? null : () => _perform(_run),
                       child: const Text('Разработать проект')),
+                  if (_background != null)
+                    const Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: Text(
+                            'Запуская проект, вы подтверждаете предел 250 000 AI-токенов из месячного остатка. Спишется фактический расход; превышение потребует подтверждения.')),
                   if (_busy) ...[
                     const SizedBox(height: 16),
                     const LinearProgressIndicator(),

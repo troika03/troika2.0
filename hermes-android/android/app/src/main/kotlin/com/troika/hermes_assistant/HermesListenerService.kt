@@ -53,6 +53,16 @@ class HermesListenerService : Service() {
 
     companion object {
         @Volatile var serviceActive: Boolean = false
+        @Volatile private var projectSpeechHost: HermesListenerService? = null
+        fun projectReportBlocker(): String? = projectSpeechHost?.let {
+            when {
+                it.isInDialog.get() -> "dialog"
+                it.manualDialogActive.get() -> "manual_dialog"
+                it.listenerPaused.get() -> "foreground_speech"
+                else -> null
+            }
+        }
+        fun projectReportMaySpeak(): Boolean = projectReportBlocker() == null
         const val CHANNEL_ID = "hermes_listener"
         const val NOTIF_ID = 1001
         const val FLUTTER_CHANNEL = "com.troika.hermes/background"
@@ -176,6 +186,7 @@ class HermesListenerService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        projectSpeechHost = this
         createNotificationChannel()
         // TTS init может занять несколько секунд — Android даёт сервису
         // ровно 5-10 сек чтобы вызвать startForeground(). Поэтому всю
@@ -1137,6 +1148,7 @@ class HermesListenerService : Service() {
      * История сообщений сохраняется между итерациями для follow-up вопросов.
      */
     private fun runDialog(manual: Boolean = false) {
+        DevelopmentService.interruptReport()
         listenerPaused.set(true)
         dialogStartMs.set(System.currentTimeMillis())
         Thread.sleep(400)
@@ -1797,6 +1809,7 @@ class HermesListenerService : Service() {
     }
 
     override fun onDestroy() {
+        projectSpeechHost = null
         serviceActive = false
         isRunning.set(false)
         manualDialogActive.set(false)

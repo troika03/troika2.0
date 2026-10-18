@@ -53,7 +53,7 @@ class DevelopmentService {
         if (entry.key != 'troika-project.json')
           entry.key: utf8.decode(entry.value),
     };
-    if (utf8.encode(json.encode(sources)).length > 160000) {
+    if (utf8.encode(json.encode(sources)).length > 2 * 1024 * 1024) {
       throw const FormatException(
           'Проект слишком большой для полного ревью модели.');
     }

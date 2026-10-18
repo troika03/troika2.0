@@ -134,6 +134,7 @@ namespace Troika.Desktop {
             panelContent.Children.Add(Label("Способ проверки", 12, muted)); var kinds = new ComboBox { Margin = new Thickness(0, 8, 0, 8) }; AccessibleName(kinds, "Способ проверки проекта");
             foreach (var kind in new[] { DevelopmentWorkflow.ModelReview, "Python: тесты", "JavaScript: тесты", "Python: синтаксис", "JavaScript: синтаксис" }) kinds.Items.Add(kind); kinds.SelectedIndex = 0; panelContent.Children.Add(kinds);
             AddPanelButton("Разработать проект", () => { var task = ChooseDevelopmentTarget(developmentRequest, Convert.ToString(kinds.SelectedItem), false); }, true);
+            panelContent.Children.Add(Label("Запуская автопилот, вы подтверждаете предел 250 000 AI-токенов из месячного остатка. Спишется фактический расход; превышение потребует подтверждения.", 11, muted));
             SurfaceGroup(0, "От идеи до проекта", "Тройка пишет код и проверяет исходники моделью через API. Тесты запускаются отдельно.", "code"); int imported = panelContent.Children.Count;
             Check("Голосовые отчёты по проектам", Autopilot.VoiceReports, enabled => { Autopilot.SetVoice(enabled); if (!enabled && projectSpeech != null) projectSpeech.Cancel(); });
             panelContent.Children.Add(Label("Важные этапы и результат. Во время разговора Тройка подождёт.", 11, muted));

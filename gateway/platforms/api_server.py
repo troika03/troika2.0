@@ -2071,6 +2071,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             if owner[0] == user_id
         ]
         for run_id in run_ids:
+            self.__dict__.get('_development_snapshots', {}).pop(
+                self._run_statuses.get(run_id, {}).get('project_id', run_id), None)
             try:
                 from tools.approval import unregister_gateway_notify
 
@@ -2159,6 +2161,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         ]
         tasks: list["asyncio.Task[Any]"] = []
         for run_id in run_ids:
+            self.__dict__.get('_development_snapshots', {}).pop(
+                self._run_statuses.get(run_id, {}).get('project_id', run_id), None)
             guard = self._active_resource_guards.get(run_id)
             if guard is not None:
                 guard.block_pending_calls()
@@ -5924,7 +5928,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             return capacity_error
         active_streams = sum(
             not (self._run_statuses.get(run, {}).get("workflow") == "development"
-                 and self._run_statuses[run].get("status") in {"completed", "failed", "cancelled"})
+                 and self._run_statuses[run].get("status") in {"completed", "failed", "cancelled", "paused", "waiting_budget", "interrupted"})
             for run in self._run_streams
         )
         if active_streams >= self._MAX_CONCURRENT_RUNS:

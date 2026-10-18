@@ -131,6 +131,7 @@ def build_project(args: dict, *, require_complete: bool = False) -> tuple[bytes,
                 "execution": "not_run", "instructions": str(args.get("instructions") or "")[:8000]}
     if args.get("review") is not None:
         manifest["review"] = args["review"]
+        manifest['execution'] = args['review'].get('execution','not_run')
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for path, content in output.items():
