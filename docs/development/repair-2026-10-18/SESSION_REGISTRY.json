@@ -1,0 +1,99 @@
+{
+  "date": "2026-10-18",
+  "dispatch_ready": false,
+  "product_checkout": "D:/troika-product",
+  "launch_project": "D:/troikahermes",
+  "coordination": "Per-session reports and candidate patches. Only 09 integrates shared files. No thread messaging authorized.",
+  "sessions": [
+    {
+      "id": "01-development",
+      "title": "Troika — разработка, skills, MCP и плагины",
+      "prompt": "sessions/01-development.md",
+      "report": "reports/01-development.md",
+      "threadId": null,
+      "hostId": null,
+      "status": "prompt_ready"
+    },
+    {
+      "id": "02-android",
+      "title": "Troika — Android, голос и рабочая среда",
+      "prompt": "sessions/02-android.md",
+      "report": "reports/02-android.md",
+      "threadId": null,
+      "hostId": null,
+      "status": "prompt_ready"
+    },
+    {
+      "id": "03-windows",
+      "title": "Troika — Windows и рабочее окно проекта",
+      "prompt": "sessions/03-windows.md",
+      "report": "reports/03-windows.md",
+      "threadId": null,
+      "hostId": null,
+      "status": "prompt_ready"
+    },
+    {
+      "id": "04-account-data",
+      "title": "Troika — аккаунт, память, проекты и напоминания",
+      "prompt": "sessions/04-account-data.md",
+      "report": "reports/04-account-data.md",
+      "threadId": null,
+      "hostId": null,
+      "status": "prompt_ready"
+    },
+    {
+      "id": "05-web-files",
+      "title": "Troika — поиск, исследования, файлы и документы",
+      "prompt": "sessions/05-web-files.md",
+      "report": "reports/05-web-files.md",
+      "threadId": null,
+      "hostId": null,
+      "status": "prompt_ready"
+    },
+    {
+      "id": "06-subscription",
+      "title": "Troika — подписка, ресурс, модели и личный API",
+      "prompt": "sessions/06-subscription.md",
+      "report": "reports/06-subscription.md",
+      "threadId": null,
+      "hostId": null,
+      "status": "prompt_ready"
+    },
+    {
+      "id": "07-site-support",
+      "title": "Troika — сайт, Telegram и путь пользователя",
+      "prompt": "sessions/07-site-support.md",
+      "report": "reports/07-site-support.md",
+      "threadId": null,
+      "hostId": null,
+      "status": "prompt_ready"
+    },
+    {
+      "id": "08-security-release",
+      "title": "Troika — безопасность, инфраструктура и выпуск",
+      "prompt": "sessions/08-security-release.md",
+      "report": "reports/08-security-release.md",
+      "threadId": null,
+      "hostId": null,
+      "status": "prompt_ready"
+    },
+    {
+      "id": "09-coordinator",
+      "title": "Troika — координатор общего исправления",
+      "prompt": "sessions/09-coordinator.md",
+      "report": "reports/09-coordinator.md",
+      "threadId": null,
+      "hostId": null,
+      "status": "prompt_ready"
+    },
+    {
+      "id": "10-acceptance",
+      "title": "Troika — независимая приёмка всех функций",
+      "prompt": "sessions/10-acceptance.md",
+      "report": "reports/10-acceptance.md",
+      "threadId": null,
+      "hostId": null,
+      "status": "prompt_ready"
+    }
+  ]
+}

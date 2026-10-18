@@ -1,0 +1,2491 @@
+{
+  "date": "2026-10-18",
+  "checkout": "D:/troika-product",
+  "base_commit": "a5c3b0226f6bf502cb8b37fadfe265247af8d391",
+  "snapshot_kind": "working_tree_with_preexisting_uncommitted_changes",
+  "scope": [
+    "troika_product/",
+    "troika-desktop/src/",
+    "hermes-android/lib/",
+    "hermes-android/android/app/src/main/kotlin/",
+    "hermes-android/windows/runner/",
+    "troika-site/src/",
+    "troika-site/timeweb/",
+    "agent/",
+    "gateway/platforms/api_server.py",
+    "toolsets.py",
+    "run_agent.py",
+    "model_tools.py",
+    "tools/skills_tool.py",
+    "tools/mcp_tool.py",
+    "hermes_cli/plugins.py",
+    "tools/troika_*"
+  ],
+  "excluded": "tests, generated outputs, work copies, binaries, historical checkout, and upstream modules outside explicit scope",
+  "method": "file hashes and Python AST definitions; no imports, network, model calls, or code execution",
+  "manual_review_note": "indexed_only is not manual or dynamic verification; manual findings and their cited source files are in the two accompanying Markdown reports",
+  "source_files": 306,
+  "language_files": {
+    ".py": 173,
+    ".kt": 27,
+    ".dart": 60,
+    ".cpp": 6,
+    ".h": 6,
+    ".cs": 28,
+    ".js": 1,
+    ".mjs": 1,
+    ".php": 4
+  },
+  "python_function_definitions": 2843,
+  "python_parse_errors": [],
+  "files": [
+    {
+      "path": "agent/__init__.py",
+      "sha256": "036fdfbeb243e2b7cf3a1033b0007328bc61905f5368e0680f1bcde297ebcdb9",
+      "bytes": 282,
+      "lines": 6,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/account_usage.py",
+      "sha256": "36b90c9baa4943b601cdc9d10f8908ed6960a0e08c617a7f115dee880a508b69",
+      "bytes": 12047,
+      "lines": 326,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/agent_init.py",
+      "sha256": "dfab46e2b10678a9ef73982e5044695539c45c638fc8cd8c5ce29ceb156cf100",
+      "bytes": 84177,
+      "lines": 1637,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/agent_runtime_helpers.py",
+      "sha256": "0a22570a0b024fc8d05728b5b7b53d6eaf0ca1785ad5b053ab1a8d4d531424b1",
+      "bytes": 100193,
+      "lines": 2270,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/anthropic_adapter.py",
+      "sha256": "4d7ec03b75cd36c1ec48940414a9c6185a3b07af6ba355e971ca12ff6425e8dc",
+      "bytes": 97072,
+      "lines": 2273,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/async_utils.py",
+      "sha256": "289dc7baf769a71bed142075951c4a6719618300646a3fadc42e3197633fc35c",
+      "bytes": 2619,
+      "lines": 68,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/auxiliary_client.py",
+      "sha256": "b65d77b9155d645efd10cbce368bd362b8173cedb09cd12010fd366bc9d5df41",
+      "bytes": 249616,
+      "lines": 5540,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/azure_identity_adapter.py",
+      "sha256": "427a66dbe27972955b1f079166302c5a28e670f991b6464955204719ebef9048",
+      "bytes": 23621,
+      "lines": 555,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/background_review.py",
+      "sha256": "54ee1cff8538991a52a662445e67055b5452890c34005df3bc06e887adb99607",
+      "bytes": 30476,
+      "lines": 593,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/bedrock_adapter.py",
+      "sha256": "80d8e9c532c7abfd7c5f3527b785c581a67d7910c06d66787dad653be905c67e",
+      "bytes": 51651,
+      "lines": 1289,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/browser_provider.py",
+      "sha256": "4713a6fe165366c0d4a461331d2373a50386b8cfa98260cf8a80ef972d0a177e",
+      "bytes": 7302,
+      "lines": 175,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/browser_registry.py",
+      "sha256": "c7669821e9b229af6411bc803de807d92d4d2f811bd431b555792c9401669089",
+      "bytes": 8946,
+      "lines": 223,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/chat_completion_helpers.py",
+      "sha256": "3d6c8a27b214b68060a52ce48018c4145abcf4cce2c15cc68c7c8fa393ca619a",
+      "bytes": 115602,
+      "lines": 2335,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/codex_responses_adapter.py",
+      "sha256": "0cff4a87ead464fbdb0ea3fbb52fc8a2cff8854d9fc31c1a5c39ac0a01f47bb3",
+      "bytes": 50378,
+      "lines": 1089,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/codex_runtime.py",
+      "sha256": "83634ba3f64faf59fe403c402110b919420b195830cd2090c2d8754961562ea1",
+      "bytes": 22256,
+      "lines": 454,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/context_compressor.py",
+      "sha256": "81a7c3609af5270a7f67bebb838bb5ba3a978dd265e363fcc849432ec8664bb8",
+      "bytes": 83389,
+      "lines": 1749,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/context_engine.py",
+      "sha256": "6e67a1ddab4675302ecde7d64dd580aaa2769a7edf79ff13e2c8812648348d34",
+      "bytes": 8330,
+      "lines": 212,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/context_references.py",
+      "sha256": "c43e9514bc75fc237f97e83bbedb35b8ac6faad71fb3742329149504de2db0b4",
+      "bytes": 17432,
+      "lines": 518,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/conversation_compression.py",
+      "sha256": "2389b09558359b9b8d9f909ef8448b6e37821b70908a38a20992a8a3c8bdc164",
+      "bytes": 28307,
+      "lines": 603,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/conversation_loop.py",
+      "sha256": "4abd6b3d5e02a9e1fe1a2a5f40825c3925ea88590084db2ad20c6f8ab74624c2",
+      "bytes": 252635,
+      "lines": 4465,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/copilot_acp_client.py",
+      "sha256": "ba26a1db0d746d699c7e9859a7c81286e4a58d4fec0b18d1665093e07751ac65",
+      "bytes": 25110,
+      "lines": 686,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/credential_persistence.py",
+      "sha256": "a29bda3456c69e43bf0835d11919fdd482e5d3132b4abede282df04c1458ec9f",
+      "bytes": 5194,
+      "lines": 174,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/credential_pool.py",
+      "sha256": "3feebd349556a46bcb607af066823f52110926c3f81619e42607128ae9550017",
+      "bytes": 95110,
+      "lines": 2063,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/credential_sources.py",
+      "sha256": "f32b654c61e5de268e5d37470bca43a5c2c8f786b44d7b0e11dfba701474ccde",
+      "bytes": 19179,
+      "lines": 448,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/curator.py",
+      "sha256": "7446616631dbfe7c3f2b441c717c8ad3c4fe72b152e1f6247e75c747be9ea98a",
+      "bytes": 76716,
+      "lines": 1782,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/curator_backup.py",
+      "sha256": "32f85a70fb33e9e4bb2a3e81328fb6e7dab9093502daab981a9c75fcbcb3f2e4",
+      "bytes": 27358,
+      "lines": 696,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/display.py",
+      "sha256": "af5846957ea8c090a5dd3b7dc1d551cd82bb31e3f4fa105df9febd9bd775dc95",
+      "bytes": 40765,
+      "lines": 1037,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/error_classifier.py",
+      "sha256": "b1c92abcd974778deeb117f0d16ac939c6629f2a35cc71930b2f45f0edf15ec5",
+      "bytes": 47198,
+      "lines": 1169,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/file_safety.py",
+      "sha256": "c06b57f925ba03b3c9ce81925f10bc6623696e7de8673dba9bb236aa237b6a17",
+      "bytes": 18174,
+      "lines": 449,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/gemini_cloudcode_adapter.py",
+      "sha256": "a8ac6bd655d9c212b709c8fa2fa735f972e3ad85a89b4cb7e53bbb933cac2029",
+      "bytes": 34987,
+      "lines": 909,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/gemini_native_adapter.py",
+      "sha256": "dfe3e965e6782454f50d55c849eda3c2801664339745f07c190332db261d68ec",
+      "bytes": 35959,
+      "lines": 971,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/gemini_schema.py",
+      "sha256": "fc6c8fd8525e4a4ae454823218465bffbff8a41b6e6e5cecdf5744ef703e83db",
+      "bytes": 3437,
+      "lines": 99,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/google_code_assist.py",
+      "sha256": "e165c9fa7984f31af06bd1b0491d503ef4b5711f8112526654ecf275b57161d0",
+      "bytes": 17326,
+      "lines": 452,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/google_oauth.py",
+      "sha256": "15590aa3b097728c72391da0fbbb517a2015bf3b26d4803162618db58cd64c3b",
+      "bytes": 39414,
+      "lines": 1059,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/i18n.py",
+      "sha256": "7b2019abf5211f82ab455b5dc35660e43dd2f8c4ac6a84b98c13af1147f34f39",
+      "bytes": 9828,
+      "lines": 258,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/image_gen_provider.py",
+      "sha256": "46d0888a36e0927ffdc3fa23e3430569b3aa94683db48319a881426882b1c6da",
+      "bytes": 10956,
+      "lines": 324,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/image_gen_registry.py",
+      "sha256": "7a1fde64e4795c6eb60792eac8a7f21640b8827a2a67bc5f9c17dd18894d5e46",
+      "bytes": 5303,
+      "lines": 145,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/image_routing.py",
+      "sha256": "cd4e36f193f53195a808059b1b79d27a499296cde0b9910785b4f7fa2f9c3dfc",
+      "bytes": 15445,
+      "lines": 391,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/insights.py",
+      "sha256": "20db8ac14a5e507a8d80585b36d6f72a36ef9dcf354a86e3764706b15ab7a826",
+      "bytes": 39937,
+      "lines": 930,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/iris_persona.py",
+      "sha256": "17d0094710b6ca5661391ef079b325804ffe88cc3b71123b8b9188c2aba1f59a",
+      "bytes": 6902,
+      "lines": 128,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/iteration_budget.py",
+      "sha256": "95bdc26279aab0c9312752c8768d68997eeb1067771c599a5e85961f26c7b912",
+      "bytes": 2054,
+      "lines": 62,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/lmstudio_reasoning.py",
+      "sha256": "c6ee25027d05801209cf5e764bdc520621df8f66b809d7e13ede378137a5725e",
+      "bytes": 2074,
+      "lines": 48,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/lsp/__init__.py",
+      "sha256": "45abab34ec5fa1910d8221a0531470b8351fb6f4ae8362fc2bb8d952785f12c9",
+      "bytes": 4049,
+      "lines": 106,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/lsp/cli.py",
+      "sha256": "d0ae34be9d6e8d19e857210b8a86f7c6ef4df03c2cfe9fce6eeeb1ce07bc528a",
+      "bytes": 11165,
+      "lines": 308,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/lsp/client.py",
+      "sha256": "b3b06822638af771db0dda102840d9cc0e654f2528bdc88a57488c6f26024726",
+      "bytes": 38437,
+      "lines": 930,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/lsp/eventlog.py",
+      "sha256": "98432b54be3e70946bbbda849e78f896bbed71842c801269df25927711be7cdc",
+      "bytes": 7995,
+      "lines": 213,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/lsp/install.py",
+      "sha256": "e09e57aa88f6720434add03ecd96bfdefc345bcf81276e0ee738673347263035",
+      "bytes": 13655,
+      "lines": 376,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/lsp/manager.py",
+      "sha256": "4ee793ed0fc6e8c2a00cf9642d3002e4b73b86751d50e1ba4e6bed56f8c70289",
+      "bytes": 26599,
+      "lines": 644,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/lsp/protocol.py",
+      "sha256": "1067b31de2fad52007d25f8b4abd740011c6c9499e88e347a39432d54bfe3f2a",
+      "bytes": 6955,
+      "lines": 196,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/lsp/range_shift.py",
+      "sha256": "e6d905aad1b281b740b9236a1d7f2c7a3ee64da9bb43f386926849b0ae388ffc",
+      "bytes": 6222,
+      "lines": 149,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/lsp/reporter.py",
+      "sha256": "8fe3f5be036eb74b8560e20301d7cc0c5dc34c28571e172b9098e363c9540000",
+      "bytes": 2636,
+      "lines": 78,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/lsp/servers.py",
+      "sha256": "f1b3710aec6c164354614ef3b76545bfca842609d02243691515420467da59ae",
+      "bytes": 35357,
+      "lines": 1040,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/lsp/workspace.py",
+      "sha256": "241bb0813b91f46cae539713f5205c9de0e4c9d3e633e7b888fd1da26ed4ee86",
+      "bytes": 7986,
+      "lines": 223,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/manual_compression_feedback.py",
+      "sha256": "6ca87bf0164c6910f92d3fc66b022683a0428fe65a7aa59637fdd94815227005",
+      "bytes": 1614,
+      "lines": 49,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/markdown_tables.py",
+      "sha256": "a0f3f2b8c1e0a02c046c58a1795778ed200148beb2326c8af63b3243d1b5db09",
+      "bytes": 10567,
+      "lines": 309,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/memory_manager.py",
+      "sha256": "bf62eb973b5799603440d0b5f829ec5168966ba305b3cc8d8d5d3e4338a64b7a",
+      "bytes": 23570,
+      "lines": 609,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/memory_provider.py",
+      "sha256": "cfefb837f624e8a63820e5e10764fd524afc60ab61399962f2795da9370f9a58",
+      "bytes": 11952,
+      "lines": 279,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/message_sanitization.py",
+      "sha256": "0dab8165bddba03acc2143bf54f44d2d396a1aca72c326ddbbb36b0b78f69d8f",
+      "bytes": 18038,
+      "lines": 444,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/model_metadata.py",
+      "sha256": "e87e58edc55635af3698f0f509573ba885bbd16bcd3273a9213bd9cc5abcd494",
+      "bytes": 78673,
+      "lines": 1827,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/models_dev.py",
+      "sha256": "7c8ba639b7bd99ae9d3b672baaadc7f657db75ab225b87d48cf0d9fd5d7b0578",
+      "bytes": 26393,
+      "lines": 726,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/moonshot_schema.py",
+      "sha256": "0bf488dfd4f0ce7f62d6aa0d49704d96109e547695984fdfcbbe3fa3ca042c6a",
+      "bytes": 11652,
+      "lines": 262,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/nous_rate_guard.py",
+      "sha256": "55aecb1d4e30c5b51490505f07b8f901fcebc9a687fc05dd79b1db48ca42e344",
+      "bytes": 11415,
+      "lines": 325,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/onboarding.py",
+      "sha256": "238d412f954313456e498b93f7416d3ee704e74db5b65261110ae98c2080dc67",
+      "bytes": 7518,
+      "lines": 193,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/plugin_llm.py",
+      "sha256": "799ede2e5095d814bb528977935d012ec24255c86908ceebc22818eaed466dd9",
+      "bytes": 39707,
+      "lines": 1046,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/portal_tags.py",
+      "sha256": "6dc53498ddff5b4bf5732367222ed84ef520bb7e10e031ac2b5a80a4507dac84",
+      "bytes": 2431,
+      "lines": 64,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/process_bootstrap.py",
+      "sha256": "2a7e78e85137472bcdd8f4859e0b12cb73ab4d6fa72725c2c952bdf304142766",
+      "bytes": 5367,
+      "lines": 167,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/prompt_builder.py",
+      "sha256": "411f209469ac3fca138c0eb3b8e3b3edb8430248acdf567e5e208469aa25f457",
+      "bytes": 74749,
+      "lines": 1513,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/prompt_caching.py",
+      "sha256": "ee3db7b26122e6d4187d787e6dda413a6043ea227e079d95dad3598acafbd98a",
+      "bytes": 2516,
+      "lines": 79,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/provider_metering.py",
+      "sha256": "52522da37d1efef37f6268830261b159b894a6b07741abbfd3cb44ccfd9b9781",
+      "bytes": 9140,
+      "lines": 279,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/rate_limit_tracker.py",
+      "sha256": "9e687db7cc47812d8684f66fbde9d71ead81db60a47269a6159e753e49b5bb52",
+      "bytes": 8704,
+      "lines": 246,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/redact.py",
+      "sha256": "524903548d199de33a8cc433002befcc616fd25bf867b8dfb8a42ef5131f1b25",
+      "bytes": 20513,
+      "lines": 509,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/retry_utils.py",
+      "sha256": "abaa0e8966a9722cea8efda11804060c915ad5a3fda5c7325d31a289fbb6847c",
+      "bytes": 1869,
+      "lines": 57,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/secret_sources/__init__.py",
+      "sha256": "12ae4b955e71b4b5d6180bc098fcf4c327d8db124079849f7eb1ab3065db2a06",
+      "bytes": 559,
+      "lines": 13,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/secret_sources/bitwarden.py",
+      "sha256": "41902928eb7aa22b1fac1b5cbbab74464e932b77d5cd93c4126006c35d9e6c7a",
+      "bytes": 24759,
+      "lines": 661,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/shell_hooks.py",
+      "sha256": "21b0443783d861199967df77f57a51c5d20660cdcd4e597cf5a13fa63a881026",
+      "bytes": 30865,
+      "lines": 847,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/skill_bundles.py",
+      "sha256": "fed2ff06e1dfe1b9b1605dc4a1f6762aaacf2b34c475608cac5285d18c049507",
+      "bytes": 13982,
+      "lines": 410,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/skill_commands.py",
+      "sha256": "9da53c67a0b7eb30b773582372dc1541e2d7ff432616553cb8845e5b5f835de9",
+      "bytes": 20462,
+      "lines": 523,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/skill_preprocessing.py",
+      "sha256": "3e63f70c3d0986aa05ffabd4b9099bb3c6ad9ec633382a8bb7811bb7eff1f413",
+      "bytes": 4907,
+      "lines": 139,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/skill_utils.py",
+      "sha256": "b5f0fe82c3ea96d30b12116f72ccefdf1dd6bafbff4006064c44fd61ea6ea77b",
+      "bytes": 20419,
+      "lines": 566,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/stream_diag.py",
+      "sha256": "cbec324b7bb1215486632de42a3a979e7833b584c8ecc0b8a48a92f8a7b35c77",
+      "bytes": 10155,
+      "lines": 280,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/subdirectory_hints.py",
+      "sha256": "ed747833513ae21a999b72bffeb91a1f002bad43bb9b39bbded4be1202964c5b",
+      "bytes": 10298,
+      "lines": 270,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/system_prompt.py",
+      "sha256": "2d7f40425fa99e0149b5f59a3f8e0a7cad11831e5d3afb330171e83c1487f3b1",
+      "bytes": 19867,
+      "lines": 421,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/think_scrubber.py",
+      "sha256": "fabaad7252e6d5588fb738792373b48cca410ef319bbd5def3b84c2ad59034ea",
+      "bytes": 15816,
+      "lines": 386,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/title_generator.py",
+      "sha256": "c2e736bd39dda95be2eeb08406bb9256d5fc07fa3bd61b3b0fb4425c09ca51e1",
+      "bytes": 6385,
+      "lines": 172,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/tool_dispatch_helpers.py",
+      "sha256": "44c0e4307f0c8055090cd353e5314d37e3ecc67afe723bc2539521e2acd8fd0e",
+      "bytes": 15219,
+      "lines": 417,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/tool_executor.py",
+      "sha256": "77da99c5266a89526c7485b6686d9309fa2cdbbee584b7413363648e58e83558",
+      "bytes": 46944,
+      "lines": 912,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/tool_guardrails.py",
+      "sha256": "b50af2960fc16c2e5c8bddc1ec214700c8635f443aed6e0a88da8a3a3c5df00e",
+      "bytes": 18409,
+      "lines": 475,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/tool_result_classification.py",
+      "sha256": "caf445676734b0d916aacd566e224ac7ad47ff5aa07842a6ff3d81fbdf592762",
+      "bytes": 803,
+      "lines": 26,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/trajectory.py",
+      "sha256": "432ae3310358f71d36faff098c17ffc3c3d5b936397cee0014ddbd28816df32f",
+      "bytes": 2084,
+      "lines": 56,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/transcription_provider.py",
+      "sha256": "08e6ad22ac6ec0648d6fe437b35cec92f65f86de879a68eec8433c7d04c6e4bc",
+      "bytes": 7087,
+      "lines": 193,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/transcription_registry.py",
+      "sha256": "cb722a5a9653aff099148f5557994f7fd70c515e8db4d42004ea3945bfe16ce9",
+      "bytes": 4246,
+      "lines": 122,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/transports/__init__.py",
+      "sha256": "b07521c89465798748d22370b3a66a0a9a97051f8a87c7463a837633e71836b0",
+      "bytes": 2085,
+      "lines": 68,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/transports/anthropic.py",
+      "sha256": "7e4e20edb33d27a212bf2a2654f2e754370e82c8ff234fa6efbefa954fb786ee",
+      "bytes": 7588,
+      "lines": 189,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/transports/base.py",
+      "sha256": "f7f7a819569d4bbaac4a47b8bb970eb175559b1c8a7a035b9414e549fa0d1bee",
+      "bytes": 3113,
+      "lines": 89,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/transports/bedrock.py",
+      "sha256": "5068451f7b140b4e83014dfc578015e431e6b8db44ce13a0376db1cd2c45da3f",
+      "bytes": 5613,
+      "lines": 154,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/transports/chat_completions.py",
+      "sha256": "5358767107f9b947d06550f0b9a2c88964bc41c3c8235a383b98076fcd73eb85",
+      "bytes": 29069,
+      "lines": 646,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/transports/codex.py",
+      "sha256": "f816fb1c285c4fb0968698354eb165b156cce6b9085b6a2f3789da5d4403b71f",
+      "bytes": 13643,
+      "lines": 295,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/transports/codex_app_server.py",
+      "sha256": "8dca7aefbde1932c4d4289029823fa41f7fc8f99244e7e606d9545803d2d612e",
+      "bytes": 15217,
+      "lines": 399,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/transports/codex_app_server_session.py",
+      "sha256": "31e577c33cb21c497f3c032bf79f92bbb4289d1b600d86ef08bbc9f537a6703d",
+      "bytes": 37908,
+      "lines": 845,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/transports/codex_event_projector.py",
+      "sha256": "cb2e4b24d74e330708d1cc7f716195d1554c14343333989ebcc60a063d47d371",
+      "bytes": 13048,
+      "lines": 312,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/transports/hermes_tools_mcp_server.py",
+      "sha256": "e51005b60490a671433b3966f820689597e9a8889956283c3996e2acc6bf3b26",
+      "bytes": 9373,
+      "lines": 233,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/transports/types.py",
+      "sha256": "088d756b327b8dd5067e860cd0e1aa0a5dd6a97dd1734b1bb5ba3c120cf3a707",
+      "bytes": 5968,
+      "lines": 162,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/tts_provider.py",
+      "sha256": "e181fc3df1c653069f390b5523f243edee66f582c5a034c1e6880993e8d5d98c",
+      "bytes": 10605,
+      "lines": 274,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/tts_registry.py",
+      "sha256": "fc578938973d7e06b3ff0a07596c77b1d832b7bead97a7e00f20acf22450396c",
+      "bytes": 4544,
+      "lines": 133,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/usage_pricing.py",
+      "sha256": "7298684e60e3235f9bbadbbbb425c9233737400c89df8878dd788d5fbe22bfc8",
+      "bytes": 33748,
+      "lines": 877,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/video_gen_provider.py",
+      "sha256": "8d846abc872e948590f274bf5bc2286e2277f276c77236146eca669d9c88e154",
+      "bytes": 10394,
+      "lines": 299,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/video_gen_registry.py",
+      "sha256": "a4554cadf846808908ad88ccf204bc7c1020fc0a4156998d5f59581f325ad26d",
+      "bytes": 3776,
+      "lines": 117,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/web_search_provider.py",
+      "sha256": "e3db661b57b3d513072b21270dbe1cb909a7af377e84c6e9446d97cd08d932ec",
+      "bytes": 8328,
+      "lines": 221,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "agent/web_search_registry.py",
+      "sha256": "1ba41f9b2df16d6259569823130f62fb60beff4540fd779500274699229fc046",
+      "bytes": 10149,
+      "lines": 262,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "gateway/platforms/api_server.py",
+      "sha256": "bbb4f628987c04d7bb8b14beeecca35f807eb5399cd5803480a494533c8b66e5",
+      "bytes": 334406,
+      "lines": 7045,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/AppCommandMatcher.kt",
+      "sha256": "33807cc175f5563b8eb44af7a9b9fa2f1ab5d0eacc1185e582cc7b387e45d85b",
+      "bytes": 820,
+      "lines": 17,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/BargeInMonitor.kt",
+      "sha256": "c34259add7a8cd074b23c7f49f6abc1115cf0375a842d3fe14660569f651b581",
+      "bytes": 7955,
+      "lines": 175,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/BootReceiver.kt",
+      "sha256": "f0a852bc9aa4e174f91866dec391f79270124b5a8b6d747a3566d9b167e57bb4",
+      "bytes": 2161,
+      "lines": 47,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/DevelopmentBridge.kt",
+      "sha256": "2788ec99f7d83f911113a3f6611a682651fcc6a938eb87e0a61f42cfad98b876",
+      "bytes": 3142,
+      "lines": 44,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/DevelopmentCheckBridge.kt",
+      "sha256": "43f033b3d0a7d72be00b382a721d045093e6dcc8f202b332cf39138414c594dc",
+      "bytes": 7854,
+      "lines": 141,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/DevelopmentService.kt",
+      "sha256": "14c4ee2c90799c30b199201e678446a668af44a0601123c7355198caccca0afc",
+      "bytes": 19679,
+      "lines": 283,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/DeviceContext.kt",
+      "sha256": "fcfe808d9d727cce70b7b80deb1535951a995dae14d5de70fff6d0acd4f59f77",
+      "bytes": 7235,
+      "lines": 147,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/EdgeTtsPlayer.kt",
+      "sha256": "b3845bbecabe52e10305c27bcd9a08133635b9c3a9412fc591255853457d796c",
+      "bytes": 23829,
+      "lines": 477,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/HermesAccessibilityService.kt",
+      "sha256": "2e46f349c43555ff72436e4816cf627dee90916cf53c9137b82ce934fe493f5c",
+      "bytes": 15410,
+      "lines": 356,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/HermesListenerService.kt",
+      "sha256": "c22c75736015a39a70b6cbcea81b1c74c4646df6feb4a3d4cb402924a7f41f1c",
+      "bytes": 102272,
+      "lines": 1920,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/HermesOverlay.kt",
+      "sha256": "9e7b3140e09fa6bd72b7378f581d5f5cc44220f19d8e4d3f81ff7be3c87e79fe",
+      "bytes": 9124,
+      "lines": 233,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/MainActivity.kt",
+      "sha256": "bd54c36a39ddd91186d682e6be172fbbe612705949123f33a30c86230f42c4fc",
+      "bytes": 35111,
+      "lines": 794,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/NativeAccountSession.kt",
+      "sha256": "8c409178d65d49fcc5d7fc4e14247239d43c1682eae3a4302eb7b04ecca3ee7a",
+      "bytes": 3547,
+      "lines": 63,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/NativeReminderDelivery.kt",
+      "sha256": "0a02e44df8ef99ec0ff86c0badd860ea6db9c18166c1fa2a266e359ed8bf36d1",
+      "bytes": 2092,
+      "lines": 46,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/NativeSpeechQueue.kt",
+      "sha256": "d02851186a2d7aab7a98a71568de742f1a509135531eb14fad58f0dc88850b35",
+      "bytes": 4794,
+      "lines": 109,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/OwnProviderSession.kt",
+      "sha256": "a9417ceffd74c0e708ed4dbd1963818b2890191eccac0db7caf8e3870f7ef2a7",
+      "bytes": 3069,
+      "lines": 45,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/PhoneBridgeClient.kt",
+      "sha256": "8ea14c9378f154d2aa81096b7651e16a23ccb52e65e80c28aa788fd1e043aca5",
+      "bytes": 5013,
+      "lines": 136,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/PhoneCalendar.kt",
+      "sha256": "a4a8fa5d1883156df9913e3cdcaada51eba40b91fa3524ac59d5172d721813f4",
+      "bytes": 15958,
+      "lines": 363,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/PhoneCommandExecutor.kt",
+      "sha256": "39a1d0308e53a33460e102647084e64e739eb115b6f9fc55f10c97b3bb5f44c3",
+      "bytes": 22900,
+      "lines": 456,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/PhoneCommands.kt",
+      "sha256": "35d64528adfbe4002f48112f933a9451a75f322fd645388b4535580793795dc9",
+      "bytes": 32853,
+      "lines": 610,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/PhoneFiles.kt",
+      "sha256": "2266546584830f910107f00f7dee856d2bf5155dc55056f0eb855155909d664c",
+      "bytes": 18791,
+      "lines": 401,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/PhoneSystem.kt",
+      "sha256": "b99d3b7f92e2f9c277967035454831bae77a606fc3736b8a3c7d2b8a0ba3a330",
+      "bytes": 10028,
+      "lines": 221,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/ReminderScheduler.kt",
+      "sha256": "80f0ea5615c8ed1e188484156ed6d8582a1f3251463690d87daf669dc3de86dd",
+      "bytes": 8817,
+      "lines": 170,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/ReminderVoiceService.kt",
+      "sha256": "af8f78135dcf9ce805bf256d503c42b0a4153db18199ab3a48d289805fc2c0fe",
+      "bytes": 7302,
+      "lines": 157,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/ScreenCaptureService.kt",
+      "sha256": "c57c69402601099999ffb002fc9478a48e2c7c9befb2ae4345c802242ddf1b74",
+      "bytes": 14998,
+      "lines": 364,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/SecureTokenStore.kt",
+      "sha256": "4b84e3a1ecd70c273a62e3de00da5fb48af7f17843348620eaa5fa68abea001d",
+      "bytes": 3096,
+      "lines": 77,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant/SoundFeedback.kt",
+      "sha256": "652a02556eb85c2e8e4dbce7f75c402496f4915a5ca9a00e0d848dd75797be1c",
+      "bytes": 2986,
+      "lines": 72,
+      "language": ".kt",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/config/troika_config.dart",
+      "sha256": "8bc821faddd1a89edb3738c9e532563495162624d5efc4317cf30ae8643c5acc",
+      "bytes": 23202,
+      "lines": 606,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/main.dart",
+      "sha256": "923861220e3f5a1e98ec8e6e62d1f035a44344dc9f0249a145432629a743927d",
+      "bytes": 5082,
+      "lines": 108,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/screens/assistant_hub_screen.dart",
+      "sha256": "c8d4356430a92dd0953ef700c5e2e54527a52971e941a4031001da031f94dfc2",
+      "bytes": 32692,
+      "lines": 747,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/screens/auth_screen.dart",
+      "sha256": "af19e41ea64ce8c442cc5f54fa431e86257d3ba97fe1d04f44ca546473b357d8",
+      "bytes": 7775,
+      "lines": 197,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/screens/capabilities_screen.dart",
+      "sha256": "86597bdc7cf0a9e832cb687c516d641e28215a037cba3eb4cc25d7706d42c980",
+      "bytes": 9607,
+      "lines": 250,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/screens/chat_screen.dart",
+      "sha256": "d7bae02c8498e6a7b1f5697cf3291e7120e4f5b0b290ef4cc5c1ae08cef333ef",
+      "bytes": 30323,
+      "lines": 895,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/screens/commands_screen.dart",
+      "sha256": "812f0a1e5fdeda4d889f92542d2450dee21abc503301d367a55dcc123fc75221",
+      "bytes": 9619,
+      "lines": 250,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/screens/development_screen.dart",
+      "sha256": "28774649132c91de1610b4289cb0d994b42c790808d9575a6b2b1c0db53ccf14",
+      "bytes": 26956,
+      "lines": 572,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/screens/files_hub_screen.dart",
+      "sha256": "4c1336ab58913621e10fe5e19e2f8e258f8aeb613495a8cd093bb84a58f4c2bc",
+      "bytes": 2990,
+      "lines": 61,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/screens/files_screen.dart",
+      "sha256": "4c98b478a4714392bb019c23c55edde64110d74304ff128c32173b4a6332c629",
+      "bytes": 9464,
+      "lines": 292,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/screens/history_screen.dart",
+      "sha256": "14d5404f97239fb5327212f02b4024ea73c39570e1e0d1ece8a4a7040586a6cf",
+      "bytes": 7918,
+      "lines": 184,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/screens/home_screen.dart",
+      "sha256": "827fb287bb51ab9005cce9c9d293c27282ea1dcc928852610a153d06ad692244",
+      "bytes": 40211,
+      "lines": 1165,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/screens/interface_settings_screen.dart",
+      "sha256": "e38b721a87dd4b0fed83b610b7650ecd31de288a8133b4ba376f59a1345161be",
+      "bytes": 7664,
+      "lines": 193,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/screens/local_documents_screen.dart",
+      "sha256": "326b17d923dc7c5a68240ac0960ba42d7af7245ce1ec285589c15bf1ed50e711",
+      "bytes": 9057,
+      "lines": 229,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/screens/memory_screen.dart",
+      "sha256": "1047ca71e270ef2506f4b81c6ff4c0d5d3cf85122d5b6ed14a1bb9fc0b22f2a7",
+      "bytes": 22973,
+      "lines": 500,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/screens/onboarding_screen.dart",
+      "sha256": "60de49e41dc5b14e1959acd6b36cd56170c45ba5bff9bb40bf1b16ad7994269a",
+      "bytes": 11414,
+      "lines": 293,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/screens/session_detail_screen.dart",
+      "sha256": "d5e85a278dc9f4b8b9a3dde7c18cb17770c31381e1109474c1e6622e40c7edd1",
+      "bytes": 5136,
+      "lines": 151,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/screens/settings_overview_screen.dart",
+      "sha256": "995c6d1bbc00764a68f59656957a4258d7c1ca4a255ba7e2822f9051c378726d",
+      "bytes": 10197,
+      "lines": 248,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/screens/settings_screen.dart",
+      "sha256": "7f629ca6b822d033f4616b1d80150276a9c60b7e5eb9937ac21800215542da86",
+      "bytes": 67595,
+      "lines": 1736,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/screens/voice_screen.dart",
+      "sha256": "206b5e72d1e85354479224f37e3a7afc8121598a7244ed68177737a1096b56a7",
+      "bytes": 4418,
+      "lines": 116,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/account_service.dart",
+      "sha256": "1307b2fe01a2431aa8471c65c531af5a74dea5311dff46fe3c86178c2bb6e79f",
+      "bytes": 7486,
+      "lines": 222,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/assistant_result.dart",
+      "sha256": "8adf6a4ecebe377b370d8963cd200cf5e972b8938b424e94e5e8429ca96b9f89",
+      "bytes": 2625,
+      "lines": 86,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/assistant_service.dart",
+      "sha256": "cafe44ac09c5febada0761eac52c4fe8624dcca9f404a63bf9d101ffca78bd34",
+      "bytes": 32785,
+      "lines": 866,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/audio_recorder_service.dart",
+      "sha256": "19fc93746d61da0e0b82d0ac771735b55752820fc69a24fc5c011da6b7ac4a94",
+      "bytes": 2884,
+      "lines": 87,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/billing_service.dart",
+      "sha256": "9fc2146a00b04fd64b9fd65f69505866bc27ae002b34285c13d0e50ba2472058",
+      "bytes": 3634,
+      "lines": 82,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/capability_service.dart",
+      "sha256": "567d0d5ea957fe7415c6aedb528b34ca6c0d47dcd9392b3886477255423e1759",
+      "bytes": 4996,
+      "lines": 139,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/custom_command_store.dart",
+      "sha256": "7f89e7a990302d6d84de15b98e0a71c4421a08f9f03a24c0dd01eccedecc61a7",
+      "bytes": 1377,
+      "lines": 46,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/development_agent_service.dart",
+      "sha256": "678c8abd4b8e41b6da2f0b28c36539f5fd2a942788c49af022d7a252d2fb411b",
+      "bytes": 2570,
+      "lines": 77,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/development_autopilot_service.dart",
+      "sha256": "64894f378a2e6f0b6cec8b7325d7e9c24021f7cfdd636ba6b1b325de98a0059f",
+      "bytes": 21187,
+      "lines": 544,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/development_checkpoint_store.dart",
+      "sha256": "296625aa7d8af562cf1ea0f8ceea34927620197c4eb38cb829eeea5b8375dc03",
+      "bytes": 3726,
+      "lines": 91,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/development_remote_service.dart",
+      "sha256": "ffd251b910c8bf799c1b004c620824c219f07c898b4c7037724a851a1513b755",
+      "bytes": 9168,
+      "lines": 252,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/development_service.dart",
+      "sha256": "b9a7fa64e50cc16652abe742bea134829ef77068766db7e6ef7bfe1ddd9fe0db",
+      "bytes": 12754,
+      "lines": 346,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/development_workflow.dart",
+      "sha256": "6c3c88c03433b4355cf92033538c53bd5c998ecba41579ad33384fca7bb6549c",
+      "bytes": 8370,
+      "lines": 159,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/files_service.dart",
+      "sha256": "22bcd3832eb48e541715920933afb29e260ceb7cf7d4efb66dc7f74690325908",
+      "bytes": 13748,
+      "lines": 334,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/local_command_service.dart",
+      "sha256": "fa01db63243b55687c9325d66fd08a1c583e9ec1175e4388e582012823f65fa6",
+      "bytes": 25023,
+      "lines": 718,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/local_document_service.dart",
+      "sha256": "6bdbb791a6ba8eb1414130d01184fbca72bce5f7deb7c234cc0e54088a00deeb",
+      "bytes": 15859,
+      "lines": 231,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/memory_service.dart",
+      "sha256": "9f54c51cd5560825975497a3c650f24fd58cc9c02fdb80fcd6bc9de5a1ee673e",
+      "bytes": 2573,
+      "lines": 69,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/own_api_service.dart",
+      "sha256": "1139858b64fd25ea8e6cbd0250a0da01497850a931f8065abfd89ac67a91d6b1",
+      "bytes": 2308,
+      "lines": 50,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/reminder_delivery_service.dart",
+      "sha256": "86bf0d2d11b79f9f16133b0315cafef0bd500fe6c94816dfc4ea41fa8a56ea56",
+      "bytes": 4809,
+      "lines": 139,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/streaming_speech.dart",
+      "sha256": "bce6c0adf57faf69f8afb7ec368ce3e49f889a154a89321ffc4e216e24c2ac34",
+      "bytes": 3131,
+      "lines": 107,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/stt_service.dart",
+      "sha256": "0b7ad19a4c6bf3c118595aace2cd684d1d234996410a7797cb8c9e23a5bbb884",
+      "bytes": 1944,
+      "lines": 47,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/subscription_usage.dart",
+      "sha256": "5cac75a6fd01daaa26300fc805ea0e50621308865d24383fab75bc4d01f895cc",
+      "bytes": 3331,
+      "lines": 58,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/thought_translator.dart",
+      "sha256": "5e738fa944dbadd505ba8c4e465e5118531f4763cd652a103cb391a1d319227e",
+      "bytes": 3386,
+      "lines": 81,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/troika_api_service.dart",
+      "sha256": "eabcadce8d70d654f3b82486be48f2f531f5c52a7af937af66182cf0bf5c28a1",
+      "bytes": 57977,
+      "lines": 1422,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/tts_service.dart",
+      "sha256": "0cc5fc3fb60c14474b8c5962e79086395bcfad840086bb80fb399548eb98299f",
+      "bytes": 6384,
+      "lines": 184,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/voice_presets.dart",
+      "sha256": "e497e46a110cd7f7cf203bf236509bb80f585cadb31d06047055cdd06c5be3aa",
+      "bytes": 4081,
+      "lines": 128,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/wake_word_service.dart",
+      "sha256": "0dd5274039c962e6ffcc756add06e34c0f50d26a8e59ea8dd4a2026e6fa898fa",
+      "bytes": 2323,
+      "lines": 65,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/web_sources.dart",
+      "sha256": "f53af0b537f70ae90730d15a8507f50ce62b941a8470df3a9b7f51b7b8955466",
+      "bytes": 2871,
+      "lines": 88,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/services/windows_shell_service.dart",
+      "sha256": "b1e426c5748df9b2cd63e5c73cac4498670451268894967726613c4dc2a5905b",
+      "bytes": 2815,
+      "lines": 99,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/theme/troika_theme.dart",
+      "sha256": "e5509192436f0c43d35df6fcc1034255740932d0cb46031a8c78d49ac5929b99",
+      "bytes": 7056,
+      "lines": 173,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/widgets/billing_panel.dart",
+      "sha256": "43ae58eb19444d3376eef4ea476a7bb1cc7dca820c5edfb1308b0a60f1ec7b31",
+      "bytes": 6607,
+      "lines": 158,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/widgets/conversation_view.dart",
+      "sha256": "f58d12d92587e621401d237daec5264c40125a563a58ce24844a937b5664be8f",
+      "bytes": 3667,
+      "lines": 110,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/widgets/development_autopilot_panel.dart",
+      "sha256": "29dd699625fec89f25679290a249faa74f947706b59a36b56e7feae05ab5ac7f",
+      "bytes": 10117,
+      "lines": 208,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/widgets/own_api_panel.dart",
+      "sha256": "06f8ed0cd4af818f3dfee2fd79eb327ce73d5163637f32c0e27aabdb5525bdb5",
+      "bytes": 3131,
+      "lines": 52,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/widgets/status_orb.dart",
+      "sha256": "7e29fc6f6396628a241cb849449070229b1e50a38ee997a074c6b081581e79c9",
+      "bytes": 9894,
+      "lines": 329,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/widgets/subscription_panel.dart",
+      "sha256": "01aedd49a07f4ed001623bf138819708ab4325eda628ea82a0f019033ab287ac",
+      "bytes": 12294,
+      "lines": 290,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/widgets/text_input_bar.dart",
+      "sha256": "58728900bbfe0532e0d9dd2291e2b0cbd820d56787a83f76e9a1fa45dffa271e",
+      "bytes": 2828,
+      "lines": 88,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/widgets/troika_brand.dart",
+      "sha256": "fc3e4eae4ba3a4987b01de0bf203d2767878d42c3e46fcd2dc93d990c9e20c05",
+      "bytes": 1181,
+      "lines": 38,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/widgets/troika_page.dart",
+      "sha256": "189c1abefa92f275406a91e3849c2a07007c45115ce91b9fb2b4432382254c9a",
+      "bytes": 12227,
+      "lines": 323,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/lib/widgets/web_sources_view.dart",
+      "sha256": "8b1a7d8c6864cd73e71f3f42ebea40684e921715f224a5cee0654df2fcf3467f",
+      "bytes": 3791,
+      "lines": 96,
+      "language": ".dart",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/windows/runner/flutter_window.cpp",
+      "sha256": "e94203ffc4afe0cffcd677e41ea50a974a92cae0aa74c7ce60e20c6c1c0b9a62",
+      "bytes": 17978,
+      "lines": 484,
+      "language": ".cpp",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/windows/runner/flutter_window.h",
+      "sha256": "ad6a363c42eebfeb5ff0f6e95b564ef999f7e25b47ae8e957ea54cc61b51337d",
+      "bytes": 1525,
+      "lines": 48,
+      "language": ".h",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/windows/runner/main.cpp",
+      "sha256": "8e11030e029ba90fc56efc7b2998b95d92048dc6d3aeed2862d8d43ba003f83d",
+      "bytes": 1735,
+      "lines": 53,
+      "language": ".cpp",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/windows/runner/reminder_audio.cpp",
+      "sha256": "dea91c1ac1ef4777dffde5ae41c4cae1e8e25a6cfc7422d6368f2f8fbfe5665d",
+      "bytes": 5034,
+      "lines": 105,
+      "language": ".cpp",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/windows/runner/reminder_audio.h",
+      "sha256": "d7c9b8c18c84a69ee4af449ea5609c401035e80646e3816155d5164dccba7e46",
+      "bytes": 240,
+      "lines": 8,
+      "language": ".h",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/windows/runner/reminder_scheduler.cpp",
+      "sha256": "7a2fc2684320aae97d044dc2b7eb57b582612c121ca014f7bdbca61fdf24d011",
+      "bytes": 28246,
+      "lines": 593,
+      "language": ".cpp",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/windows/runner/reminder_scheduler.h",
+      "sha256": "c218605fa865db0119b44938ed97994714715b95908fcb389dbe267823a313b0",
+      "bytes": 602,
+      "lines": 18,
+      "language": ".h",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/windows/runner/resource.h",
+      "sha256": "d0e8bf7835468b4b6b1f8f0747f2e8f25c19841f2df2ac60aaa584ddae3aa7c6",
+      "bytes": 448,
+      "lines": 16,
+      "language": ".h",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/windows/runner/utils.cpp",
+      "sha256": "fc3281d9586760f8d252065aa0a82ddadd36a613837b422f79a35d82c08bf516",
+      "bytes": 1853,
+      "lines": 65,
+      "language": ".cpp",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/windows/runner/utils.h",
+      "sha256": "832e246b6758253f89016fb0374b30791242e97ad950d27fc678b3d9feacfdc4",
+      "bytes": 691,
+      "lines": 19,
+      "language": ".h",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/windows/runner/win32_window.cpp",
+      "sha256": "4e4f4dcf8e86ea6e097562cb3476039e693449bd8045367538afee579c017511",
+      "bytes": 8822,
+      "lines": 288,
+      "language": ".cpp",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes-android/windows/runner/win32_window.h",
+      "sha256": "d154cf89ba85f820631a9b5bedacbe64fc5815e428fe6bc5da579ce649f69841",
+      "bytes": 3624,
+      "lines": 102,
+      "language": ".h",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "hermes_cli/plugins.py",
+      "sha256": "99e4b488d7ccebc44c56126213a0c724ad30cb5e13232c07dad16956848fddbb",
+      "bytes": 74438,
+      "lines": 1807,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "model_tools.py",
+      "sha256": "d4185dede2c1991ae3d15eb2e1e3b6820c9292675ddaf6a269897a2fdd4e6e14",
+      "bytes": 42539,
+      "lines": 942,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "run_agent.py",
+      "sha256": "f0395472f20f351d5398de74ae94427f293a3d0ba61aa8424f5a19369462f4c6",
+      "bytes": 198626,
+      "lines": 4415,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "tools/mcp_tool.py",
+      "sha256": "b000d328af7eb674bdb29ef7db19331516609014a71933377b0ffb4e4a509790",
+      "bytes": 152432,
+      "lines": 3621,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "tools/skills_tool.py",
+      "sha256": "46be43db1991504b8a473ca843e1336dbf9adde2db259a386aecb3c478ffb91d",
+      "bytes": 59283,
+      "lines": 1567,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "tools/troika_assistant_tool.py",
+      "sha256": "a61f3027eddf43ef8464adafd2d7262cb68ff1a3feacd0b0cdee6f51588fedf4",
+      "bytes": 13998,
+      "lines": 309,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "tools/troika_documents_tool.py",
+      "sha256": "b92ab4c91c38f261568f6d02cf73853011532371e16f3163a0a00d701e5b8835",
+      "bytes": 12553,
+      "lines": 305,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "tools/troika_screen_tool.py",
+      "sha256": "de04ed509712117c61f79bb98ad119274e26061b86bce263683927b9e7a11c2b",
+      "bytes": 7877,
+      "lines": 231,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "tools/troika_workspace_tool.py",
+      "sha256": "3b79631e946092435c094f961f9d0e35b333dbc214dd2ec1e754ab1e441586ab",
+      "bytes": 17471,
+      "lines": 445,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "toolsets.py",
+      "sha256": "f513cf8325b7fbccd7b0a1bf44a341b723139768789fc0d5b4ab0d2030d96e43",
+      "bytes": 49106,
+      "lines": 1221,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/ApiClient.cs",
+      "sha256": "4919544de15885aad7c2f827701a67f071b3d3338e36ead2a48b199a461701ff",
+      "bytes": 19238,
+      "lines": 237,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/Appearance.cs",
+      "sha256": "d840d7b7723e14ce7f4b57739f729d088c3cbb088383d022af83d0533e817a37",
+      "bytes": 7986,
+      "lines": 117,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/AutopilotPanel.cs",
+      "sha256": "f1b15f11ba364dc6fa161fc3fe9d8428b54b1aada8a90498319137416a2d58b5",
+      "bytes": 9812,
+      "lines": 104,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/BackgroundWindow.cs",
+      "sha256": "bd4aa8e290b77fc63b64c86963729dce62e5d43dc51a9ef42015baa7d602b9ec",
+      "bytes": 2106,
+      "lines": 29,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/Billing.cs",
+      "sha256": "649592e72436ec499bf63a6ad2f2c09605dd310d25db42460eee22566fdb97f7",
+      "bytes": 5582,
+      "lines": 52,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/BrandAssets.cs",
+      "sha256": "b7310723624be1ee0570d3e7784cc0ea3e2c2e3c8ccec8f7b2afecd20aea7b5b",
+      "bytes": 1543,
+      "lines": 30,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/Capabilities.cs",
+      "sha256": "92b84dfe5bb09cb964abd1a842c53a67fdd3c100c217c9cec86b7dd043fd99e5",
+      "bytes": 26103,
+      "lines": 182,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/CapabilityCards.cs",
+      "sha256": "f32c1956b0bbe07026350494ad35411541de5060622371e8502476877a9a7b0e",
+      "bytes": 2467,
+      "lines": 41,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/CapabilityCataloguePanel.cs",
+      "sha256": "ebed5a0350249b1922590d497ca2742ba7e450ab4959034c4eb08354232a354e",
+      "bytes": 5757,
+      "lines": 86,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/CapabilityCatalogueService.cs",
+      "sha256": "10ccc7be0656f3af7d83f749d1c38654f4eb1ddaef177c95f5f3892d14020415",
+      "bytes": 1872,
+      "lines": 31,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/Development.cs",
+      "sha256": "56be0971896e7e260c2a3ced4558726107b8bd7dec0d0888384aa1521f9b2994",
+      "bytes": 17914,
+      "lines": 170,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/DevelopmentAutopilot.cs",
+      "sha256": "27edfe9ea0e45a92d7302855a96b7145da0e9b3832d1fee8275b9d6e70727a49",
+      "bytes": 14856,
+      "lines": 159,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/DevelopmentCheckpoints.cs",
+      "sha256": "23944be1e3ffc878ff46866e491422d22c65b227439d20ed817b6731c677217b",
+      "bytes": 3324,
+      "lines": 55,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/DevelopmentPanel.cs",
+      "sha256": "c2842764a7ef5b6902bcf4ecf14c0928ade6e2880e5a2a58afa47e4456ebb3d9",
+      "bytes": 9168,
+      "lines": 74,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/DevelopmentRelay.cs",
+      "sha256": "fe3a6ba4f82c385a565218c83d9c168ce206966ba711dbb633165c4ac3bbb4b2",
+      "bytes": 9280,
+      "lines": 106,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/DevelopmentWorkflow.cs",
+      "sha256": "0478e12a6697d84bdbd2ef926c90a342c02c90dcbf4aab042b8192f69c473f7b",
+      "bytes": 4955,
+      "lines": 42,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/Json.cs",
+      "sha256": "8dce4c19cfe3ec40c90d0c3273b21da1a31139168785ee3b13cd3ae95674bbf4",
+      "bytes": 2686,
+      "lines": 41,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/LocalStore.cs",
+      "sha256": "bd22691bbc3db32ce0f9eef85111728b160d0cda72b372761926d47f591fc8bb",
+      "bytes": 6180,
+      "lines": 73,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/MainWindow.cs",
+      "sha256": "45514262f5623ce704109abd784ab56fff2f9870e58f870a7e47e30976c4b8fd",
+      "bytes": 70826,
+      "lines": 570,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/Notifications.cs",
+      "sha256": "63deb841e231d59bb86b2748ff52ae5f98d6c3493b18780acdf3149a20f95b33",
+      "bytes": 6745,
+      "lines": 66,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/Orb.cs",
+      "sha256": "edacae90ec6c33b1c240cd873317749b83225cd900e82fc69236fbe9a14a97f9",
+      "bytes": 5485,
+      "lines": 80,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/OwnApi.cs",
+      "sha256": "d449351da25a5ca796947bf2d2ee52e79bf2f04a5e6599ca82aa92c87ea18ca1",
+      "bytes": 2422,
+      "lines": 37,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/OwnApiPanel.cs",
+      "sha256": "4f3a7318e680899f1d47c467327db0d1339d7edecdc99a8e1d8d9353319af7d0",
+      "bytes": 1921,
+      "lines": 21,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/PageSurfaces.cs",
+      "sha256": "537d9382a492300fd2d2544a8c8e2f63f834412065910612de0a3ce51b9a737d",
+      "bytes": 10365,
+      "lines": 115,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/PaymentKeys.cs",
+      "sha256": "6ca5aaa15f77736cdfd017f9bb6c94ea1a3729a181bf6018a7f91952a24015a3",
+      "bytes": 1767,
+      "lines": 30,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/PhraseSpeech.cs",
+      "sha256": "3cc8c1add5213bee4610448a39831826c77a3eceedf8ac8cf5b190eea001d543",
+      "bytes": 4165,
+      "lines": 78,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/ResourceDetails.cs",
+      "sha256": "bde627157c156627ce00098bfd41d264a38bb5e7873f566bf4ac110413177dd4",
+      "bytes": 2644,
+      "lines": 21,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-desktop/src/Voice.cs",
+      "sha256": "0e08025d36a9afd06965420fcf6e6afa974788178cf925c2d9f255c57d8af964",
+      "bytes": 4293,
+      "lines": 55,
+      "language": ".cs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-site/src/app.js",
+      "sha256": "b1ca0d7a0537b0e565d551de3a240183d47458aa6cf1dd939072ba2b3eb9bf9d",
+      "bytes": 25207,
+      "lines": 148,
+      "language": ".js",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-site/src/content.mjs",
+      "sha256": "9020f881bd79be3ac407db6ae7e26024bc5a28465259b00b620f9e8d0842309f",
+      "bytes": 31831,
+      "lines": 77,
+      "language": ".mjs",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-site/timeweb/application.php",
+      "sha256": "11ed244fd7d18ec3b5e3b9ff90637a9028f0fe9fa7df0f0febfeb2a7ae169db5",
+      "bytes": 19708,
+      "lines": 246,
+      "language": ".php",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-site/timeweb/setup.php",
+      "sha256": "ecc2bd4c865a8dd11c8521620a3595f3d146eb8ec71fcb8608d7720df0c199f7",
+      "bytes": 1949,
+      "lines": 33,
+      "language": ".php",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-site/timeweb/support-operator.php",
+      "sha256": "2dda494e88407314400f9d38bc36ae4264330d5563e0468f1640c0d0b5725b21",
+      "bytes": 2272,
+      "lines": 36,
+      "language": ".php",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika-site/timeweb/transfer.php",
+      "sha256": "dadc0d8de34acb921df693f068a79071511734152b2cd5d59fffe08f40c7b34c",
+      "bytes": 234,
+      "lines": 7,
+      "language": ".php",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/__init__.py",
+      "sha256": "fbebba580fbbed03ef5904c6b7eee4b6b393a5e913766fa5c9087dc2e9b5fe64",
+      "bytes": 76,
+      "lines": 1,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/__main__.py",
+      "sha256": "d836712abd5d138ba2da5910d4f57f34ab1acb797744a853fee8e86e67580c0b",
+      "bytes": 4801,
+      "lines": 118,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/access.py",
+      "sha256": "e989b80da5ee4bc51235414a0e3b2929db6c25cadc88d391f18bec4bcd0f5fe2",
+      "bytes": 62650,
+      "lines": 1442,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/artifacts.py",
+      "sha256": "97a903f86658c5b5961b024829e979cffba36a836352bb4c096be446b70c827b",
+      "bytes": 14121,
+      "lines": 354,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/automatic_memory.py",
+      "sha256": "c3342658b0c7f24c2856906dfb1fac74b8705df2d0adb3560f4a37785b5977b6",
+      "bytes": 6088,
+      "lines": 112,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/billing.py",
+      "sha256": "96c99020f61e8da3bbb92ae0bb123c46b1a66b4b7baf6d4549ffe64ce66d7377",
+      "bytes": 16701,
+      "lines": 392,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/capabilities.py",
+      "sha256": "3f5b3824914b64073f3003097eb9a2fa32afc9bc2fd07813e990fd24934ee083",
+      "bytes": 21832,
+      "lines": 402,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/capability_api.py",
+      "sha256": "b64768479314f37ceedccc26b0e2200bb74c61db318bb185dbfa35c9ccc7061e",
+      "bytes": 1873,
+      "lines": 42,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/completion.py",
+      "sha256": "ab0a8882976058ce63602de54a9816638ead949dc0d5eb1d2d603c1d2efc0001",
+      "bytes": 18444,
+      "lines": 285,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/context_guidance.py",
+      "sha256": "7e70ca5cfad0be6e03e704e6f08319c26fc7b352aed5b0850d0204ef9804f6b8",
+      "bytes": 8235,
+      "lines": 60,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/conversation_sessions.py",
+      "sha256": "05fcf4a350b3df915797f02981cfc7a31c229c45c62f63a4d01dc419b03059d6",
+      "bytes": 8187,
+      "lines": 159,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/data_export.py",
+      "sha256": "10fd93d36eba682c61bd0636e8d4d978246ac6d34cb836680766930ebff16484",
+      "bytes": 7729,
+      "lines": 215,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/development.py",
+      "sha256": "16f580e6adaa2d83dfdcde0beac6ec37aaddbacfa6c817246501a563558d55e2",
+      "bytes": 8717,
+      "lines": 140,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/development_agent.py",
+      "sha256": "8abb7653f131b752be47e97cca280a4966db6f7f5d678e6255ae5388b5ac6490",
+      "bytes": 36671,
+      "lines": 807,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/development_api.py",
+      "sha256": "32ad1cc2ae7d106527b7efed917b28f2e8b25158e858394d918f15e9d1d2f57c",
+      "bytes": 3979,
+      "lines": 86,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/development_checks.py",
+      "sha256": "17b7e9479e016feefd112579e39adbae82f847078ac890621690da7880a132c2",
+      "bytes": 7592,
+      "lines": 167,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/development_runtime.py",
+      "sha256": "09b425608a2f149d7608b405cada51c943fb548364ca5658db0fae1b8a8b17f5",
+      "bytes": 34157,
+      "lines": 842,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/development_sessions.py",
+      "sha256": "a941551f9756190163d0021036e4d27f0ea7213da83678148ff61410305b44ed",
+      "bytes": 10239,
+      "lines": 243,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/development_team.py",
+      "sha256": "3438725a6069d71844ccd756eabf87ffbc8db90daebe80faea8c9728c68b648e",
+      "bytes": 47939,
+      "lines": 1006,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/development_verification.py",
+      "sha256": "d9baebaefc624e31d01120fcc606b724b4c1b927aced802b0821f0e66cb1994b",
+      "bytes": 12393,
+      "lines": 307,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/device_delivery.py",
+      "sha256": "66a2fd406200945374d87350a3b84d58f98b24e5a42aef996240a80e54a152b7",
+      "bytes": 3956,
+      "lines": 100,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/document_generation.py",
+      "sha256": "0b0106a596b680368b41fcba452dda90a97ebfed5d5e8610d72cc39dd8fd0bd2",
+      "bytes": 11791,
+      "lines": 301,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/feature_policy.py",
+      "sha256": "8fa01674a1721ee908828eb82945a1bafc934d055df3e425720438e258b2402f",
+      "bytes": 4102,
+      "lines": 145,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/llm_metering.py",
+      "sha256": "a934ba0d698b3251f392b016b8e9e876c8c7bb404d352773de48a4377e20fe1d",
+      "bytes": 21931,
+      "lines": 514,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/memory.py",
+      "sha256": "2af7e46374a8edf20d3b987968ea2c036fce55a7d608834fafb0ce669588e927",
+      "bytes": 22026,
+      "lines": 466,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/notifications.py",
+      "sha256": "ac55fbb451e2c7634296fafcad2a1d693ca6db0b560d32c089618b36ac04ebfb",
+      "bytes": 3415,
+      "lines": 77,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/own_provider.py",
+      "sha256": "e43a9e58323e42d7143985021d30b8c8e21a24e5c0908b2ad69ef4fef6c27e70",
+      "bytes": 4271,
+      "lines": 98,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/persona.py",
+      "sha256": "62eaeefbd1731a294e13309604657f6a30019a475ad9624a06eda8c409eaab75",
+      "bytes": 10220,
+      "lines": 88,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/proactive.py",
+      "sha256": "6ba83f08938796007bb20899e75b4add94b8d112834d5c22ff1a358427178737",
+      "bytes": 50420,
+      "lines": 1087,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/reminder_speech.py",
+      "sha256": "56ac36efb461932b0d256eae47a9f38035673cfdd9bf5d052dc41b4d9b4192d4",
+      "bytes": 685,
+      "lines": 13,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/resource_ledger.py",
+      "sha256": "992377b153b69d749bc0ad825862d9306b79395ac4134e1b26a17c0774cd1573",
+      "bytes": 40407,
+      "lines": 902,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/resource_runtime.py",
+      "sha256": "53e31dcf88ec06f0c4a5aaa1ed2d89e09c9d0635e3f91f7054cde94c19eccf61",
+      "bytes": 10452,
+      "lines": 245,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/retention.py",
+      "sha256": "81613dcb4b123a284e720df11c694fef8e9d42eea2369092125677319d4e6a47",
+      "bytes": 20244,
+      "lines": 490,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/service_metering.py",
+      "sha256": "590eeafae3023d37d68e92d038111e9728ecbbcf947c12bf0cab5be8ec27186b",
+      "bytes": 9154,
+      "lines": 232,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/speech.py",
+      "sha256": "89e3e1c85ad5c224d49519904d433f2dcfc7cb57ba5375f4777fe2348b1eb4e1",
+      "bytes": 8106,
+      "lines": 169,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/streaming.py",
+      "sha256": "5eee1e741a67a4677e0b0f55fd8f78feae38b282086ae8f66aab1083fcc9030a",
+      "bytes": 2947,
+      "lines": 77,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/subscription_policy.py",
+      "sha256": "a4ae12340557fb08f4cb86a68f1df5fa61d7a8e56edfc197aca2f08e2b074334",
+      "bytes": 5129,
+      "lines": 163,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/telegram_commerce/__init__.py",
+      "sha256": "eb774eeb8084f45d5ecb24815bc832d16cf0d5788e154a31a5be949d41c94165",
+      "bytes": 73,
+      "lines": 1,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/telegram_commerce/__main__.py",
+      "sha256": "21eee1fe19ee2f1652e8c21621fcfe802e92b866efaf73a9a2d13aaca291ec78",
+      "bytes": 5520,
+      "lines": 92,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/telegram_commerce/api.py",
+      "sha256": "d00a95ace933568d3c456ab3ddb37549b36a7ce3443e43c7ab8d34c615631e88",
+      "bytes": 2307,
+      "lines": 51,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/telegram_commerce/config.py",
+      "sha256": "79999085b17c6eeb761daead239f6d83181f8c02d36b47ae7a85add653049fbc",
+      "bytes": 2941,
+      "lines": 62,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/telegram_commerce/content.py",
+      "sha256": "195ed6939df9a0fbfa13d6fca65d0b11beba52eeacf2596c7ca1f7280745a6bd",
+      "bytes": 8222,
+      "lines": 73,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/telegram_commerce/service.py",
+      "sha256": "a22dc587082fba43b3e972fd4caff3602ca1337f5549e5d217843b83175cf6b2",
+      "bytes": 18910,
+      "lines": 241,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/telegram_commerce/store.py",
+      "sha256": "cbf5ba5ca4c832a411c775dc20674742378e2fa8f090350cc898f9ae1a8f23cd",
+      "bytes": 5507,
+      "lines": 99,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/token_diagnostics.py",
+      "sha256": "aa588bf27538779c8609d68410b4ae90b9b914553e7e534c94e357a1c5c3a956",
+      "bytes": 7759,
+      "lines": 162,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/tool_result_context.py",
+      "sha256": "1eddc615271f569ee404ce138cd257f298b3681c8ce002dff332bb3610855804",
+      "bytes": 4180,
+      "lines": 94,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/verification.py",
+      "sha256": "2d08d5c5f4813db65bdda3816f48f458d5ce6a6e545521d379be25d5cb3795cb",
+      "bytes": 10848,
+      "lines": 253,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/vision_sessions.py",
+      "sha256": "bf8041bcad351be55325ac4618a826548eddbefafe9f51fb3abd64537d8a1389",
+      "bytes": 7617,
+      "lines": 202,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/voice.py",
+      "sha256": "7b20a72b307da916ea6b5766625df7c2e1ac751fa3f45c67a2bcea0ed28dadf1",
+      "bytes": 3557,
+      "lines": 87,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/voice_proxy.py",
+      "sha256": "a76575dfd44a4318c670029910438aa60863e224abac935f2e7179e5b005868c",
+      "bytes": 1273,
+      "lines": 37,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/web_sources.py",
+      "sha256": "eac83d26f911e5510db7542e580230ef28f42071e7d6b8ac4a5f79f60aba3de2",
+      "bytes": 5885,
+      "lines": 129,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/working_context.py",
+      "sha256": "2790c3bb4188bf92f2c5ad9499af1d6e17ce4f75f8fe645b14725fa4e9a4b869",
+      "bytes": 15406,
+      "lines": 300,
+      "language": ".py",
+      "review_status": "indexed_only"
+    },
+    {
+      "path": "troika_product/workspace.py",
+      "sha256": "999bd44d1792c8aa6b674570920b9240fd490bb4b5aed7716fcc3841e7f610c5",
+      "bytes": 13246,
+      "lines": 335,
+      "language": ".py",
+      "review_status": "indexed_only"
+    }
+  ]
+}
