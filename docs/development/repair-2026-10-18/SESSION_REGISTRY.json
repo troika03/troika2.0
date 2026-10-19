@@ -3,7 +3,7 @@
   "dispatch_ready": true,
   "product_checkout": "D:/troika-product",
   "launch_project": "D:/troikahermes",
-  "coordination": "Per-session reports and candidate patches. Only 09 integrates shared files. Parent authorized to start all ten; lateral thread messaging is not authorized.",
+  "coordination": "Reports and candidate patches only. 09 integrates shared code. No lateral messaging, new chats or agents authorized. Owner batch policy of 2026-10-19 supersedes the earlier all-ten restart.",
   "sessions": [
     {
       "id": "01-development",
@@ -12,8 +12,13 @@
       "report": "reports/01-development.md",
       "threadId": "01a14da2-bec1-76c0-b1aa-9a801b7f8f87",
       "hostId": "local",
-      "status": "restart_request_accepted",
-      "initial_turn_status": "interrupted"
+      "status": "active_v6_in_progress",
+      "initial_turn_status": "interrupted",
+      "observed_at_utc": "2026-10-19T12:31:04.870851+00:00",
+      "candidate_ready": "v5",
+      "delivered_tests": 412,
+      "coordinator_verified_tests": 412,
+      "integration": "v5_isolated_candidate_only"
     },
     {
       "id": "02-android",
@@ -22,8 +27,11 @@
       "report": "reports/02-android.md",
       "threadId": "01a14da3-1f86-7543-ab90-8a735d3dbdec",
       "hostId": "local",
-      "status": "restart_request_accepted",
-      "initial_turn_status": "interrupted"
+      "status": "queued_for_batch",
+      "initial_turn_status": "interrupted",
+      "observed_at_utc": "2026-10-19T12:31:04.870851+00:00",
+      "last_observed_turn_status": "interrupted",
+      "integration": "no_deliverable_received"
     },
     {
       "id": "03-windows",
@@ -32,8 +40,10 @@
       "report": "reports/03-windows.md",
       "threadId": "01a14da3-4a56-7cd3-952b-ca6f27e7351b",
       "hostId": "local",
-      "status": "restart_request_accepted",
-      "initial_turn_status": "interrupted"
+      "status": "active",
+      "initial_turn_status": "interrupted",
+      "observed_at_utc": "2026-10-19T12:31:04.870851+00:00",
+      "integration": "awaiting_deliverable"
     },
     {
       "id": "04-account-data",
@@ -42,8 +52,12 @@
       "report": "reports/04-account-data.md",
       "threadId": "01a14da3-85fd-7e12-b7e7-1b41d9f151a6",
       "hostId": "local",
-      "status": "restart_request_unconfirmed",
-      "initial_turn_status": "interrupted"
+      "status": "candidate_ready",
+      "initial_turn_status": "interrupted",
+      "observed_at_utc": "2026-10-19T12:31:04.870851+00:00",
+      "candidate_ready": "v3",
+      "delivered_tests": 206,
+      "integration": "v3_isolated_candidate_with_01_v5"
     },
     {
       "id": "05-web-files",
@@ -52,8 +66,11 @@
       "report": "reports/05-web-files.md",
       "threadId": "01a14dac-6824-7ee0-9e9c-0455fe72c8a5",
       "hostId": "local",
-      "status": "restart_request_unconfirmed",
-      "initial_turn_status": "failed_usage_limit"
+      "status": "queued_for_batch",
+      "initial_turn_status": "failed_usage_limit",
+      "observed_at_utc": "2026-10-19T12:31:04.870851+00:00",
+      "last_observed_turn_status": "interrupted",
+      "integration": "no_deliverable_received"
     },
     {
       "id": "06-subscription",
@@ -62,8 +79,11 @@
       "report": "reports/06-subscription.md",
       "threadId": "01a14dac-9fdb-7ca1-ad7a-81be6b42a454",
       "hostId": "local",
-      "status": "restart_request_unconfirmed",
-      "initial_turn_status": "failed_usage_limit"
+      "status": "queued_for_batch",
+      "initial_turn_status": "failed_usage_limit",
+      "observed_at_utc": "2026-10-19T12:31:04.870851+00:00",
+      "last_observed_turn_status": "interrupted",
+      "integration": "no_deliverable_received"
     },
     {
       "id": "07-site-support",
@@ -72,8 +92,11 @@
       "report": "reports/07-site-support.md",
       "threadId": "01a14dad-5e6b-7c03-b397-a55f225405d9",
       "hostId": "local",
-      "status": "restart_request_unconfirmed",
-      "initial_turn_status": "failed_usage_limit"
+      "status": "queued_for_batch",
+      "initial_turn_status": "failed_usage_limit",
+      "observed_at_utc": "2026-10-19T12:31:04.870851+00:00",
+      "last_observed_turn_status": "interrupted",
+      "integration": "no_deliverable_received"
     },
     {
       "id": "08-security-release",
@@ -82,8 +105,11 @@
       "report": "reports/08-security-release.md",
       "threadId": "01a14dad-99e7-7101-8ccc-57b86a983dfc",
       "hostId": "local",
-      "status": "restart_request_unconfirmed",
-      "initial_turn_status": "failed_usage_limit"
+      "status": "queued_for_batch",
+      "initial_turn_status": "failed_usage_limit",
+      "observed_at_utc": "2026-10-19T12:31:04.870851+00:00",
+      "last_observed_turn_status": "interrupted",
+      "integration": "no_deliverable_received"
     },
     {
       "id": "09-coordinator",
@@ -92,8 +118,11 @@
       "report": "reports/09-coordinator.md",
       "threadId": "01a14dae-4a32-7ca2-b8db-6a1e49902961",
       "hostId": "local",
-      "status": "restart_request_unconfirmed",
-      "initial_turn_status": "failed_usage_limit"
+      "status": "integration_checkpoint_ready",
+      "initial_turn_status": "failed_usage_limit",
+      "observed_at_utc": "2026-10-19T12:31:04.870851+00:00",
+      "integration": "01_v5_04_v3_gateway_candidate",
+      "next_step": "Independent acceptance and combined regression in a later authorized batch."
     },
     {
       "id": "10-acceptance",
@@ -102,9 +131,31 @@
       "report": "reports/10-acceptance.md",
       "threadId": "01a14dae-13e2-7c43-87a4-39c5a81a19da",
       "hostId": "local",
-      "status": "restart_request_unconfirmed",
-      "initial_turn_status": "failed_usage_limit"
+      "status": "queued_for_batch",
+      "initial_turn_status": "failed_usage_limit",
+      "observed_at_utc": "2026-10-19T12:31:04.870851+00:00",
+      "last_observed_turn_status": "interrupted",
+      "integration": "no_deliverable_received"
     }
   ],
-  "dispatch_note": "All ten created. Owner authorized restart of all. Restart accepted for 01/02/03; tool responses for seven others did not complete. Running status is not confirmed."
+  "dispatch_note": "Registration complete; dispatch_ready does not authorize a simultaneous start. Current group 01/03/09 is finishing bounded stages. 04 v3 is delivered. 02/05/06/07/08/10 were observed interrupted and await a scheduler-selected related batch. No chat was started or messaged by 09.",
+  "execution_policy": {
+    "updated": "2026-10-19",
+    "batch_size_min": 2,
+    "batch_size_max": 3,
+    "interval_hours": 5,
+    "early_dispatch_only_after_confirmed_limit_reset": true,
+    "active_group": [
+      "01-development",
+      "03-windows",
+      "09-coordinator"
+    ],
+    "one_bounded_stage_per_turn": true,
+    "stop_primary_used_percent": 75,
+    "stop_weekly_used_percent": 85,
+    "automation_id": "troika-2-3",
+    "automation_status": "ACTIVE",
+    "scheduler_state": "work/product-repair-2026-10-18/scheduler-state.json",
+    "no_duplicate_automation": true
+  }
 }

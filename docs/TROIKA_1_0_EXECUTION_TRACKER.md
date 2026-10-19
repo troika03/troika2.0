@@ -40,6 +40,15 @@ installed-client E2E или релизной готовности. `[-]` — ч�
 | 19. Public launch | [ ] | Публичная продажа запрещена до всех gates. |
 | 20. Final DoD | [ ] | Сквозной путь site/register/download/voice/result/pay/cancel/delete ещё не проходит. |
 
+## Общий ремонт — checkpoint 19 октября 2026
+
+01 v5 независимо повторена координатором: 412 passed. 04 v3 добавлена в отдельный
+candidate; gateway-связка sync/export/revoke/delete прошла 43 tests и 29 tests
+поверх копии чужого API WIP. Четыре новых сценария падают на исходном gateway.
+Shared runtime, установленные клиенты и production этим этапом не менялись.
+Независимая приёмка 10 и общий regression открыты. Статусы разделов 1–20 не повышены.
+Полный состав и ограничения: [отчёт 09](development/repair-2026-10-18/reports/09-coordinator.md).
+
 ## Следующий шаг
 
 Сначала воспроизводимые дефекты текущих сценариев из аудита по запросу
