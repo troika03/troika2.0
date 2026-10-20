@@ -1,0 +1,68 @@
+﻿id,Страница,Раздел,Платформы,Темы,Источник дизайна,Статус
+home,Главная,Основное,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+text,Разговор,Основное,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+tasks,Дела,Основное,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+files,Файлы,Основное,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+development,Разработка,Проекты,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+history,История разговоров,Основное,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+search,Поиск по разговорам,Основное,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+session,Прошлый разговор,Основное,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+new-task,Новое дело,Дела,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+task-detail,Дело и напоминание,Дела,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+project,Проект дел,Дела,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+reminders,Напоминания,Дела,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+new-reminder,Новое напоминание,Дела,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+file-detail,Документ,Файлы,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+create-file,Создать файл,Файлы,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+file-transfer,Получение файла,Файлы,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+new-project,Новый проект,Проекты,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+budget,Оценка задачи,Проекты,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+development-detail,Работа над проектом,Проекты,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+project-plan,План проекта,Проекты,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+project-team,Работа специалистов,Проекты,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+project-files,Исходники проекта,Проекты,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+project-review,Ревью исходников,Проекты,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+project-checks,Тесты проекта,Проекты,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+project-preview,Предпросмотр проекта,Проекты,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+project-report,Результат проекта,Проекты,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+project-paused,Проект на паузе,Проекты,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+project-resume,Продолжить проект,Проекты,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+project-restore,Восстановить работу,Проекты,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+project-background,Фоновая работа,Проекты,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+project-clarify,Уточнение проекта,Проекты,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+project-export,Сохранить проект,Проекты,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+autopilot-queue,Активные проекты,Проекты,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+local-check,Проверка на ПК,Проекты,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+capabilities,Возможности,Настройки,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+memory,Память,Настройки,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+edit-memory,Изменить память,Настройки,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+profile,Профиль,Аккаунт,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+subscription,Тариф и ресурс,Аккаунт,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+usage,Расход ресурса,Аккаунт,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+resource-detail,Расход задачи,Аккаунт,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+voice,Голос и озвучка,Настройки,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+background-voice,Пробуждение в фоне,Настройки,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+notifications,Уведомления,Настройки,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+devices,Устройства,Аккаунт,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+device-detail,Разрешения устройства,Аккаунт,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+appearance,Интерфейс,Настройки,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+privacy,Приватность,Настройки,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+export,Экспорт данных,Аккаунт,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+advanced,Дополнительно,Настройки,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+api,Личный API,Настройки,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+diagnostics,Диагностика,Настройки,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+sources,Источники ответа,Основное,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+commands,Команды устройства,Настройки,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+help,Помощь,Настройки,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+support,Поддержка,Настройки,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+approval,Подтверждение действия,Состояния,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+offline,Нет подключения,Состояния,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+empty,Пока ничего нет,Состояния,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+loading,Загрузка,Состояния,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+error,Не удалось выполнить,Состояния,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+onboarding,Первое знакомство,Вход,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+permissions,Разрешения,Вход,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+login,Вход,Вход,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+register,Регистрация,Вход,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+compact,Компактное окно,Основное,ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно
+voice-chat,Голосовой разговор,Основное,Android / ПК,Тёмная / Светлая,pages.js / conversation.js / extra-pages.js / workbench.js,Макет; состояние runtime проверяется отдельно

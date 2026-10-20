@@ -1,0 +1,18 @@
+{
+  "checks": [
+    "Mobile menu, task form, return",
+    "Composer switches voice/send, Enter, local message",
+    "Voice screen and end conversation",
+    "Theme and accessible switches",
+    "Project estimate, start, pause, resume",
+    "Codex-style workspace, changes, preview and file inspector",
+    "All mobile routes at 360 and 430 pixels",
+    "Desktop primary routes at 1024 and 1440 pixels"
+  ],
+  "issues": [],
+  "script_errors": [],
+  "limitations": [
+    "Local prototype only; no account, microphone, payments, provider, or native app verification.",
+    "Figma importer must still be run in a real Figma editor."
+  ]
+}

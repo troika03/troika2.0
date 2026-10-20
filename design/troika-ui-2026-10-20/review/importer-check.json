@@ -1,0 +1,24 @@
+{
+  "modelOnly": true,
+  "realFigmaRun": false,
+  "frames": 266,
+  "pages": 3,
+  "layerTypes": {
+    "DOCUMENT": 1,
+    "PAGE": 3,
+    "FRAME": 18825,
+    "TEXT": 6991,
+    "RECTANGLE": 1218,
+    "COMPONENT": 4,
+    "INSTANCE": 4,
+    "SVG": 3138
+  },
+  "variables": 58,
+  "textStyles": 66,
+  "repeatImportAddedLayers": 0,
+  "prototypeLinks": 3592,
+  "progressiveImportLinksUpdated": 244,
+  "editableControls": 36,
+  "radioDots": 4,
+  "letterSpacingPreserved": true
+}

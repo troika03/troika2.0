@@ -1,0 +1,11 @@
+const fs=require('fs'),path=require('path');
+const root=path.resolve(__dirname,'..'),repo=path.resolve(root,'../..');
+const icons={};
+for(const file of fs.readdirSync(path.join(repo,'brand/troika/icons')).filter(f=>f.endsWith('.svg')&&f!=='sprite.svg'))icons[file.replace('.svg','')]=fs.readFileSync(path.join(repo,'brand/troika/icons',file),'utf8');
+for(const file of fs.readdirSync(path.join(repo,'hermes-android/assets/brand')).filter(f=>f.endsWith('.svg')&&!f.startsWith('logo')))icons[file.replace('.svg','')]=fs.readFileSync(path.join(repo,'hermes-android/assets/brand',file),'utf8');
+for(const key of Object.keys(icons))icons[key]=icons[key].replace(/(stroke|fill)="#[0-9a-f]{3,8}"/gi,'$1="currentColor"');
+const extra={arrow:'<path d="M12 19V5m-6 6 6-6 6 6"/>',more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',pause:'<path d="M8 5v14M16 5v14"/>',play:'<path d="m8 5 11 7-11 7z"/>',history:'<path d="M3 11a9 9 0 1 1 2 7M3 4v7h7m2-4v6l4 2"/>',chevron:'<path d="m9 5 7 7-7 7"/>',menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',close:'<path d="m6 6 12 12M18 6 6 18"/>',clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',branch:'<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M6 7v10m0-4c6 0 12 0 12-6"/>',folder:'<path d="M3 6h7l2 2h9v12H3z"/>',terminal:'<path d="m5 7 5 5-5 5m8 0h6"/>',check:'<path d="m5 12 4 4L19 6"/>',dot:'<circle cx="12" cy="12" r="3" fill="currentColor"/>'};
+for(const [key,p]of Object.entries(extra))icons[key]=`<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+const logos={};for(const theme of ['dark','light'])logos[theme]=fs.readFileSync(path.join(repo,'brand/troika/logos',`logo-ru-${theme==='dark'?'reverse':'primary'}.svg`),'utf8');
+fs.writeFileSync(path.join(root,'assets.js'),'window.TROIKA_ASSETS='+JSON.stringify({icons,logos})+';\n');
+console.log('Local vector assets ready.');

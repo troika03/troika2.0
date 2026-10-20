@@ -1,0 +1,11 @@
+/* Restrained translucency requested by the owner. */
+#app[data-platform=android]{height:844px;min-height:844px;overflow:hidden}
+.button:not(.primary),.home-suggestions button,.voice-live-controls button{background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.045);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.button.ghost{background:transparent;border-color:transparent;box-shadow:none}
+#app .composer{background:rgba(218,242,224,.055);border:1px solid rgba(229,251,233,.11);box-shadow:inset 0 1px 0 rgba(255,255,255,.035);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+#app[data-theme=light] .composer{background:rgba(221,232,219,.4);border-color:rgba(80,113,87,.1);box-shadow:inset 0 1px 0 #ffffffc0}
+[data-theme=light] .button:not(.primary),[data-theme=light] .home-suggestions button,[data-theme=light] .voice-live-controls button{background:rgba(255,255,255,.55);border-color:rgba(75,104,80,.15);box-shadow:inset 0 1px 0 #fff}
+[data-theme=light] .button.ghost{background:transparent;border-color:transparent;box-shadow:none}
+#app .code-change{justify-content:flex-start;text-align:left}#app .code-change strong{text-align:left}
+[data-platform=android] .stage{height:844px;min-height:844px}[data-platform=android] .workspace{min-height:0;height:780px;overflow:auto;scrollbar-width:none}[data-platform=android] .workspace::-webkit-scrollbar{display:none}[data-platform=android] .chat-content{height:780px;min-height:780px;max-height:780px;overflow:hidden;flex:none}[data-platform=android] .chat-log{min-height:0;overflow:auto;scrollbar-width:none;flex:1}[data-platform=android] .chat-log::-webkit-scrollbar{display:none}[data-platform=android] .chat-content>.bottom-composer{flex:none;padding-top:18px}[data-platform=android] .assistant-home{height:780px;min-height:780px}[data-platform=android] .project-thread{height:780px;min-height:780px}[data-platform=android] .project-thread .bottom-composer{flex:none}
+@media(prefers-reduced-transparency:reduce){#app .composer,.button:not(.primary),.home-suggestions button,.voice-live-controls button{background:var(--surface);backdrop-filter:none;-webkit-backdrop-filter:none}}
