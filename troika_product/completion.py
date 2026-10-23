@@ -35,8 +35,12 @@ _DOMAINS = {
     "project": re.compile(r"проект|project", re.I),
     "message": re.compile(r"сообщени|письм|sms|message|email", re.I),
     "device": re.compile(r"приложени|телефон|громкост|яркост|фонарик|device|app", re.I),
-    "information": re.compile(r"сайт|страниц|интернет|результат.{0,20}поиск|website|search results", re.I),
+    "information": re.compile(r"сайт|страниц|интернет|website", re.I),
+    "search_results": re.compile(r"результат.{0,20}поиск|сниппет|поисков\w*\s+выдач|search results|snippets?", re.I),
 }
+_SEARCH_SITE_QUALIFIER = re.compile(
+    r"\b(результат\w*\s+поиск\w*)\s+(?:по\s+)?сайт\w*\b", re.I
+)
 _ACTION_REQUEST = re.compile(
     r"(?:созда|сдела|сохран|добав|удал|измени|обнови|исправ).{0,100}"
     r"(?:файл|документ|презентац|папк|задач|напомин|заметк|проект)|"
@@ -169,14 +173,27 @@ class CompletionEvidence:
                 self.filenames.add(str(args.get("path") or "").replace("\\", "/").rsplit("/", 1)[-1].casefold())
             if not operation and name[8:] in {"read_screen", "file_read", "file_info", "status", "battery", "network"}:
                 domain, operation = "device", "read"
-        elif name in {"web_search", "web_extract", "troika_file_search", "troika_screen_snapshot"}:
+        elif name == "web_search":
+            domain, operation = "search_results", "read"
+            results = _object(payload.get("data")).get("web")
+            proved = proved and isinstance(results, list) and any(
+                isinstance(item, dict)
+                and isinstance(item.get("url"), str) and item["url"].strip()
+                and any(isinstance(item.get(key), str) and item[key].strip()
+                        for key in ("title", "description"))
+                and not item.get("error")
+                for item in results
+            )
+        elif name in {"web_extract", "troika_file_search", "troika_screen_snapshot"}:
             domain, operation = "information", "read"
             if name == "web_extract":
                 results = payload.get("results")
                 proved = bool(isinstance(results, list) and results) and all(
-                    isinstance(item, dict) and item.get("content") and not item.get("error")
+                    isinstance(item, dict)
+                    and isinstance(item.get("content"), str) and item["content"].strip()
+                    and not item.get("error")
                     for item in results or []
-                ) and not payload.get("error")
+                ) and not payload.get("error") and payload.get("ok") is not False and payload.get("success") is not False
         if not operation:
             return  # Read-only/unknown tools cannot prove a mutation.
         target = str(args.get("command") or args.get("path") or args.get("task_id") or args.get("memory_id")
@@ -200,7 +217,10 @@ class CompletionEvidence:
             operations = [op for op, pattern in _CLAIMS.items() if pattern.search(clean)]
             if not operations:
                 continue
-            domains = [domain for domain, pattern in _DOMAINS.items() if pattern.search(clean)]
+            # In "результаты поиска сайта", the site qualifies the search.
+            # A separate page claim in the sentence still requires page proof.
+            domain_text = _SEARCH_SITE_QUALIFIER.sub(r"\1", clean) if "read" in operations else clean
+            domains = [domain for domain, pattern in _DOMAINS.items() if pattern.search(domain_text)]
             if self.device_file_pending and (
                 re.search(r"сохранил[аи]?|сохран[её]н[аоы]?|записал[аи]?|saved", clean, re.I)
                 and ("file" in domains or "project" in domains or not domains)
@@ -215,7 +235,7 @@ class CompletionEvidence:
             if "reminder" in domains and not re.search(r"приложени|громкост|яркост|фонарик|device|app", clean, re.I):
                 domains = [domain for domain in domains if domain != "device"]
             if "file" in domains and any(op in {"create", "update"} for op in operations):
-                domains = [domain for domain in domains if domain != "information"]
+                domains = [domain for domain in domains if domain not in {"information", "search_results"}]
             # Writing an answer/poem in chat and checking supplied text require
             # no external tool. Short "сохранила" after an action request does.
             if not domains and not self.receipts and not _ACTION_REQUEST.search(str(user_message)):

@@ -1210,6 +1210,21 @@ def handle_max_iterations(agent, messages: list, api_call_count: int) -> str:
                     "enabled": True,
                     "effort": "medium"
                 }
+        # Keep automatic defaults gated, but let the registered profile accept
+        # an explicit setting for a model absent from the legacy heuristic.
+        if (not _is_lmstudio_summary and agent.reasoning_config is not None
+                and "reasoning" not in summary_extra_body):
+            from providers import get_provider_profile
+            _summary_profile = get_provider_profile(agent.provider)
+            if _summary_profile is not None:
+                _profile_extra, _ = _summary_profile.build_api_kwargs_extras(
+                    reasoning_config=agent.reasoning_config,
+                    supports_reasoning=agent._supports_reasoning_extra_body(),
+                    model=agent.model,
+                )
+                if "reasoning" in _profile_extra:
+                    summary_extra_body["reasoning"] = _profile_extra["reasoning"]
+
         if _is_nous:
             from agent.portal_tags import nous_portal_tags as _portal_tags
             summary_extra_body["tags"] = _portal_tags()

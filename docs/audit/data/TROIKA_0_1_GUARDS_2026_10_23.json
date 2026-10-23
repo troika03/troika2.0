@@ -1,0 +1,507 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-23",
+  "base_commit": "a3b1ba43d328249e96b33d19541b10d6c669c3c3",
+  "production_changed": false,
+  "product_model_changed": false,
+  "installed_clients_verified": false,
+  "live_provider_model_posts_in_new_diagnostic_scenarios": 0,
+  "new_paid_model_posts": 0,
+  "existing_full_suite_external_requests_globally_monitored": false,
+  "live_latency_measurement_repeated": false,
+  "old_probe_unknown_reservation_usd_not_settled": 0.00074256,
+  "regressions_before_fix": {
+    "summary_reasoning": {
+      "failed": 4,
+      "passed": 5,
+      "method": "offline SDK final JSON through MockTransport"
+    },
+    "web_read_evidence": {
+      "failed": 13,
+      "passed": 16,
+      "method": "synthetic real receipt shapes and routed envelopes"
+    }
+  },
+  "file_qualifier_followup": {
+    "before": {
+      "failed": 3,
+      "passed": 29
+    },
+    "source_changes_after_full_run": [
+      "troika_product/completion.py",
+      "tests/troika_product/test_web_read_evidence.py",
+      "tests/providers/test_openrouter_summary_reasoning.py"
+    ],
+    "scope": "Keep search terms in a created or updated file description from being treated as a page-reading claim."
+  },
+  "summary_test_isolation_followup": {
+    "tokenizer_asset_get_timeout_seen_in_full_run": true,
+    "final_local_diagnostic_token_estimate_stubbed": true,
+    "actual_metering_bounds_and_receipts_unchanged": true,
+    "final_socket_and_dns_network_guard_enabled": true
+  },
+  "final_target_tokenizer_asset": {
+    "loaded_from_existing_local_asset": true,
+    "network_download": false,
+    "sha256_matches_installed_tokenizer_contract": true,
+    "sha256": "223921b76ee99bde995b7ff738513eef100fb51d18c93597a113bcffe865b2a7",
+    "scope": "task_owned_temporary_test_cache"
+  },
+  "new_test_cases_final": {
+    "summary_reasoning": 16,
+    "web_read_evidence": 32
+  },
+  "final_source_target_subset": {
+    "expected_files": 19,
+    "covered_files": 19,
+    "counts": {
+      "passed": 372,
+      "failed": 0,
+      "skipped": 0,
+      "errors": 0,
+      "xfailed": 0,
+      "xpassed": 0
+    },
+    "rows": [
+      {
+        "path": "tests/agent/transports/test_chat_completions.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 69
+        }
+      },
+      {
+        "path": "tests/gateway/test_device_files.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 3
+        }
+      },
+      {
+        "path": "tests/providers/test_e2e_wiring.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 6
+        }
+      },
+      {
+        "path": "tests/agent/test_product_completion_guard.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 5
+        }
+      },
+      {
+        "path": "tests/providers/test_openrouter_explicit_reasoning.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 12
+        }
+      },
+      {
+        "path": "tests/providers/test_profile_wiring.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 22
+        }
+      },
+      {
+        "path": "tests/providers/test_openrouter_summary_reasoning.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 16
+        }
+      },
+      {
+        "path": "tests/providers/test_transport_parity.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 19
+        }
+      },
+      {
+        "path": "tests/providers/test_provider_profiles.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 42
+        }
+      },
+      {
+        "path": "tests/tools/test_troika_documents_tool.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 6
+        }
+      },
+      {
+        "path": "tests/troika_product/test_artifacts.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 5
+        }
+      },
+      {
+        "path": "tests/troika_product/test_completion.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 43
+        }
+      },
+      {
+        "path": "tests/troika_product/test_device_delivery.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 16
+        }
+      },
+      {
+        "path": "tests/troika_product/test_capabilities.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 26
+        }
+      },
+      {
+        "path": "tests/troika_product/test_streaming.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 16
+        }
+      },
+      {
+        "path": "tests/troika_product/test_tool_result_context.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 6
+        }
+      },
+      {
+        "path": "tests/troika_product/test_metered_runtime.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 13
+        }
+      },
+      {
+        "path": "tests/troika_product/test_web_read_evidence.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 32
+        }
+      },
+      {
+        "path": "tests/troika_product/test_web_sources.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 15
+        }
+      }
+    ],
+    "missing_files": [],
+    "nonzero_files": []
+  },
+  "final_target_source_sha256_before": {
+    "agent/chat_completion_helpers.py": "c3cb6149b7c6721e828e80a8a8580ef9ca5c6ec72d2943f71699ac316c137abc",
+    "troika_product/completion.py": "e67a1f4712f11e45fe3466d5b94b34b8754eecb144070ac991b33dc89d27847a",
+    "troika_product/context_guidance.py": "61273c639f64ac8dd7cdce15f1e03ad89757ea8d80900dcb86e689f74170acb6",
+    "plugins/model-providers/openrouter/__init__.py": "3f60df5e4a684a89b9d32631e9ee6427700f8509487270f6e3441402a1f7c42e",
+    "tests/providers/test_openrouter_summary_reasoning.py": "2683b4e467876a897076b79088c6829efdb791bc7babe138fba99e2a35a829e2",
+    "tests/troika_product/test_web_read_evidence.py": "48365c6db41be32955df945fc13fae9ddc269e2bb0dcb59e3e9ba926a11c2a20"
+  },
+  "final_target_source_sha256_after": {
+    "agent/chat_completion_helpers.py": "c3cb6149b7c6721e828e80a8a8580ef9ca5c6ec72d2943f71699ac316c137abc",
+    "troika_product/completion.py": "e67a1f4712f11e45fe3466d5b94b34b8754eecb144070ac991b33dc89d27847a",
+    "troika_product/context_guidance.py": "61273c639f64ac8dd7cdce15f1e03ad89757ea8d80900dcb86e689f74170acb6",
+    "plugins/model-providers/openrouter/__init__.py": "3f60df5e4a684a89b9d32631e9ee6427700f8509487270f6e3441402a1f7c42e",
+    "tests/providers/test_openrouter_summary_reasoning.py": "2683b4e467876a897076b79088c6829efdb791bc7babe138fba99e2a35a829e2",
+    "tests/troika_product/test_web_read_evidence.py": "48365c6db41be32955df945fc13fae9ddc269e2bb0dcb59e3e9ba926a11c2a20"
+  },
+  "full_suite_before_file_qualifier_followup": {
+    "files": 1267,
+    "covered_unique_files": 1267,
+    "duplicates": [],
+    "missing_files": [],
+    "reported_pytest_counts": {
+      "passed": 24958,
+      "failed": 575,
+      "skipped": 205,
+      "errors": 1,
+      "xfailed": 0,
+      "xpassed": 0
+    },
+    "exit_code": 1,
+    "nonzero_files": [
+      "tests/acp/test_ping_suppression.py",
+      "tests/acp/test_edit_approval.py",
+      "tests/acp_adapter/test_acp_images.py",
+      "tests/agent/lsp/test_broken_set.py",
+      "tests/agent/lsp/test_install_and_lint_fixes.py",
+      "tests/agent/lsp/test_service.py",
+      "tests/agent/lsp/test_workspace.py",
+      "tests/agent/test_context_references.py",
+      "tests/agent/test_curator.py",
+      "tests/agent/test_curator_backup.py",
+      "tests/agent/test_external_skills.py",
+      "tests/agent/test_gemini_cloudcode.py",
+      "tests/agent/test_proxy_and_url_validation.py",
+      "tests/agent/test_shell_hooks.py",
+      "tests/agent/test_save_url_image.py",
+      "tests/agent/test_shell_hooks_consent.py",
+      "tests/agent/test_skill_commands_reload.py",
+      "tests/agent/test_skill_commands.py",
+      "tests/agent/test_minimax_provider.py",
+      "tests/agent/test_subdirectory_hints.py",
+      "tests/cli/test_cli_browser_connect.py",
+      "tests/cli/test_cli_file_drop.py",
+      "tests/cli/test_cli_image_command.py",
+      "tests/cli/test_cli_secret_capture.py",
+      "tests/agent/test_vision_routing_31179.py",
+      "tests/cli/test_cli_provider_resolution.py",
+      "tests/cron/test_file_permissions.py",
+      "tests/cron/test_cron_workdir.py",
+      "tests/cli/test_surrogate_sanitization.py",
+      "tests/cron/test_scheduler.py",
+      "tests/gateway/test_config_env_bridge_authority.py",
+      "tests/gateway/test_email.py",
+      "tests/gateway/test_feishu.py",
+      "tests/gateway/test_msgraph_webhook.py",
+      "tests/gateway/test_platform_base.py",
+      "tests/gateway/test_product_completion_stream.py",
+      "tests/gateway/test_reasoning_command.py",
+      "tests/gateway/test_restart_drain.py",
+      "tests/gateway/test_runtime_footer.py",
+      "tests/gateway/test_setup_feishu.py",
+      "tests/gateway/test_stt_config.py",
+      "tests/gateway/test_tts_media_routing.py",
+      "tests/gateway/test_unavailable_skill_hint.py",
+      "tests/gateway/test_update_command.py",
+      "tests/gateway/test_update_streaming.py",
+      "tests/hermes_cli/test_atomic_json_write.py",
+      "tests/hermes_cli/test_auth_qwen_provider.py",
+      "tests/hermes_cli/test_auth_nous_provider.py",
+      "tests/hermes_cli/test_banner.py",
+      "tests/hermes_cli/test_container_boot.py",
+      "tests/hermes_cli/test_cmd_update.py",
+      "tests/hermes_cli/test_curator_status.py",
+      "tests/hermes_cli/test_curses_color_compat.py",
+      "tests/hermes_cli/test_debug.py",
+      "tests/hermes_cli/test_gateway_linger.py",
+      "tests/hermes_cli/test_gateway.py",
+      "tests/hermes_cli/test_gateway_wsl.py",
+      "tests/hermes_cli/test_hooks_cli.py",
+      "tests/hermes_cli/test_kanban_boards.py",
+      "tests/hermes_cli/test_inventory.py",
+      "tests/hermes_cli/test_kanban_core_functionality.py",
+      "tests/hermes_cli/test_list_picker_providers.py",
+      "tests/hermes_cli/test_kanban_db.py",
+      "tests/hermes_cli/test_model_catalog.py",
+      "tests/hermes_cli/test_model_switch_copilot_api_mode.py",
+      "tests/hermes_cli/test_model_switch_opencode_anthropic.py",
+      "tests/hermes_cli/test_model_switch_variant_tags.py",
+      "tests/hermes_cli/test_model_switch_custom_providers.py",
+      "tests/hermes_cli/test_openai_codex_model_validation_fallback.py",
+      "tests/hermes_cli/test_ollama_cloud_auth.py",
+      "tests/hermes_cli/test_opencode_go_flat_namespace.py",
+      "tests/hermes_cli/test_opencode_go_in_model_list.py",
+      "tests/hermes_cli/test_path_completion.py",
+      "tests/hermes_cli/test_ollama_cloud_provider.py",
+      "tests/hermes_cli/test_plugins_cmd.py",
+      "tests/hermes_cli/test_model_provider_persistence.py",
+      "tests/hermes_cli/test_overlay_slug_resolution.py",
+      "tests/hermes_cli/test_relaunch.py",
+      "tests/hermes_cli/test_service_manager.py",
+      "tests/hermes_cli/test_session_browse.py",
+      "tests/hermes_cli/test_skills_config.py",
+      "tests/hermes_cli/test_setup_openclaw_migration.py",
+      "tests/hermes_cli/test_skills_hub.py",
+      "tests/hermes_cli/test_setup.py",
+      "tests/hermes_cli/test_tools_config.py",
+      "tests/hermes_cli/test_tool_token_estimation.py",
+      "tests/hermes_cli/test_timeouts.py",
+      "tests/hermes_cli/test_update_post_pull_syntax_guard.py",
+      "tests/hermes_cli/test_update_stale_dashboard.py",
+      "tests/hermes_cli/test_update_autostash.py",
+      "tests/hermes_cli/test_web_server_oauth_write.py",
+      "tests/hermes_cli/test_update_yes_flag.py",
+      "tests/hermes_cli/test_xai_provider_labels.py",
+      "tests/hermes_cli/test_web_server.py",
+      "tests/plugins/image_gen/test_openai_provider.py",
+      "tests/plugins/memory/test_hindsight_provider.py",
+      "tests/plugins/image_gen/test_xai_provider.py",
+      "tests/plugins/test_disk_cleanup_plugin.py",
+      "tests/plugins/test_teams_pipeline_plugin.py",
+      "tests/providers/test_openrouter_summary_reasoning.py",
+      "tests/hermes_cli/test_user_providers_model_switch.py",
+      "tests/run_agent/test_codex_app_server_integration.py",
+      "tests/run_agent/test_api_max_retries_config.py",
+      "tests/run_agent/test_860_dedup.py",
+      "tests/run_agent/test_compression_boundary_hook.py",
+      "tests/run_agent/test_codex_silent_hang_hint.py",
+      "tests/run_agent/test_compression_persistence.py",
+      "tests/run_agent/test_context_token_tracking.py",
+      "tests/run_agent/test_copilot_native_vision_headers.py",
+      "tests/run_agent/test_dict_tool_call_args.py",
+      "tests/run_agent/test_invalid_context_length_warning.py",
+      "tests/run_agent/test_real_interrupt_subagent.py",
+      "tests/run_agent/test_primary_runtime_restore.py",
+      "tests/run_agent/test_provider_fallback.py",
+      "tests/run_agent/test_session_id_env.py",
+      "tests/run_agent/test_provider_parity.py",
+      "tests/skills/test_google_oauth_setup.py",
+      "tests/skills/test_openclaw_migration.py",
+      "tests/test_bitwarden_secrets.py",
+      "tests/test_cli_file_drop.py",
+      "tests/test_hermes_logging.py",
+      "tests/test_install_sh_symlink_stomp.py",
+      "tests/test_live_system_guard_self_test.py",
+      "tests/test_model_tools.py",
+      "tests/run_agent/test_run_agent_codex_responses.py",
+      "tests/run_agent/test_run_agent.py",
+      "tests/test_subprocess_home_isolation.py",
+      "tests/test_toolsets.py",
+      "tests/test_transform_tool_result_hook.py",
+      "tests/tools/test_browser_homebrew_paths.py",
+      "tests/tools/test_credential_files.py",
+      "tests/tools/test_checkpoint_manager.py",
+      "tests/tools/test_docker_find.py",
+      "tests/tools/test_cross_profile_guard.py",
+      "tests/tools/test_file_operations.py",
+      "tests/tools/test_file_write_safety.py",
+      "tests/tools/test_hidden_dir_filter.py",
+      "tests/tools/test_kanban_codex_lane_skill.py",
+      "tests/tools/test_local_env_blocklist.py",
+      "tests/tools/test_local_env_cwd_recovery.py",
+      "tests/tools/test_local_interrupt_cleanup.py",
+      "tests/tools/test_local_background_child_hang.py",
+      "tests/tools/test_local_tempdir.py",
+      "tests/tools/test_local_shell_init.py",
+      "tests/tools/test_mcp_oauth.py",
+      "tests/tools/test_file_tools_live.py",
+      "tests/tools/test_microsoft_graph_auth.py",
+      "tests/tools/test_modal_bulk_upload.py",
+      "tests/tools/test_modal_sandbox_fixes.py",
+      "tests/tools/test_pr_6656_regressions.py",
+      "tests/tools/test_process_registry.py",
+      "tests/tools/test_skill_improvements.py",
+      "tests/tools/test_skill_manager_tool.py",
+      "tests/tools/test_skill_size_limits.py",
+      "tests/tools/test_skills_sync.py",
+      "tests/tools/test_skill_usage.py",
+      "tests/tools/test_skills_hub.py",
+      "tests/tools/test_skills_tool.py",
+      "tests/tools/test_ssh_bulk_upload.py",
+      "tests/tools/test_tirith_security.py",
+      "tests/tools/test_vercel_sandbox_environment.py",
+      "tests/tools/test_web_providers_searxng.py",
+      "tests/tools/test_vision_tools.py",
+      "tests/tools/test_web_tools_config.py",
+      "tests/tools/test_web_providers.py",
+      "tests/tools/test_windows_native_support.py",
+      "tests/tools/test_zombie_process_cleanup.py"
+    ],
+    "nonzero_files_without_summary": [
+      "tests/agent/test_minimax_provider.py",
+      "tests/cli/test_cli_provider_resolution.py",
+      "tests/cli/test_surrogate_sanitization.py",
+      "tests/hermes_cli/test_cmd_update.py",
+      "tests/hermes_cli/test_inventory.py",
+      "tests/hermes_cli/test_kanban_db.py",
+      "tests/hermes_cli/test_model_catalog.py",
+      "tests/hermes_cli/test_model_switch_copilot_api_mode.py",
+      "tests/hermes_cli/test_model_switch_opencode_anthropic.py",
+      "tests/hermes_cli/test_model_switch_variant_tags.py",
+      "tests/hermes_cli/test_model_switch_custom_providers.py",
+      "tests/hermes_cli/test_openai_codex_model_validation_fallback.py",
+      "tests/hermes_cli/test_ollama_cloud_auth.py",
+      "tests/hermes_cli/test_opencode_go_flat_namespace.py",
+      "tests/hermes_cli/test_opencode_go_in_model_list.py",
+      "tests/hermes_cli/test_ollama_cloud_provider.py",
+      "tests/hermes_cli/test_model_provider_persistence.py",
+      "tests/hermes_cli/test_overlay_slug_resolution.py",
+      "tests/hermes_cli/test_tool_token_estimation.py",
+      "tests/hermes_cli/test_timeouts.py",
+      "tests/hermes_cli/test_update_yes_flag.py",
+      "tests/providers/test_openrouter_summary_reasoning.py",
+      "tests/hermes_cli/test_user_providers_model_switch.py",
+      "tests/run_agent/test_codex_app_server_integration.py",
+      "tests/run_agent/test_api_max_retries_config.py",
+      "tests/run_agent/test_codex_silent_hang_hint.py",
+      "tests/run_agent/test_context_token_tracking.py",
+      "tests/run_agent/test_copilot_native_vision_headers.py",
+      "tests/run_agent/test_dict_tool_call_args.py",
+      "tests/run_agent/test_invalid_context_length_warning.py",
+      "tests/run_agent/test_primary_runtime_restore.py",
+      "tests/run_agent/test_provider_fallback.py",
+      "tests/run_agent/test_session_id_env.py",
+      "tests/run_agent/test_provider_parity.py",
+      "tests/run_agent/test_run_agent_codex_responses.py",
+      "tests/run_agent/test_run_agent.py",
+      "tests/tools/test_checkpoint_manager.py",
+      "tests/tools/test_mcp_oauth.py"
+    ],
+    "runtime_and_target_tests_unchanged_during_run": true,
+    "source_sha256_before": {
+      "agent/chat_completion_helpers.py": "c3cb6149b7c6721e828e80a8a8580ef9ca5c6ec72d2943f71699ac316c137abc",
+      "troika_product/completion.py": "4ff54fdc4abba6dd6e5c469e23d9fa564b402032d37790a5c0597baeb8d7b985",
+      "troika_product/context_guidance.py": "61273c639f64ac8dd7cdce15f1e03ad89757ea8d80900dcb86e689f74170acb6",
+      "plugins/model-providers/openrouter/__init__.py": "3f60df5e4a684a89b9d32631e9ee6427700f8509487270f6e3441402a1f7c42e",
+      "tests/providers/test_openrouter_summary_reasoning.py": "6a8f595f85ff8a933a1a693289a8e128e175f8d4d55f7b85fac3fec012c5af68",
+      "tests/troika_product/test_web_read_evidence.py": "f9fa59ac60cd45c6deac50f5d8e986ddb45b1cb523a8c08de97ed8028d0dcfa9"
+    },
+    "source_sha256_after": {
+      "agent/chat_completion_helpers.py": "c3cb6149b7c6721e828e80a8a8580ef9ca5c6ec72d2943f71699ac316c137abc",
+      "troika_product/completion.py": "4ff54fdc4abba6dd6e5c469e23d9fa564b402032d37790a5c0597baeb8d7b985",
+      "troika_product/context_guidance.py": "61273c639f64ac8dd7cdce15f1e03ad89757ea8d80900dcb86e689f74170acb6",
+      "plugins/model-providers/openrouter/__init__.py": "3f60df5e4a684a89b9d32631e9ee6427700f8509487270f6e3441402a1f7c42e",
+      "tests/providers/test_openrouter_summary_reasoning.py": "6a8f595f85ff8a933a1a693289a8e128e175f8d4d55f7b85fac3fec012c5af68",
+      "tests/troika_product/test_web_read_evidence.py": "f9fa59ac60cd45c6deac50f5d8e986ddb45b1cb523a8c08de97ed8028d0dcfa9"
+    },
+    "wall_seconds": 2092.8188393115997,
+    "default_integration_e2e_docker_excluded": true,
+    "counts_limitation": "Only explicit pytest summaries are counted; no counts are inferred for files without summaries.",
+    "baseline_limitation": "Earlier suite mixed source revisions. This fresh run does not prove that every failure predates this task."
+  },
+  "docx_roundtrip": {
+    "ok": true,
+    "sdk_fixture_calls": 3,
+    "loopback_http_requests": 12,
+    "tool_completed_events": 2,
+    "file_pending_events": 1,
+    "real_provider_posts": 0,
+    "real_search_calls": 0,
+    "real_http_transport": true,
+    "real_tool_dispatch": true,
+    "real_docx_generation": true,
+    "owner_and_device_guards_checked": true,
+    "invalid_token_rejected": true,
+    "download_size_and_hash_match": true,
+    "flush_fsync_completed": true,
+    "saved_file_reopened_and_matched": true,
+    "docx_openxml_valid": true,
+    "ack_after_save_accepted": true,
+    "ram_purged_after_ack": true,
+    "permanent_docx_artifact_created": false,
+    "provider_usage_is_synthetic": true,
+    "installed_client_verified": false,
+    "word_application_opened": false,
+    "visual_layout_verified": false,
+    "ack_is_save_attestation": false
+  },
+  "unmeasured_gates": [
+    "real model tool planning",
+    "live webpage extraction",
+    "Android/WPF installed client save and open",
+    "Word visual layout",
+    "STT/TTS and physical audio",
+    "ten physical voice E2E"
+  ],
+  "sources": [
+    "https://openrouter.ai/docs/api_reference/limits",
+    "https://openrouter.ai/api/v1/models"
+  ],
+  "privacy": {
+    "message_or_response_text_included": false,
+    "keys_or_authorization_included": false,
+    "private_account_identifiers_or_balances_included": false
+  }
+}
