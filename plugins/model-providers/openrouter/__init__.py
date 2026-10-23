@@ -81,11 +81,13 @@ class OpenRouterProfile(ProviderProfile):
         the same backend server across turns.
         """
         extra_body: dict[str, Any] = {}
-        if supports_reasoning:
-            if reasoning_config is not None:
-                extra_body["reasoning"] = dict(reasoning_config)
-            else:
-                extra_body["reasoning"] = {"enabled": True, "effort": "medium"}
+        # Explicit settings also apply to dynamic routers and newly published
+        # models that are absent from the agent's capability heuristic. Keep
+        # automatic defaults gated; omission and an explicit choice differ.
+        if reasoning_config is not None:
+            extra_body["reasoning"] = dict(reasoning_config)
+        elif supports_reasoning:
+            extra_body["reasoning"] = {"enabled": True, "effort": "medium"}
 
         extra_headers: dict[str, Any] = {}
         if session_id and model and model.startswith(("x-ai/grok-", "xai/grok-")):
