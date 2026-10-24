@@ -48,10 +48,31 @@ def test_first_phrase_arrives_before_checked_final_and_is_not_repeated():
     heard = []
     stream = GuardedTextStream(heard.append, 'Поговорим')
     stream.feed('[emo:joy] Привет! ')
-    assert heard == ['[emo:joy] Привет!']
+    assert heard == ['[emo:joy] Привет! ']
     stream.feed('Как ты?')
     stream.finish_result({'final_response': '[emo:joy] Привет! Как ты?', 'completed': True})
     assert ''.join(heard) == '[emo:joy] Привет! Как ты?'
+
+
+def test_safe_sentence_delimiter_reaches_speech_without_waiting_for_next_phrase():
+    heard = []
+    stream = GuardedTextStream(heard.append, 'Поговорим')
+    stream.feed('Число 3.')
+    assert heard == []
+    stream.feed('14. ')
+    # Clients need the known separator to distinguish a period from a decimal.
+    # The next model phrase and the checked final result have not arrived yet.
+    assert heard == ['Число 3.14. ']
+    stream.finish_result({'final_response': 'Число 3.14.', 'completed': True})
+    assert heard == ['Число 3.14. ']
+
+
+def test_final_footer_does_not_repeat_a_phrase_after_replacing_its_separator():
+    heard = []
+    stream = GuardedTextStream(heard.append, 'Поговорим')
+    stream.feed('Привет! ')
+    stream.finish_result({'final_response': 'Привет!\nУточнение.', 'completed': True})
+    assert heard == ['Привет! ', '\nУточнение.']
 
 
 @pytest.mark.parametrize('draft', [
@@ -74,10 +95,10 @@ def test_split_claim_and_failed_result_never_escape():
     stream = GuardedTextStream(heard.append, 'Создай файл')
     stream.feed('Привет! Файл со')
     stream.feed('хранён. Следующая фраза!')
-    assert heard == ['Привет!']
+    assert heard == ['Привет! ']
     stream.finish_result({'final_response': 'Файл сохранён.', 'failed': True})
     stream.feed('Ещё текст!')
-    assert heard == ['Привет!']
+    assert heard == ['Привет! ']
 
 
 def test_buffered_provider_and_canonical_correction_are_delivered_once():
@@ -86,7 +107,7 @@ def test_buffered_provider_and_canonical_correction_are_delivered_once():
     stream.feed('Привет! Файл создан. ')
     stream.finish_result({'final_response': 'Не удалось подтвердить просьбу.'})
     stream.finish_result({'final_response': 'Не удалось подтвердить просьбу.'})
-    assert ''.join(heard) == 'Привет!\nНе удалось подтвердить просьбу.'
+    assert ''.join(heard) == 'Привет! \nНе удалось подтвердить просьбу.'
     heard.clear()
     stream = GuardedTextStream(heard.append, 'Разговор')
     stream.finish_result({'final_response': 'Ответ без дельт.'})
@@ -99,7 +120,7 @@ def test_decimal_and_bounded_unfinished_text():
     stream.feed('Число 3.')
     assert heard == []
     stream.feed('14. Следующая часть')
-    assert heard == ['Число 3.14.']
+    assert heard == ['Число 3.14. ']
     stream.feed('x' * 5000)
     assert stream.pending == '' and stream.blocked
     stream.finish_result({'final_response': 'Число 3.14. Короткий итог.'})
@@ -108,7 +129,8 @@ def test_decimal_and_bounded_unfinished_text():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('endpoint', ['chat', 'runs'])
-async def test_authenticated_http_stream_delivers_phrase_while_agent_is_blocked(tmp_path, monkeypatch, endpoint):
+@pytest.mark.parametrize('greeting', ['Привет! ', 'Привет. '])
+async def test_authenticated_http_stream_delivers_phrase_while_agent_is_blocked(tmp_path, monkeypatch, endpoint, greeting):
     adapter = APIServerAdapter(PlatformConfig(enabled=True, extra={
         'product_auth_enabled': True, 'product_auth_db': str(tmp_path/'access.db'),
         'product_artifact_root': str(tmp_path/'artifacts'),
@@ -125,10 +147,10 @@ async def test_authenticated_http_stream_delivers_phrase_while_agent_is_blocked(
         assert callback is not None
 
         def run(**kwargs):
-            callback('Привет! ')
+            callback(greeting)
             assert release.wait(5), 'HTTP consumer did not receive early text'
             callback('Файл сохранён. ')
-            return {'final_response': 'Привет! Не удалось подтвердить действие.', 'completed': True}
+            return {'final_response': greeting + 'Не удалось подтвердить действие.', 'completed': True}
 
         return SimpleNamespace(run_conversation=run)
 
@@ -168,13 +190,13 @@ async def test_authenticated_http_stream_delivers_phrase_while_agent_is_blocked(
                 response = await client.get('/v1/runs/'+run_id+'/events', headers=headers)
             assert response.status == 200
             first = await asyncio.wait_for(next_text(response), 2)
-            assert first == 'Привет!'
+            assert first == greeting
             assert not release.is_set()
             received.append(first)
             release.set()
             while text := await asyncio.wait_for(next_text(response), 3):
                 received.append(text)
-            assert ''.join(received) == 'Привет! Не удалось подтвердить действие.'
+            assert ''.join(received) == greeting + 'Не удалось подтвердить действие.'
             assert 'Файл сохранён' not in ''.join(received)
         finally:
             release.set()

@@ -14,7 +14,7 @@ class GuardedTextStream:
     Reasoning/context scrubbing remains the agent's upstream responsibility.
     """
 
-    _boundary = re.compile(r"[!?…](?=\s|$)|\.(?=\s)|(?<=\S)\n")
+    _boundary = re.compile(r"[!?…](?:\s|$)|\.\s|(?<=\S)\n")
 
     def __init__(self, emit, user_message):
         self.emit = emit
@@ -31,8 +31,10 @@ class GuardedTextStream:
         if not self.sent:
             self.pending = self.pending.lstrip()
         while match := self._boundary.search(self.pending):
-            phrase = self.pending[:match.end()].rstrip()
-            if not phrase:
+            # Forward the known separator so speech clients can release a
+            # period-terminated sentence before another model phrase arrives.
+            phrase = self.pending[:match.end()]
+            if not phrase.strip():
                 break
             if ("```" in phrase or _DONE.search(phrase)
                     or any(pattern.search(phrase) for pattern in _CLAIMS.values())
@@ -67,6 +69,10 @@ class GuardedTextStream:
             return
         if final.startswith(self.sent):
             suffix = final[len(self.sent):]
+        elif self.sent and final.startswith(self.sent.rstrip()):
+            # Final formatting may replace the emitted separator with a
+            # newline before a footer. Do not repeat the spoken sentence.
+            suffix = final[len(self.sent.rstrip()):]
         elif final.rstrip() == self.sent.rstrip():
             suffix = ""
         else:

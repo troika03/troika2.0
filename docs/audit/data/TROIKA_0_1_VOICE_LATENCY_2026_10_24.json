@@ -1,0 +1,2512 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-24",
+  "base_commit": "f46924298b86eb2e1bc142fdb4d7cb023f2bda27",
+  "production_changed": false,
+  "installed_client_changed": false,
+  "default_product_model_changed": false,
+  "owner_constraints": {
+    "free_models_only": true,
+    "natural_voice_required": true
+  },
+  "full_discovery": {
+    "files": 1270,
+    "counts": {
+      "passed": 24761,
+      "failed": 501,
+      "skipped": 158,
+      "errors": 2,
+      "xfailed": 0,
+      "xpassed": 0
+    },
+    "exit_code": 1,
+    "file_timeout_seconds": 60,
+    "wall_seconds": 2030.3964567184448,
+    "runtime_unchanged": true,
+    "nonzero_files": 154,
+    "nonzero_files_without_summary": 24,
+    "missing_files": [],
+    "duplicate_files": [],
+    "application_latency_measurement": false,
+    "comparison_notes": {
+      "new_nonzero_files_vs_previous_600_second_cap": 6,
+      "independent_stack_review": {
+        "tests/gateway/test_matrix.py": "Deferred redaction did not finish during a 30 ms wait; timing failure. No rerun; cause not proved.",
+        "tests/hermes_cli/test_backup.py": "Explicit 60-second per-file cap, no summary.",
+        "tests/hermes_cli/test_commands.py": "Explicit 60-second per-file cap, no summary.",
+        "tests/hermes_cli/test_tui_resume_flow.py": "30-second per-test timeout while hashing skill files.",
+        "tests/run_agent/test_provider_attribution_headers.py": "30-second TLS timeout in unchanged custom endpoint native probe; previous file duration 125.6 seconds.",
+        "tests/tools/test_file_staleness.py": "Collection FileNotFoundError for a repo-root temp directory another file-worker creates/removes; suspected race, not proved."
+      },
+      "all_new_failures_proved_preexisting": false,
+      "own_changed_lines_observed_in_these_failure_stacks": false,
+      "isolated_rerun_performed": false
+    }
+  },
+  "final_targeted": {
+    "files": 37,
+    "counts": {
+      "passed": 668,
+      "failed": 0,
+      "skipped": 0,
+      "errors": 0,
+      "xfailed": 0,
+      "xpassed": 0
+    },
+    "exit_code": 0,
+    "runtime_unchanged": true,
+    "rows": [
+      {
+        "path": "tests/agent/test_model_metadata_ssl.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 9
+        }
+      },
+      {
+        "path": "tests/agent/test_model_metadata_local_ctx.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 22
+        }
+      },
+      {
+        "path": "tests/agent/test_models_dev.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 32
+        }
+      },
+      {
+        "path": "tests/agent/test_openrouter_context_probe.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 21
+        }
+      },
+      {
+        "path": "tests/agent/transports/test_chat_completions.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 69
+        }
+      },
+      {
+        "path": "tests/gateway/test_device_files.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 3
+        }
+      },
+      {
+        "path": "tests/agent/test_product_completion_guard.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 5
+        }
+      },
+      {
+        "path": "tests/providers/test_e2e_wiring.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 6
+        }
+      },
+      {
+        "path": "tests/providers/test_openrouter_explicit_reasoning.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 12
+        }
+      },
+      {
+        "path": "tests/providers/test_openrouter_summary_reasoning.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 16
+        }
+      },
+      {
+        "path": "tests/providers/test_profile_wiring.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 22
+        }
+      },
+      {
+        "path": "tests/providers/test_provider_profiles.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 42
+        }
+      },
+      {
+        "path": "tests/providers/test_transport_parity.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 19
+        }
+      },
+      {
+        "path": "tests/test_ollama_num_ctx.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 8
+        }
+      },
+      {
+        "path": "tests/tools/test_troika_documents_tool.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 6
+        }
+      },
+      {
+        "path": "tests/troika_product/test_alpha_http_boundaries.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 2
+        }
+      },
+      {
+        "path": "tests/troika_product/test_access.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 16
+        }
+      },
+      {
+        "path": "tests/troika_product/test_artifacts.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 5
+        }
+      },
+      {
+        "path": "tests/troika_product/test_completion.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 43
+        }
+      },
+      {
+        "path": "tests/troika_product/test_capabilities.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 26
+        }
+      },
+      {
+        "path": "tests/troika_product/test_device_delivery.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 16
+        }
+      },
+      {
+        "path": "tests/troika_product/test_conversation_sessions.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 18
+        }
+      },
+      {
+        "path": "tests/troika_product/test_metered_runtime.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 13
+        }
+      },
+      {
+        "path": "tests/troika_product/test_own_provider.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 3
+        }
+      },
+      {
+        "path": "tests/troika_product/test_llm_metering.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 51
+        }
+      },
+      {
+        "path": "tests/troika_product/test_reminder_speech.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 9
+        }
+      },
+      {
+        "path": "tests/troika_product/test_proactive.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 9
+        }
+      },
+      {
+        "path": "tests/troika_product/test_retention.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 3
+        }
+      },
+      {
+        "path": "tests/troika_product/test_resource_ledger.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 31
+        }
+      },
+      {
+        "path": "tests/troika_product/test_streaming.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 20
+        }
+      },
+      {
+        "path": "tests/troika_product/test_token_diagnostics.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 8
+        }
+      },
+      {
+        "path": "tests/troika_product/test_tool_result_context.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 6
+        }
+      },
+      {
+        "path": "tests/troika_product/test_web_read_evidence.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 32
+        }
+      },
+      {
+        "path": "tests/troika_product/test_voice.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 15
+        }
+      },
+      {
+        "path": "tests/troika_product/test_web_sources.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 15
+        }
+      },
+      {
+        "path": "tests/troika_product/test_working_context_tokenizer.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 20
+        }
+      },
+      {
+        "path": "tests/troika_product/test_working_context.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 15
+        }
+      }
+    ]
+  },
+  "own_tested_python_sha256": {
+    "agent/model_metadata.py": "7984f80fca7390b173d38a6eb3824fd840a2c0ffc5f8aaf3291ca425054bbe35",
+    "troika_product/streaming.py": "afc43e855904e059b81396a15546b9743997068c24014af060c2db5613be8848",
+    "tests/agent/test_openrouter_context_probe.py": "afd6713bc291822c4e1f9617b974ec41f04cf96871a06fe9c120aa89e0255400",
+    "tests/troika_product/test_streaming.py": "49ded3a6e35ae873c1efcf33b024f20e81c6b1aab8eb3d879cd397330a064186"
+  },
+  "resolver_mock_before": {
+    "kind": "synthetic_context_resolution_only",
+    "label": "before",
+    "fixture_delay_seconds": 0.05,
+    "blocked_network_attempts": 0,
+    "groups": [
+      {
+        "scenario": "openrouter",
+        "samples": 20,
+        "p50_seconds": 0.051592199997685384,
+        "p95_seconds": 0.05221989999699872,
+        "api_show_calls": 20,
+        "context_values": [
+          262144
+        ]
+      },
+      {
+        "scenario": "hosted_ollama",
+        "samples": 20,
+        "p50_seconds": 0.051511899997422006,
+        "p95_seconds": 0.052219299992430024,
+        "api_show_calls": 20,
+        "context_values": [
+          131072
+        ]
+      }
+    ]
+  },
+  "resolver_mock_after": {
+    "kind": "synthetic_context_resolution_only",
+    "label": "after",
+    "fixture_delay_seconds": 0.05,
+    "blocked_network_attempts": 0,
+    "groups": [
+      {
+        "scenario": "openrouter",
+        "samples": 20,
+        "p50_seconds": 8.05000017862767e-05,
+        "p95_seconds": 0.000298400002066046,
+        "api_show_calls": 0,
+        "context_values": [
+          262144
+        ]
+      },
+      {
+        "scenario": "hosted_ollama",
+        "samples": 20,
+        "p50_seconds": 0.05153600000630831,
+        "p95_seconds": 0.053346799992141314,
+        "api_show_calls": 20,
+        "context_values": [
+          131072
+        ]
+      }
+    ]
+  },
+  "edge_speech_pinned": {
+    "tested_utc": "2026-10-24T06:45:47Z",
+    "provider": "edge",
+    "voice": "ru-RU-SvetlanaNeural",
+    "edge_tts_version": "7.3.1",
+    "timeout_seconds": 8,
+    "audio_saved": false,
+    "playback_tested": false,
+    "model_requests": 0,
+    "rows": [
+      {
+        "trial": 1,
+        "first_audio_ms": 2904.889,
+        "audio_bytes": 22176,
+        "ok": true,
+        "complete_ms": 3842.761
+      },
+      {
+        "trial": 2,
+        "first_audio_ms": 1940.848,
+        "audio_bytes": 22176,
+        "ok": true,
+        "complete_ms": 2469.926
+      },
+      {
+        "trial": 3,
+        "first_audio_ms": 1491.717,
+        "audio_bytes": 22176,
+        "ok": true,
+        "complete_ms": 1890.162
+      }
+    ]
+  },
+  "old_key_free_model_series": {
+    "receipt_sha256": "65a370b154294a2eaabd1dfc4a96650d657ddab34c768dd34ef1dfac894a9c9a",
+    "started_utc": "2026-10-24T11:30:14.561169+00:00",
+    "finished_utc": "2026-10-24T11:35:40.991798+00:00",
+    "stop_reason": "completed_planned_series",
+    "model_calls": 36,
+    "http_statuses": {
+      "200": 36
+    },
+    "provider_counts": {
+      "Nvidia": 36
+    },
+    "actual_model_counts": {
+      "nvidia/nemotron-3.5-lightning:free": 36
+    },
+    "cost_receipts": 33,
+    "cost_receipts_zero": 33,
+    "cost_receipts_absent": 3,
+    "reported_cost_total": 0,
+    "tool_trials": [
+      {
+        "index": 1,
+        "success": true,
+        "model_calls": 2
+      },
+      {
+        "index": 2,
+        "success": true,
+        "model_calls": 2
+      },
+      {
+        "index": 3,
+        "success": true,
+        "model_calls": 2
+      }
+    ],
+    "tool_timing_rows": [
+      {
+        "index": 1,
+        "stage": "request_tool",
+        "first_tool_seconds": 1.281841,
+        "first_text_seconds": null,
+        "total_seconds": 1.327588,
+        "fixture_arguments_correct": true,
+        "fixture_answer_correct": null,
+        "error": null
+      },
+      {
+        "index": 1,
+        "stage": "fixture_result",
+        "first_tool_seconds": null,
+        "first_text_seconds": 0.810124,
+        "total_seconds": 0.949928,
+        "fixture_arguments_correct": null,
+        "fixture_answer_correct": true,
+        "error": null
+      },
+      {
+        "index": 2,
+        "stage": "request_tool",
+        "first_tool_seconds": 1.197726,
+        "first_text_seconds": null,
+        "total_seconds": 1.19924,
+        "fixture_arguments_correct": true,
+        "fixture_answer_correct": null,
+        "error": null
+      },
+      {
+        "index": 2,
+        "stage": "fixture_result",
+        "first_tool_seconds": null,
+        "first_text_seconds": 1.484895,
+        "total_seconds": 1.503585,
+        "fixture_arguments_correct": null,
+        "fixture_answer_correct": true,
+        "error": null
+      },
+      {
+        "index": 3,
+        "stage": "request_tool",
+        "first_tool_seconds": 1.325866,
+        "first_text_seconds": null,
+        "total_seconds": 1.349812,
+        "fixture_arguments_correct": true,
+        "fixture_answer_correct": null,
+        "error": null
+      },
+      {
+        "index": 3,
+        "stage": "fixture_result",
+        "first_tool_seconds": null,
+        "first_text_seconds": 0.871669,
+        "total_seconds": 0.904114,
+        "fixture_arguments_correct": null,
+        "fixture_answer_correct": true,
+        "error": null
+      }
+    ],
+    "greeting_first_text_within_2s": 16,
+    "greeting_first_text_max": 10.848856,
+    "free_daily_remaining": null,
+    "catalog_all_pricing_fields_zero": true,
+    "catalog_tools_supported": true,
+    "summary": [
+      {
+        "requested_model": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "disabled",
+        "scenario": "greeting",
+        "max_tokens": 384,
+        "attempts": 20,
+        "successes": 20,
+        "failures": 0,
+        "errors": {},
+        "quality_method": "heuristic",
+        "quality_heuristic_checked": 20,
+        "quality_heuristic_passes": 20,
+        "successful_only_seconds": {
+          "headers_seconds": {
+            "samples": 20,
+            "p50": 1.059167,
+            "p95": 6.200068
+          },
+          "first_text_seconds": {
+            "samples": 20,
+            "p50": 1.1489,
+            "p95": 6.20068
+          },
+          "first_phrase_seconds": {
+            "samples": 20,
+            "p50": 1.227777,
+            "p95": 6.201338
+          },
+          "total_seconds": {
+            "samples": 20,
+            "p50": 1.313627,
+            "p95": 6.219072
+          }
+        }
+      },
+      {
+        "requested_model": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "low",
+        "scenario": "planning",
+        "max_tokens": 1536,
+        "attempts": 10,
+        "successes": 5,
+        "failures": 5,
+        "errors": {
+          "length_limit": 2,
+          "timeout": 3
+        },
+        "quality_method": "heuristic",
+        "quality_heuristic_checked": 5,
+        "quality_heuristic_passes": 5,
+        "successful_only_seconds": {
+          "headers_seconds": {
+            "samples": 5,
+            "p50": 0.869417,
+            "p95": 1.559397
+          },
+          "first_text_seconds": {
+            "samples": 5,
+            "p50": 16.119918,
+            "p95": 21.438165
+          },
+          "first_phrase_seconds": {
+            "samples": 5,
+            "p50": 16.631754,
+            "p95": 21.52424
+          },
+          "total_seconds": {
+            "samples": 5,
+            "p50": 18.690939,
+            "p95": 23.614492
+          }
+        }
+      }
+    ]
+  },
+  "temporary_key_direct": {
+    "attempts": [
+      {
+        "type": "attempt",
+        "request_id": "aad3c8ae98c74f74ac075dd79da9cea9",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "openrouter/free",
+        "reasoning": "disabled",
+        "index": 1,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 378,
+        "http_status": 404,
+        "headers_seconds": 0.541902,
+        "first_text_seconds": null,
+        "first_phrase_seconds": null,
+        "total_seconds": 0.542393,
+        "actual_model": null,
+        "provider": null,
+        "characters": 0,
+        "usage": {},
+        "finish_reason": null,
+        "stream_done": false,
+        "error": "http_404",
+        "error_phase": "http",
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": null
+      },
+      {
+        "type": "attempt",
+        "request_id": "3503586812b2479cadaf62ed021c010c",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "openrouter/free",
+        "reasoning": "disabled",
+        "index": 2,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 378,
+        "http_status": 200,
+        "headers_seconds": 0.901307,
+        "first_text_seconds": 0.901607,
+        "first_phrase_seconds": 1.217133,
+        "total_seconds": 1.348384,
+        "actual_model": "dots-studio/dots-3-note-preview:free",
+        "provider": null,
+        "characters": 39,
+        "usage": {
+          "prompt_tokens": 37,
+          "completion_tokens": 14,
+          "total_tokens": 51,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": true
+      },
+      {
+        "type": "attempt",
+        "request_id": "188d8c29aa294f278edf46ac8214e10d",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "openrouter/free",
+        "reasoning": "disabled",
+        "index": 3,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 378,
+        "http_status": 429,
+        "headers_seconds": 1.870015,
+        "first_text_seconds": null,
+        "first_phrase_seconds": null,
+        "total_seconds": 1.870466,
+        "actual_model": null,
+        "provider": null,
+        "characters": 0,
+        "usage": {},
+        "finish_reason": null,
+        "stream_done": false,
+        "error": "http_429",
+        "error_phase": "http",
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": null
+      },
+      {
+        "type": "attempt",
+        "request_id": "c01ace56763741d4b9e457b30d072a55",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "openrouter/free",
+        "reasoning": "disabled",
+        "index": 4,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 378,
+        "http_status": 400,
+        "headers_seconds": 0.451081,
+        "first_text_seconds": null,
+        "first_phrase_seconds": null,
+        "total_seconds": 0.451412,
+        "actual_model": null,
+        "provider": null,
+        "characters": 0,
+        "usage": {},
+        "finish_reason": null,
+        "stream_done": false,
+        "error": "reasoning_required",
+        "error_phase": "http",
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": null
+      },
+      {
+        "type": "attempt",
+        "request_id": "31441ace0c084a288fdde4ead117f857",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "openrouter/free",
+        "reasoning": "disabled",
+        "index": 5,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 378,
+        "http_status": 400,
+        "headers_seconds": 0.217154,
+        "first_text_seconds": null,
+        "first_phrase_seconds": null,
+        "total_seconds": 0.217412,
+        "actual_model": null,
+        "provider": null,
+        "characters": 0,
+        "usage": {},
+        "finish_reason": null,
+        "stream_done": false,
+        "error": "reasoning_required",
+        "error_phase": "http",
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": null
+      },
+      {
+        "type": "attempt",
+        "request_id": "130a6e9fdce64a61be4630d6ce28610e",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "openrouter/free",
+        "reasoning": "disabled",
+        "index": 6,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 378,
+        "http_status": 400,
+        "headers_seconds": 0.15473,
+        "first_text_seconds": null,
+        "first_phrase_seconds": null,
+        "total_seconds": 0.155167,
+        "actual_model": null,
+        "provider": null,
+        "characters": 0,
+        "usage": {},
+        "finish_reason": null,
+        "stream_done": false,
+        "error": "reasoning_required",
+        "error_phase": "http",
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": null
+      },
+      {
+        "type": "attempt",
+        "request_id": "34179550ce144d879a4631d8bb0a7b92",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "openrouter/free",
+        "reasoning": "disabled",
+        "index": 7,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 378,
+        "http_status": 429,
+        "headers_seconds": 0.317771,
+        "first_text_seconds": null,
+        "first_phrase_seconds": null,
+        "total_seconds": 0.318204,
+        "actual_model": null,
+        "provider": null,
+        "characters": 0,
+        "usage": {},
+        "finish_reason": null,
+        "stream_done": false,
+        "error": "http_429",
+        "error_phase": "http",
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": null
+      },
+      {
+        "type": "attempt",
+        "request_id": "efafe629dd9e40d082c5acd8b64c3ca3",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "openrouter/free",
+        "reasoning": "disabled",
+        "index": 8,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 378,
+        "http_status": 200,
+        "headers_seconds": 0.275013,
+        "first_text_seconds": null,
+        "first_phrase_seconds": null,
+        "total_seconds": 0.330007,
+        "actual_model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+        "provider": "Nvidia",
+        "characters": 0,
+        "usage": {},
+        "finish_reason": null,
+        "stream_done": false,
+        "error": "stream_error",
+        "error_phase": "stream",
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": null
+      },
+      {
+        "type": "attempt",
+        "request_id": "2ee8093a921d47c6b92c06b4f63a70ae",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "openrouter/free",
+        "reasoning": "disabled",
+        "index": 9,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 378,
+        "http_status": 200,
+        "headers_seconds": 0.76896,
+        "first_text_seconds": 0.87846,
+        "first_phrase_seconds": 0.906455,
+        "total_seconds": 2.962868,
+        "actual_model": "nvidia/nemotron-3.5-super-vl:free",
+        "provider": "Nvidia",
+        "characters": 24,
+        "usage": {
+          "prompt_tokens": 39,
+          "completion_tokens": 9,
+          "total_tokens": 48,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": true
+      },
+      {
+        "type": "attempt",
+        "request_id": "0c20248c17b6401da4b0c840f62c0e68",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "openrouter/free",
+        "reasoning": "disabled",
+        "index": 10,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 378,
+        "http_status": 200,
+        "headers_seconds": 0.597575,
+        "first_text_seconds": 0.650075,
+        "first_phrase_seconds": 0.673715,
+        "total_seconds": 0.740013,
+        "actual_model": "nvidia/nemotron-3.5-lightning:free",
+        "provider": "Nvidia",
+        "characters": 24,
+        "usage": {
+          "prompt_tokens": 39,
+          "completion_tokens": 9,
+          "total_tokens": 48,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": true
+      },
+      {
+        "type": "attempt",
+        "request_id": "c6975dca14e04fae8a29bf9119f8eed9",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "disabled",
+        "index": 1,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 397,
+        "http_status": 200,
+        "headers_seconds": 0.613269,
+        "first_text_seconds": 0.707462,
+        "first_phrase_seconds": 0.746151,
+        "total_seconds": 0.866871,
+        "actual_model": "nvidia/nemotron-3.5-lightning:free",
+        "provider": "Nvidia",
+        "characters": 16,
+        "usage": {
+          "prompt_tokens": 39,
+          "completion_tokens": 16,
+          "total_tokens": 55,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": true
+      },
+      {
+        "type": "attempt",
+        "request_id": "2507e3a032ca4b41bb1558fd3a3343fa",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "disabled",
+        "index": 2,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 397,
+        "http_status": 200,
+        "headers_seconds": 0.720461,
+        "first_text_seconds": 0.812127,
+        "first_phrase_seconds": 0.812215,
+        "total_seconds": 2.278104,
+        "actual_model": "nvidia/nemotron-3.5-lightning:free",
+        "provider": "Nvidia",
+        "characters": 74,
+        "usage": {
+          "prompt_tokens": 39,
+          "completion_tokens": 27,
+          "total_tokens": 66,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": true
+      },
+      {
+        "type": "attempt",
+        "request_id": "02c412be7d88404599a9232b866960ce",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "disabled",
+        "index": 3,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 397,
+        "http_status": 200,
+        "headers_seconds": 0.612599,
+        "first_text_seconds": 0.685054,
+        "first_phrase_seconds": 0.745117,
+        "total_seconds": 1.971429,
+        "actual_model": "nvidia/nemotron-3.5-lightning:free",
+        "provider": "Nvidia",
+        "characters": 113,
+        "usage": {
+          "prompt_tokens": 39,
+          "completion_tokens": 34,
+          "total_tokens": 73,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": true
+      },
+      {
+        "type": "attempt",
+        "request_id": "9f1d911586c44afc855fe4b52e12f7d8",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "disabled",
+        "index": 4,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 397,
+        "http_status": 200,
+        "headers_seconds": 0.620869,
+        "first_text_seconds": 0.956782,
+        "first_phrase_seconds": 0.987195,
+        "total_seconds": 1.055502,
+        "actual_model": "nvidia/nemotron-3.5-lightning:free",
+        "provider": "Nvidia",
+        "characters": 34,
+        "usage": {
+          "prompt_tokens": 39,
+          "completion_tokens": 12,
+          "total_tokens": 51,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": true
+      },
+      {
+        "type": "attempt",
+        "request_id": "64636b5993e942309175aeff7eaf2281",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "disabled",
+        "index": 5,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 397,
+        "http_status": 200,
+        "headers_seconds": 5.994196,
+        "first_text_seconds": 6.05237,
+        "first_phrase_seconds": 6.08612,
+        "total_seconds": 6.403719,
+        "actual_model": "nvidia/nemotron-3.5-lightning:free",
+        "provider": "Nvidia",
+        "characters": 47,
+        "usage": {
+          "prompt_tokens": 39,
+          "completion_tokens": 18,
+          "total_tokens": 57,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": true
+      },
+      {
+        "type": "attempt",
+        "request_id": "a5b5da842bac4db39019efa2339b3f1a",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "disabled",
+        "index": 6,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 397,
+        "http_status": 200,
+        "headers_seconds": 0.595407,
+        "first_text_seconds": 0.718304,
+        "first_phrase_seconds": 1.096318,
+        "total_seconds": 1.532506,
+        "actual_model": "nvidia/nemotron-3.5-lightning:free",
+        "provider": "Nvidia",
+        "characters": 24,
+        "usage": {
+          "prompt_tokens": 39,
+          "completion_tokens": 9,
+          "total_tokens": 48,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": true
+      },
+      {
+        "type": "attempt",
+        "request_id": "3fe85aa97f564e13b11739973c8017eb",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "disabled",
+        "index": 7,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 397,
+        "http_status": 200,
+        "headers_seconds": 0.69488,
+        "first_text_seconds": 1.135299,
+        "first_phrase_seconds": 1.491942,
+        "total_seconds": 2.949787,
+        "actual_model": "nvidia/nemotron-3.5-lightning:free",
+        "provider": "Nvidia",
+        "characters": 26,
+        "usage": {
+          "prompt_tokens": 39,
+          "completion_tokens": 10,
+          "total_tokens": 49,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": true
+      },
+      {
+        "type": "attempt",
+        "request_id": "8f6f9fa24a52476db24541b0aece6f9d",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "disabled",
+        "index": 8,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 397,
+        "http_status": 200,
+        "headers_seconds": 0.658603,
+        "first_text_seconds": 0.725927,
+        "first_phrase_seconds": 0.85186,
+        "total_seconds": 0.925527,
+        "actual_model": "nvidia/nemotron-3.5-lightning:free",
+        "provider": "Nvidia",
+        "characters": 24,
+        "usage": {
+          "prompt_tokens": 39,
+          "completion_tokens": 9,
+          "total_tokens": 48,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": true
+      },
+      {
+        "type": "attempt",
+        "request_id": "9916032ec3234bada3c8c9302e29d297",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "disabled",
+        "index": 9,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 397,
+        "http_status": 200,
+        "headers_seconds": 0.872108,
+        "first_text_seconds": 0.926273,
+        "first_phrase_seconds": 0.981836,
+        "total_seconds": 1.043331,
+        "actual_model": "nvidia/nemotron-3.5-lightning:free",
+        "provider": "Nvidia",
+        "characters": 28,
+        "usage": {
+          "prompt_tokens": 39,
+          "completion_tokens": 13,
+          "total_tokens": 52,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": true
+      },
+      {
+        "type": "attempt",
+        "request_id": "1528ef80676f4d6493826126930d0157",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "disabled",
+        "index": 10,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 397,
+        "http_status": 200,
+        "headers_seconds": 0.602009,
+        "first_text_seconds": 0.668555,
+        "first_phrase_seconds": 0.740835,
+        "total_seconds": 0.826664,
+        "actual_model": "nvidia/nemotron-3.5-lightning:free",
+        "provider": "Nvidia",
+        "characters": 34,
+        "usage": {
+          "prompt_tokens": 39,
+          "completion_tokens": 12,
+          "total_tokens": 51,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": true
+      }
+    ],
+    "summary": {
+      "type": "summary",
+      "scope": "direct_openrouter_synthetic",
+      "groups": [
+        {
+          "requested_model": "nvidia/nemotron-3.5-lightning:free",
+          "reasoning": "disabled",
+          "scenario": "greeting",
+          "max_tokens": 384,
+          "attempts": 10,
+          "successes": 10,
+          "failures": 0,
+          "errors": {},
+          "quality_method": "heuristic",
+          "quality_heuristic_checked": 10,
+          "quality_heuristic_passes": 10,
+          "successful_only_seconds": {
+            "headers_seconds": {
+              "samples": 10,
+              "p50": 0.620869,
+              "p95": 5.994196
+            },
+            "first_text_seconds": {
+              "samples": 10,
+              "p50": 0.725927,
+              "p95": 6.05237
+            },
+            "first_phrase_seconds": {
+              "samples": 10,
+              "p50": 0.85186,
+              "p95": 6.08612
+            },
+            "total_seconds": {
+              "samples": 10,
+              "p50": 1.055502,
+              "p95": 6.403719
+            }
+          }
+        },
+        {
+          "requested_model": "openrouter/free",
+          "reasoning": "disabled",
+          "scenario": "greeting",
+          "max_tokens": 384,
+          "attempts": 10,
+          "successes": 3,
+          "failures": 7,
+          "errors": {
+            "http_404": 1,
+            "http_429": 2,
+            "reasoning_required": 3,
+            "stream_error": 1
+          },
+          "quality_method": "heuristic",
+          "quality_heuristic_checked": 3,
+          "quality_heuristic_passes": 3,
+          "successful_only_seconds": {
+            "headers_seconds": {
+              "samples": 3,
+              "p50": 0.76896,
+              "p95": 0.901307
+            },
+            "first_text_seconds": {
+              "samples": 3,
+              "p50": 0.87846,
+              "p95": 0.901607
+            },
+            "first_phrase_seconds": {
+              "samples": 3,
+              "p50": 0.906455,
+              "p95": 1.217133
+            },
+            "total_seconds": {
+              "samples": 3,
+              "p50": 1.348384,
+              "p95": 2.962868
+            }
+          }
+        }
+      ],
+      "interval_seconds": 3.3,
+      "timeout_seconds": 15.0,
+      "max_tokens": 384,
+      "quality_method": "heuristic",
+      "production_measured": false
+    }
+  },
+  "temporary_key_gemma": {
+    "attempts": [
+      {
+        "type": "attempt",
+        "request_id": "1d91663290f642e5ab992d14d67c18df",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "google/gemma-4-26b-a4b-it:free",
+        "reasoning": "disabled",
+        "index": 1,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 393,
+        "http_status": 429,
+        "headers_seconds": 0.478678,
+        "first_text_seconds": null,
+        "first_phrase_seconds": null,
+        "total_seconds": 0.481768,
+        "actual_model": null,
+        "provider": null,
+        "characters": 0,
+        "usage": {},
+        "finish_reason": null,
+        "stream_done": false,
+        "error": "http_429",
+        "error_phase": "http",
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": null
+      },
+      {
+        "type": "attempt",
+        "request_id": "e7a0253bddb14ffa878e579ae21726c3",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "google/gemma-4-26b-a4b-it:free",
+        "reasoning": "disabled",
+        "index": 2,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 393,
+        "http_status": 429,
+        "headers_seconds": 0.322197,
+        "first_text_seconds": null,
+        "first_phrase_seconds": null,
+        "total_seconds": 0.322583,
+        "actual_model": null,
+        "provider": null,
+        "characters": 0,
+        "usage": {},
+        "finish_reason": null,
+        "stream_done": false,
+        "error": "http_429",
+        "error_phase": "http",
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": null
+      },
+      {
+        "type": "attempt",
+        "request_id": "c72656ab04da447abc7b245aee9cef29",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "google/gemma-4-26b-a4b-it:free",
+        "reasoning": "disabled",
+        "index": 3,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 393,
+        "http_status": 429,
+        "headers_seconds": 0.284954,
+        "first_text_seconds": null,
+        "first_phrase_seconds": null,
+        "total_seconds": 0.285404,
+        "actual_model": null,
+        "provider": null,
+        "characters": 0,
+        "usage": {},
+        "finish_reason": null,
+        "stream_done": false,
+        "error": "http_429",
+        "error_phase": "http",
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": null
+      },
+      {
+        "type": "attempt",
+        "request_id": "667bd8f3d4ba4408b8bc2db47a833a33",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "google/gemma-4-26b-a4b-it:free",
+        "reasoning": "disabled",
+        "index": 4,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 393,
+        "http_status": 429,
+        "headers_seconds": 0.317649,
+        "first_text_seconds": null,
+        "first_phrase_seconds": null,
+        "total_seconds": 0.318028,
+        "actual_model": null,
+        "provider": null,
+        "characters": 0,
+        "usage": {},
+        "finish_reason": null,
+        "stream_done": false,
+        "error": "http_429",
+        "error_phase": "http",
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": null
+      },
+      {
+        "type": "attempt",
+        "request_id": "5a8832137df646ab97463cc79340a891",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "google/gemma-4-26b-a4b-it:free",
+        "reasoning": "disabled",
+        "index": 5,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 393,
+        "http_status": 429,
+        "headers_seconds": 0.264033,
+        "first_text_seconds": null,
+        "first_phrase_seconds": null,
+        "total_seconds": 0.264287,
+        "actual_model": null,
+        "provider": null,
+        "characters": 0,
+        "usage": {},
+        "finish_reason": null,
+        "stream_done": false,
+        "error": "http_429",
+        "error_phase": "http",
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": null
+      },
+      {
+        "type": "attempt",
+        "request_id": "9e2271dc42af4363958d343dccfc398b",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "google/gemma-4-26b-a4b-it:free",
+        "reasoning": "disabled",
+        "index": 6,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 393,
+        "http_status": 429,
+        "headers_seconds": 0.288515,
+        "first_text_seconds": null,
+        "first_phrase_seconds": null,
+        "total_seconds": 0.288757,
+        "actual_model": null,
+        "provider": null,
+        "characters": 0,
+        "usage": {},
+        "finish_reason": null,
+        "stream_done": false,
+        "error": "http_429",
+        "error_phase": "http",
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": null
+      },
+      {
+        "type": "attempt",
+        "request_id": "f357a6f761584b8e9ed6c43c93f3b136",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "google/gemma-4-26b-a4b-it:free",
+        "reasoning": "disabled",
+        "index": 7,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 393,
+        "http_status": 429,
+        "headers_seconds": 0.298835,
+        "first_text_seconds": null,
+        "first_phrase_seconds": null,
+        "total_seconds": 0.299171,
+        "actual_model": null,
+        "provider": null,
+        "characters": 0,
+        "usage": {},
+        "finish_reason": null,
+        "stream_done": false,
+        "error": "http_429",
+        "error_phase": "http",
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": null
+      },
+      {
+        "type": "attempt",
+        "request_id": "0b92f5d4f325438591b4c95e95091082",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "google/gemma-4-26b-a4b-it:free",
+        "reasoning": "disabled",
+        "index": 8,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 393,
+        "http_status": 429,
+        "headers_seconds": 0.318909,
+        "first_text_seconds": null,
+        "first_phrase_seconds": null,
+        "total_seconds": 0.319234,
+        "actual_model": null,
+        "provider": null,
+        "characters": 0,
+        "usage": {},
+        "finish_reason": null,
+        "stream_done": false,
+        "error": "http_429",
+        "error_phase": "http",
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": null
+      },
+      {
+        "type": "attempt",
+        "request_id": "7a44f9b6e54a4689bc12dc1a9a1517e8",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "google/gemma-4-26b-a4b-it:free",
+        "reasoning": "disabled",
+        "index": 9,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 393,
+        "http_status": 429,
+        "headers_seconds": 0.287905,
+        "first_text_seconds": null,
+        "first_phrase_seconds": null,
+        "total_seconds": 0.288205,
+        "actual_model": null,
+        "provider": null,
+        "characters": 0,
+        "usage": {},
+        "finish_reason": null,
+        "stream_done": false,
+        "error": "http_429",
+        "error_phase": "http",
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": null
+      },
+      {
+        "type": "attempt",
+        "request_id": "b9a0ffce42bb4f118db5c5a7ededf4ba",
+        "path": "direct_openrouter",
+        "scenario": "greeting",
+        "requested_model": "google/gemma-4-26b-a4b-it:free",
+        "reasoning": "disabled",
+        "index": 10,
+        "model_calls": 1,
+        "max_tokens": 384,
+        "input_bytes": 393,
+        "http_status": 429,
+        "headers_seconds": 0.325511,
+        "first_text_seconds": null,
+        "first_phrase_seconds": null,
+        "total_seconds": 0.325881,
+        "actual_model": null,
+        "provider": null,
+        "characters": 0,
+        "usage": {},
+        "finish_reason": null,
+        "stream_done": false,
+        "error": "http_429",
+        "error_phase": "http",
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": null
+      }
+    ],
+    "summary": {
+      "type": "summary",
+      "scope": "direct_openrouter_synthetic",
+      "groups": [
+        {
+          "requested_model": "google/gemma-4-26b-a4b-it:free",
+          "reasoning": "disabled",
+          "scenario": "greeting",
+          "max_tokens": 384,
+          "attempts": 10,
+          "successes": 0,
+          "failures": 10,
+          "errors": {
+            "http_429": 10
+          },
+          "quality_method": "heuristic",
+          "quality_heuristic_checked": 0,
+          "quality_heuristic_passes": 0,
+          "successful_only_seconds": {
+            "headers_seconds": {
+              "samples": 0,
+              "p50": null,
+              "p95": null
+            },
+            "first_text_seconds": {
+              "samples": 0,
+              "p50": null,
+              "p95": null
+            },
+            "first_phrase_seconds": {
+              "samples": 0,
+              "p50": null,
+              "p95": null
+            },
+            "total_seconds": {
+              "samples": 0,
+              "p50": null,
+              "p95": null
+            }
+          }
+        }
+      ],
+      "interval_seconds": 3.3,
+      "timeout_seconds": 15.0,
+      "max_tokens": 384,
+      "quality_method": "heuristic",
+      "production_measured": false
+    }
+  },
+  "temporary_key_planning": {
+    "attempts": [
+      {
+        "type": "attempt",
+        "request_id": "180b81d4e8bd4643bf6c65fbba5739fe",
+        "path": "direct_openrouter",
+        "scenario": "planning",
+        "requested_model": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "low",
+        "index": 1,
+        "model_calls": 1,
+        "max_tokens": 1536,
+        "input_bytes": 781,
+        "http_status": 200,
+        "headers_seconds": 0.402659,
+        "first_text_seconds": 14.11807,
+        "first_phrase_seconds": 14.278887,
+        "total_seconds": 16.454372,
+        "actual_model": "nvidia/nemotron-3.5-lightning:free",
+        "provider": "Nvidia",
+        "characters": 443,
+        "usage": {
+          "prompt_tokens": 120,
+          "completion_tokens": 1105,
+          "total_tokens": 1225,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": true
+      },
+      {
+        "type": "attempt",
+        "request_id": "a7f11fb010c24ad48444f4eb554bc1c7",
+        "path": "direct_openrouter",
+        "scenario": "planning",
+        "requested_model": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "low",
+        "index": 2,
+        "model_calls": 1,
+        "max_tokens": 1536,
+        "input_bytes": 781,
+        "http_status": 200,
+        "headers_seconds": 0.781365,
+        "first_text_seconds": 18.545154,
+        "first_phrase_seconds": 20.225361,
+        "total_seconds": 23.365359,
+        "actual_model": "nvidia/nemotron-3.5-lightning:free",
+        "provider": "Nvidia",
+        "characters": 685,
+        "usage": {
+          "prompt_tokens": 120,
+          "completion_tokens": 1183,
+          "total_tokens": 1303,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": true
+      },
+      {
+        "type": "attempt",
+        "request_id": "85ed247dca1b452da0a47b8aa3e5513a",
+        "path": "direct_openrouter",
+        "scenario": "planning",
+        "requested_model": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "low",
+        "index": 3,
+        "model_calls": 1,
+        "max_tokens": 1536,
+        "input_bytes": 781,
+        "http_status": 200,
+        "headers_seconds": 1.140882,
+        "first_text_seconds": 16.662995,
+        "first_phrase_seconds": 16.694527,
+        "total_seconds": 19.092668,
+        "actual_model": "nvidia/nemotron-3.5-lightning:free",
+        "provider": "Nvidia",
+        "characters": 631,
+        "usage": {
+          "prompt_tokens": 120,
+          "completion_tokens": 1364,
+          "total_tokens": 1484,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": true
+      },
+      {
+        "type": "attempt",
+        "request_id": "27e1b1aeeb714a29803bcec66058f5af",
+        "path": "direct_openrouter",
+        "scenario": "planning",
+        "requested_model": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "low",
+        "index": 4,
+        "model_calls": 1,
+        "max_tokens": 1536,
+        "input_bytes": 781,
+        "http_status": 200,
+        "headers_seconds": 0.628047,
+        "first_text_seconds": 10.255437,
+        "first_phrase_seconds": 10.693314,
+        "total_seconds": 13.043211,
+        "actual_model": "nvidia/nemotron-3.5-lightning:free",
+        "provider": "Nvidia",
+        "characters": 546,
+        "usage": {
+          "prompt_tokens": 120,
+          "completion_tokens": 1045,
+          "total_tokens": 1165,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": true
+      },
+      {
+        "type": "attempt",
+        "request_id": "6ec5d2e28aaa49b38b2146a6c067a961",
+        "path": "direct_openrouter",
+        "scenario": "planning",
+        "requested_model": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "low",
+        "index": 5,
+        "model_calls": 1,
+        "max_tokens": 1536,
+        "input_bytes": 781,
+        "http_status": 200,
+        "headers_seconds": 1.363634,
+        "first_text_seconds": 11.020429,
+        "first_phrase_seconds": 11.064777,
+        "total_seconds": 14.18718,
+        "actual_model": "nvidia/nemotron-3.5-lightning:free",
+        "provider": "Nvidia",
+        "characters": 723,
+        "usage": {
+          "prompt_tokens": 120,
+          "completion_tokens": 1120,
+          "total_tokens": 1240,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": true
+      },
+      {
+        "type": "attempt",
+        "request_id": "8fe129ae485643a88de45a131fc6d45b",
+        "path": "direct_openrouter",
+        "scenario": "planning",
+        "requested_model": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "disabled",
+        "index": 1,
+        "model_calls": 1,
+        "max_tokens": 1536,
+        "input_bytes": 782,
+        "http_status": 200,
+        "headers_seconds": 0.598699,
+        "first_text_seconds": 0.717465,
+        "first_phrase_seconds": 0.774914,
+        "total_seconds": 4.242368,
+        "actual_model": "nvidia/nemotron-3.5-lightning:free",
+        "provider": "Nvidia",
+        "characters": 769,
+        "usage": {
+          "prompt_tokens": 120,
+          "completion_tokens": 318,
+          "total_tokens": 438,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": true
+      },
+      {
+        "type": "attempt",
+        "request_id": "7c67504cb78b40f1b7afcc340473bc6b",
+        "path": "direct_openrouter",
+        "scenario": "planning",
+        "requested_model": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "disabled",
+        "index": 2,
+        "model_calls": 1,
+        "max_tokens": 1536,
+        "input_bytes": 782,
+        "http_status": 200,
+        "headers_seconds": 0.648525,
+        "first_text_seconds": 0.729637,
+        "first_phrase_seconds": 1.088233,
+        "total_seconds": 4.486475,
+        "actual_model": "nvidia/nemotron-3.5-lightning:free",
+        "provider": "Nvidia",
+        "characters": 848,
+        "usage": {
+          "prompt_tokens": 120,
+          "completion_tokens": 329,
+          "total_tokens": 449,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": true
+      },
+      {
+        "type": "attempt",
+        "request_id": "71ec0d8dcfcc4f89b9d5eacfa9de83a2",
+        "path": "direct_openrouter",
+        "scenario": "planning",
+        "requested_model": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "disabled",
+        "index": 3,
+        "model_calls": 1,
+        "max_tokens": 1536,
+        "input_bytes": 782,
+        "http_status": 200,
+        "headers_seconds": 0.583713,
+        "first_text_seconds": 0.67273,
+        "first_phrase_seconds": 0.747455,
+        "total_seconds": 3.007339,
+        "actual_model": "nvidia/nemotron-3.5-lightning:free",
+        "provider": "Nvidia",
+        "characters": 565,
+        "usage": {
+          "prompt_tokens": 120,
+          "completion_tokens": 234,
+          "total_tokens": 354,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": true
+      },
+      {
+        "type": "attempt",
+        "request_id": "b78c962c8fb54146850e58b927639ab1",
+        "path": "direct_openrouter",
+        "scenario": "planning",
+        "requested_model": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "disabled",
+        "index": 4,
+        "model_calls": 1,
+        "max_tokens": 1536,
+        "input_bytes": 782,
+        "http_status": 200,
+        "headers_seconds": 0.616485,
+        "first_text_seconds": 0.692569,
+        "first_phrase_seconds": 1.391109,
+        "total_seconds": 2.382917,
+        "actual_model": "nvidia/nemotron-3.5-lightning:free",
+        "provider": "Nvidia",
+        "characters": 269,
+        "usage": {
+          "prompt_tokens": 120,
+          "completion_tokens": 105,
+          "total_tokens": 225,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": false
+      },
+      {
+        "type": "attempt",
+        "request_id": "69652d8c04ab4700a9868855c1d71abf",
+        "path": "direct_openrouter",
+        "scenario": "planning",
+        "requested_model": "nvidia/nemotron-3.5-lightning:free",
+        "reasoning": "disabled",
+        "index": 5,
+        "model_calls": 1,
+        "max_tokens": 1536,
+        "input_bytes": 782,
+        "http_status": 200,
+        "headers_seconds": 0.811253,
+        "first_text_seconds": 0.906478,
+        "first_phrase_seconds": 1.059468,
+        "total_seconds": 3.427434,
+        "actual_model": "nvidia/nemotron-3.5-lightning:free",
+        "provider": "Nvidia",
+        "characters": 683,
+        "usage": {
+          "prompt_tokens": 120,
+          "completion_tokens": 290,
+          "total_tokens": 410,
+          "cost": 0
+        },
+        "finish_reason": "stop",
+        "stream_done": true,
+        "error": null,
+        "error_phase": null,
+        "quality_method": "heuristic",
+        "quality_heuristic_pass": true
+      }
+    ],
+    "summary": {
+      "type": "summary",
+      "scope": "direct_openrouter_synthetic",
+      "groups": [
+        {
+          "requested_model": "nvidia/nemotron-3.5-lightning:free",
+          "reasoning": "disabled",
+          "scenario": "planning",
+          "max_tokens": 1536,
+          "attempts": 5,
+          "successes": 5,
+          "failures": 0,
+          "errors": {},
+          "quality_method": "heuristic",
+          "quality_heuristic_checked": 5,
+          "quality_heuristic_passes": 4,
+          "successful_only_seconds": {
+            "headers_seconds": {
+              "samples": 5,
+              "p50": 0.616485,
+              "p95": 0.811253
+            },
+            "first_text_seconds": {
+              "samples": 5,
+              "p50": 0.717465,
+              "p95": 0.906478
+            },
+            "first_phrase_seconds": {
+              "samples": 5,
+              "p50": 1.059468,
+              "p95": 1.391109
+            },
+            "total_seconds": {
+              "samples": 5,
+              "p50": 3.427434,
+              "p95": 4.486475
+            }
+          }
+        },
+        {
+          "requested_model": "nvidia/nemotron-3.5-lightning:free",
+          "reasoning": "low",
+          "scenario": "planning",
+          "max_tokens": 1536,
+          "attempts": 5,
+          "successes": 5,
+          "failures": 0,
+          "errors": {},
+          "quality_method": "heuristic",
+          "quality_heuristic_checked": 5,
+          "quality_heuristic_passes": 5,
+          "successful_only_seconds": {
+            "headers_seconds": {
+              "samples": 5,
+              "p50": 0.781365,
+              "p95": 1.363634
+            },
+            "first_text_seconds": {
+              "samples": 5,
+              "p50": 14.11807,
+              "p95": 18.545154
+            },
+            "first_phrase_seconds": {
+              "samples": 5,
+              "p50": 14.278887,
+              "p95": 20.225361
+            },
+            "total_seconds": {
+              "samples": 5,
+              "p50": 16.454372,
+              "p95": 23.365359
+            }
+          }
+        }
+      ],
+      "interval_seconds": 3.3,
+      "timeout_seconds": 30.0,
+      "max_tokens": 1536,
+      "quality_method": "heuristic",
+      "production_measured": false
+    }
+  },
+  "temporary_key_local_product": {
+    "summary": {
+      "mode": "live",
+      "model": "nvidia/nemotron-3.5-lightning:free",
+      "samples": 5,
+      "successful": 5,
+      "failed": 0,
+      "quality_method": "russian_short_heuristic",
+      "quality_heuristic_passes": 5,
+      "setup_ms": 398.871,
+      "first_text_p50_ms": 1417.284,
+      "first_text_p95_ms": 3805.458,
+      "full_p50_ms": 1526.328,
+      "full_p95_ms": 4260.851
+    },
+    "conditions": {
+      "loopback_only": true,
+      "synthetic_account": true,
+      "real_agent": true,
+      "context_limit_preseeded": 128000,
+      "metadata_http_excluded": true,
+      "tools": 0,
+      "max_tokens": 384,
+      "voice_enabled": false,
+      "account_quotas_enabled": false,
+      "resource_guard_enabled": true,
+      "model_retries": 0,
+      "default_suite_running": false
+    },
+    "rows": [
+      {
+        "sample": 1,
+        "mode": "live",
+        "model_calls": [
+          {
+            "request_model": "nvidia/nemotron-3.5-lightning:free",
+            "request_bytes": 6802,
+            "dispatch_ms": 1816.242,
+            "message_count": 2,
+            "tool_schema_count": 0,
+            "max_tokens": 384,
+            "provider_max_price_zero": true,
+            "nonempty_text": true,
+            "wire_reasoning_present": true,
+            "wire_reasoning_enabled": false,
+            "wire_reasoning_effort": null,
+            "wire_top_level_reasoning_effort": null,
+            "wire_payload_bytes": 6802,
+            "wire_system_characters": 3853,
+            "wire_stream": true,
+            "headers_ms": 1840.015,
+            "http_status": 200,
+            "model": "nvidia/nemotron-3.5-lightning:free",
+            "provider": "Nvidia",
+            "first_text_ms": 1943.006,
+            "finish_reason": "stop",
+            "prompt_tokens": 1171,
+            "completion_tokens": 14,
+            "total_tokens": 1185,
+            "provider_cost_usd": 0,
+            "stream_full_ms": 2315.338
+          }
+        ],
+        "auth_ms": 9.459,
+        "conversation_context_ms": 81.523,
+        "assistant_context_ms": 12.163,
+        "post_http_status": 202,
+        "run_accepted_ms": 140.85,
+        "events_http_status": 200,
+        "agent_init_ms": 955.542,
+        "agent_real_class": true,
+        "reasoning_disabled": true,
+        "agent_supports_reasoning_extra_body": false,
+        "visible_nonempty_text": true,
+        "first_text_ms": 3805.458,
+        "agent_completed": true,
+        "agent_failed": false,
+        "agent_conversation_ms": 2930.376,
+        "terminal_event": "run.completed",
+        "full_ms": 4260.851,
+        "final_nonempty_text": true,
+        "quality_heuristic_pass": true,
+        "agent_api_calls": 1,
+        "successful_model_calls": 1,
+        "successful": true
+      },
+      {
+        "sample": 2,
+        "mode": "live",
+        "model_calls": [
+          {
+            "request_model": "nvidia/nemotron-3.5-lightning:free",
+            "request_bytes": 6802,
+            "dispatch_ms": 387.846,
+            "message_count": 2,
+            "tool_schema_count": 0,
+            "max_tokens": 384,
+            "provider_max_price_zero": true,
+            "nonempty_text": true,
+            "wire_reasoning_present": true,
+            "wire_reasoning_enabled": false,
+            "wire_reasoning_effort": null,
+            "wire_top_level_reasoning_effort": null,
+            "wire_payload_bytes": 6802,
+            "wire_system_characters": 3853,
+            "wire_stream": true,
+            "headers_ms": 627.056,
+            "http_status": 200,
+            "model": "nvidia/nemotron-3.5-lightning:free",
+            "provider": "Nvidia",
+            "first_text_ms": 683.369,
+            "finish_reason": "stop",
+            "prompt_tokens": 1171,
+            "completion_tokens": 14,
+            "total_tokens": 1185,
+            "provider_cost_usd": 0,
+            "stream_full_ms": 823.545
+          }
+        ],
+        "auth_ms": 7.783,
+        "conversation_context_ms": 8.348,
+        "assistant_context_ms": 2.824,
+        "post_http_status": 202,
+        "run_accepted_ms": 54.628,
+        "events_http_status": 200,
+        "agent_init_ms": 141.524,
+        "agent_real_class": true,
+        "reasoning_disabled": true,
+        "agent_supports_reasoning_extra_body": false,
+        "visible_nonempty_text": true,
+        "first_text_ms": 1160.757,
+        "agent_completed": true,
+        "agent_failed": false,
+        "agent_conversation_ms": 1004.409,
+        "terminal_event": "run.completed",
+        "full_ms": 1267.479,
+        "final_nonempty_text": true,
+        "quality_heuristic_pass": true,
+        "agent_api_calls": 1,
+        "successful_model_calls": 1,
+        "successful": true
+      },
+      {
+        "sample": 3,
+        "mode": "live",
+        "model_calls": [
+          {
+            "request_model": "nvidia/nemotron-3.5-lightning:free",
+            "request_bytes": 6802,
+            "dispatch_ms": 450.131,
+            "message_count": 2,
+            "tool_schema_count": 0,
+            "max_tokens": 384,
+            "provider_max_price_zero": true,
+            "nonempty_text": true,
+            "wire_reasoning_present": true,
+            "wire_reasoning_enabled": false,
+            "wire_reasoning_effort": null,
+            "wire_top_level_reasoning_effort": null,
+            "wire_payload_bytes": 6802,
+            "wire_system_characters": 3853,
+            "wire_stream": true,
+            "headers_ms": 586.864,
+            "http_status": 200,
+            "model": "nvidia/nemotron-3.5-lightning:free",
+            "provider": "Nvidia",
+            "first_text_ms": 677.137,
+            "finish_reason": "stop",
+            "prompt_tokens": 1171,
+            "completion_tokens": 19,
+            "total_tokens": 1190,
+            "provider_cost_usd": 0,
+            "stream_full_ms": 862.109
+          }
+        ],
+        "auth_ms": 6.093,
+        "conversation_context_ms": 9.26,
+        "assistant_context_ms": 2.453,
+        "post_http_status": 202,
+        "run_accepted_ms": 52.933,
+        "events_http_status": 200,
+        "agent_init_ms": 146.254,
+        "agent_real_class": true,
+        "reasoning_disabled": true,
+        "agent_supports_reasoning_extra_body": false,
+        "visible_nonempty_text": true,
+        "first_text_ms": 1174.003,
+        "agent_completed": true,
+        "agent_failed": false,
+        "agent_conversation_ms": 1043.227,
+        "terminal_event": "run.completed",
+        "full_ms": 1367.043,
+        "final_nonempty_text": true,
+        "quality_heuristic_pass": true,
+        "agent_api_calls": 1,
+        "successful_model_calls": 1,
+        "successful": true
+      },
+      {
+        "sample": 4,
+        "mode": "live",
+        "model_calls": [
+          {
+            "request_model": "nvidia/nemotron-3.5-lightning:free",
+            "request_bytes": 6802,
+            "dispatch_ms": 399.289,
+            "message_count": 2,
+            "tool_schema_count": 0,
+            "max_tokens": 384,
+            "provider_max_price_zero": true,
+            "nonempty_text": true,
+            "wire_reasoning_present": true,
+            "wire_reasoning_enabled": false,
+            "wire_reasoning_effort": null,
+            "wire_top_level_reasoning_effort": null,
+            "wire_payload_bytes": 6802,
+            "wire_system_characters": 3853,
+            "wire_stream": true,
+            "headers_ms": 788.628,
+            "http_status": 200,
+            "model": "nvidia/nemotron-3.5-lightning:free",
+            "provider": "Nvidia",
+            "first_text_ms": 966.681,
+            "finish_reason": "stop",
+            "prompt_tokens": 1171,
+            "completion_tokens": 14,
+            "total_tokens": 1185,
+            "provider_cost_usd": 0,
+            "stream_full_ms": 1142.474
+          }
+        ],
+        "auth_ms": 8.444,
+        "conversation_context_ms": 9.179,
+        "assistant_context_ms": 2.982,
+        "post_http_status": 202,
+        "run_accepted_ms": 62.257,
+        "events_http_status": 200,
+        "agent_init_ms": 142.227,
+        "agent_real_class": true,
+        "reasoning_disabled": true,
+        "agent_supports_reasoning_extra_body": false,
+        "visible_nonempty_text": true,
+        "first_text_ms": 1432.743,
+        "agent_completed": true,
+        "agent_failed": false,
+        "agent_conversation_ms": 1327.424,
+        "terminal_event": "run.completed",
+        "full_ms": 1598.393,
+        "final_nonempty_text": true,
+        "quality_heuristic_pass": true,
+        "agent_api_calls": 1,
+        "successful_model_calls": 1,
+        "successful": true
+      },
+      {
+        "sample": 5,
+        "mode": "live",
+        "model_calls": [
+          {
+            "request_model": "nvidia/nemotron-3.5-lightning:free",
+            "request_bytes": 6802,
+            "dispatch_ms": 391.235,
+            "message_count": 2,
+            "tool_schema_count": 0,
+            "max_tokens": 384,
+            "provider_max_price_zero": true,
+            "nonempty_text": true,
+            "wire_reasoning_present": true,
+            "wire_reasoning_enabled": false,
+            "wire_reasoning_effort": null,
+            "wire_top_level_reasoning_effort": null,
+            "wire_payload_bytes": 6802,
+            "wire_system_characters": 3853,
+            "wire_stream": true,
+            "headers_ms": 801.575,
+            "http_status": 200,
+            "model": "nvidia/nemotron-3.5-lightning:free",
+            "provider": "Nvidia",
+            "first_text_ms": 944.828,
+            "finish_reason": "stop",
+            "prompt_tokens": 1171,
+            "completion_tokens": 14,
+            "total_tokens": 1185,
+            "provider_cost_usd": 0,
+            "stream_full_ms": 1079.18
+          }
+        ],
+        "auth_ms": 9.171,
+        "conversation_context_ms": 9.367,
+        "assistant_context_ms": 2.71,
+        "post_http_status": 202,
+        "run_accepted_ms": 56.03,
+        "events_http_status": 200,
+        "agent_init_ms": 142.707,
+        "agent_real_class": true,
+        "reasoning_disabled": true,
+        "agent_supports_reasoning_extra_body": false,
+        "visible_nonempty_text": true,
+        "first_text_ms": 1417.284,
+        "agent_completed": true,
+        "agent_failed": false,
+        "agent_conversation_ms": 1264.796,
+        "terminal_event": "run.completed",
+        "full_ms": 1526.328,
+        "final_nonempty_text": true,
+        "quality_heuristic_pass": true,
+        "agent_api_calls": 1,
+        "successful_model_calls": 1,
+        "successful": true
+      }
+    ]
+  },
+  "temporary_key_natural_speech": {
+    "model": "fish-audio/s2.1-pro-free:free",
+    "audio_saved": false,
+    "playback_tested": false,
+    "production_accessed": false,
+    "rows": [
+      {
+        "trial": 1,
+        "http_status": 200,
+        "first_audio_ms": 2286.86,
+        "audio_bytes": 34271,
+        "headers_ms": 2286.706,
+        "ok": true,
+        "total_ms": 3203.827
+      },
+      {
+        "trial": 2,
+        "http_status": 200,
+        "first_audio_ms": 1174.916,
+        "audio_bytes": 30928,
+        "headers_ms": 1174.738,
+        "ok": true,
+        "total_ms": 1867.336
+      },
+      {
+        "trial": 3,
+        "http_status": 200,
+        "first_audio_ms": 833.424,
+        "audio_bytes": 30092,
+        "headers_ms": 833.3,
+        "ok": true,
+        "total_ms": 1544.92
+      }
+    ],
+    "planned_calls": 3,
+    "catalog_http_status": 200,
+    "catalog_free_verified": true,
+    "model_calls": 3
+  },
+  "client_checks": [
+    {
+      "label": "v2-head-pub",
+      "scope": "HEAD plus own patch and new regression test",
+      "exit_code": 0,
+      "timeout": false,
+      "elapsed_seconds": 30.266,
+      "last_reported_counts": null,
+      "installed": false
+    },
+    {
+      "label": "v2-head-target",
+      "scope": "HEAD plus own patch and new regression test",
+      "exit_code": 0,
+      "timeout": false,
+      "elapsed_seconds": 107.203,
+      "last_reported_counts": {
+        "passed": 15,
+        "skipped": 0,
+        "failed": 0
+      },
+      "installed": false
+    },
+    {
+      "label": "v2-head-analyze",
+      "scope": "HEAD plus own patch and new regression test",
+      "exit_code": 0,
+      "timeout": false,
+      "elapsed_seconds": 38.188,
+      "last_reported_counts": null,
+      "analyzer_severities": {
+        "info": 0,
+        "warning": 0,
+        "error": 0
+      },
+      "installed": false
+    },
+    {
+      "label": "v2-working-all-tests",
+      "scope": "working tree with preserved existing WIP plus own patch",
+      "exit_code": 0,
+      "timeout": false,
+      "elapsed_seconds": 80.266,
+      "last_reported_counts": {
+        "passed": 139,
+        "skipped": 2,
+        "failed": 0
+      },
+      "installed": false
+    },
+    {
+      "label": "v2-working-all-analyze",
+      "scope": "working tree with preserved existing WIP plus own patch",
+      "exit_code": 0,
+      "timeout": false,
+      "elapsed_seconds": 24.828,
+      "last_reported_counts": null,
+      "analyzer_severities": {
+        "info": 58,
+        "warning": 0,
+        "error": 0
+      },
+      "installed": false
+    },
+    {
+      "label": "v2-hosted-config",
+      "scope": "working tree with preserved existing WIP plus own patch",
+      "exit_code": 0,
+      "timeout": false,
+      "elapsed_seconds": 91.094,
+      "last_reported_counts": {
+        "passed": 2,
+        "skipped": 0,
+        "failed": 0
+      },
+      "installed": false
+    },
+    {
+      "label": "v2-diagnostics-build",
+      "scope": "working tree with preserved existing WIP plus own patch",
+      "exit_code": 0,
+      "timeout": false,
+      "elapsed_seconds": 772.718,
+      "last_reported_counts": null,
+      "installed": false,
+      "apk": ".git\\troika-0.1-gates-20261023\\android-diagnostics\\build\\app\\outputs\\flutter-apk\\app-debug.apk",
+      "apk_sha256": "b0973a197dbfe6ecc2bf9908cbaa87cf0248db7c77eeca1e04edb077b57675ef",
+      "apk_bytes": 166743483,
+      "application_id": "com.troika.hermes_assistant.diagnostics",
+      "application_id_verified_from_apk": true,
+      "reporting_wrapper_exit_code": 1,
+      "reporting_wrapper_error": "UnicodeEncodeError printing Flutter success checkmark to cp1251 stdout after saving exit_code 0 receipt; no rebuild required"
+    }
+  ],
+  "client_head_scope": {
+    "head_revision": "f46924298b86eb2e1bc142fdb4d7cb023f2bda27",
+    "archive_files_compared": 101,
+    "modified_existing_source_files": [
+      "lib/services/assistant_service.dart"
+    ],
+    "line_ending_only_differences": [
+      "analysis_options.yaml"
+    ],
+    "new_test_sha256": "f3164b512c3fe6a41fe58b9099f8a3d16ad0fc4aa2fec875228f3a95c77ffcff",
+    "reminder_wip_prerequisites": false
+  },
+  "client_source_hashes": {
+    "assistant_sha256": "882af3a4cd79a0de5a3ee1c53a7d308fa0cee4cf8ea950b90c4eafc0b01b7833",
+    "test_sha256": "f3164b512c3fe6a41fe58b9099f8a3d16ad0fc4aa2fec875228f3a95c77ffcff",
+    "head_assistant_sha256": "fcefd1551c201ff78a4ef830e63968580fa8e464b83a183e419d98c788d346ce",
+    "wip_preserved_outside_own_two_hunks": true,
+    "native_bytes_unchanged": true
+  },
+  "client_limits": {
+    "installed": false,
+    "phone_used": false,
+    "production_touched": false,
+    "real_model_post": false,
+    "real_microphone_stt_audio_playback_tested": false,
+    "live_voice_latency_measured": false,
+    "latency_test_uses": "scripted SSE, pending reminder HTTP future and mocked TTS HTTP failure; proves call ordering, not physical sound latency",
+    "all_default_skips_followup": "two endpoint-defined config tests passed separately with synthetic https://gateway.example.invalid",
+    "counts_note": "Do not sum repeated HEAD, targeted, full and follow-up runs."
+  },
+  "old_unknown_paid_reserve_usd_preserved": 0.00074256,
+  "temporary_key_cleanup": {
+    "key_not_found_in_scanned_files": true,
+    "scanned_files": 87,
+    "scope": [
+      "task root files",
+      "task local-profile tree",
+      "reviewed source and report files"
+    ],
+    "found_paths": [],
+    "all_test_children_exited": true,
+    "key_written_to_env_file": false,
+    "key_written_to_command_line": false,
+    "cleared_from_repl": true
+  },
+  "privacy": {
+    "credentials": false,
+    "private_prompts_or_responses": false,
+    "account_ids_or_balances": false,
+    "audio_saved": false
+  }
+}

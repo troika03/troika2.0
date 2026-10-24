@@ -37,6 +37,10 @@ enum BackgroundVoiceState {
 }
 
 class AssistantService extends ChangeNotifier {
+  AssistantService({ReminderDeliveryService? replyDelivery})
+      : _replyDelivery = replyDelivery ?? ReminderDeliveryService.instance;
+
+  final ReminderDeliveryService _replyDelivery;
   static const _lastResultKey = 'troika_last_action_result';
   final AudioRecorderService _recorder = AudioRecorderService();
   final SttService _stt = SttService();
@@ -687,7 +691,10 @@ class AssistantService extends ChangeNotifier {
         onApproval: _waitForApproval,
       );
       var cleanResponse = _stripEmoTag(response);
-      final reminderStatus = await ReminderDeliveryService.instance.sync();
+      final reminderSync = _replyDelivery.sync();
+      final waitsForReminder = structuredResult?.kind == 'reminder';
+      final reminderStatus = waitsForReminder ? await reminderSync : null;
+      if (!waitsForReminder) unawaited(reminderSync);
       if (structuredResult?.kind == 'reminder' && Platform.isAndroid) {
         if (reminderStatus == null) {
           cleanResponse +=
