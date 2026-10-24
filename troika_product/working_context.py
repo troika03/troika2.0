@@ -7,9 +7,14 @@ read through the product capability gateway during the current run.
 
 from collections import OrderedDict
 from copy import deepcopy
+import base64
+from functools import lru_cache
 import hashlib
 import json
+import os
+from pathlib import Path
 import re
+import tempfile
 import threading
 import time
 
@@ -21,6 +26,54 @@ _cache_bytes = 0
 _MAX_CACHE_BYTES = 2_000_000
 _TTL = 900
 
+# Match the cl100k_base vocabulary and metadata shipped by tiktoken. Never
+# invoke its downloading constructor from the context-estimation request path.
+_CL100K_URL = "https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken"
+_CL100K_HASH = "223921b76ee99bde995b7ff738513eef100fb51d18c93597a113bcffe865b2a7"
+_CL100K_PATTERN = r"""'(?i:[sdmt]|ll|ve|re)|[^\r\n\p{L}\p{N}]?+\p{L}++|\p{N}{1,3}+| ?[^\s\p{L}\p{N}]++[\r\n]*+|\s++$|\s*[\r\n]|\s+(?!\S)|\s"""
+_CL100K_SPECIAL = {"<|endoftext|>": 100257, "<|fim_prefix|>": 100258,
+                   "<|fim_middle|>": 100259, "<|fim_suffix|>": 100260, "<|endofprompt|>": 100276}
+_CL100K_MAX_BYTES = 2_000_000
+
+
+@lru_cache(maxsize=2)
+def _cached_token_encoding(path, modified_ns, size):
+    """Parse only verified local bytes; cache misses never download or write."""
+    try:
+        import tiktoken
+        with path.open("rb") as source:
+            data = source.read(_CL100K_MAX_BYTES + 1)
+        if len(data) > _CL100K_MAX_BYTES or hashlib.sha256(data).hexdigest() != _CL100K_HASH:
+            return None
+        ranks = {}
+        for line in data.splitlines():
+            if line:
+                token, rank = line.split()
+                ranks[base64.b64decode(token, validate=True)] = int(rank)
+        return tiktoken.Encoding(name="cl100k_base", pat_str=_CL100K_PATTERN,
+                                 mergeable_ranks=ranks, special_tokens=_CL100K_SPECIAL)
+    except (ImportError, OSError, ValueError):
+        return None
+
+
+def _local_token_encoding():
+    try:
+        if "TIKTOKEN_CACHE_DIR" in os.environ:
+            cache_dir = os.environ["TIKTOKEN_CACHE_DIR"]
+        elif "DATA_GYM_CACHE_DIR" in os.environ:
+            cache_dir = os.environ["DATA_GYM_CACHE_DIR"]
+        else:
+            cache_dir = os.path.join(tempfile.gettempdir(), "data-gym-cache")
+        if not cache_dir:
+            return None
+        path = Path(cache_dir) / hashlib.sha1(_CL100K_URL.encode()).hexdigest()
+        info = path.stat()
+        if info.st_size > _CL100K_MAX_BYTES:
+            return None
+        return _cached_token_encoding(path, info.st_mtime_ns, info.st_size)
+    except (OSError, ValueError):
+        return None
+
 
 def compact_enabled() -> bool:
     return bool(getattr(getattr(current_provider_guard(), "context", None), "enabled", False))
@@ -28,11 +81,10 @@ def compact_enabled() -> bool:
 
 def token_count(value) -> int:
     text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-    try:
-        import tiktoken
-        return len(tiktoken.get_encoding("cl100k_base").encode(text, disallowed_special=()))
-    except ImportError:
-        return max(1, len(text.encode()) // 3)
+    encoding = _local_token_encoding()
+    if encoding is not None:
+        return len(encoding.encode(text, disallowed_special=()))
+    return max(1, len(text.encode()) // 3)
 
 
 def _hash(messages):

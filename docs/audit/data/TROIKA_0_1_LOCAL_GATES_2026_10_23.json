@@ -1,0 +1,514 @@
+{
+  "schema_version": 1,
+  "dates": [
+    "2026-10-23",
+    "2026-10-24"
+  ],
+  "base_commit": "b0055257122740e5b5ea86d94068f29023f375db",
+  "production_changed": false,
+  "main_installed_android_package_changed": false,
+  "default_product_model_changed": false,
+  "new_diagnostic_model_posts": 0,
+  "all_full_suite_network_access_globally_monitored": false,
+  "live_model_latency_repeated": false,
+  "unknown_probe_reservation_usd_preserved": 0.00074256,
+  "openrouter_read_only_flags": {
+    "checked_utc": "2026-10-24T05:44:40.865932+00:00",
+    "model_posts": 0,
+    "key_present": true,
+    "credits_http_status": 200,
+    "credits_positive": false,
+    "credits_zero": false,
+    "credits_negative": true
+  },
+  "tokenizer": {
+    "before": {
+      "passed": 1,
+      "failed": 3
+    },
+    "final_file_passed": 20,
+    "network_download_in_product_token_count": false,
+    "valid_local_cache_exact_cl100k": true,
+    "fallback": "max(1, UTF8 bytes // 3)",
+    "billing_changed": false,
+    "function_timing": {
+      "kind": "offline_local_tokenizer_only",
+      "network_calls": 0,
+      "vocabulary_bytes": 1681126,
+      "groups": [
+        {
+          "case": "missing",
+          "first_seconds": 0.00019190000602975488,
+          "warm_samples": 50,
+          "warm_p50_seconds": 1.2500007869675756e-05,
+          "warm_p95_seconds": 1.7800004570744932e-05,
+          "count": 220,
+          "reference_count": 141,
+          "exact_cl100k": false,
+          "environment_unchanged": true
+        },
+        {
+          "case": "corrupt",
+          "first_seconds": 0.0021287999988999218,
+          "warm_samples": 50,
+          "warm_p50_seconds": 1.85999961104244e-05,
+          "warm_p95_seconds": 2.649999805726111e-05,
+          "count": 220,
+          "reference_count": 141,
+          "exact_cl100k": false,
+          "environment_unchanged": true
+        },
+        {
+          "case": "valid",
+          "first_seconds": 0.12138899999263231,
+          "warm_samples": 50,
+          "warm_p50_seconds": 6.489999941550195e-05,
+          "warm_p95_seconds": 8.779999916441739e-05,
+          "count": 141,
+          "reference_count": 141,
+          "exact_cl100k": true,
+          "environment_unchanged": true
+        }
+      ]
+    }
+  },
+  "full_default_suite": {
+    "files": 1269,
+    "completed_files": 1269,
+    "counts_from_explicit_summaries": {
+      "passed": 24589,
+      "failed": 581,
+      "skipped": 207,
+      "errors": 1,
+      "xfailed": 0,
+      "xpassed": 0
+    },
+    "exit_code": 1,
+    "missing_files": [],
+    "duplicate_files": [],
+    "nonzero_files_without_summary_count": 48,
+    "wall_seconds": 52147.29777431488,
+    "runtime_unchanged": true,
+    "application_latency_measurement": false,
+    "limitation": "No test counts inferred for missing summaries; passed summaries can coexist with runner timeout."
+  },
+  "final_targeted_suite": {
+    "files": 32,
+    "counts": {
+      "passed": 572,
+      "failed": 0,
+      "skipped": 0,
+      "errors": 0,
+      "xfailed": 0,
+      "xpassed": 0
+    },
+    "exit_code": 0,
+    "workers": 2,
+    "runtime_unchanged": true,
+    "rows": [
+      {
+        "path": "tests/agent/transports/test_chat_completions.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 69
+        }
+      },
+      {
+        "path": "tests/gateway/test_device_files.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 3
+        }
+      },
+      {
+        "path": "tests/providers/test_e2e_wiring.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 6
+        }
+      },
+      {
+        "path": "tests/providers/test_openrouter_explicit_reasoning.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 12
+        }
+      },
+      {
+        "path": "tests/agent/test_product_completion_guard.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 5
+        }
+      },
+      {
+        "path": "tests/providers/test_profile_wiring.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 22
+        }
+      },
+      {
+        "path": "tests/providers/test_openrouter_summary_reasoning.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 16
+        }
+      },
+      {
+        "path": "tests/providers/test_transport_parity.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 19
+        }
+      },
+      {
+        "path": "tests/providers/test_provider_profiles.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 42
+        }
+      },
+      {
+        "path": "tests/tools/test_troika_documents_tool.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 6
+        }
+      },
+      {
+        "path": "tests/troika_product/test_access.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 16
+        }
+      },
+      {
+        "path": "tests/troika_product/test_alpha_http_boundaries.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 2
+        }
+      },
+      {
+        "path": "tests/troika_product/test_artifacts.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 5
+        }
+      },
+      {
+        "path": "tests/troika_product/test_completion.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 43
+        }
+      },
+      {
+        "path": "tests/troika_product/test_capabilities.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 26
+        }
+      },
+      {
+        "path": "tests/troika_product/test_conversation_sessions.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 18
+        }
+      },
+      {
+        "path": "tests/troika_product/test_device_delivery.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 16
+        }
+      },
+      {
+        "path": "tests/troika_product/test_llm_metering.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 51
+        }
+      },
+      {
+        "path": "tests/troika_product/test_metered_runtime.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 13
+        }
+      },
+      {
+        "path": "tests/troika_product/test_own_provider.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 3
+        }
+      },
+      {
+        "path": "tests/troika_product/test_proactive.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 9
+        }
+      },
+      {
+        "path": "tests/troika_product/test_reminder_speech.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 9
+        }
+      },
+      {
+        "path": "tests/troika_product/test_retention.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 3
+        }
+      },
+      {
+        "path": "tests/troika_product/test_streaming.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 16
+        }
+      },
+      {
+        "path": "tests/troika_product/test_resource_ledger.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 31
+        }
+      },
+      {
+        "path": "tests/troika_product/test_token_diagnostics.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 8
+        }
+      },
+      {
+        "path": "tests/troika_product/test_tool_result_context.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 6
+        }
+      },
+      {
+        "path": "tests/troika_product/test_web_read_evidence.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 32
+        }
+      },
+      {
+        "path": "tests/troika_product/test_voice.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 15
+        }
+      },
+      {
+        "path": "tests/troika_product/test_web_sources.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 15
+        }
+      },
+      {
+        "path": "tests/troika_product/test_working_context_tokenizer.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 20
+        }
+      },
+      {
+        "path": "tests/troika_product/test_working_context.py",
+        "zero_exit": true,
+        "counts": {
+          "passed": 15
+        }
+      }
+    ]
+  },
+  "tested_source_sha256": {
+    "troika_product/working_context.py": "53c1707753f0acf949cc8aaaeb2d39480f29d6594840a6ced88ddeab5e043eff",
+    "tests/troika_product/test_working_context_tokenizer.py": "cd4f861dde1667c6216879eae35a217799fcd51a7bf4bafa04450af3915efe64",
+    "tests/troika_product/test_alpha_http_boundaries.py": "24dbbd80ed9543affd21cb26ecbc88e10bb71eb8e71b68f59102e28d0c9f66b7"
+  },
+  "docx_real_agent_loopback": {
+    "ok": true,
+    "sdk_fixture_calls": 3,
+    "loopback_http_requests": 12,
+    "tool_completed_events": 2,
+    "file_pending_events": 1,
+    "real_provider_posts": 0,
+    "real_search_calls": 0,
+    "real_http_transport": true,
+    "canonical_ack_route": true,
+    "real_tool_dispatch": true,
+    "real_docx_generation": true,
+    "owner_and_device_guards_checked": true,
+    "invalid_token_rejected": true,
+    "download_size_and_hash_match": true,
+    "flush_fsync_completed": true,
+    "saved_file_reopened_and_matched": true,
+    "docx_openxml_valid": true,
+    "ack_after_save_accepted": true,
+    "ram_purged_after_ack": true,
+    "permanent_docx_artifact_created": false,
+    "provider_usage_is_synthetic": true,
+    "installed_client_verified": false,
+    "word_application_opened": false,
+    "visual_layout_verified": false,
+    "ack_is_save_attestation": false
+  },
+  "windows_existing_offline": {
+    "test_exit": 0,
+    "passed_lines": 31,
+    "live_mode": false,
+    "default_endpoint_used": false,
+    "home_profile_preserved": true,
+    "temporary_store": true,
+    "short_temp_used": true,
+    "preceding_run_max_path_failure_preserved": true,
+    "final_summary": "31 desktop tests passed.",
+    "wall_seconds": 6.143694877624512
+  },
+  "windows_real_client_loopback": {
+    "ok": true,
+    "cases_passed": 6,
+    "checks_passed": 35,
+    "loopback_http_requests": 29,
+    "stop_requests": 1,
+    "canonical_ack_requests": 1,
+    "docx_downloads": 1,
+    "explicit_loopback_endpoint": true,
+    "default_endpoint_used": false,
+    "real_client_classes": true,
+    "real_http_transport": true,
+    "register_and_login_checked": true,
+    "dpapi_session_roundtrip_checked": true,
+    "shared_home_session_checked": true,
+    "history_list_reload_checked": true,
+    "two_account_history_isolation_checked": true,
+    "active_run_stop_checked": true,
+    "verified_file_existed_before_ack": true,
+    "atomic_part_gone_before_ack": true,
+    "docx_reopened_and_hash_verified": true,
+    "ram_pending_cleared_after_ack": true,
+    "worker_and_provider_usage_are_synthetic": true,
+    "installed_client_verified": false,
+    "microphone_or_playback_checked": false,
+    "word_application_opened": false
+  },
+  "loopback_server": {
+    "counts": {
+      "requests": 29,
+      "scripted_workers": 4,
+      "provider_requests": 0,
+      "search_requests": 0,
+      "stopped_workers": 1,
+      "late_calls_blocked": 1,
+      "received_ack": 1,
+      "docx_created": 1,
+      "unexpected_paths": 0,
+      "pending_deliveries": 0
+    },
+    "http_status_counts": {
+      "201": 2,
+      "200": 23,
+      "202": 4
+    },
+    "scripted_worker": true,
+    "installed_production_client_used": false,
+    "external_network_allowed": false
+  },
+  "android_diagnostics": {
+    "build_exit_code": 0,
+    "build_method": "scratch_only_with_read_only_dependency_cache",
+    "application_id": "com.troika.hermes_assistant.diagnostics",
+    "launchable_activity": "com.troika.hermes_assistant.MainActivity",
+    "apk_bytes": 166235477,
+    "apk_sha256": "3f4d1e884e4c949fe82e44efb447a3077349ecc32898c41456f98197580e7fab",
+    "endpoint": "http://127.0.0.1:18765",
+    "product_checkout_android_changed": false,
+    "main_package_replaced": false,
+    "installed_on_device": true,
+    "physical_protocol_test_passed": true,
+    "physical_voice_tested": false,
+    "provider_latency_measured": false,
+    "initial_built_apk_sha256": "eb47e156818efe3e6eee55c27d275525e445b355a8449ebd8d5b3899818f8d81",
+    "main_package_metadata_unchanged": true,
+    "temporary_device_setting_restored": true,
+    "own_adb_reverse_removed": true
+  },
+  "physical_android_client_test": {
+    "installed": true,
+    "test_exit_code": 0,
+    "timeout": false,
+    "physical_voice_tested": false,
+    "provider_latency_measured": false,
+    "client_receipt": {
+      "scripted_local_server": true,
+      "register_login": true,
+      "history": true,
+      "normal_delta_count": 1,
+      "stop_and_next_question": true,
+      "docx_bytes": 36643,
+      "docx_hash_verified": true,
+      "docx_reopened": true,
+      "pending_deliveries_empty": true,
+      "physical_voice_tested": false,
+      "provider_latency_measured": false
+    },
+    "ok": true,
+    "main_package_metadata_unchanged": true,
+    "wall_seconds": 192.19451427459717,
+    "device_setting_restored": true,
+    "own_reverse_removed": true
+  },
+  "phone_loopback_server": {
+    "counts": {
+      "requests": 47,
+      "scripted_workers": 8,
+      "provider_requests": 0,
+      "search_requests": 0,
+      "stopped_workers": 2,
+      "late_calls_blocked": 2,
+      "received_ack": 2,
+      "docx_created": 2,
+      "unexpected_paths": 0,
+      "pending_deliveries": 0
+    },
+    "http_status_counts": {
+      "200": 37,
+      "201": 2,
+      "202": 8
+    },
+    "scripted_worker": true,
+    "installed_production_client_used": false,
+    "external_network_allowed": false
+  },
+  "unverified": [
+    "fresh live model route and latency",
+    "live search with sources",
+    "installed Android and Windows UI",
+    "ten physical voice E2E",
+    "physical microphone and speaker",
+    "Word visual document review"
+  ],
+  "privacy": {
+    "prompts_or_responses": false,
+    "credentials": false,
+    "account_ids_or_balances": false
+  },
+  "post_validation_formatting": {
+    "path": "tests/troika_product/test_working_context_tokenizer.py",
+    "only_extra_eof_blank_line_removed": true,
+    "ast_unchanged": true,
+    "tested_sha256": "cd4f861dde1667c6216879eae35a217799fcd51a7bf4bafa04450af3915efe64",
+    "final_sha256": "d092dea0b7a20effdc52a7e2b1c0a6b8fdb9e7199cae49e5a0bb6413ef3b7566"
+  }
+}
