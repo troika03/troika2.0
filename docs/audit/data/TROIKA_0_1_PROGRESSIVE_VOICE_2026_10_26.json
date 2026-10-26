@@ -135,7 +135,7 @@
     "aapt_application_id_verified": true,
     "canonical_project_classpath_pin": true,
     "diagnostic_classpath_adaptation": false,
-    "installed": false
+    "installed_at_build_validation": false
   },
   "provider_and_model_default_changed": false,
   "source_limits": {
@@ -156,5 +156,18 @@
     "A separate player per phrase differs from the reused player in phone9.",
     "Native background/reminder WIP was excluded from the HEAD-based APK build.",
     "Scoped identity guards do not establish atomic account storage or immediate silent-SSE cancellation."
-  ]
+  ],
+  "installation_after_source_stage": {
+    "date": "2026-10-26",
+    "installed": true,
+    "application_id": "com.troika.hermes_assistant.voicediagnostics",
+    "installed_apk_sha256": "e043e1f492514ac07479e59ead88f3b09a6219ebf167f29bc1c61e43d94b79c3",
+    "primary_package_metadata_unchanged": true,
+    "permissions_auto_granted": false,
+    "launched": false,
+    "packaged_server_url": "https://voice-diagnostics.invalid",
+    "developer_diagnostics_enabled": false,
+    "normal_ui_server_change_available": false,
+    "live_voice_test_performed": false
+  }
 }
