@@ -1,0 +1,160 @@
+{
+  "historical_provider_first_audio_ms": [
+    2286.86,
+    1174.916,
+    833.424
+  ],
+  "metric": "PC receipt of first positive Android position event minus first fixture bytes sent; prerecorded synthetic transport only",
+  "phone6": {
+    "verdict": "negative_completion_gate",
+    "first_position_ms": {
+      "short": 3734,
+      "long": 312,
+      "stop": 344
+    },
+    "stop_ms": 55
+  },
+  "phone8_initial": {
+    "final_cases_limited_pass": true,
+    "short_instance_count": 2,
+    "first_instance_playback_recorded": false,
+    "unexplained_instance_lifecycle": true,
+    "first_position_ms": {
+      "short": 3109,
+      "long": 547,
+      "stop": 563
+    },
+    "stop_ms": 237
+  },
+  "phone8_repeat1": {
+    "one_fresh_instance_and_get_per_case": true,
+    "limited_pass": true,
+    "first_position_ms": {
+      "short": 4297,
+      "long": 593,
+      "stop": 390
+    },
+    "short_case_elapsed_ms": 6145,
+    "stop_ms": 173
+  },
+  "release9": {
+    "one_fresh_instance_and_get_per_case": true,
+    "limited_pass": true,
+    "first_position_ms": {
+      "short": 1781,
+      "long": 343,
+      "stop": 328
+    },
+    "short_case_elapsed_ms": 2167,
+    "stop_ms": 30,
+    "events": 325,
+    "run_seconds": 50.687,
+    "apk_sha256": "71d35c05d582ee229e4aba1045c6c5ed368c708f460c21ab538420391ffc3b34",
+    "apk_bytes": 17730223,
+    "debuggable": false,
+    "same_frozen_source_as8": true,
+    "cleanup_pass": true
+  },
+  "diagnostic_transport_validation": {
+    "source_tests": 21,
+    "independent_actual_http_tests": 5,
+    "proxy_baseline": {
+      "passed": 4,
+      "failed": 5
+    },
+    "isolated_library_control": {
+      "passed": 8,
+      "failed": 1
+    },
+    "library_package_cache_changed": false
+  },
+  "diagnostic_transport_limits": {
+    "max_ram_bytes": 10485760,
+    "max_readers": 2,
+    "scratch_reader_deadline_seconds": 12,
+    "range_supported": false,
+    "silent_disconnect_detected_immediately": false
+  },
+  "build_dependency_delivery": {
+    "official_android_prebuilt_files": 68,
+    "official_android_prebuilt_git_commit": "871bf8379e5ed01ee02c5adda685374ae6c7cd1f",
+    "guava_coordinates": [
+      [
+        "com.google.guava",
+        "guava",
+        "33.0.0-android"
+      ],
+      [
+        "com.google.guava",
+        "failureaccess",
+        "1.0.2"
+      ],
+      [
+        "com.google.guava",
+        "listenablefuture",
+        "9999.0-empty-to-avoid-conflict-with-guava"
+      ]
+    ],
+    "guava_files": 10,
+    "guava_fresh_publisher_sha1_verified_files": 4,
+    "remaining_files_from_content_addressed_existing_task_cache": true,
+    "requested_dependency_versions_substituted": false
+  },
+  "date": "2026-10-26",
+  "full_voice_goal_achieved": false,
+  "production_changed": false,
+  "installed_primary_changed": false,
+  "new_provider_calls_this_source_stage": 0,
+  "own_head_flutter": {
+    "passed": 210,
+    "skipped": 2,
+    "failed": 0,
+    "separate_config_passed": 2
+  },
+  "working_flutter": {
+    "passed": 217,
+    "skipped": 2,
+    "failed": 0,
+    "separate_config_passed": 2,
+    "analysis_info": 58,
+    "analysis_warning": 0,
+    "analysis_error": 0
+  },
+  "merged_account_focused": {
+    "passed": 5,
+    "native_android_branch_executed": false
+  },
+  "source_freeze_sha256": "c3f6889efb313eb66967c7d248d1ba699ba6ffc885965d8c641816633273e57f",
+  "full_client_build": {
+    "exit_code": 0,
+    "application_id": "com.troika.hermes_assistant.voicediagnostics",
+    "build_mode": "release",
+    "apk_sha256": "e043e1f492514ac07479e59ead88f3b09a6219ebf167f29bc1c61e43d94b79c3",
+    "apk_bytes": 81424183,
+    "apk_debuggable": false,
+    "aapt_application_id_verified": true,
+    "canonical_project_classpath_pin": true,
+    "diagnostic_classpath_adaptation": false,
+    "installed": false
+  },
+  "provider_and_model_default_changed": false,
+  "source_limits": {
+    "maximum_bytes_per_phrase": 10485760,
+    "maximum_readers": 2,
+    "product_reader_deadline_seconds": 90,
+    "range_supported": false
+  },
+  "preservation": {
+    "original_tracked_wip_paths": 61,
+    "unrelated_byte_identical_paths": 55,
+    "overlapping_code_paths_semantically_merged": 5,
+    "memory_layers_three_way_merged": true,
+    "other_original_staged_paths_unchanged": 21
+  },
+  "limitations": [
+    "Prerecorded transport/player events are not acoustic or STT/model/TTS end-to-end latency.",
+    "A separate player per phrase differs from the reused player in phone9.",
+    "Native background/reminder WIP was excluded from the HEAD-based APK build.",
+    "Scoped identity guards do not establish atomic account storage or immediate silent-SSE cancellation."
+  ]
+}

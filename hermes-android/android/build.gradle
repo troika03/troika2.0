@@ -1,3 +1,23 @@
+// Keep these plugin classpaths aligned with settings.gradle.
+subprojects { targetProject ->
+    if (targetProject.path in [':just_audio', ':audio_session']) {
+        targetProject.buildscript.configurations.configureEach { configuration ->
+            if (configuration.name == 'classpath') {
+                configuration.resolutionStrategy.eachDependency { details ->
+                    if (details.requested.group == 'com.android.tools.build' &&
+                            details.requested.name == 'gradle') {
+                        details.useVersion('8.11.1')
+                    }
+                    if (details.requested.group == 'org.jetbrains.kotlin' &&
+                            details.requested.name == 'kotlin-gradle-plugin') {
+                        details.useVersion('2.2.20')
+                    }
+                }
+            }
+        }
+    }
+}
+
 allprojects {
     repositories {
         google()

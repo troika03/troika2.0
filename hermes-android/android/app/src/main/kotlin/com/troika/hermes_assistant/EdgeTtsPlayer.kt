@@ -73,6 +73,18 @@ class EdgeTtsPlayer(
     // Это убирает наложение нескольких голосов при быстрых повторных вызовах.
     private val generation = AtomicInteger(0)
 
+    // Only actual MediaPlayer completion can acknowledge a project voice report.
+    private val completedSpeechGeneration = AtomicInteger(-1)
+
+    fun speakWithResult(text: String, onResult: (Boolean) -> Unit) {
+        val expected = AtomicInteger(-1)
+        speak(text, onDone = {
+            val id = expected.get()
+            onResult(id >= 0 && generation.get() == id && completedSpeechGeneration.get() == id)
+        })
+        expected.set(generation.get())
+    }
+
     /**
      * Начать новую озвучку: глушит предыдущую (stop текущего плеера + отмена
      * стрима + отстрел старого onDone) и возвращает номер своего поколения.
@@ -398,6 +410,7 @@ class EdgeTtsPlayer(
                 currentSource.compareAndSet(source, null)
                 try { it.release() } catch (_: Exception) {}
                 player.compareAndSet(it, null)
+                if (generation.get() == myGen) completedSpeechGeneration.set(myGen)
                 invokeDoneOnce(myGen)
             }
             mp.setOnErrorListener { p, what, extra ->

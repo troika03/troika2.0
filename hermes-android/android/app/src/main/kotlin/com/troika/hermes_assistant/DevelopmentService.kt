@@ -263,7 +263,7 @@ class DevelopmentService : Service() {
             main.post {
                 if (accountMatches(identity) && SystemClock.elapsedRealtime()>=foregroundUntil && HermesListenerService.projectReportMaySpeak()) {
                     if (HermesListenerService.serviceActive) startService(Intent(this,HermesListenerService::class.java).setAction(HermesListenerService.ACTION_PAUSE_WAKE_FOR_FOREGROUND_SPEECH))
-                    player.speak("$title. $text",{ success=true; finished.countDown() },{ success=false; finished.countDown() })
+                    player.speakWithResult("$title. $text") { completed -> success=completed; finished.countDown() }
                 } else finished.countDown()
             }
             val deadline=SystemClock.elapsedRealtime()+45000

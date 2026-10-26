@@ -9,6 +9,7 @@ import '../config/troika_config.dart';
 import 'account_service.dart';
 import 'subscription_usage.dart';
 import 'own_api_service.dart';
+import 'request_identity.dart';
 
 /// Repeats an HTTP operation only when TLS negotiation failed before the
 /// request could be sent. Rebuilding the request in [operation] is required.
@@ -236,6 +237,10 @@ class ChatMessage {
 /// Использует OpenAI-совместимый Chat Completions API в общей сессии
 /// конкретной установки приложения — той же, что голосовой путь (Kotlin).
 class TroikaApiService {
+  TroikaApiService({Future<Map<String, String>> Function()? chatHeaders})
+    : _chatHeaders = chatHeaders ?? TroikaConfig.chatHeadersAsync;
+
+  final Future<Map<String, String>> Function() _chatHeaders;
   static const Duration _timeout = Duration(seconds: 90);
 
   /// Проверка подключения к Troika.
@@ -367,18 +372,23 @@ class TroikaApiService {
     }
   }
 
-  Future<AccountSubscription> getSubscription() async {
+  Future<AccountSubscription> getSubscription() =>
+      _getSubscription(TroikaRequestIdentity());
+
+  Future<AccountSubscription> _getSubscription(
+    TroikaRequestIdentity identity,
+  ) async {
+    identity.check();
     if (!TroikaConfig.apiKey.startsWith('trk_live_')) {
       throw TroikaApiException('Подписка доступна после входа в аккаунт.');
     }
     try {
-      await AccountService().ensureFreshSession();
+      await AccountService().ensureFreshSession(checkRequest: identity.check);
+      identity.check();
       final response = await http
-          .get(
-            Uri.parse(TroikaConfig.subscriptionUrl),
-            headers: TroikaConfig.headers,
-          )
+          .get(identity.uri('/v1/subscription'), headers: identity.headers())
           .timeout(const Duration(seconds: 15));
+      identity.check();
       if (response.statusCode == 401) {
         throw TroikaApiException(
           'Доступ этого устройства отозван. Войди снова.',
@@ -484,15 +494,45 @@ class TroikaApiService {
     }
   }
 
-  Future<void> _ensureDeviceDeliverySupport([http.Client? client]) async {
-    final uri = Uri.parse('${TroikaConfig.serverUrl}/v1/capabilities');
-    final response = await (client?.get(uri, headers: TroikaConfig.headers) ??
-        http.get(uri, headers: TroikaConfig.headers)).timeout(const Duration(seconds: 20));
+  Future<void> _ensureDeviceDeliverySupport(
+    TroikaRequestIdentity identity, [
+    http.Client? client,
+  ]) async {
+    final uri = identity.uri('/v1/capabilities');
+    final headers = identity.headers();
+    final response =
+        await (client?.get(uri, headers: headers) ??
+                http.get(uri, headers: headers))
+            .timeout(const Duration(seconds: 20));
+    identity.check();
     final advertised = response.statusCode == 200
-        ? json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic> : <String, dynamic>{};
+        ? json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>
+        : <String, dynamic>{};
     if ((advertised['features'] as Map?)?['device_file_delivery'] != true) {
-      throw TroikaApiException('Сервер Тройки нужно обновить для локальных файлов и разработки.');
+      throw TroikaApiException(
+        'Сервер Тройки нужно обновить для локальных файлов и разработки.',
+      );
     }
+  }
+
+  Future<Map<String, String>> _headersFor(
+    TroikaRequestIdentity identity,
+  ) async {
+    identity.check();
+    final headers = await _chatHeaders();
+    identity.check();
+    headers.addAll(await OwnApiService.headers(identity.owner));
+    identity.check();
+    if (headers.containsKey('X-Troika-Provider-Key')) {
+      final subscription = await _getSubscription(identity);
+      identity.check();
+      if (!subscription.byokEnabled) {
+        throw StateError(
+          'Сервер не поддерживает личный API. Ключ Тройки не использован.',
+        );
+      }
+    }
+    return identity.chatHeaders(headers);
   }
 
   /// Отправить сообщение (текст + опционально картинки) в общую сессию.
@@ -505,37 +545,45 @@ class TroikaApiService {
     ChatMessage message, {
     List<ChatMessage> recent = const [],
   }) async {
+    final identity = TroikaRequestIdentity();
+    identity.check();
     final messages = <Map<String, dynamic>>[
       for (final m in recent) m.toApiMessage(),
       message.toApiMessage(),
     ];
 
-    final bodyMap = <String, dynamic>{'messages': messages, 'stream': false, 'artifact_delivery': 'device'};
+    final bodyMap = <String, dynamic>{
+      'messages': messages,
+      'stream': false,
+      'artifact_delivery': 'device',
+    };
     if (TroikaConfig.model.isNotEmpty) {
       bodyMap['model'] = TroikaConfig.model;
     }
 
     try {
-      await AccountService().ensureFreshSession();
-      final uri = Uri.parse(TroikaConfig.chatCompletionsUrl);
-      await _ensureDeviceDeliverySupport();
-      // Async headers: legacy X-Hermes-Device-Context (GPS/wifi/bt) уходит с каждым
-      // запросом. Иначе Тройка не знает координат Миши пока не пройдёт
-      // wake-word диалог (Kotlin шлёт header только оттуда).
-      final chatHdrs = await TroikaConfig.chatHeadersAsync();
-      chatHdrs.addAll(await OwnApiService.headers(TroikaConfig.accountEmail));
-      if (chatHdrs.containsKey('X-Troika-Provider-Key') && !(await getSubscription()).byokEnabled) {
-        throw StateError('Сервер не поддерживает личный API. Ключ Тройки не использован.');
-      }
+      await AccountService().ensureFreshSession(checkRequest: identity.check);
+      identity.check();
+      await _ensureDeviceDeliverySupport(identity);
+      final chatHdrs = await _headersFor(identity);
+      identity.check();
       final response = await http
-          .post(uri, headers: chatHdrs, body: json.encode(bodyMap))
+          .post(
+            identity.uri('/v1/chat/completions'),
+            headers: identity.chatHeaders(chatHdrs),
+            body: json.encode(bodyMap),
+          )
           .timeout(_timeout);
+      identity.check();
 
       subscriptionUsageRevision.value++;
 
       if (response.statusCode != 200) {
         throw TroikaApiException(
-          cloudRequestError(response.statusCode, utf8.decode(response.bodyBytes)),
+          cloudRequestError(
+            response.statusCode,
+            utf8.decode(response.bodyBytes),
+          ),
           statusCode: response.statusCode,
         );
       }
@@ -543,7 +591,9 @@ class TroikaApiService {
       final data = json.decode(utf8.decode(response.bodyBytes));
       final assistantMessage =
           data['choices'][0]['message']['content'] as String? ?? '';
+      identity.check();
       await FilesService().recoverPending();
+      identity.check();
       return assistantMessage;
     } on SocketException {
       throw TroikaApiException(
@@ -576,6 +626,8 @@ class TroikaApiService {
     Future<String> Function(RunApprovalRequest request)? onApproval,
     FutureOr<void> Function(String runId)? onRunStarted,
   }) async {
+    final identity = TroikaRequestIdentity();
+    identity.check();
     // 1) Стартуем run. input = только новое сообщение; историю сервер берёт
     //    из общей сессии. recent шлём как conversation_history для надёжности.
     final history = <Map<String, dynamic>>[
@@ -584,28 +636,27 @@ class TroikaApiService {
     final inputContent = message.toApiMessage()['content'];
     final startBody = <String, dynamic>{
       'input': inputContent is String ? inputContent : [message.toApiMessage()],
-      'session_id': TroikaConfig.sessionId,
+      'session_id': identity.session,
       'artifact_delivery': 'device',
       if (history.isNotEmpty) 'conversation_history': history,
     };
 
     final client = http.Client();
     try {
-      await AccountService().ensureFreshSession();
-      await _ensureDeviceDeliverySupport(client);
-      // Async headers — с device_context (GPS) для streaming-пути тоже.
-      final chatHdrs = await TroikaConfig.chatHeadersAsync();
-      chatHdrs.addAll(await OwnApiService.headers(TroikaConfig.accountEmail));
-      if (chatHdrs.containsKey('X-Troika-Provider-Key') && !(await getSubscription()).byokEnabled) {
-        throw StateError('Сервер не поддерживает личный API. Ключ Тройки не использован.');
-      }
+      await AccountService().ensureFreshSession(checkRequest: identity.check);
+      identity.check();
+      await _ensureDeviceDeliverySupport(identity, client);
+      final chatHdrs = await _headersFor(identity);
+      identity.check();
       final startResp = await retryTlsHandshake(() {
-        final request = http.Request('POST', Uri.parse(TroikaConfig.runsUrl))
-          ..headers.addAll(chatHdrs)
+        final request = http.Request('POST', identity.uri('/v1/runs'))
+          ..headers.addAll(identity.chatHeaders(chatHdrs))
           ..body = json.encode(startBody);
         return client.send(request).timeout(_timeout);
       });
+      identity.check();
       final startBodyStr = await startResp.stream.bytesToString();
+      identity.check();
       subscriptionUsageRevision.value++;
       // Сервер отдаёт 202 Accepted (run стартовал асинхронно), реже 200.
       if (startResp.statusCode != 200 && startResp.statusCode != 202) {
@@ -620,14 +671,19 @@ class TroikaApiService {
         throw TroikaApiException('Сервер не вернул run_id.');
       }
       await onRunStarted?.call(runId);
+      identity.check();
 
       // 2) Слушаем поток событий.
-      final evUri = Uri.parse('${TroikaConfig.runsUrl}/$runId/events');
+      final evUri = identity.uri(
+        '/v1/runs/${Uri.encodeComponent(runId)}/events',
+      );
       final evResp = await retryTlsHandshake(() {
+        identity.check();
         final request = http.Request('GET', evUri)
-          ..headers.addAll(TroikaConfig.headers);
+          ..headers.addAll(identity.headers());
         return client.send(request).timeout(_timeout);
       });
+      identity.check();
       if (evResp.statusCode != 200) {
         throw TroikaApiException(
           'Поток событий недоступен (${evResp.statusCode}).',
@@ -637,9 +693,11 @@ class TroikaApiService {
       final answer = StringBuffer();
       String lastThought = '';
       bool runFailed = false;
-      await for (final raw in evResp.stream
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())) {
+      await for (final raw
+          in evResp.stream
+              .transform(utf8.decoder)
+              .transform(const LineSplitter())) {
+        identity.check();
         final line = raw.trim();
         if (line.isEmpty || !line.startsWith('data:')) continue;
         final payload = line.substring(5).trim();
@@ -652,6 +710,7 @@ class TroikaApiService {
         }
         final activity = WebSourceActivity.fromJson(ev['web_activity']);
         if (activity != null) onWebActivity?.call(activity);
+        identity.check();
         switch (ev['event']) {
           case 'reasoning.available':
             final t = (ev['text'] ?? '').toString().trim();
@@ -668,9 +727,11 @@ class TroikaApiService {
               (ev['tool'] ?? '').toString(),
               ev['error'] == true,
             );
+            identity.check();
             final rawResult = ev['result'];
             if (rawResult is Map<String, dynamic>) {
               await onResult?.call(RunActionResult.fromJson(rawResult));
+              identity.check();
             }
             break;
           case 'message.delta':
@@ -687,8 +748,8 @@ class TroikaApiService {
                 : const <String>['once', 'deny'];
             final request = RunApprovalRequest(
               action: (ev['action'] ?? 'Подтвердить действие').toString(),
-              description:
-                  (ev['description'] ?? 'Подтвердить действие?').toString(),
+              description: (ev['description'] ?? 'Подтвердить действие?')
+                  .toString(),
               choices: choices,
             );
             String choice = 'deny';
@@ -696,11 +757,14 @@ class TroikaApiService {
               try {
                 choice = await onApproval(request);
               } catch (_) {
+                identity.check();
                 choice = 'deny';
               }
             }
+            identity.check();
             if (!choices.contains(choice)) choice = 'deny';
-            await _resolveRunApproval(client, runId, choice);
+            await _resolveRunApproval(client, runId, choice, identity);
+            identity.check();
             break;
           case 'run.failed':
             runFailed = true;
@@ -711,18 +775,21 @@ class TroikaApiService {
         }
       }
 
+      identity.check();
       final full = answer.toString().trim();
       if (runFailed && full.isEmpty) {
         // Run упал на сервере — достаём причину из статуса, чтобы показать
         // понятную ошибку, а не пустой пузырь.
-        final reason = await _fetchRunError(client, runId);
+        final reason = await _fetchRunError(client, runId, identity);
         throw TroikaApiException(reason);
       }
       if (full.isEmpty) {
         // Финал не пришёл дельтами — добираем через статус run.
-        final r = await _fetchRunResult(client, runId);
+        final r = await _fetchRunResult(client, runId, identity);
         if (r.isEmpty) {
-          throw TroikaApiException(await _fetchRunError(client, runId));
+          throw TroikaApiException(
+            await _fetchRunError(client, runId, identity),
+          );
         }
         return r;
       }
@@ -756,13 +823,17 @@ class TroikaApiService {
     http.Client client,
     String runId,
     String choice,
+    TroikaRequestIdentity identity,
   ) async {
-    final uri = Uri.parse('${TroikaConfig.runsUrl}/$runId/approval');
+    final uri = identity.uri('/v1/runs/${Uri.encodeComponent(runId)}/approval');
     final response = await client
-        .post(uri,
-            headers: TroikaConfig.headers,
-            body: json.encode({'choice': choice}))
+        .post(
+          uri,
+          headers: identity.headers(),
+          body: json.encode({'choice': choice}),
+        )
         .timeout(const Duration(seconds: 20));
+    identity.check();
     if (response.statusCode != 200) {
       throw TroikaApiException(
         'Не удалось подтвердить действие (${response.statusCode}).',
@@ -771,13 +842,18 @@ class TroikaApiService {
   }
 
   /// Достаёт человеко-понятную причину падения run из его статуса.
-  Future<String> _fetchRunError(http.Client client, String runId) async {
+  Future<String> _fetchRunError(
+    http.Client client,
+    String runId,
+    TroikaRequestIdentity identity,
+  ) async {
     try {
-      final uri = Uri.parse('${TroikaConfig.runsUrl}/$runId');
-      final req = http.Request('GET', uri)
-        ..headers.addAll(TroikaConfig.headers);
+      final uri = identity.uri('/v1/runs/${Uri.encodeComponent(runId)}');
+      final req = http.Request('GET', uri)..headers.addAll(identity.headers());
       final resp = await client.send(req).timeout(const Duration(seconds: 20));
+      identity.check();
       final body = await resp.stream.bytesToString();
+      identity.check();
       final data = json.decode(body) as Map<String, dynamic>;
       final err = (data['error'] ?? '').toString();
       if (err.contains('402') || err.toLowerCase().contains('credits')) {
@@ -787,24 +863,35 @@ class TroikaApiService {
         return 'Тройка временно перегружена. Попробуй через минуту.';
       }
       return 'Тройка не смогла выполнить задачу. Попробуй ещё раз.';
+    } on RequestIdentityChanged {
+      rethrow;
     } catch (_) {
+      identity.check();
       return 'Тройка не смогла выполнить задачу. Попробуй ещё раз.';
     }
   }
 
   /// Запасной путь: если message.delta не пришли — берём готовый ответ run.
-  Future<String> _fetchRunResult(http.Client client, String runId) async {
+  Future<String> _fetchRunResult(
+    http.Client client,
+    String runId,
+    TroikaRequestIdentity identity,
+  ) async {
     try {
-      final uri = Uri.parse('${TroikaConfig.runsUrl}/$runId');
-      final req = http.Request('GET', uri)
-        ..headers.addAll(TroikaConfig.headers);
+      final uri = identity.uri('/v1/runs/${Uri.encodeComponent(runId)}');
+      final req = http.Request('GET', uri)..headers.addAll(identity.headers());
       final resp = await client.send(req).timeout(const Duration(seconds: 30));
+      identity.check();
       final body = await resp.stream.bytesToString();
+      identity.check();
       if (resp.statusCode != 200) return '';
       final data = json.decode(body) as Map<String, dynamic>;
       final out = data['output'] ?? data['result'] ?? data['content'] ?? '';
       return _extractText(out).trim();
+    } on RequestIdentityChanged {
+      rethrow;
     } catch (_) {
+      identity.check();
       return '';
     }
   }

@@ -38,7 +38,9 @@ enum BackgroundVoiceState {
 
 class AssistantService extends ChangeNotifier {
   AssistantService({ReminderDeliveryService? replyDelivery})
-      : _replyDelivery = replyDelivery ?? ReminderDeliveryService.instance;
+      : _replyDelivery = replyDelivery ?? ReminderDeliveryService.instance {
+    TroikaConfig.voiceIdentityChanges.addListener(_voiceIdentityChanged);
+  }
 
   final ReminderDeliveryService _replyDelivery;
   static const _lastResultKey = 'troika_last_action_result';
@@ -73,6 +75,61 @@ class AssistantService extends ChangeNotifier {
   bool _accountSyncInFlight = false;
   bool _projectReportSpeaking = false;
   bool _projectReportInterrupted = false;
+  bool _disposed = false;
+  int _turnGeneration = 0;
+  _AssistantTurn? _activeTurn;
+
+  bool _isCurrentTurn(_AssistantTurn turn) =>
+      !_disposed &&
+      !turn.cancelled &&
+      identical(_activeTurn, turn) &&
+      turn.generation == _turnGeneration &&
+      turn.identityMatches;
+
+  void _checkTurn(_AssistantTurn turn) {
+    if (!_isCurrentTurn(turn)) throw const _TurnCancelled();
+  }
+
+  Future<void> _stopOwnedRun(_AssistantTurn turn) {
+    final id = turn.runId;
+    // stopRun builds current headers and endpoint: never redirect an old ID to
+    // a new owner or origin. A late start callback may supply the ID after Stop.
+    if (id == null || !turn.identityMatches) return Future<void>.value();
+    return turn.stopRequest ??= _troika.stopRun(id).catchError((Object _) {
+      if (!_disposed && _activeTurn == null &&
+          _turnGeneration == turn.generation + 1 && turn.identityMatches) {
+        _errorMessage = 'Звук остановлен. Не удалось остановить запрос на сервере.';
+        notifyListeners();
+      }
+    });
+  }
+
+  Future<void> _invalidateTurn() {
+    ++_turnGeneration;
+    final turn = _activeTurn;
+    _activeTurn = null;
+    if (turn != null) {
+      turn.cancelled = true;
+      final pending = turn.pending;
+      if (pending != null) {
+        pending.pending = false;
+        if (pending.text.isEmpty) _messages.remove(pending);
+        pending.webSources.finish();
+      }
+      unawaited(_stopOwnedRun(turn));
+    }
+    resolvePendingApproval('deny');
+    // Calling stop invalidates speech synchronously, before platform/network IO.
+    return _tts.stop();
+  }
+
+  void _voiceIdentityChanged() {
+    if (_disposed) return;
+    unawaited(_invalidateTurn().catchError((Object _) {}));
+    _actionInProgress = false;
+    _activityStatus = '';
+    _setState(AssistantState.idle);
+  }
 
   Future<bool> speakProjectReport(String text) async {
     if (_state != AssistantState.idle ||
@@ -536,12 +593,16 @@ class AssistantService extends ChangeNotifier {
   Future<void> interrupt() async {
     // Останавливаем И Flutter-side TTS, И нативный Edge TTS player из
     // HermesListenerService — Тройка молчит сразу.
-    try {
-      await _platform.invokeMethod('interruptTts');
-    } catch (_) {}
-    await _tts.stop();
-    await _recorder.cancelRecording();
-    _setState(AssistantState.idle);
+    final stopping = _invalidateTurn();
+    _projectReportInterrupted = true;
+    _actionInProgress = false;
+    _activityStatus = '';
+    if (!_disposed) _setState(AssistantState.idle);
+    await Future.wait<void>([
+      stopping,
+      _platform.invokeMethod<void>('interruptTts').catchError((Object _) {}),
+      _recorder.cancelRecording(),
+    ]);
   }
 
   Future<String> _waitForApproval(RunApprovalRequest request) async {
@@ -557,7 +618,7 @@ class AssistantService extends ChangeNotifier {
       if (identical(_approvalCompleter, completer)) {
         _approvalCompleter = null;
         _pendingApproval = null;
-        notifyListeners();
+        if (!_disposed) notifyListeners();
       }
     }
   }
@@ -578,7 +639,11 @@ class AssistantService extends ChangeNotifier {
     bool speak = false,
     bool fromVoice = false,
   }) async {
-    if (text.trim().isEmpty && imageDataUrls.isEmpty) return;
+    if (_disposed || (text.trim().isEmpty && imageDataUrls.isEmpty)) return;
+
+    unawaited(_invalidateTurn().catchError((Object _) {}));
+    final turn = _AssistantTurn(++_turnGeneration);
+    _activeTurn = turn;
 
     _lastUserText = text;
     _activityStatus = '';
@@ -590,6 +655,7 @@ class AssistantService extends ChangeNotifier {
     );
     _messages.add(userMsg);
     final pending = ChatMessage(role: 'assistant', pending: true);
+    turn.pending = pending;
     _webSources = pending.webSources;
     _messages.add(pending);
     _setState(AssistantState.processing);
@@ -601,6 +667,7 @@ class AssistantService extends ChangeNotifier {
           text,
           preferAgentConversation: TroikaConfig.serverUrl.trim().isNotEmpty,
         );
+        _checkTurn(turn);
         if (local.handled) {
           _queueUiAction(local, text);
           final response = local.response.isEmpty ? 'Готово' : local.response;
@@ -616,6 +683,7 @@ class AssistantService extends ChangeNotifier {
           if (speak) {
             _setState(AssistantState.speaking);
             await _tts.speak(response);
+            _checkTurn(turn);
           }
           _setState(AssistantState.idle);
           return;
@@ -634,6 +702,7 @@ class AssistantService extends ChangeNotifier {
         if (speak) {
           _setState(AssistantState.speaking);
           await _tts.speak(response);
+          _checkTurn(turn);
         }
         _setState(AssistantState.idle);
         return;
@@ -644,34 +713,47 @@ class AssistantService extends ChangeNotifier {
       final successfulTools = <String>[];
       RunActionResult? structuredResult;
       final voiceText = StringBuffer();
-      if (speak) _tts.beginReply();
+      if (speak) turn.speech = _tts.beginReply();
       final response = await _troika.streamMessage(
         userMsg,
         recent: _recentContext(),
+        onRunStarted: (id) async {
+          turn.runId = id;
+          if (!_isCurrentTurn(turn)) {
+            await _stopOwnedRun(turn);
+            throw const _TurnCancelled();
+          }
+        },
         onWebActivity: (activity) {
+          _checkTurn(turn);
           pending.webSources.apply(activity);
           _activityStatus = pending.webSources.label;
           notifyListeners();
         },
         onThought: (t) {
+          _checkTurn(turn);
           pending.thoughts.add(ThoughtStep(ThoughtKind.thinking, t));
           notifyListeners();
         },
         onToolStart: (tool) {
+          _checkTurn(turn);
           _actionInProgress = true;
           _activityStatus = safeActivityStatusForTool(tool);
           pending.thoughts.add(ThoughtStep(ThoughtKind.toolStart, tool));
           notifyListeners();
         },
         onToolDone: (tool, isErr) {
+          _checkTurn(turn);
           pending.thoughts
               .add(ThoughtStep(ThoughtKind.toolDone, tool, isError: isErr));
           if (!isErr && tool.trim().isNotEmpty) successfulTools.add(tool);
           notifyListeners();
         },
         onResult: (result) async {
+          _checkTurn(turn);
           if (result.kind == 'file_pending' && result.artifact != null) {
             final file = await FilesService().receiveDeviceFile(result.artifact!);
+            _checkTurn(turn);
             structuredResult = RunActionResult(kind: 'file', id: file.id,
                 title: '${file.name} — сохранён на устройстве');
           } else {
@@ -679,21 +761,29 @@ class AssistantService extends ChangeNotifier {
           }
         },
         onDelta: (d) {
+          _checkTurn(turn);
           if (speak) {
             voiceText.write(d);
-            _tts.addReplyDelta(d);
+            turn.speech?.add(d);
           }
           // Чистим накопленный текст от тега на каждом апдейте, чтобы
           // [emo:...] не мелькал в пузыре пока идёт стрим.
           pending.text = _stripEmoTag(pending.text + d);
           notifyListeners();
         },
-        onApproval: _waitForApproval,
+        onApproval: (request) async {
+          _checkTurn(turn);
+          final choice = await _waitForApproval(request);
+          _checkTurn(turn);
+          return choice;
+        },
       );
+      _checkTurn(turn);
       var cleanResponse = _stripEmoTag(response);
       final reminderSync = _replyDelivery.sync();
       final waitsForReminder = structuredResult?.kind == 'reminder';
       final reminderStatus = waitsForReminder ? await reminderSync : null;
+      _checkTurn(turn);
       if (!waitsForReminder) unawaited(reminderSync);
       if (structuredResult?.kind == 'reminder' && Platform.isAndroid) {
         if (reminderStatus == null) {
@@ -724,28 +814,35 @@ class AssistantService extends ChangeNotifier {
         _setState(AssistantState.speaking);
         final streamed = _stripEmoTag(voiceText.toString());
         if (streamed.isEmpty) {
-          _tts.addReplyDelta(cleanResponse);
+          turn.speech?.add(cleanResponse);
         } else if (cleanResponse.startsWith(streamed)) {
-          _tts.addReplyDelta(cleanResponse.substring(streamed.length));
+          turn.speech?.add(cleanResponse.substring(streamed.length));
         }
         try {
-          await _tts.finishReply();
+          await turn.speech?.finish();
+          _checkTurn(turn);
         } catch (_) {
+          _checkTurn(turn);
           // Keep the received result visible when audio delivery fails.
           _errorMessage = 'Ответ получен. Голос сейчас недоступен.';
         }
       }
       _setState(AssistantState.idle);
     } catch (e) {
-      if (speak) await _tts.stop();
+      if (!_isCurrentTurn(turn)) return;
+      await turn.speech?.cancel();
+      if (!_isCurrentTurn(turn)) return;
       _messages.remove(pending);
       _setError(safeErrorMessage(e));
     } finally {
-      _actionInProgress = false;
-      pending.webSources.finish();
-      _activityStatus = '';
-      notifyListeners();
-      if (_wakeWordEnabled) await _startWakeWordListening();
+      if (_isCurrentTurn(turn)) {
+        _activeTurn = null;
+        _actionInProgress = false;
+        pending.webSources.finish();
+        _activityStatus = '';
+        notifyListeners();
+        if (_wakeWordEnabled) await _startWakeWordListening();
+      }
     }
   }
 
@@ -826,6 +923,7 @@ class AssistantService extends ChangeNotifier {
   }
 
   void _setState(AssistantState s) {
+    if (_disposed) return;
     if (_projectReportSpeaking &&
         (s == AssistantState.recording ||
             s == AssistantState.processing ||
@@ -838,12 +936,15 @@ class AssistantService extends ChangeNotifier {
   }
 
   void _setError(String msg) {
+    if (_disposed) return;
+    final generation = _turnGeneration;
     _errorMessage = msg;
     _state = AssistantState.error;
     notifyListeners();
 
     Future.delayed(const Duration(seconds: 4), () {
-      if (_state == AssistantState.error) {
+      if (!_disposed && generation == _turnGeneration &&
+          _state == AssistantState.error) {
         _state = AssistantState.idle;
         if (_wakeWordEnabled) _startWakeWordListening();
         notifyListeners();
@@ -853,6 +954,10 @@ class AssistantService extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    TroikaConfig.voiceIdentityChanges.removeListener(_voiceIdentityChanged);
+    unawaited(_invalidateTurn().catchError((Object _) {}));
     DevelopmentAutopilotService.instance.speakWhenIdle = null;
     DevelopmentAutopilotService.instance.stopSpeakingReport = null;
     _accountSyncTimer?.cancel();
@@ -862,4 +967,30 @@ class AssistantService extends ChangeNotifier {
     _wakeWord.dispose();
     super.dispose();
   }
+}
+
+class _AssistantTurn {
+  _AssistantTurn(this.generation)
+      : revision = TroikaConfig.voiceIdentityRevision,
+        owner = TroikaConfig.accountEmail,
+        endpoint = TroikaConfig.serverUrl,
+        session = TroikaConfig.sessionId;
+
+  final int generation, revision;
+  final String owner, endpoint, session;
+  bool cancelled = false;
+  String? runId;
+  ChatMessage? pending;
+  SpeechReply? speech;
+  Future<void>? stopRequest;
+
+  bool get identityMatches =>
+      revision == TroikaConfig.voiceIdentityRevision &&
+      owner == TroikaConfig.accountEmail &&
+      endpoint == TroikaConfig.serverUrl &&
+      session == TroikaConfig.sessionId;
+}
+
+class _TurnCancelled implements Exception {
+  const _TurnCancelled();
 }

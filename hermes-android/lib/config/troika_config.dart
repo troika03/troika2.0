@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
 import 'dart:math';
 import 'package:flutter/services.dart' show MethodChannel;
+import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/reminder_delivery_service.dart';
 
@@ -85,6 +87,46 @@ class TroikaConfig {
   static late String _sessionKey;
   static late String _sessionId;
 
+  static final _voiceRevision = ValueNotifier<int>(0);
+  static bool _voiceSessionChanging = false;
+  static int _voiceIdentityOperation = 0;
+  static ValueListenable<int> get voiceIdentityChanges => _voiceRevision;
+  static int get voiceIdentityRevision => _voiceRevision.value;
+  static bool get voiceSessionAvailable => signedIn && !_voiceSessionChanging;
+
+  static int _beginVoiceIdentityChange() {
+    _voiceSessionChanging = true;
+    final operation = ++_voiceIdentityOperation;
+    _voiceRevision.value++;
+    return operation;
+  }
+
+  static void _finishVoiceIdentityChange(int operation) {
+    if (operation != _voiceIdentityOperation) return;
+    _voiceSessionChanging = false;
+    _voiceRevision.value++;
+  }
+
+  static Future<void> _setVoiceServerUrl(String url) async {
+    final operation = _beginVoiceIdentityChange();
+    try {
+      await _setStringCompat(_keyServerUrl, _legacyKeyServerUrl, url);
+      _finishVoiceIdentityChange(operation);
+    } catch (_) {
+      // A failed identity change cannot resume audio authorized for the old one.
+    }
+  }
+
+  static Future<void> _setVoiceApiKey(String key) async {
+    final operation = _beginVoiceIdentityChange();
+    try {
+      await _setStringCompat(_keyApiKey, _legacyKeyApiKey, key);
+      _finishVoiceIdentityChange(operation);
+    } catch (_) {
+      // Settings replacement is a new credential, unlike same-owner refresh.
+    }
+  }
+
   static Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
     await _migrateLegacyPreferences();
@@ -92,11 +134,7 @@ class TroikaConfig {
     _sessionKey = _prefs.getString(_keySessionKey)?.trim() ?? '';
     if (_sessionKey.isEmpty) {
       _sessionKey = 'mobile-${_newOpaqueId()}';
-      await _setStringCompat(
-        _keySessionKey,
-        _legacyKeySessionKey,
-        _sessionKey,
-      );
+      await _setStringCompat(_keySessionKey, _legacyKeySessionKey, _sessionKey);
     }
     _sessionId = _prefs.getString(_keySessionId)?.trim() ?? '';
     if (_sessionId.isEmpty) {
@@ -105,6 +143,8 @@ class TroikaConfig {
       _sessionId = _sessionKey;
       await _setStringCompat(_keySessionId, _legacyKeySessionId, _sessionId);
     }
+    _voiceSessionChanging = false;
+    _voiceRevision.value++;
   }
 
   static Future<void> _migrateLegacyPreferences() async {
@@ -141,7 +181,8 @@ class TroikaConfig {
     final accountEmail =
         _prefs.getString(_keyAccountEmail)?.trim().toLowerCase() ?? '';
     final legacyBetaAccount = accountEmail.endsWith('@beta.troika.local');
-    final legacyLocalDesktop = !Platform.isAndroid &&
+    final legacyLocalDesktop =
+        !Platform.isAndroid &&
         !Platform.isIOS &&
         accountEmail.isEmpty &&
         (currentUrl == 'http://127.0.0.1:8642' ||
@@ -223,13 +264,23 @@ class TroikaConfig {
   static String get serverUrl =>
       _prefs.getString(_keyServerUrl) ?? defaultServerUrl;
 
-  static set serverUrl(String url) =>
-      _setStringCompat(_keyServerUrl, _legacyKeyServerUrl, url);
+  static set serverUrl(String url) {
+    if (url == serverUrl) {
+      unawaited(_setStringCompat(_keyServerUrl, _legacyKeyServerUrl, url));
+    } else {
+      unawaited(_setVoiceServerUrl(url));
+    }
+  }
 
   static String get apiKey => _prefs.getString(_keyApiKey) ?? defaultApiKey;
 
-  static set apiKey(String key) =>
-      _setStringCompat(_keyApiKey, _legacyKeyApiKey, key);
+  static set apiKey(String key) {
+    if (key == apiKey) {
+      unawaited(_setStringCompat(_keyApiKey, _legacyKeyApiKey, key));
+    } else {
+      unawaited(_setVoiceApiKey(key));
+    }
+  }
 
   static String get accountEmail =>
       _prefs.getString(_keyAccountEmail)?.trim() ?? '';
@@ -244,29 +295,42 @@ class TroikaConfig {
     double accessExpiresAt = 0,
     String homeSessionId = '',
   }) async {
-    await _prefs.setString(_keyAccountEmail, email.trim().toLowerCase());
-    await _setStringCompat(_keyApiKey, _legacyKeyApiKey, token.trim());
-    if (accessExpiresAt > 0) {
-      await _prefs.setInt(
-        _keyAccessTokenExpiresAt,
-        (accessExpiresAt * 1000).round(),
-      );
-    }
-    if (refreshToken.isNotEmpty) await storeRefreshToken(refreshToken);
-    final sharedSession = homeSessionId.trim();
-    if (sharedSession.isNotEmpty) {
-      _sessionKey = sharedSession;
-      _sessionId = sharedSession;
-      await _setStringCompat(
-        _keySessionKey,
-        _legacyKeySessionKey,
-        sharedSession,
-      );
-      await _setStringCompat(
-        _keySessionId,
-        _legacyKeySessionId,
-        sharedSession,
-      );
+    final changesIdentity =
+        !signedIn ||
+        _voiceSessionChanging ||
+        email.trim().toLowerCase() != accountEmail ||
+        (homeSessionId.trim().isNotEmpty && homeSessionId.trim() != _sessionId);
+    final operation = changesIdentity ? _beginVoiceIdentityChange() : null;
+    var saved = false;
+    try {
+      await _prefs.setString(_keyAccountEmail, email.trim().toLowerCase());
+      await _setStringCompat(_keyApiKey, _legacyKeyApiKey, token.trim());
+      if (accessExpiresAt > 0) {
+        await _prefs.setInt(
+          _keyAccessTokenExpiresAt,
+          (accessExpiresAt * 1000).round(),
+        );
+      }
+      if (refreshToken.isNotEmpty) await storeRefreshToken(refreshToken);
+      final sharedSession = homeSessionId.trim();
+      if (sharedSession.isNotEmpty) {
+        _sessionKey = sharedSession;
+        _sessionId = sharedSession;
+        await _setStringCompat(
+          _keySessionKey,
+          _legacyKeySessionKey,
+          sharedSession,
+        );
+        await _setStringCompat(
+          _keySessionId,
+          _legacyKeySessionId,
+          sharedSession,
+        );
+      }
+
+      saved = true;
+    } finally {
+      if (saved && operation != null) _finishVoiceIdentityChange(operation);
     }
   }
 
@@ -283,10 +347,9 @@ class TroikaConfig {
     }
     try {
       const platform = MethodChannel('com.troika.hermes/background');
-      return await platform.invokeMethod<bool>(
-            'storeRefreshToken',
-            {'token': token},
-          ) ??
+      return await platform.invokeMethod<bool>('storeRefreshToken', {
+            'token': token,
+          }) ??
           false;
     } catch (_) {
       return false;
@@ -313,6 +376,7 @@ class TroikaConfig {
   }
 
   static Future<void> signOut() async {
+    _beginVoiceIdentityChange();
     await ReminderDeliveryService.instance.clear();
     await setPhoneControlEnabled(false);
     await clearRefreshToken();
@@ -341,11 +405,7 @@ class TroikaConfig {
       _setBoolCompat(_keyWakeWordEnabled, _legacyKeyWakeWordEnabled, v);
 
   static Future<void> saveWakeWordEnabled(bool value) async {
-    await _setBoolCompat(
-      _keyWakeWordEnabled,
-      _legacyKeyWakeWordEnabled,
-      value,
-    );
+    await _setBoolCompat(_keyWakeWordEnabled, _legacyKeyWakeWordEnabled, value);
   }
 
   static String get themeMode => _prefs.getString(_keyThemeMode) ?? 'system';
@@ -438,8 +498,9 @@ class TroikaConfig {
   /// Legacy local installations keep their separate STT proxy.
   static Uri get transcriptionUri {
     final base = Uri.parse(serverUrl);
-    final sttBase =
-        apiKey.startsWith('trk_live_') ? base : base.replace(port: 8643);
+    final sttBase = apiKey.startsWith('trk_live_')
+        ? base
+        : base.replace(port: 8643);
     return sttBase.replace(
       path:
           '${base.path.replaceAll(RegExp(r'/+$'), '')}/v1/audio/transcriptions',
@@ -481,13 +542,10 @@ class TroikaConfig {
   /// rotate the conversation identity so a later sign-in cannot reuse the
   /// revoked device's server-linked session.
   static Future<void> clearRevokedDevice() async {
+    _beginVoiceIdentityChange();
     await setPhoneControlEnabled(false);
     await clearRefreshToken();
-    await _setBoolCompat(
-      _keyWakeWordEnabled,
-      _legacyKeyWakeWordEnabled,
-      false,
-    );
+    await _setBoolCompat(_keyWakeWordEnabled, _legacyKeyWakeWordEnabled, false);
     await _setBoolCompat(
       _keyLocationContextEnabled,
       _legacyKeyLocationContextEnabled,
@@ -503,23 +561,16 @@ class TroikaConfig {
 
   /// Remove credentials and server-linked state after deletion was accepted.
   static Future<void> clearDeletedAccount() async {
+    _beginVoiceIdentityChange();
     await setPhoneControlEnabled(false);
     await clearRefreshToken();
-    await _setBoolCompat(
-      _keyWakeWordEnabled,
-      _legacyKeyWakeWordEnabled,
-      false,
-    );
+    await _setBoolCompat(_keyWakeWordEnabled, _legacyKeyWakeWordEnabled, false);
     await _setBoolCompat(
       _keyLocationContextEnabled,
       _legacyKeyLocationContextEnabled,
       false,
     );
-    await _setBoolCompat(
-      _keyOnboardingDone,
-      _legacyKeyOnboardingDone,
-      false,
-    );
+    await _setBoolCompat(_keyOnboardingDone, _legacyKeyOnboardingDone, false);
     await _removeCompat(_keyApiKey, _legacyKeyApiKey);
     await _prefs.remove(_keyAccountEmail);
     await _removeCompat(_keySessionKey, _legacyKeySessionKey);
@@ -560,8 +611,9 @@ class TroikaConfig {
     if (!Platform.isAndroid) return null;
     try {
       const platform = MethodChannel('com.troika.hermes/background');
-      final value =
-          (await platform.invokeMethod<String>('getTimeZoneId'))?.trim();
+      final value = (await platform.invokeMethod<String>(
+        'getTimeZoneId',
+      ))?.trim();
       if (value == null || value.isEmpty || value.length > 100) return null;
       if (value != 'UTC' && !value.contains('/')) return null;
       return value;

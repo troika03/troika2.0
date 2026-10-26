@@ -1,6 +1,6 @@
 # Troika: текущая память проекта
 
-Обновлено 2026-10-24. Краткий рабочий срез; история находится в Git и
+Обновлено 2026-10-26. Краткий рабочий срез; история находится в Git и
 [архиве](docs/archive/README.md). Результаты проверок и дефекты хранятся в
 [аудите функций](docs/TROIKA_FUNCTIONAL_AUDIT.md), без дублирования здесь.
 
@@ -15,7 +15,7 @@
 содержат точные ссылки. Завершённые изменения коммитить и отправлять
 `git push origin HEAD:main`; чужой WIP не включать.
 
-## Troika 0.1: диагностика и локальные критерии — 22–24 октября 2026
+## Troika 0.1: диагностика и локальные критерии — 22–26 октября 2026
 
 Приоритет владельца от 24 октября — сократить живой голосовой ответ с 5–10 с
 до почти мгновенного. Рабочий ориентир: 1–2 с от конца реплики до начала
@@ -27,7 +27,7 @@
 Ollama probe для настоящего OpenRouter URL, сохранён известный разделитель
 проверенной фразы для немедленного выпуска в TTS, ordinary Flutter reply
 не ждёт reminder sync. Reminder receipts/warnings и completion guard сохранены.
-Native reminder WIP не изменён. Основной runtime не переключался.
+Native reminder WIP сохранён отдельно. Основной runtime не переключался.
 
 Бесплатная фиксированная NVIDIA проверена с tools: 3/3 fixture loops.
 В прямом запросе временным ключом greeting 10/10, первый текст p50/p95
@@ -59,10 +59,13 @@ Default продукта остаётся openrouter/free. Локального 
 ещё 24 nonzero файлов без summary. Источники не менялись.
 Это другой cap относительно прежних 600 с; общий набор остаётся красным.
 Последующий целевой повтор 37 файлов: 668 passed, 0 failed, 0 skipped.
-Flutter HEAD + собственный patch: 15 passed и чистый analyze; working full:
-139 passed / 2 skipped, оба skip отдельно 2 passed. Analyze exit 0, 58 info.
-Новая diagnostics APK собрана и проверена, не установлена. Все доказательства
-и границы проверки — в отчёте быстрого голоса; счётчики повторов не складываются.
+Текущий HEAD-based Flutter-кандидат: 210 passed / 2 skipped; оба config cases отдельно 2 passed. Working с сохранённым WIP: 217 passed / 2 skipped, оба skip отдельно 2 passed. Analyze без ошибок и предупреждений, 58 info. Отдельные пять merged Account/Config cases прошли; Android native branch проверен статически.
+
+25–26 октября Android foreground получил stream:true и ограниченный RAM MP3 source с корректным chunked EOF. Естественный голос и default openrouter/free сохранены. Per-turn Stop, поздние callbacks и смена identity защищены; narrow chat/speech preflight больше не сочетает старый Bearer с новым origin. Сам backend/Python не менялся. Native background/reminder WIP исключён из commit и APK.
+
+На телефоне отдельный release probe с заранее подготовленным Fish начал сообщать положительную позицию через 1781/343/328 мс после первых PC-байтов; Stop 30 мс. Это не acoustic onset или полный голосовой E2E. Пользователь подтвердил слышимость/отсутствие повторов/Stop в предшествующем APK8 run. Все диагностические APK/reverse удалены, RAM fixtures закрыты, основное приложение сохранено.
+
+Полный HEAD-based клиент собран в отдельную release APK с canonical pin AGP8.11.1/Kotlin2.2.20 только для двух audio-плагинов; APK не устанавливалась. Новая реализация создаёт player на фразу; тёплые показатели probe с одним player на три cases её скорость не доказывают. Полный стабильный голос 1–2 с остаётся незакрытым. Подробности и ограничения — в новом аудите потокового голоса.
 
 Новые loopback проверки подтвердили auth двух устройств, durable history,
 refresh/replay/logout и owner isolation; Stop блокирует поздние calls оставшегося
@@ -85,12 +88,13 @@ applicationId и loopback endpoint; основной пакет не замен�
 настройка экрана восстановлена, reverse удалён, тестовый сервер закрыт.
 
 Production, основной установленный клиент и общий профиль не менялись. Весь
-исходный WIP сохранён, включая staged/unstaged память. Чужие API, Telegram,
-reminders, клиенты и сайт не входят в commit. Доказательства:
+исходный WIP сохранён, включая staged/unstaged память. Чужой WIP API, Telegram,
+reminders, native клиентов и сайта не включён в commit; его рабочие слои сохранены. Доказательства:
 [задержка](docs/audit/TROIKA_0_1_LATENCY_2026_10_22.md),
 [reasoning и evidence](docs/audit/TROIKA_0_1_GUARDS_2026_10_23.md),
 [локальные критерии и численные результаты](docs/audit/TROIKA_0_1_LOCAL_GATES_2026_10_23.md),
-[быстрый голос и модель](docs/audit/TROIKA_0_1_VOICE_LATENCY_2026_10_24.md).
+[быстрый голос и модель](docs/audit/TROIKA_0_1_VOICE_LATENCY_2026_10_24.md),
+[потоковый естественный голос](docs/audit/TROIKA_0_1_PROGRESSIVE_VOICE_2026_10_26.md).
 
 ## Общее исправление продукта — 18–19 октября 2026
 

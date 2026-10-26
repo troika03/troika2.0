@@ -96,15 +96,22 @@ class AccountService {
   }
 
   /// Refresh a short-lived access token, or migrate one legacy installation.
-  Future<bool> ensureFreshSession({bool force = false}) async {
+  Future<bool> ensureFreshSession({
+    bool force = false,
+    void Function()? checkRequest,
+  }) async {
+    checkRequest?.call();
+    final requestOwner = TroikaConfig.accountEmail;
     if (!TroikaConfig.signedIn) return false;
     final expiry = TroikaConfig.accessTokenExpiresAt;
     final refreshToken = await TroikaConfig.getRefreshToken();
+    checkRequest?.call();
     if (!force &&
         refreshToken.isNotEmpty &&
         expiry != null &&
-        expiry
-            .isAfter(DateTime.now().toUtc().add(const Duration(minutes: 5)))) {
+        expiry.isAfter(
+          DateTime.now().toUtc().add(const Duration(minutes: 5)),
+        )) {
       return true;
     }
     final legacyUpgrade = refreshToken.isEmpty;
@@ -123,27 +130,31 @@ class AccountService {
             ),
           )
           .timeout(_timeout);
+      checkRequest?.call();
       if (response.statusCode != 200) return false;
       final payload =
           jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       final access = (payload['access_token'] ?? payload['token']).toString();
       final nextRefresh = (payload['refresh_token'] ?? '').toString();
       final expiresAt = (payload['access_expires_at'] as num?)?.toDouble() ?? 0;
-      final homeSessionId =
-          (payload['home_session_id'] ?? '').toString().trim();
+      final homeSessionId = (payload['home_session_id'] ?? '')
+          .toString()
+          .trim();
       if (!access.startsWith('trk_live_') ||
           !nextRefresh.startsWith('trk_refresh_') ||
           expiresAt <= 0 ||
           homeSessionId.isEmpty) {
         return false;
       }
+      checkRequest?.call();
       await TroikaConfig.saveAccount(
-        email: TroikaConfig.accountEmail,
+        email: requestOwner,
         token: access,
         refreshToken: nextRefresh,
         accessExpiresAt: expiresAt,
         homeSessionId: homeSessionId,
       );
+      checkRequest?.call();
       return true;
     } catch (_) {
       return false;
