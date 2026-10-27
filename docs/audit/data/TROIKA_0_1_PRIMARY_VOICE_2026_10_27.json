@@ -1,0 +1,263 @@
+{
+  "schema_version": 1,
+  "record_date": "2026-10-27",
+  "state": "primary_installed_slow_both_voice_modes_backend_deployed_verified",
+  "primary_apk": {
+    "application_id": "com.troika.hermes_assistant",
+    "bytes": 81424163,
+    "sha256": "d64ef4d6c547ee2215710de84b704a4b2cf0fb87a0412f9cd07666c6c11bf774",
+    "installed_sha256_matches": true,
+    "server_url": "https://api.zhulebino-teahouse.ru",
+    "original_signer_preserved": true,
+    "first_install_time_preserved": true,
+    "data_directory_preserved": true,
+    "uninstall_performed": false,
+    "data_clear_performed": false,
+    "permissions_auto_granted": false,
+    "ui_launch_verified": true,
+    "user_reports_slow": [
+      "foreground_microphone",
+      "background_wake_word"
+    ],
+    "stable_one_to_two_seconds_verified": false,
+    "latest_owner_clarification": {
+      "mode": "background_wake_word",
+      "voice_begins_after_banner_seconds_approx": [
+        3,
+        4
+      ],
+      "unit": "seconds",
+      "timing_origin": "banner_visible",
+      "subjective": true,
+      "timing_trace_available": false,
+      "measured_from_end_of_speech": false
+    }
+  },
+  "separate_diagnostics_package": {
+    "application_id": "com.troika.hermes_assistant.voicediagnostics",
+    "still_installed": true,
+    "server_url": "https://voice-diagnostics.invalid",
+    "is_primary_package": false
+  },
+  "backend": {
+    "candidate_image_ref": "troika-production:voice-latency-20261027",
+    "candidate_image_id": "sha256:1f82d6b8f4234cc322bae8fe2a0cb9de56363ae087ef50557466c6b63200421e",
+    "source_files": 5,
+    "candidate_built": true,
+    "offline_checks_passed": 15,
+    "same_image_retry_without_rebuild": true,
+    "initial_harness_failure_preserved": true,
+    "canonical_target": {
+      "files": 5,
+      "passed": 89,
+      "failed": 0,
+      "skipped": 0,
+      "exit_code": 0,
+      "runtime_unchanged": true
+    },
+    "activation_status": "passed",
+    "activation_error_code": null,
+    "active_image_ref": "sha256:1f82d6b8f4234cc322bae8fe2a0cb9de56363ae087ef50557466c6b63200421e",
+    "active_image_id": "sha256:1f82d6b8f4234cc322bae8fe2a0cb9de56363ae087ef50557466c6b63200421e",
+    "api_recreated": true,
+    "other_services_changed": false,
+    "configuration_changed": false,
+    "production_deployed": true,
+    "production_deployment_verified": true,
+    "historical_preflight_refusal": {
+      "before_confirmed_dispatch": true,
+      "activation_error_code": "docker_command_failed",
+      "api_up_reached": false,
+      "cause": "optional_Config.Entrypoint_lookup",
+      "helper_lookup_fixed_using_index": true
+    },
+    "last_verified_before_dispatch": {
+      "verified_utc": "2026-10-27T10:41:10.040451+00:00",
+      "image_ref": "troika-production:autopilot-final-20261017-api",
+      "image_id": "sha256:6d85f98f8a826573c64e479858e9d6a5dfb29f354ce3bc4636a00976eae61c4e",
+      "old_api_identity_and_sources_verified": true,
+      "api_restarted": false
+    },
+    "public_health_after_dispatch": {
+      "started_utc": "2026-10-27T10:54:00.156406+00:00",
+      "http_status": 200,
+      "status_ok": true,
+      "tls_verified": true,
+      "elapsed_ms": 813,
+      "image_identity_proven": false,
+      "voice_latency_measured": false
+    },
+    "post_dispatch_public_probe": {
+      "started_utc": "2026-10-27T10:59:41.380215+00:00",
+      "completed_utc": "2026-10-27T10:59:51.386920+00:00",
+      "error_type": "ConnectTimeout",
+      "failure_stage": "before_http_and_registration",
+      "timings_ms": {},
+      "event_counts": {},
+      "latency_result_available": false,
+      "deployment_outcome_proven": false
+    },
+    "persistent_data_migrated_or_deleted": false,
+    "api_only": true,
+    "health_verified": true,
+    "configuration_identities_preserved": true,
+    "settings_preserved": true,
+    "siblings_preserved": true,
+    "old_image_retained": true,
+    "candidate_rebuilt_during_activation_repairs": false,
+    "runtime_source_hashes": {
+      "agent/chat_completion_helpers.py": "c3cb6149b7c6721e828e80a8a8580ef9ca5c6ec72d2943f71699ac316c137abc",
+      "agent/model_metadata.py": "7984f80fca7390b173d38a6eb3824fd840a2c0ffc5f8aaf3291ca425054bbe35",
+      "plugins/model-providers/openrouter/__init__.py": "3f60df5e4a684a89b9d32631e9ee6427700f8509487270f6e3441402a1f7c42e",
+      "troika_product/streaming.py": "d4d7a87ce10f17b36f0c473c2e24ef873e9fbeb4c12dc5b7279d81a5ffbf30b9",
+      "troika_product/working_context.py": "53c1707753f0acf949cc8aaaeb2d39480f29d6594840a6ced88ddeab5e043eff"
+    },
+    "runtime_sources_match_candidate": true,
+    "activation_completed_utc": "2026-10-27T12:03:07.985368+00:00",
+    "activation_helper_sha256": "244c70112edfbf623a7461053865f9f9364ebd86cea128b437496b71c346e5d9",
+    "restored_baseline_read_only_verified_before_final_activation": true,
+    "historical_unverified_dispatch": {
+      "completed_utc": "2026-10-27T10:50:52.415884+00:00",
+      "result_retrieval_failed_over_ssh": true,
+      "resolved_by": "final_verified_activation_receipt"
+    },
+    "public_health_after_verified_update": {
+      "started_utc": "2026-10-27T12:05:00.807076+00:00",
+      "tls_verified": true,
+      "http_status": 200,
+      "elapsed_ms": 1531,
+      "status_ok": true,
+      "voice_latency_measured": false
+    },
+    "persistent_operation": {
+      "compose_project": "production",
+      "project_directory": "/srv/troika/current/deploy/production",
+      "env_file": "/srv/troika/current/deploy/production/resource-images.env",
+      "base_compose": "/srv/troika/current/deploy/production/compose.yaml",
+      "activation_override": "/srv/troika/releases/voice-latency-20261027/activation-pinned-image.override.yaml",
+      "rollback_override": "/srv/troika/releases/voice-latency-20261027/rollback-pinned-image.override.yaml",
+      "api_only": true,
+      "build": false,
+      "pull": "never",
+      "timeout_seconds": 60,
+      "bare_base_compose_can_restore_old_tag": true
+    },
+    "persistent_storage_layout_changed": false
+  },
+  "measurements": {
+    "clock_origin": "request_start",
+    "server_loopback_before_attempt": {
+      "observations": 1,
+      "transport": "server_loopback_http",
+      "first_safe_delta_ms": 4782.53,
+      "first_phrase_ready_ms": 4835.96,
+      "tts_request_ms": 4837.14,
+      "tts_first_byte_ms": 6258.13,
+      "tts_eof_ms": 8508.2,
+      "model_override": false,
+      "byok_supplied": false,
+      "first_delta_ends_period": true,
+      "first_delta_ends_whitespace": false,
+      "cleanup_status": "deleted",
+      "after_successful_deployment": false,
+      "started_utc": "2026-10-27T06:27:45.612410+00:00",
+      "before_confirmed_activation_dispatch": true,
+      "old_api_at_measurement": true
+    },
+    "public_https_after_refused_attempt": {
+      "observations": 1,
+      "transport": "workstation_public_https",
+      "first_safe_delta_ms": 4140.0,
+      "first_phrase_ready_ms": 4187.0,
+      "tts_request_ms": 4187.0,
+      "tts_first_byte_ms": 5953.0,
+      "tts_eof_ms": 9187.0,
+      "model_override": false,
+      "byok_supplied": false,
+      "first_delta_ends_period": true,
+      "first_delta_ends_whitespace": false,
+      "cleanup_status": "deleted",
+      "after_successful_deployment": false,
+      "started_utc": "2026-10-27T06:47:16.443295+00:00",
+      "before_confirmed_activation_dispatch": true,
+      "old_api_at_measurement": true
+    },
+    "stt_included": false,
+    "android_player_included": false,
+    "acoustic_onset_measured": false,
+    "controlled_ab": false,
+    "median_or_percentiles_claimed": false,
+    "server_loopback_after_verified_update_1": {
+      "observations": 1,
+      "started_utc": "2026-10-27T12:05:06.845372+00:00",
+      "transport": "server_loopback_http",
+      "first_safe_delta_ms": 13400.25,
+      "first_phrase_ready_ms": 13460.28,
+      "tts_request_ms": 13461.4,
+      "tts_first_byte_ms": 14074.98,
+      "tts_first_byte_after_request_ms": 613.58,
+      "tts_eof_ms": 16485.07,
+      "model_override": false,
+      "byok_supplied": false,
+      "first_delta_ends_period": true,
+      "first_delta_ends_whitespace": false,
+      "cleanup_status": "deleted",
+      "after_successful_deployment": true,
+      "runtime_image_verified_before_probe": true
+    },
+    "server_loopback_after_update_attempt_2": {
+      "launcher_started_utc": "2026-10-27T12:09:28.329767+00:00",
+      "launcher_completed_utc": "2026-10-27T12:09:49.411170+00:00",
+      "ssh_exit_code": 255,
+      "status": "ssh_or_probe_failed_without_receipt",
+      "receipt_available": false,
+      "latency_result_available": false,
+      "deployment_outcome_inferred": false
+    }
+  },
+  "routing": {
+    "free_models_only": true,
+    "natural_voice_preserved": true,
+    "paid_fallback_enabled": false,
+    "default_model": "openrouter/free"
+  },
+  "historical_full_suite": {
+    "green": false,
+    "file_timeout_seconds": 60,
+    "passed": 24761,
+    "failed": 501,
+    "skipped": 158,
+    "errors_in_summaries": 2,
+    "nonzero_files_without_summary": 24
+  },
+  "privacy": {
+    "keys_in_report": false,
+    "ip_addresses_in_report": false,
+    "prompts_in_report": false,
+    "raw_media_in_report": false,
+    "raw_user_logs_in_report": false
+  },
+  "limits": [
+    "Installation and UI launch do not establish voice latency.",
+    "Both earlier numerical probes ran on the old API before deployment; neither is an after-deployment result.",
+    "Final deployment is verified independently by runtime image, five source hashes, health and environment invariants.",
+    "HTTP health duration is not voice latency.",
+    "The earlier ConnectTimeout occurred before HTTP and registration and produced no latency measurements or deployment verdict.",
+    "Post-deployment synthetic API/TTS observations exclude STT, Android player and acoustic onset.",
+    "The observations do not establish controlled A/B, p50, p95 or a stable 1-2 second voice target.",
+    "No new full-suite pass is claimed.",
+    "The latest owner estimate is approximately 3-4 seconds after the background banner, with no timing trace; it is not measured from end of speech."
+  ],
+  "production_deployed": true,
+  "production_deployment_verified": true,
+  "evidence_cutoff_utc": "2026-10-27T12:09:49.411170+00:00",
+  "work_preservation": {
+    "existing_product_only": true,
+    "new_checkouts_created": false,
+    "new_apks_created": false,
+    "source77_unchanged": true,
+    "owner_memory_layers_preserved": true,
+    "scope": "documentation_record_stage"
+  },
+  "evidence_cutoff_scope": "machine_receipts"
+}
