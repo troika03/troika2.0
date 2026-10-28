@@ -27,6 +27,8 @@ class TroikaConfig {
   static const String _keyApiKey = 'troika_api_key';
   static const String _keyAccessTokenExpiresAt =
       'troika_access_token_expires_at';
+  static const String _keyNativeIdentityRevision =
+      'troika_native_identity_revision';
   static const String _legacyKeyApiKey = 'hermes_api_key';
   static const String _keyAccountEmail = 'troika_account_email';
   static const String _keyGroqKey = 'troika_groq_key';
@@ -110,7 +112,11 @@ class TroikaConfig {
   static Future<void> _setVoiceServerUrl(String url) async {
     final operation = _beginVoiceIdentityChange();
     try {
-      await _setStringCompat(_keyServerUrl, _legacyKeyServerUrl, url);
+      if (Platform.isAndroid) {
+        await _setNativeConnection('setAccountServerUrl', url);
+      } else {
+        await _setStringCompat(_keyServerUrl, _legacyKeyServerUrl, url);
+      }
       _finishVoiceIdentityChange(operation);
     } catch (_) {
       // A failed identity change cannot resume audio authorized for the old one.
@@ -120,11 +126,23 @@ class TroikaConfig {
   static Future<void> _setVoiceApiKey(String key) async {
     final operation = _beginVoiceIdentityChange();
     try {
-      await _setStringCompat(_keyApiKey, _legacyKeyApiKey, key);
+      if (Platform.isAndroid) {
+        await _setNativeConnection('setAccountApiKey', key);
+      } else {
+        await _setStringCompat(_keyApiKey, _legacyKeyApiKey, key);
+      }
       _finishVoiceIdentityChange(operation);
     } catch (_) {
       // Settings replacement is a new credential, unlike same-owner refresh.
     }
+  }
+
+  static Future<void> _setNativeConnection(String method, String value) async {
+    final saved = await const MethodChannel(
+      'com.troika.hermes/background',
+    ).invokeMethod<bool>(method, {'value': value});
+    if (saved != true) throw StateError('Не удалось сохранить подключение.');
+    await reloadAccountSession();
   }
 
   static Future<void> init() async {
@@ -294,8 +312,11 @@ class TroikaConfig {
     String refreshToken = '',
     double accessExpiresAt = 0,
     String homeSessionId = '',
+    bool replaceIdentity = false,
+    int? expectedNativeRevision,
   }) async {
     final changesIdentity =
+        replaceIdentity ||
         !signedIn ||
         _voiceSessionChanging ||
         email.trim().toLowerCase() != accountEmail ||
@@ -303,6 +324,29 @@ class TroikaConfig {
     final operation = changesIdentity ? _beginVoiceIdentityChange() : null;
     var saved = false;
     try {
+      if (Platform.isAndroid) {
+        final published =
+            await const MethodChannel(
+              'com.troika.hermes/background',
+            ).invokeMethod<bool>('saveAccountSession', {
+              'email': email.trim().toLowerCase(),
+              'token': token.trim(),
+              'refreshToken': refreshToken,
+              'expiresAtMillis': (accessExpiresAt * 1000).round(),
+              'sessionId': homeSessionId.trim(),
+              'replaceIdentity': replaceIdentity,
+              'expectedGeneration':
+                  expectedNativeRevision ?? nativeIdentityRevision,
+            });
+        if (published != true) {
+          throw StateError(
+            'Не удалось безопасно сохранить вход. Повтори вход в аккаунт.',
+          );
+        }
+        await reloadAccountSession();
+        saved = true;
+        return;
+      }
       await _prefs.setString(_keyAccountEmail, email.trim().toLowerCase());
       await _setStringCompat(_keyApiKey, _legacyKeyApiKey, token.trim());
       if (accessExpiresAt > 0) {
@@ -341,6 +385,34 @@ class TroikaConfig {
         : DateTime.fromMillisecondsSinceEpoch(milliseconds, isUtc: true);
   }
 
+  /// Native background voice can rotate credentials without a Flutter engine.
+  static Future<void> reloadAccountSession() async {
+    final previousRevision = nativeIdentityRevision;
+    await _prefs.reload();
+    _sessionKey = _prefs.getString(_keySessionKey)?.trim() ?? '';
+    _sessionId = _prefs.getString(_keySessionId)?.trim() ?? _sessionKey;
+    if (nativeIdentityRevision != previousRevision) _voiceRevision.value++;
+  }
+
+  static int get nativeIdentityRevision =>
+      _prefs.getInt(_keyNativeIdentityRevision) ?? 0;
+
+  static Future<void> _clearNativeAccountSession(
+    String mode,
+    int operation,
+  ) async {
+    if (!Platform.isAndroid) return;
+    ReminderDeliveryService.instance.invalidate();
+    final cleared = await const MethodChannel('com.troika.hermes/background')
+        .invokeMethod<bool>('clearAccountSession', {
+          'mode': mode,
+          'expectedGeneration': nativeIdentityRevision,
+        });
+    if (operation != _voiceIdentityOperation) return;
+    if (cleared != true) throw StateError('Не удалось удалить данные входа.');
+    await reloadAccountSession();
+  }
+
   static Future<bool> storeRefreshToken(String token) async {
     if ((!Platform.isAndroid && !Platform.isWindows) || token.isEmpty) {
       return false;
@@ -376,7 +448,10 @@ class TroikaConfig {
   }
 
   static Future<void> signOut() async {
-    _beginVoiceIdentityChange();
+    final operation = _beginVoiceIdentityChange();
+    if (Platform.isAndroid) {
+      return _clearNativeAccountSession('signout', operation);
+    }
     await ReminderDeliveryService.instance.clear();
     await setPhoneControlEnabled(false);
     await clearRefreshToken();
@@ -542,7 +617,11 @@ class TroikaConfig {
   /// rotate the conversation identity so a later sign-in cannot reuse the
   /// revoked device's server-linked session.
   static Future<void> clearRevokedDevice() async {
-    _beginVoiceIdentityChange();
+    final operation = _beginVoiceIdentityChange();
+    if (Platform.isAndroid) {
+      return _clearNativeAccountSession('revoke', operation);
+    }
+    await ReminderDeliveryService.instance.clear();
     await setPhoneControlEnabled(false);
     await clearRefreshToken();
     await _setBoolCompat(_keyWakeWordEnabled, _legacyKeyWakeWordEnabled, false);
@@ -561,7 +640,11 @@ class TroikaConfig {
 
   /// Remove credentials and server-linked state after deletion was accepted.
   static Future<void> clearDeletedAccount() async {
-    _beginVoiceIdentityChange();
+    final operation = _beginVoiceIdentityChange();
+    if (Platform.isAndroid) {
+      return _clearNativeAccountSession('delete', operation);
+    }
+    await ReminderDeliveryService.instance.clear();
     await setPhoneControlEnabled(false);
     await clearRefreshToken();
     await _setBoolCompat(_keyWakeWordEnabled, _legacyKeyWakeWordEnabled, false);

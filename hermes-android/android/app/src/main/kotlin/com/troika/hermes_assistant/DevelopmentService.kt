@@ -112,14 +112,16 @@ class DevelopmentService : Service() {
         check(accountMatches(identity))
         val server = settings.getString("server", "").orEmpty()
         check(server == "https://api.zhulebino-teahouse.ru")
+        val account = requireNotNull(NativeAccountSession.snapshot(this, server))
+        check(account.owner.equals(identity, ignoreCase = true))
         val token = accessToken(identity, server)
-        check(token.startsWith("trk_live_") && accountMatches(identity))
+        check(token.startsWith("trk_live_") && accountMatches(identity) && NativeAccountSession.current(this, account))
         val connection = URL(server+path).openConnection() as HttpURLConnection
         try {
             connection.instanceFollowRedirects=false; connection.connectTimeout=8000; connection.readTimeout=30000
             connection.setRequestProperty("Authorization", "Bearer $token")
             if (personal) OwnProviderSession.headers(this, server+"/v1/chat/completions", token).forEach { (key,value) -> connection.setRequestProperty(key,value) }
-            check(accountMatches(identity))
+            check(accountMatches(identity) && NativeAccountSession.current(this, account))
             if (body != null) {
                 connection.requestMethod="POST"; connection.doOutput=true
                 connection.setRequestProperty("Content-Type", "application/json")
@@ -128,34 +130,15 @@ class DevelopmentService : Service() {
             responseStatus = connection.responseCode
             check(responseStatus in 200..299)
             val data=bounded(connection.inputStream,max)
-            check(data.size <= max && accountMatches(identity)); return data
+            check(data.size <= max && accountMatches(identity) && NativeAccountSession.current(this, account)); return data
         } finally { connection.disconnect() }
     }
-    private fun accessToken(identity: String, server: String): String = synchronized(SecureTokenStore) {
-        val old=HermesListenerService.resolvedKey(preferences)
-        if (!old.startsWith("trk_live_")) return@synchronized ""
-        if (preferences.getLong("flutter.troika_access_token_expires_at", 0) > System.currentTimeMillis()+300000) return@synchronized old
-        val refresh=SecureTokenStore.get(this).orEmpty()
-        val connection=URL(server+if (refresh.isBlank()) "/v1/auth/upgrade-token" else "/v1/auth/refresh").openConnection() as HttpURLConnection
-        try {
-            connection.instanceFollowRedirects=false; connection.requestMethod="POST"; connection.doOutput=true
-            connection.connectTimeout=8000; connection.readTimeout=20000; connection.setRequestProperty("Content-Type","application/json")
-            if (refresh.isBlank()) connection.setRequestProperty("Authorization","Bearer $old")
-            val body=JSONObject(); if (refresh.isNotBlank()) body.put("refresh_token",refresh)
-            connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
-            check(connection.responseCode == 200)
-            val data=JSONObject(String(bounded(connection.inputStream,32000), Charsets.UTF_8))
-            val token=data.optString("access_token",data.optString("token")); val next=data.optString("refresh_token")
-            val session=data.optString("home_session_id"); val expires=data.optDouble("access_expires_at")
-            check(token.startsWith("trk_live_") && next.startsWith("trk_refresh_") && session.startsWith("ses_") && expires.isFinite() && expires>0)
-            check(accountMatches(identity) && HermesListenerService.resolvedKey(preferences)==old && SecureTokenStore.get(this).orEmpty()==refresh)
-            check(SecureTokenStore.put(this,next))
-            check(preferences.edit().putString("flutter.troika_api_key",token).putString(HermesListenerService.PREF_KEY,token)
-                .putString("flutter.troika_session_id",session).putString("flutter.troika_session_key",session)
-                .putString(HermesListenerService.PREF_SESSION_ID,session).putString(HermesListenerService.PREF_SESSION_KEY,session)
-                .putLong("flutter.troika_access_token_expires_at",(expires*1000).toLong()).commit())
-            token
-        } finally { connection.disconnect() }
+    private fun accessToken(identity: String, server: String): String {
+        val account = requireNotNull(NativeAccountSession.snapshot(this, server))
+        check(accountMatches(identity) && account.owner.equals(identity, ignoreCase = true))
+        val token = NativeAccountSession.accessToken(this, account)
+        check(token.startsWith("trk_live_") && NativeAccountSession.current(this, account) && accountMatches(identity))
+        return token
     }
     private fun atomic(path: File, bytes: ByteArray) {
         path.parentFile!!.mkdirs(); val partial=File(path.path+".part")
@@ -257,7 +240,10 @@ class DevelopmentService : Service() {
         try {
             val server=settings.getString("server", "").orEmpty(); val token=accessToken(identity,server)
             check(accountMatches(identity) && SystemClock.elapsedRealtime()>=foregroundUntil)
-            val player=EdgeTtsPlayer(this,server,token,preferences.getString("flutter.hermes_edge_voice","ru-RU-SvetlanaNeural")!!)
+            val account = requireNotNull(NativeAccountSession.snapshot(this, server))
+            check(account.owner.equals(identity, ignoreCase = true))
+            val player=EdgeTtsPlayer(this,server,token,preferences.getString("flutter.hermes_edge_voice","ru-RU-SvetlanaNeural")!!,
+                expectedIdentity = account)
             reportInterrupted=false; voice=player
             diagnostic("report_synthesizing:$reference")
             main.post {

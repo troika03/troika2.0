@@ -86,16 +86,20 @@ class HermesListenerService : Service() {
 
         /** URL и ключ задаются при подключении аккаунта; общих production-дефолтов нет. */
         fun resolvedUrl(prefs: android.content.SharedPreferences): String {
-            return prefs.getString(PREF_URL, null)?.trim()?.trimEnd('/') ?: ""
+            return accountPreference(prefs, "server_url", PREF_URL).trimEnd('/')
         }
 
         fun resolvedKey(prefs: android.content.SharedPreferences): String {
-            return prefs.getString(PREF_KEY, null)?.trim() ?: ""
+            return accountPreference(prefs, "api_key", PREF_KEY)
         }
+
+        private fun accountPreference(prefs: android.content.SharedPreferences, name: String, legacy: String): String =
+            (if (prefs.contains("flutter.troika_$name")) prefs.getString("flutter.troika_$name", null)
+                else prefs.getString(legacy, null)).orEmpty().trim()
 
         /** The Android service and Flutter share one random identity per install. */
         fun resolvedSessionKey(prefs: android.content.SharedPreferences): String {
-            prefs.getString(PREF_SESSION_KEY, null)?.trim()?.takeIf { it.isNotEmpty() }?.let {
+            accountPreference(prefs, "session_key", PREF_SESSION_KEY).takeIf { it.isNotEmpty() }?.let {
                 return it
             }
             val bytes = ByteArray(24)
@@ -103,16 +107,16 @@ class HermesListenerService : Service() {
             val generated = "mobile-" + Base64.encodeToString(
                 bytes, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
             )
-            prefs.edit().putString(PREF_SESSION_KEY, generated).commit()
+            prefs.edit().putString(PREF_SESSION_KEY, generated).putString("flutter.troika_session_key", generated).commit()
             return generated
         }
 
         fun resolvedSessionId(prefs: android.content.SharedPreferences): String {
-            prefs.getString(PREF_SESSION_ID, null)?.trim()?.takeIf { it.isNotEmpty() }?.let {
+            accountPreference(prefs, "session_id", PREF_SESSION_ID).takeIf { it.isNotEmpty() }?.let {
                 return it
             }
             val generated = resolvedSessionKey(prefs)
-            prefs.edit().putString(PREF_SESSION_ID, generated).commit()
+            prefs.edit().putString(PREF_SESSION_ID, generated).putString("flutter.troika_session_id", generated).commit()
             return generated
         }
         const val PREF_TTS_VOICE = "flutter.hermes_tts_voice"
@@ -188,6 +192,8 @@ class HermesListenerService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        observedAccountIdentity = NativeAccountSession.snapshot(this)
+        getSharedPreferences(PREFS, MODE_PRIVATE).registerOnSharedPreferenceChangeListener(accountIdentityListener)
         projectSpeechHost = this
         createNotificationChannel()
         // TTS init может занять несколько секунд — Android даёт сервису
@@ -301,6 +307,19 @@ class HermesListenerService : Service() {
         .build()
     private val activeReplySpeech = java.util.concurrent.atomic.AtomicReference<NativeSpeechQueue?>(null)
     private val replySpeechGeneration = java.util.concurrent.atomic.AtomicInteger(0)
+    private var observedAccountIdentity: NativeAccountSession.Identity? = null
+    private val accountIdentityListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+        val previous = observedAccountIdentity
+        if (previous != null && !NativeAccountSession.current(this, previous)) {
+            cancelReplySpeech()
+            manualDialogActive.set(false)
+            isInDialog.set(false)
+            try { edgeTts?.stop() } catch (_: Exception) {}
+            edgeTts = null
+            try { tts?.stop() } catch (_: Exception) {}
+        }
+        observedAccountIdentity = NativeAccountSession.snapshot(this)
+    }
 
     private fun cancelReplySpeech() {
         replySpeechGeneration.incrementAndGet()
@@ -321,6 +340,7 @@ class HermesListenerService : Service() {
         if (cleaned.isEmpty()) { onDone?.invoke(); return }
 
         // Сначала пробуем серверный Edge TTS — гораздо качественнее
+        startEdgeTts()
         val edge = edgeTts
         if (edge != null) {
             // Колбэк может быть вызван либо при успешной озвучке, либо при ошибке/таймауте
@@ -334,18 +354,8 @@ class HermesListenerService : Service() {
             return
         }
 
-        // Fallback на встроенный Android TTS если Edge недоступен. Локальный TTS
-        // не умеет интонацию по тону, поэтому просто вырезаем тег [emo:...],
-        // чтобы он не прозвучал вслух как «эмо джой».
-        if (!ttsReady) { onDone?.invoke(); return }
-        val noTag = cleaned.replace(Regex("""\[emo:\s*[A-Za-zА-Яа-яЁё_]+\s*]"""), "").trim()
-        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(id: String?) {}
-            override fun onDone(id: String?) { onDone?.invoke() }
-            @Deprecated("Deprecated in Java")
-            override fun onError(id: String?) { onDone?.invoke() }
-        })
-        tts?.speak(noTag, TextToSpeech.QUEUE_FLUSH, null, "hermes-${System.currentTimeMillis()}")
+        // Preserve the selected natural voice; a provider failure leaves the text visible.
+        onDone?.invoke()
     }
 
     /**
@@ -693,7 +703,9 @@ class HermesListenerService : Service() {
     }
 
     private fun startEdgeTts() {
-        if (edgeTts != null) return
+        if (edgeTts?.isCurrentAccount() == true) return
+        edgeTts?.stop()
+        edgeTts = null
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val url = resolvedUrl(prefs)
         if (url.isBlank()) {
@@ -701,12 +713,13 @@ class HermesListenerService : Service() {
             return
         }
         val key = resolvedKey(prefs)
+        val identity = NativeAccountSession.snapshot(this, url) ?: return
         val voice = prefs.getString("flutter.hermes_edge_voice", null) ?: "ru-RU-SvetlanaNeural"
         // SharedPreferences хранит числа как double/int; берём с fallback
         val rate = readDoublePref(prefs, "flutter.hermes_voice_rate", 1.15)  // 20.06: чуть быстрее речь по умолчанию
         val pitch = readIntPref(prefs, "flutter.hermes_voice_pitch", 0)
         val volume = readIntPref(prefs, "flutter.hermes_voice_volume", 0)
-        edgeTts = EdgeTtsPlayer(applicationContext, url, key, voice, rate, pitch, volume)
+        edgeTts = EdgeTtsPlayer(applicationContext, url, key, voice, rate, pitch, volume, identity)
         android.util.Log.i("HermesListener",
             "Edge TTS: voice=$voice rate=$rate pitch=$pitch volume=$volume")
     }
@@ -1166,6 +1179,9 @@ class HermesListenerService : Service() {
      * История сообщений сохраняется между итерациями для follow-up вопросов.
      */
     private fun runDialog(manual: Boolean = false) {
+        val dialogIdentity = NativeAccountSession.snapshot(this)
+        fun currentDialog() = if (dialogIdentity != null) NativeAccountSession.current(this, dialogIdentity)
+            else resolvedUrl(getSharedPreferences(PREFS, MODE_PRIVATE)).isBlank()
         DevelopmentService.interruptReport()
         listenerPaused.set(true)
         dialogStartMs.set(System.currentTimeMillis())
@@ -1211,7 +1227,7 @@ class HermesListenerService : Service() {
             // recordUtterance (~350мс) прикрывает эхо. Экономия ~300мс до старта записи.
             Thread.sleep(250)
 
-            while (isRunning.get() || (manual && manualDialogActive.get())) {
+            while (currentDialog() && isInDialog.get() && (isRunning.get() || (manual && manualDialogActive.get()))) {
                 // Запись вопроса
                 HermesOverlay.get(this).updateStatus(
                     if (firstTurn) "🎙 Говори..." else "🎙 Продолжай..."
@@ -1227,11 +1243,12 @@ class HermesListenerService : Service() {
                     val questionWav = recordUtterance(maxMs)
                     if (questionWav == null) "" else {
                         HermesOverlay.get(this).updateStatus("⏳ Распознаю...")
-                        transcribeSync(questionWav)?.trim() ?: ""
+                        transcribeSync(questionWav, dialogIdentity)?.trim() ?: ""
                     }
                 } else {
                     ""
                 }
+                if (!currentDialog()) break
                 if (rawQuestion.isEmpty()) {
                     if (firstTurn && !manual) {
                         val metrics = getSharedPreferences(PREFS, MODE_PRIVATE)
@@ -1332,6 +1349,7 @@ class HermesListenerService : Service() {
                 val ttsDone = Object()
                 val bargeMonitor = java.util.concurrent.atomic.AtomicReference<BargeInMonitor?>(null)
                 val speechStarted = java.util.concurrent.atomic.AtomicBoolean(false)
+                startEdgeTts()
                 val voicePlayer = edgeTts
                 val speechGeneration = replySpeechGeneration.get()
                 val replySpeech = NativeSpeechQueue(
@@ -1353,7 +1371,7 @@ class HermesListenerService : Service() {
                 )
                 activeReplySpeech.getAndSet(replySpeech)?.cancel()
                 if (replySpeechGeneration.get() != speechGeneration) replySpeech.cancel()
-                val answer = chatWithHermesHistory(history, replySpeech::add) {
+                val answer = chatWithHermesHistory(history, replySpeech::add, dialogIdentity) {
                     replySpeechGeneration.get() != speechGeneration ||
                         !isInDialog.get() || bargeMonitor.get()?.wasTriggered() == true
                 }
@@ -1543,10 +1561,13 @@ class HermesListenerService : Service() {
     private fun chatWithHermesHistory(
         history: List<JSONObject>,
         onDelta: ((String) -> Unit)? = null,
+        expectedIdentity: NativeAccountSession.Identity? = null,
         shouldStop: () -> Boolean = { false },
     ): String {
         val requestGeneration = replySpeechGeneration.get()
-        fun stopRequested() = shouldStop() || replySpeechGeneration.get() != requestGeneration
+        var requestIdentity = expectedIdentity
+        fun stopRequested() = shouldStop() || replySpeechGeneration.get() != requestGeneration ||
+            requestIdentity?.let { !NativeAccountSession.current(this, it) } == true
         if (stopRequested()) return ""
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val serverUrl = resolvedUrl(prefs)
@@ -1555,8 +1576,11 @@ class HermesListenerService : Service() {
             return ""
         }
         if (stopRequested()) return ""
-        val apiKey = resolvedKey(prefs)
+        val identity = requestIdentity ?: NativeAccountSession.snapshot(this, serverUrl) ?: return ""
+        requestIdentity = identity
+        val apiKey = NativeAccountSession.accessToken(applicationContext, identity)
         if (stopRequested()) return ""
+        if (apiKey.isBlank()) return "Вход в аккаунт или соединение недоступны. Открой Тройку и проверь подключение."
         val url = "$serverUrl/v1/chat/completions"
 
         var ownedCall: okhttp3.Call? = null
@@ -1602,7 +1626,9 @@ class HermesListenerService : Service() {
                             "Theme под тему: экология→forest_green, бизнес→corporate_navy, технологии→modern_blue, " +
                             "дизайн→vibrant_pink, минимализм→minimalist_mono, океан→ocean_teal, закат→warm_sunset, космос→elegant_purple.\n" +
                             "— Документ/отчёт/PDF — phone_create_beautiful_pdf.\n" +
-                            "— Календарь/встреча/'запиши на завтра'/'напомни' — android_calendar_create_event " +
+                            "— Личное напоминание/'напомни' — troika_reminder: title и delay_seconds " +
+                            "для относительного срока либо due_at с часовым поясом. Не заменяй его событием календаря.\n" +
+                            "— Календарь/встреча/'запиши на завтра' — android_calendar_create_event " +
                             "(ISO-8601 дата, reminder_minutes=15 по умолчанию). 'Что на завтра' — android_calendar_list_events.\n" +
                             "— Отправить мне в телеграм/в избранное/скинь файл — telegram_send.\n" +
                             "— Сложная многошаговая задача/исследование — delegate_task (sub-agent с целью, краткий итог).\n" +
@@ -1616,6 +1642,7 @@ class HermesListenerService : Service() {
                 put("stream", onDelta != null)
             }
 
+            if (stopRequested()) return ""
             val request = okhttp3.Request.Builder().url(url).apply {
                 if (apiKey.isNotBlank()) {
                     header("Authorization", "Bearer $apiKey")
@@ -1624,8 +1651,9 @@ class HermesListenerService : Service() {
                 // One random session identity per app installation; Flutter sends
                 // the same values so voice and text share only this user's history.
                 OwnProviderSession.headers(this@HermesListenerService, url, apiKey).forEach { (name, value) -> header(name, value) }
-                header("X-Hermes-Session-Key", resolvedSessionKey(prefs))
-                header("X-Hermes-Session-Id", resolvedSessionId(prefs))
+                header("X-Hermes-Session-Key", identity.sessionKey)
+                header("X-Hermes-Session-Id", identity.sessionId)
+                header("X-Troika-Time-Zone", java.util.TimeZone.getDefault().id)
                 // Контекст устройства для режима «где я» — Wi-Fi BSSID,
                 // bluetooth, тип сети. Сервер маппит в дом/работа/машина.
                 try {
@@ -1673,7 +1701,24 @@ class HermesListenerService : Service() {
                     }
                     response.close()
                     if (stopRequested()) return ""
-                    if (stopRequested()) "" else content
+                    val reminderRequest = history.lastOrNull()?.optString("content")?.contains("напом", ignoreCase = true) == true
+                    val delivery = if (reminderRequest) NativeReminderDelivery.sync(applicationContext, identity) else {
+                        thread(name = "TroikaReminderSync", isDaemon = true) {
+                            NativeReminderDelivery.sync(applicationContext, identity)
+                        }
+                        null
+                    }
+                    val result = if (reminderRequest) {
+                        when {
+                            delivery == null -> "$content На телефоне не удалось настроить уведомление. Открой Тройку и проверь соединение."
+                            delivery["notifications_enabled"] != true -> "$content Разреши уведомления Тройки в настройках телефона."
+                            delivery["exact_alarms"] != true -> "$content Android может задержать уведомление. Включи точные напоминания в разделе Дела."
+                            else -> content
+                        }
+                    } else content
+                    if (result.length > content.length && !stopRequested()) onDelta?.invoke(result.substring(content.length))
+                    if (stopRequested()) return ""
+                    result
                 } else {
                     android.util.Log.e("HermesListener", "Chat HTTP ${response.code}")
                     ""
@@ -1728,13 +1773,15 @@ class HermesListenerService : Service() {
         ((v shr 8) and 0xff).toByte()
     )
 
-    private fun transcribeSync(wav: ByteArray): String? {
-        val prefs: SharedPreferences = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val serverUrl = resolvedUrl(prefs)
+    private fun transcribeSync(wav: ByteArray, expectedIdentity: NativeAccountSession.Identity? = null): String? {
+        val identity = expectedIdentity ?: NativeAccountSession.snapshot(this) ?: return null
+        if (!NativeAccountSession.current(this, identity)) return null
+        val serverUrl = identity.serverUrl
         if (serverUrl.isBlank()) {
             return null
         }
-        val apiKey = resolvedKey(prefs)
+        val apiKey = NativeAccountSession.accessToken(this, identity)
+        if (apiKey.isBlank() || !NativeAccountSession.current(this, identity)) return null
         val sttBase = if (apiKey.startsWith("trk_live_")) serverUrl
             else serverUrl.replace(Regex(":\\d+$"), ":8643")
         val sttUrl = sttBase +
@@ -1750,7 +1797,7 @@ class HermesListenerService : Service() {
                 if (apiKey.isNotBlank()) {
                     setRequestProperty("Authorization", "Bearer $apiKey")
                 }
-                setRequestProperty("X-Hermes-Session-Id", resolvedSessionId(prefs))
+                setRequestProperty("X-Hermes-Session-Id", identity.sessionId)
                 instanceFollowRedirects = false
                 setRequestProperty(
                     "Content-Type",
@@ -1771,11 +1818,12 @@ class HermesListenerService : Service() {
                     out.flush()
                 }
 
+                if (!NativeAccountSession.current(this, identity)) return null
                 if (conn.responseCode == 200) {
                     val resp = conn.inputStream.bufferedReader().use { it.readText() }
                     // Используем JSONObject вместо ручного regex — он сам декодирует \uXXXX
                     try {
-                        JSONObject(resp).optString("text", "")
+                        if (NativeAccountSession.current(this, identity)) JSONObject(resp).optString("text", "") else null
                     } catch (e: Exception) {
                         android.util.Log.e("HermesListener", "STT json parse err: ${e.message}")
                         null
@@ -1849,6 +1897,7 @@ class HermesListenerService : Service() {
     }
 
     override fun onDestroy() {
+        getSharedPreferences(PREFS, MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(accountIdentityListener)
         isInDialog.set(false)
         cancelReplySpeech()
         projectSpeechHost = null

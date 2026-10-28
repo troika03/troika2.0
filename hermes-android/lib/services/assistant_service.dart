@@ -38,7 +38,7 @@ enum BackgroundVoiceState {
 
 class AssistantService extends ChangeNotifier {
   AssistantService({ReminderDeliveryService? replyDelivery})
-      : _replyDelivery = replyDelivery ?? ReminderDeliveryService.instance {
+    : _replyDelivery = replyDelivery ?? ReminderDeliveryService.instance {
     TroikaConfig.voiceIdentityChanges.addListener(_voiceIdentityChanged);
   }
 
@@ -96,9 +96,12 @@ class AssistantService extends ChangeNotifier {
     // a new owner or origin. A late start callback may supply the ID after Stop.
     if (id == null || !turn.identityMatches) return Future<void>.value();
     return turn.stopRequest ??= _troika.stopRun(id).catchError((Object _) {
-      if (!_disposed && _activeTurn == null &&
-          _turnGeneration == turn.generation + 1 && turn.identityMatches) {
-        _errorMessage = 'Звук остановлен. Не удалось остановить запрос на сервере.';
+      if (!_disposed &&
+          _activeTurn == null &&
+          _turnGeneration == turn.generation + 1 &&
+          turn.identityMatches) {
+        _errorMessage =
+            'Звук остановлен. Не удалось остановить запрос на сервере.';
         notifyListeners();
       }
     });
@@ -160,7 +163,6 @@ class AssistantService extends ChangeNotifier {
     if (_state == AssistantState.speaking) _setState(AssistantState.idle);
   }
 
-
   // Скрытый тег эмоции [emo:...] управляет интонацией голоса. В тексте чата и
   // в произношении локального TTS его быть не должно — вырезаем.
   static final RegExp _emoTag = RegExp(r'\[emo:\s*[A-Za-zА-Яа-яЁё_]+\s*\]');
@@ -188,12 +190,12 @@ class AssistantService extends ChangeNotifier {
   bool get wakeWordEnabled => _wakeWordEnabled;
   BackgroundVoiceState get backgroundVoiceState => _backgroundVoiceState;
   String get backgroundVoiceStatus => switch (_backgroundVoiceState) {
-        BackgroundVoiceState.working => 'Работает',
-        BackgroundVoiceState.permissionRequired => 'Требуется разрешение',
-        BackgroundVoiceState.systemDisabled => 'Отключено системой',
-        BackgroundVoiceState.unavailable => 'Недоступно на устройстве',
-        BackgroundVoiceState.off => 'Выключено',
-      };
+    BackgroundVoiceState.working => 'Работает',
+    BackgroundVoiceState.permissionRequired => 'Требуется разрешение',
+    BackgroundVoiceState.systemDisabled => 'Отключено системой',
+    BackgroundVoiceState.unavailable => 'Недоступно на устройстве',
+    BackgroundVoiceState.off => 'Выключено',
+  };
   bool get isActing => _actionInProgress;
   RunApprovalRequest? get pendingApproval => _pendingApproval;
   List<ChatMessage> get messages => List.unmodifiable(_messages);
@@ -243,8 +245,7 @@ class AssistantService extends ChangeNotifier {
       await AccountService().ensureFreshSession(
         force: !TroikaConfig.sessionId.startsWith('ses_'),
       );
-      unawaited(_troika.syncDeviceTimeZone());
-      unawaited(ReminderDeliveryService.instance.sync());
+      unawaited(_replyDelivery.syncWithDeviceTimeZone());
     }
 
     if (_wakeWordEnabled) {
@@ -265,8 +266,7 @@ class AssistantService extends ChangeNotifier {
   Future<void> onAccountAuthenticated() async {
     _webSources = WebSourceTrace();
     await AccountService().ensureFreshSession();
-    unawaited(_troika.syncDeviceTimeZone());
-    unawaited(ReminderDeliveryService.instance.sync());
+    unawaited(_replyDelivery.syncWithDeviceTimeZone());
     await loadHistory(replaceEvenIfEmpty: true);
   }
 
@@ -283,7 +283,7 @@ class AssistantService extends ChangeNotifier {
     _accountSyncInFlight = true;
     try {
       await AccountService().ensureFreshSession();
-      unawaited(ReminderDeliveryService.instance.sync());
+      unawaited(_replyDelivery.syncWithDeviceTimeZone());
       await loadHistory();
     } finally {
       _accountSyncInFlight = false;
@@ -298,7 +298,9 @@ class AssistantService extends ChangeNotifier {
         _messages
           ..clear()
           ..addAll(loaded);
-        _webSources = loaded.where((message) => !message.isUser).lastOrNull?.webSources ?? WebSourceTrace();
+        _webSources =
+            loaded.where((message) => !message.isUser).lastOrNull?.webSources ??
+            WebSourceTrace();
       }
       _historyLoaded = true;
       notifyListeners();
@@ -321,7 +323,8 @@ class AssistantService extends ChangeNotifier {
         return;
       }
       try {
-        final ignored = await _platform.invokeMethod<bool>(
+        final ignored =
+            await _platform.invokeMethod<bool>(
               'isBatteryOptimizationIgnored',
             ) ??
             false;
@@ -354,9 +357,8 @@ class AssistantService extends ChangeNotifier {
       return;
     }
     try {
-      final value = await _platform.invokeMethod<String>(
-            'getBackgroundVoiceStatus',
-          ) ??
+      final value =
+          await _platform.invokeMethod<String>('getBackgroundVoiceStatus') ??
           'system_disabled';
       _backgroundVoiceState = switch (value) {
         'working' => BackgroundVoiceState.working,
@@ -402,7 +404,8 @@ class AssistantService extends ChangeNotifier {
         return;
       }
     }
-    final dup = _messages.isNotEmpty &&
+    final dup =
+        _messages.isNotEmpty &&
         _messages.last.role == role &&
         _messages.last.text.trim() == text;
     if (dup) {
@@ -433,12 +436,17 @@ class AssistantService extends ChangeNotifier {
           !_messages.contains(target)) {
         return;
       }
-      final reply = history.where((message) =>
-          !message.isUser &&
-          _stripEmoTag(message.text) == _stripEmoTag(target.text)).lastOrNull;
+      final reply = history
+          .where(
+            (message) =>
+                !message.isUser &&
+                _stripEmoTag(message.text) == _stripEmoTag(target.text),
+          )
+          .lastOrNull;
       if (reply == null || reply.webSources.isEmpty) return;
       target.webSources.apply(
-          WebSourceActivity(reply.webSources.phase, reply.webSources.sources));
+        WebSourceActivity(reply.webSources.phase, reply.webSources.sources),
+      );
       if (_messages.last == target) _webSources = target.webSources;
       notifyListeners();
     } catch (_) {
@@ -522,10 +530,12 @@ class AssistantService extends ChangeNotifier {
           ? result.response
           : 'Эта локальная команда пока не поддерживается.';
       _lastTroikaText = response;
-      _setLastResult(AssistantResult.forTurn(
-        response: response,
-        successfulTools: const ['local_action'],
-      ));
+      _setLastResult(
+        AssistantResult.forTurn(
+          response: response,
+          successfulTools: const ['local_action'],
+        ),
+      );
       _messages.add(
         ChatMessage(role: 'assistant', text: response, fromVoice: true),
       );
@@ -585,8 +595,10 @@ class AssistantService extends ChangeNotifier {
   List<ChatMessage> _recentContext({int n = 6}) {
     final done = _messages.where((m) => !m.pending).toList();
     if (done.length <= 1) return const [];
-    final slice =
-        done.sublist(0, done.length - 1); // без только что добавленного user
+    final slice = done.sublist(
+      0,
+      done.length - 1,
+    ); // без только что добавленного user
     return slice.length > n ? slice.sublist(slice.length - n) : slice;
   }
 
@@ -672,10 +684,12 @@ class AssistantService extends ChangeNotifier {
           _queueUiAction(local, text);
           final response = local.response.isEmpty ? 'Готово' : local.response;
           _lastTroikaText = response;
-          _setLastResult(AssistantResult.forTurn(
-            response: response,
-            successfulTools: const ['local_action'],
-          ));
+          _setLastResult(
+            AssistantResult.forTurn(
+              response: response,
+              successfulTools: const ['local_action'],
+            ),
+          );
           pending
             ..text = response
             ..pending = false;
@@ -691,7 +705,8 @@ class AssistantService extends ChangeNotifier {
       }
 
       if (TroikaConfig.serverUrl.trim().isEmpty) {
-        const response = 'Эта локальная команда пока не поддерживается. '
+        const response =
+            'Эта локальная команда пока не поддерживается. '
             'Свободные вопросы будут доступны в AI-тарифе.';
         _lastTroikaText = response;
         _setLastResult(AssistantResult.forTurn(response: response));
@@ -744,18 +759,24 @@ class AssistantService extends ChangeNotifier {
         },
         onToolDone: (tool, isErr) {
           _checkTurn(turn);
-          pending.thoughts
-              .add(ThoughtStep(ThoughtKind.toolDone, tool, isError: isErr));
+          pending.thoughts.add(
+            ThoughtStep(ThoughtKind.toolDone, tool, isError: isErr),
+          );
           if (!isErr && tool.trim().isNotEmpty) successfulTools.add(tool);
           notifyListeners();
         },
         onResult: (result) async {
           _checkTurn(turn);
           if (result.kind == 'file_pending' && result.artifact != null) {
-            final file = await FilesService().receiveDeviceFile(result.artifact!);
+            final file = await FilesService().receiveDeviceFile(
+              result.artifact!,
+            );
             _checkTurn(turn);
-            structuredResult = RunActionResult(kind: 'file', id: file.id,
-                title: '${file.name} — сохранён на устройстве');
+            structuredResult = RunActionResult(
+              kind: 'file',
+              id: file.id,
+              title: '${file.name} — сохранён на устройстве',
+            );
           } else {
             structuredResult = result;
           }
@@ -780,31 +801,34 @@ class AssistantService extends ChangeNotifier {
       );
       _checkTurn(turn);
       var cleanResponse = _stripEmoTag(response);
-      final reminderSync = _replyDelivery.sync();
+      final reminderSync = _replyDelivery.sync(refresh: true);
       final waitsForReminder = structuredResult?.kind == 'reminder';
       final reminderStatus = waitsForReminder ? await reminderSync : null;
       _checkTurn(turn);
       if (!waitsForReminder) unawaited(reminderSync);
-      if (structuredResult?.kind == 'reminder' && Platform.isAndroid) {
+      if (structuredResult?.kind == 'reminder' &&
+          (Platform.isAndroid || Platform.isWindows)) {
         if (reminderStatus == null) {
           cleanResponse +=
-              '\nНа телефоне пока не удалось настроить уведомление. Проверь соединение.';
+              '\nНа этом устройстве пока не удалось настроить уведомление. Проверь соединение.';
         } else if (!reminderStatus.notificationsEnabled) {
           cleanResponse +=
-              '\nРазреши уведомления Тройки в настройках телефона, чтобы напоминание сработало.';
+              '\nРазреши уведомления Тройки в настройках устройства, чтобы напоминание сработало.';
         } else if (!reminderStatus.exactAlarms) {
           cleanResponse +=
-              '\nAndroid может задержать уведомление. Включи точные напоминания в разделе «Помощник».';
+              '\nAndroid может задержать уведомление. Включи точные напоминания в разделе «Дела».';
         }
       }
       _lastTroikaText = cleanResponse;
-      _setLastResult(AssistantResult.forTurn(
-        response: cleanResponse,
-        successfulTools: successfulTools,
-        structuredKind: structuredResult?.kind ?? '',
-        structuredTitle: structuredResult?.title ?? '',
-        resourceId: structuredResult?.id ?? '',
-      ));
+      _setLastResult(
+        AssistantResult.forTurn(
+          response: cleanResponse,
+          successfulTools: successfulTools,
+          structuredKind: structuredResult?.kind ?? '',
+          structuredTitle: structuredResult?.title ?? '',
+          resourceId: structuredResult?.id ?? '',
+        ),
+      );
       pending
         ..text = cleanResponse
         ..pending = false;
@@ -943,7 +967,8 @@ class AssistantService extends ChangeNotifier {
     notifyListeners();
 
     Future.delayed(const Duration(seconds: 4), () {
-      if (!_disposed && generation == _turnGeneration &&
+      if (!_disposed &&
+          generation == _turnGeneration &&
           _state == AssistantState.error) {
         _state = AssistantState.idle;
         if (_wakeWordEnabled) _startWakeWordListening();
@@ -971,10 +996,10 @@ class AssistantService extends ChangeNotifier {
 
 class _AssistantTurn {
   _AssistantTurn(this.generation)
-      : revision = TroikaConfig.voiceIdentityRevision,
-        owner = TroikaConfig.accountEmail,
-        endpoint = TroikaConfig.serverUrl,
-        session = TroikaConfig.sessionId;
+    : revision = TroikaConfig.voiceIdentityRevision,
+      owner = TroikaConfig.accountEmail,
+      endpoint = TroikaConfig.serverUrl,
+      session = TroikaConfig.sessionId;
 
   final int generation, revision;
   final String owner, endpoint, session;

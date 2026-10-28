@@ -21,11 +21,31 @@ object ReminderScheduler {
     private const val PREFS = "troika_reminders"
     private const val CHANNEL = "troika_personal_reminders"
     private const val FIRE = "com.troika.hermes_assistant.REMINDER_FIRE"
+    private val syncTickets = ReminderSyncTickets<NativeAccountSession.Identity>()
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private fun rows(context: Context): JSONArray = try {
         JSONArray(prefs(context).getString("rows", "[]"))
     } catch (_: Exception) { JSONArray() }
+
+    private fun record(row: JSONObject) = ReminderDeliveryPolicy.Reminder(
+        row.getString("id"), row.getDouble("fire_at"), row.optString("title"),
+        row.optString("body"), row.optString("available_at"))
+
+    private fun records(rows: JSONArray): List<ReminderDeliveryPolicy.Reminder> =
+        (0 until rows.length()).map { record(rows.getJSONObject(it)) }
+
+    private fun accountValue(account: android.content.SharedPreferences, name: String): String =
+        (account.getString("flutter.troika_$name", null) ?:
+            account.getString("flutter.hermes_$name", null)).orEmpty().trim()
+
+    private fun identityMatches(context: Context): Boolean {
+        val saved = prefs(context)
+        val account = context.getSharedPreferences(HermesListenerService.PREFS, Context.MODE_PRIVATE)
+        return ReminderDeliveryPolicy.matchesIdentity(saved.getString("identity_origin", null),
+            saved.getLong("identity_revision", 0), accountValue(account, "server_url").trimEnd('/'),
+            account.getLong(NativeAccountSession.IDENTITY_REVISION, 0), accountValue(account, "api_key").isNotBlank())
+    }
 
     fun status(context: Context): Map<String, Boolean> {
         val alarms = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -45,22 +65,59 @@ object ReminderScheduler {
             putExtra("id", id)
         }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
+    @Synchronized fun beginSync(context: Context, expectedIdentity: NativeAccountSession.Identity? = null): Long? {
+        val identity = expectedIdentity ?: NativeAccountSession.snapshot(context) ?: return null
+        if (!NativeAccountSession.current(context, identity)) return null
+        return syncTickets.begin(identity)
+    }
+
+    @Synchronized fun applySync(context: Context, snapshot: JSONObject, ticket: Long): Map<String, Boolean>? {
+        val identity = syncTickets.consume(ticket) { NativeAccountSession.current(context, it) } ?: return null
+        return applySnapshot(context, snapshot, identity)
+    }
+
+    @Synchronized fun rejectSync(context: Context, ticket: Long): Boolean {
+        syncTickets.consume(ticket) { NativeAccountSession.current(context, it) } ?: return false
+        clear(context)
+        return true
+    }
+
     @Synchronized fun sync(context: Context, snapshot: JSONObject): Map<String, Boolean> {
+        val ticket = requireNotNull(beginSync(context))
+        return requireNotNull(applySync(context, snapshot, ticket))
+    }
+
+    private fun applySnapshot(context: Context, snapshot: JSONObject,
+        identity: NativeAccountSession.Identity): Map<String, Boolean> {
         val owner = snapshot.optString("owner_id")
-        require(owner.matches(Regex("usr_[0-9a-f]{32}")))
+        val enabled = snapshot.get("reminders_enabled")
+        require(enabled is Boolean)
+        val incoming = snapshot.getJSONArray("reminders")
+        val next = if (enabled) incoming else JSONArray()
+        require(next.length() <= 200)
+        val nextRecords = records(next)
+        ReminderDeliveryPolicy.validate(owner, nextRecords)
         val preferences = prefs(context)
         if (preferences.getString("owner", "") != owner) clear(context)
         val alarms = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val previous = rows(context)
         for (i in 0 until previous.length()) alarms.cancel(pending(context, previous.getJSONObject(i).getString("id")))
-        val next = if (snapshot.optBoolean("reminders_enabled")) snapshot.optJSONArray("reminders") ?: JSONArray() else JSONArray()
-        require(next.length() <= 200)
-        preferences.edit().putString("owner", owner).putString("rows", next.toString()).commit()
+        val nextIds = nextRecords.mapTo(mutableSetOf()) { it.id }
+        val retired = ReminderDeliveryPolicy.retiredIds(records(previous), nextRecords) +
+            (preferences.getStringSet("fired", emptySet()) ?: emptySet()).filterNot { it in nextIds }
+        for (id in retired) manager.cancel(id, 1)
+        preferences.edit().putString("owner", owner).putString("rows", next.toString())
+            .putLong("identity_revision", identity.generation)
+            .putString("identity_origin", identity.serverUrl).commit()
+        ReminderVoiceService.remindersChanged()
         reschedule(context)
         return status(context)
     }
 
     @Synchronized fun clear(context: Context) {
+        syncTickets.clear()
+        context.stopService(Intent(context, ReminderVoiceService::class.java))
         val alarms = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val previous = rows(context)
@@ -74,14 +131,14 @@ object ReminderScheduler {
     }
 
     @Synchronized fun reschedule(context: Context) {
+        if (!identityMatches(context)) return
         val alarms = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val saved = rows(context)
         val fired = prefs(context).getStringSet("fired", emptySet()) ?: emptySet()
-        for (i in 0 until saved.length()) {
-            val row = saved.getJSONObject(i)
-            val id = row.getString("id")
-            if (!id.matches(Regex("msg_[0-9a-f]{32}")) || fired.contains(id)) continue
-            val time = maxOf((row.getDouble("fire_at") * 1000).toLong(), System.currentTimeMillis() + 500)
+        for (row in records(saved)) {
+            val id = row.id
+            if (fired.contains(id)) continue
+            val time = ReminderDeliveryPolicy.alarmTimeMillis(row, System.currentTimeMillis())
             try {
                 if (status(context)["exact_alarms"] == true) {
                     alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, time, pending(context, id))
@@ -95,7 +152,7 @@ object ReminderScheduler {
     }
 
     @Synchronized fun fire(context: Context, intent: Intent) {
-        if (intent.action != FIRE) return
+        if (intent.action != FIRE || !identityMatches(context)) return
         val id = intent.getStringExtra("id") ?: return
         val saved = rows(context)
         val fired = (prefs(context).getStringSet("fired", emptySet()) ?: emptySet()).toMutableSet()
@@ -103,7 +160,10 @@ object ReminderScheduler {
         for (i in 0 until saved.length()) {
             val row = saved.getJSONObject(i)
             if (row.optString("id") != id) continue
-            if (System.currentTimeMillis() + 1000 < (row.getDouble("fire_at") * 1000).toLong()) return
+            if (!ReminderDeliveryPolicy.isDue(record(row), System.currentTimeMillis())) {
+                reschedule(context)
+                return
+            }
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(
                 NotificationChannel(CHANNEL, "Напоминания Тройки", NotificationManager.IMPORTANCE_HIGH))
@@ -118,12 +178,32 @@ object ReminderScheduler {
                 .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                 .setCategory(NotificationCompat.CATEGORY_REMINDER)
                 .setPriority(NotificationCompat.PRIORITY_HIGH).build()
-            manager.notify(id, 1, notification)
+            try { manager.notify(id, 1, notification) } catch (_: SecurityException) { return }
             fired.add(id)
             // IDs contain no message contents; retain deduplication across syncs.
             prefs(context).edit().putStringSet("fired", fired).commit()
+            try {
+                ContextCompat.startForegroundService(context, Intent(context, ReminderVoiceService::class.java)
+                    .putExtra("owner", prefs(context).getString("owner", ""))
+                    .putExtra("id", id))
+            } catch (_: Exception) {
+                // Notification delivery remains useful if the OS blocks speech.
+            }
             return
         }
+    }
+
+    @Synchronized fun spokenText(context: Context, owner: String, id: String): String {
+        if (!identityMatches(context) || owner.isBlank() || prefs(context).getString("owner", "") != owner ||
+            !(prefs(context).getStringSet("fired", emptySet()) ?: emptySet()).contains(id)) return ""
+        val saved = rows(context)
+        for (i in 0 until saved.length()) {
+            val row = saved.getJSONObject(i)
+            if (row.optString("id") == id) {
+                return record(row).spokenText
+            }
+        }
+        return ""
     }
 }
 

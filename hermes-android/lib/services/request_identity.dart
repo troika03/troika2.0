@@ -15,6 +15,14 @@ class TroikaRequestIdentity {
   final String owner, origin, session, sessionKey;
   final bool _hosted;
 
+  bool matches(TroikaRequestIdentity other) =>
+      revision == other.revision &&
+      owner == other.owner &&
+      origin == other.origin &&
+      session == other.session &&
+      sessionKey == other.sessionKey &&
+      _hosted == other._hosted;
+
   void check() {
     if (revision != TroikaConfig.voiceIdentityRevision ||
         owner != TroikaConfig.accountEmail ||

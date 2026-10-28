@@ -23,7 +23,7 @@ installed-client E2E или релизной готовности. `[-]` — ч�
 | 2. Продукт и аудитория | [x] | Product copy ориентируется на результат; экспериментальные инструменты не продаются как готовые. |
 | 3. Границы 1.0 | [x] | Product allowlist/default-off policy реализованы. Незавершённые обязательные области остаются в следующих разделах. |
 | 4. Voice-first дизайн | [x] | Orb states, secondary text, result cards, approval modal и темы покрыты Flutter tests. |
-| 5. Android | [-] | UI и голос реализованы, прежние Samsung проверки сохранены. Фоновый native refresh access token и свежий reminder/standby E2E не закрыты. |
+| 5. Android | [-] | 28 октября основная APK обновлена с единым native refresh и защищённой синхронизацией reminders; 38 Kotlin/JUnit и 235 Flutter tests прошли. Владелец подтвердил фоновый голос. Физическое напоминание, Stop новой APK, standby/reboot и реальные expiry/revoke ещё не приняты. [Аудит](audit/TROIKA_BACKGROUND_RELIABILITY_2026_10_28.md). |
 | 6. Windows | [-] | WPF с автопилотом установлен; точный EXE прошёл SDK E2E: API, пауза/продолжение, DPAPI checkpoint, owner isolation, локальный файл и очередь без дубля. Обновлённый source с UI/голосом собирается и проходит проверки. Физический микрофон/звук, настоящее закрытие в tray, background reminders и signed installer остаются отдельными gates. [Аудит](audit/AUTOPILOT_COMPLETION_2026_10_16.md). |
 | 7. Сайт и аккаунт | [-] | Сайт опубликован на cm444726.tw1.ru: HTTPS, вход/регистрация, ресурс, устройства, память, export/delete, изолированная поддержка SQLite и локальные загрузки. 12 локальных и 52 проверки Timeweb прошли; оба установщика сверены по SHA-256, тестовые аккаунты удалены. Исходный Sites остался закрытым. Оплата/почта отложены, recovery/verification, legal, подпись и общие release gates открыты. [Аудит](audit/WEBSITE_TIMEWEB_2026_10_16.md). |
 | 8. Billing/ресурс | [-] | Месячный runtime и личный API включены 14 октября. Corporate Free: prompt + completion; личный ключ: 0 за модель без corporate fallback. Free 500 тыс., Plus 5 млн, Pro 10 млн; Run/voice/API/Android/WPF, две Pro beta-выдачи, public HTTPS E2E, APK установлен без сброса. Оплата/почта отложены; checkout/verification/refund в коде, flags false. До продаж остаются финансовые lifecycle/unknown bills/anti-abuse. [Проверки](audit/SUBSCRIPTION_RUNTIME_2026_10_13.md), [настройка](development/SUBSCRIPTION_SETUP.md). |
@@ -48,6 +48,17 @@ candidate; gateway-связка sync/export/revoke/delete прошла 43 tests 
 Shared runtime, установленные клиенты и production этим этапом не менялись.
 Независимая приёмка 10 и общий regression открыты. Статусы разделов 1–20 не повышены.
 Полный состав и ограничения: [отчёт 09](development/repair-2026-10-18/reports/09-coordinator.md).
+
+## Фон Android — checkpoint 28 октября 2026
+
+Основная release APK обновлена без удаления данных; установленный SHA и прежний
+сертификат проверены. Фоновый голос подтверждён владельцем. Native/Flutter
+refresh и reminder tickets защищены от поздних ответов, отмены и смены аккаунта.
+Kotlin/JUnit 38 passed; Flutter 235 passed/2 skipped; analyze без errors/warnings;
+release сборка прошла. Backend этой поставкой не менялся. Доставка напоминания,
+standby/reboot, реальный expiry/revoke и полный voice E2E остаются открытыми.
+Все разделы целиком этой поставкой не закрываются.
+[Доказательства и ограничения](audit/TROIKA_BACKGROUND_RELIABILITY_2026_10_28.md).
 
 ## Следующий шаг
 

@@ -72,14 +72,27 @@ class MainActivity : FlutterActivity() {
         )
         methodChannel!!.setMethodCallHandler { call, result ->
             when (call.method) {
+                "beginReminderSync" -> { result.success(ReminderScheduler.beginSync(this)) }
                 "syncReminders" -> {
-                    try {
-                        result.success(ReminderScheduler.sync(this, org.json.JSONObject(call.argument<String>("snapshot") ?: "{}")))
-                    } catch (error: Exception) {
-                        result.error("reminder_sync_failed", "Не удалось установить напоминание на телефоне", null)
+                    val ticket = call.argument<Number>("ticket")?.toLong()
+                    val snapshot = call.argument<String>("snapshot") ?: "{}"
+                    kotlin.concurrent.thread {
+                        try {
+                            val status = ticket?.let { ReminderScheduler.applySync(this, org.json.JSONObject(snapshot), it) }
+                            runOnUiThread { result.success(status) }
+                        } catch (error: Exception) {
+                            runOnUiThread { result.error("reminder_sync_failed", "Не удалось установить напоминание на телефоне", null) }
+                        }
                     }
                 }
-                "clearReminders" -> { ReminderScheduler.clear(this); result.success(null) }
+                "rejectReminderSync" -> {
+                    val ticket = call.argument<Number>("ticket")?.toLong()
+                    kotlin.concurrent.thread {
+                        val rejected = ticket?.let { ReminderScheduler.rejectSync(this, it) } ?: false
+                        runOnUiThread { result.success(rejected) }
+                    }
+                }
+                "clearReminders" -> { NativeReminderDelivery.clear(this); result.success(null) }
                 "reminderStatus" -> { result.success(ReminderScheduler.status(this)) }
                 "requestExactReminderAlarms" -> {
                     if (Build.VERSION.SDK_INT >= 31 && ReminderScheduler.status(this)["exact_alarms"] != true) {
@@ -173,16 +186,70 @@ class MainActivity : FlutterActivity() {
                 "getTimeZoneId" -> {
                     result.success(TimeZone.getDefault().id)
                 }
+                "saveAccountSession" -> {
+                    val email = call.argument<String>("email").orEmpty()
+                    val token = call.argument<String>("token").orEmpty()
+                    val refresh = call.argument<String>("refreshToken").orEmpty()
+                    val expiry = call.argument<Number>("expiresAtMillis")?.toLong() ?: 0
+                    val session = call.argument<String>("sessionId").orEmpty()
+                    val replace = call.argument<Boolean>("replaceIdentity") ?: false
+                    val expected = call.argument<Number>("expectedGeneration")?.toLong()
+                    kotlin.concurrent.thread {
+                        val saved = runCatching {
+                            NativeAccountSession.saveAccount(applicationContext, email, token, refresh,
+                                expiry, session, replace, expected)
+                        }.getOrDefault(false)
+                        runOnUiThread { result.success(saved) }
+                    }
+                }
+                "clearAccountSession" -> {
+                    val expected = call.argument<Number>("expectedGeneration")?.toLong()
+                    val mode = call.argument<String>("mode") ?: "signout"
+                    kotlin.concurrent.thread {
+                        val cleared = runCatching { NativeAccountSession.clear(applicationContext, expected, mode) }.getOrDefault(false)
+                        runOnUiThread { result.success(cleared) }
+                    }
+                }
+                "setAccountServerUrl", "setAccountApiKey" -> {
+                    val server = call.method == "setAccountServerUrl"
+                    val value = call.argument<String>("value").orEmpty()
+                    kotlin.concurrent.thread {
+                        val saved = runCatching {
+                            if (server) NativeAccountSession.setServerUrl(applicationContext, value)
+                            else NativeAccountSession.setApiKey(applicationContext, value)
+                        }.getOrDefault(false)
+                        runOnUiThread { result.success(saved) }
+                    }
+                }
                 "storeRefreshToken" -> {
                     val token = call.argument<String>("token").orEmpty()
-                    result.success(SecureTokenStore.put(applicationContext, token))
+                    kotlin.concurrent.thread {
+                        val stored = runCatching { SecureTokenStore.put(applicationContext, token) }.getOrDefault(false)
+                        runOnUiThread { result.success(stored) }
+                    }
+                }
+                "ensureFreshAccountSession" -> {
+                    val force = call.argument<Boolean>("force") == true
+                    val identity = NativeAccountSession.snapshot(applicationContext)
+                    kotlin.concurrent.thread {
+                        val fresh = try {
+                            identity != null && NativeAccountSession.accessToken(applicationContext, identity, force).isNotBlank()
+                        } catch (_: Exception) { false }
+                        runOnUiThread { result.success(fresh) }
+                    }
                 }
                 "getRefreshToken" -> {
-                    result.success(SecureTokenStore.get(applicationContext))
+                    kotlin.concurrent.thread {
+                        val token = SecureTokenStore.get(applicationContext)
+                        runOnUiThread { result.success(token) }
+                    }
                 }
                 "clearRefreshToken" -> {
-                    SecureTokenStore.clear(applicationContext)
-                    result.success(null)
+                    kotlin.concurrent.thread {
+                        SecureTokenStore.clear(applicationContext)
+                        NativeReminderDelivery.clear(applicationContext)
+                        runOnUiThread { result.success(null) }
+                    }
                 }
                 "executeLocalCommand" -> {
                     val raw = call.argument<String>("text")?.trim().orEmpty()
@@ -384,8 +451,9 @@ class MainActivity : FlutterActivity() {
         volume: Int = 0,
     ) {
         val prefs = getSharedPreferences(HermesListenerService.PREFS, MODE_PRIVATE)
-        val url = prefs.getString(HermesListenerService.PREF_URL, null) ?: return
-        val key = prefs.getString(HermesListenerService.PREF_KEY, "") ?: ""
+        val url = HermesListenerService.resolvedUrl(prefs)
+        val identity = NativeAccountSession.snapshot(this, url) ?: return
+        val key = HermesListenerService.resolvedKey(prefs)
         val sample = if (voice.startsWith("ru-")) {
             "Слушаю. Сейчас восемь часов вечера, дождь до полуночи."
         } else {
@@ -393,7 +461,7 @@ class MainActivity : FlutterActivity() {
         }
         Thread {
             try {
-                val player = EdgeTtsPlayer(applicationContext, url, key, voice, rate, pitch, volume)
+                val player = EdgeTtsPlayer(applicationContext, url, key, voice, rate, pitch, volume, identity)
                 player.speak(sample) { player.stop() }
             } catch (e: Exception) {
                 android.util.Log.e("MainActivity", "preview failed: ${e.message}")

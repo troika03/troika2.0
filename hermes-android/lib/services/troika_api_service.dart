@@ -21,7 +21,7 @@ Future<T> retryTlsHandshake<T>(
     Duration(milliseconds: 2500),
   ],
 }) async {
-  for (var attempt = 0;; attempt++) {
+  for (var attempt = 0; ; attempt++) {
     try {
       return await operation();
     } on HandshakeException {
@@ -46,7 +46,7 @@ class ThoughtStep {
   final DateTime time;
 
   ThoughtStep(this.kind, this.text, {this.isError = false, DateTime? time})
-      : time = time ?? DateTime.now();
+    : time = time ?? DateTime.now();
 }
 
 /// One server-requested confirmation for an action on the paired phone.
@@ -82,7 +82,8 @@ class RunActionResult {
       id: (json['id'] ?? '').toString(),
       title: (json['title'] ?? '').toString(),
       artifact: json['artifact'] is Map<String, dynamic>
-          ? json['artifact'] as Map<String, dynamic> : null,
+          ? json['artifact'] as Map<String, dynamic>
+          : null,
     );
   }
 }
@@ -167,7 +168,10 @@ class AccountSubscription {
       plan: (json['plan'] ?? 'free').toString(),
       status: (json['status'] ?? 'active').toString(),
       dailyLimit: (json['daily_limit'] as num?)?.toInt() ?? 0,
-      used: (json['spent'] as num?)?.toInt() ?? (json['used'] as num?)?.toInt() ?? 0,
+      used:
+          (json['spent'] as num?)?.toInt() ??
+          (json['used'] as num?)?.toInt() ??
+          0,
       remaining: (json['remaining'] as num?)?.toInt() ?? 0,
       quotaEnforced: json['quota_enforced'] == true,
       resourceEnforced: json['resource_enforced'] == true,
@@ -175,7 +179,9 @@ class AccountSubscription {
       reserved: (json['reserved'] as num?)?.toInt() ?? 0,
       monthlyLimit: (json['monthly_limit'] as num?)?.toInt() ?? 0,
       operations: (json['recent_operations'] as List? ?? const [])
-          .whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList(),
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList(),
       resetsAt: DateTime.tryParse((json['resets_at'] ?? '').toString()),
     );
   }
@@ -187,7 +193,7 @@ class ChatMessage {
   final String role; // 'user' | 'assistant'
   String text;
   final List<String>
-      imageDataUrls; // data:image/...;base64,... (для отрисовки и отправки)
+  imageDataUrls; // data:image/...;base64,... (для отрисовки и отправки)
   final bool fromVoice;
   final DateTime time;
   bool pending; // ждём ответ сервера (для индикатора «печатает»)
@@ -205,9 +211,9 @@ class ChatMessage {
     DateTime? time,
     this.pending = false,
     List<ThoughtStep>? thoughts,
-  })  : imageDataUrls = imageDataUrls ?? [],
-        thoughts = thoughts ?? [],
-        time = time ?? DateTime.now();
+  }) : imageDataUrls = imageDataUrls ?? [],
+       thoughts = thoughts ?? [],
+       time = time ?? DateTime.now();
 
   bool get isUser => role == 'user';
   bool get hasImages => imageDataUrls.isNotEmpty;
@@ -260,7 +266,8 @@ class TroikaApiService {
   Future<bool> exportAccountData() async {
     if (!TroikaConfig.apiKey.startsWith('trk_live_')) {
       throw TroikaApiException(
-          'Экспорт данных доступен после подключения Тройки.');
+        'Экспорт данных доступен после подключения Тройки.',
+      );
     }
     try {
       final response = await http
@@ -276,7 +283,8 @@ class TroikaApiService {
         );
       }
       final now = DateTime.now().toUtc();
-      final date = '${now.year.toString().padLeft(4, '0')}-'
+      final date =
+          '${now.year.toString().padLeft(4, '0')}-'
           '${now.month.toString().padLeft(2, '0')}-'
           '${now.day.toString().padLeft(2, '0')}';
       final isMobile = Platform.isAndroid || Platform.isIOS;
@@ -296,7 +304,8 @@ class TroikaApiService {
       throw TroikaApiException('Нет соединения с сервером. Экспорт не создан.');
     } on TimeoutException {
       throw TroikaApiException(
-          'Сервер не успел создать экспорт. Повтори позже.');
+        'Сервер не успел создать экспорт. Повтори позже.',
+      );
     }
   }
 
@@ -305,7 +314,8 @@ class TroikaApiService {
   Future<bool> deleteAccount() async {
     if (!TroikaConfig.apiKey.startsWith('trk_live_')) {
       throw TroikaApiException(
-          'Удаление аккаунта доступно после подключения Тройки.');
+        'Удаление аккаунта доступно после подключения Тройки.',
+      );
     }
     try {
       final response = await http
@@ -326,16 +336,15 @@ class TroikaApiService {
       throw TroikaApiException('Нет соединения с сервером. Аккаунт не удалён.');
     } on TimeoutException {
       throw TroikaApiException(
-          'Сервер не подтвердил удаление. Попробуй ещё раз.');
+        'Сервер не подтвердил удаление. Попробуй ещё раз.',
+      );
     }
   }
 
   /// List devices owned by the authenticated account.
   Future<List<AccountDevice>> listAccountDevices() async {
     if (!TroikaConfig.apiKey.startsWith('trk_live_')) {
-      throw TroikaApiException(
-        'Устройства доступны после входа в аккаунт.',
-      );
+      throw TroikaApiException('Устройства доступны после входа в аккаунт.');
     }
     try {
       final response = await http
@@ -810,12 +819,18 @@ class TroikaApiService {
 
   /// Stop an owner-scoped run; closing the event stream alone does not stop AI work.
   Future<void> stopRun(String runId) async {
-    final response = await http.post(
-      Uri.parse('${TroikaConfig.runsUrl}/${Uri.encodeComponent(runId)}/stop'),
-      headers: TroikaConfig.headers,
-    ).timeout(const Duration(seconds: 10));
+    final response = await http
+        .post(
+          Uri.parse(
+            '${TroikaConfig.runsUrl}/${Uri.encodeComponent(runId)}/stop',
+          ),
+          headers: TroikaConfig.headers,
+        )
+        .timeout(const Duration(seconds: 10));
     if (response.statusCode != 200 && response.statusCode != 404) {
-      throw TroikaApiException('Не удалось остановить запрос. Повтори остановку.');
+      throw TroikaApiException(
+        'Не удалось остановить запрос. Повтори остановку.',
+      );
     }
   }
 
@@ -980,8 +995,10 @@ class TroikaApiService {
   // ── Список всех сессий (экран истории) ───────────────────────────────────
   Future<List<TroikaProject>> listAssistantProjects() async {
     final response = await http
-        .get(Uri.parse('${TroikaConfig.serverUrl}/v1/assistant/projects'),
-            headers: TroikaConfig.headers)
+        .get(
+          Uri.parse('${TroikaConfig.serverUrl}/v1/assistant/projects'),
+          headers: TroikaConfig.headers,
+        )
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Проекты недоступны');
     final data =
@@ -992,36 +1009,49 @@ class TroikaApiService {
         .toList();
   }
 
-  Future<TroikaProject> createAssistantProject(String name,
-      {String summary = ''}) async {
+  Future<TroikaProject> createAssistantProject(
+    String name, {
+    String summary = '',
+  }) async {
     final response = await http
-        .post(Uri.parse('${TroikaConfig.serverUrl}/v1/assistant/projects'),
-            headers: TroikaConfig.headers,
-            body: json.encode({'name': name, 'summary': summary}))
+        .post(
+          Uri.parse('${TroikaConfig.serverUrl}/v1/assistant/projects'),
+          headers: TroikaConfig.headers,
+          body: json.encode({'name': name, 'summary': summary}),
+        )
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Проект не создан');
-    return TroikaProject.fromJson((json.decode(utf8.decode(response.bodyBytes))
-        as Map<String, dynamic>)['project'] as Map<String, dynamic>);
+    return TroikaProject.fromJson(
+      (json.decode(utf8.decode(response.bodyBytes))
+              as Map<String, dynamic>)['project']
+          as Map<String, dynamic>,
+    );
   }
 
   Future<void> activateAssistantProject(String projectId) async {
     final response = await http
         .put(
-            Uri.parse('${TroikaConfig.serverUrl}/v1/assistant/projects/'
-                '${Uri.encodeComponent(projectId)}/active'),
-            headers: TroikaConfig.headers)
+          Uri.parse(
+            '${TroikaConfig.serverUrl}/v1/assistant/projects/'
+            '${Uri.encodeComponent(projectId)}/active',
+          ),
+          headers: TroikaConfig.headers,
+        )
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Проект не выбран');
   }
 
-  Future<List<TroikaTask>> listAssistantTasks(
-      {String? projectId, bool includeClosed = false}) async {
+  Future<List<TroikaTask>> listAssistantTasks({
+    String? projectId,
+    bool includeClosed = false,
+  }) async {
     final query = <String, String>{'include_closed': includeClosed.toString()};
     if (projectId != null && projectId.isNotEmpty) {
       query['project_id'] = projectId;
     }
-    final uri = Uri.parse('${TroikaConfig.serverUrl}/v1/assistant/tasks')
-        .replace(queryParameters: query);
+    final uri = Uri.parse(
+      '${TroikaConfig.serverUrl}/v1/assistant/tasks',
+    ).replace(queryParameters: query);
     final response = await http
         .get(uri, headers: TroikaConfig.headers)
         .timeout(const Duration(seconds: 15));
@@ -1034,57 +1064,119 @@ class TroikaApiService {
         .toList();
   }
 
-  Future<TroikaTask> createAssistantTask(
-      {required String title,
-      String? projectId,
-      String details = '',
-      String? dueAt,
-      String actionMode = 'remind',
-      String actionSummary = ''}) async {
+  Future<TroikaTask> createAssistantTask({
+    required String title,
+    String? projectId,
+    String details = '',
+    String? dueAt,
+    String actionMode = 'remind',
+    String actionSummary = '',
+  }) async {
     final body = <String, dynamic>{
       'title': title,
       'details': details,
       'action_mode': actionMode,
-      'action_summary': actionSummary
+      'action_summary': actionSummary,
     };
     if (projectId != null && projectId.isNotEmpty) {
       body['project_id'] = projectId;
     }
     if (dueAt != null && dueAt.isNotEmpty) body['due_at'] = dueAt;
     final response = await http
-        .post(Uri.parse('${TroikaConfig.serverUrl}/v1/assistant/tasks'),
-            headers: {
-              ...TroikaConfig.headers,
-              'Idempotency-Key':
-                  'android-${DateTime.now().microsecondsSinceEpoch}'
-            },
-            body: json.encode(body))
+        .post(
+          Uri.parse('${TroikaConfig.serverUrl}/v1/assistant/tasks'),
+          headers: {
+            ...TroikaConfig.headers,
+            'Idempotency-Key':
+                'android-${DateTime.now().microsecondsSinceEpoch}',
+          },
+          body: json.encode(body),
+        )
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Задача не создана');
-    return TroikaTask.fromJson((json.decode(utf8.decode(response.bodyBytes))
-        as Map<String, dynamic>)['task'] as Map<String, dynamic>);
+    return TroikaTask.fromJson(
+      (json.decode(utf8.decode(response.bodyBytes))
+              as Map<String, dynamic>)['task']
+          as Map<String, dynamic>,
+    );
   }
 
   Future<TroikaTask> updateAssistantTaskStatus(
-      String taskId, String status) async {
+    String taskId,
+    String status,
+  ) async {
     final response = await http
         .patch(
-            Uri.parse('${TroikaConfig.serverUrl}/v1/assistant/tasks/'
-                '${Uri.encodeComponent(taskId)}'),
-            headers: TroikaConfig.headers,
-            body: json.encode({'status': status}))
+          Uri.parse(
+            '${TroikaConfig.serverUrl}/v1/assistant/tasks/'
+            '${Uri.encodeComponent(taskId)}',
+          ),
+          headers: TroikaConfig.headers,
+          body: json.encode({'status': status}),
+        )
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Статус задачи не обновлён');
-    return TroikaTask.fromJson((json.decode(utf8.decode(response.bodyBytes))
-        as Map<String, dynamic>)['task'] as Map<String, dynamic>);
+    return TroikaTask.fromJson(
+      (json.decode(utf8.decode(response.bodyBytes))
+              as Map<String, dynamic>)['task']
+          as Map<String, dynamic>,
+    );
   }
 
   Future<Map<String, dynamic>> reminderDeliveryPlan() async {
-    await AccountService().ensureFreshSession();
-    final response = await http
-        .get(Uri.parse('${TroikaConfig.serverUrl}/v1/assistant/reminders'),
-            headers: TroikaConfig.headers)
-        .timeout(const Duration(seconds: 15));
+    final identity = TroikaRequestIdentity();
+    await AccountService().ensureFreshSession(checkRequest: identity.check);
+    Future<http.Response> fetch() async {
+      final client = http.Client();
+      try {
+        return await (() async {
+          final request =
+              http.Request('GET', identity.uri('/v1/assistant/reminders'))
+                ..followRedirects = false
+                ..headers.addAll(identity.headers());
+          final response = await client.send(request);
+          final bytes = <int>[];
+          await for (final chunk in response.stream) {
+            if (bytes.length + chunk.length > 4 * 1024 * 1024) {
+              throw const FormatException('Reminder snapshot too large');
+            }
+            bytes.addAll(chunk);
+          }
+          return http.Response.bytes(
+            bytes,
+            response.statusCode,
+            headers: response.headers,
+          );
+        })().timeout(const Duration(seconds: 15));
+      } finally {
+        client.close();
+      }
+    }
+
+    var response = await fetch();
+    identity.check();
+    // A token can be rejected before its cached expiry. Recover with the
+    // device's refresh credential before cancelling its offline reminders.
+    if (response.statusCode == 401) {
+      bool fresh;
+      try {
+        fresh = await AccountService().ensureFreshSession(
+          force: true,
+          checkRequest: identity.check,
+        );
+      } on AccountSessionRevoked {
+        throw TroikaApiException('Вход в аккаунт истёк.', statusCode: 401);
+      }
+      identity.check();
+      if (!fresh) {
+        throw TroikaApiException(
+          'Не удалось восстановить соединение с аккаунтом.',
+          statusCode: 503,
+        );
+      }
+      response = await fetch();
+      identity.check();
+    }
     if (response.statusCode == 401) {
       throw TroikaApiException('Вход в аккаунт истёк.', statusCode: 401);
     }
@@ -1092,10 +1184,47 @@ class TroikaApiService {
     return json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
   }
 
-  Future<List<TroikaInboxMessage>> listAssistantInbox(
-      {bool unreadOnly = false}) async {
-    final uri = Uri.parse('${TroikaConfig.serverUrl}/v1/assistant/inbox')
-        .replace(queryParameters: {'unread_only': unreadOnly.toString()});
+  /// Prepare a short voice clip while authenticated. Windows encrypts it locally
+  /// so delivery does not depend on an open app or a still-valid access token.
+  Future<List<int>> reminderSpeech(String text) async {
+    final identity = TroikaRequestIdentity();
+    await AccountService().ensureFreshSession(checkRequest: identity.check);
+    final client = http.Client();
+    try {
+      return await (() async {
+        final request = http.Request('POST', identity.uri('/v1/audio/speech'))
+          ..headers.addAll(identity.headers())
+          ..body = json.encode({
+            'input': text,
+            'voice': 'ru-RU-SvetlanaNeural',
+          });
+        final response = await client.send(request);
+        identity.check();
+        if (response.statusCode != 200) {
+          throw const FormatException('Voice unavailable');
+        }
+        final bytes = <int>[];
+        await for (final chunk in response.stream) {
+          identity.check();
+          if (bytes.length + chunk.length > 2 * 1024 * 1024) {
+            throw const FormatException('Voice clip too large');
+          }
+          bytes.addAll(chunk);
+        }
+        if (bytes.isEmpty) throw const FormatException('Empty voice clip');
+        return bytes;
+      })().timeout(const Duration(seconds: 25));
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<List<TroikaInboxMessage>> listAssistantInbox({
+    bool unreadOnly = false,
+  }) async {
+    final uri = Uri.parse(
+      '${TroikaConfig.serverUrl}/v1/assistant/inbox',
+    ).replace(queryParameters: {'unread_only': unreadOnly.toString()});
     final response = await http
         .get(uri, headers: TroikaConfig.headers)
         .timeout(const Duration(seconds: 15));
@@ -1111,29 +1240,38 @@ class TroikaApiService {
   Future<void> markAssistantMessageRead(String messageId) async {
     final response = await http
         .post(
-            Uri.parse('${TroikaConfig.serverUrl}/v1/assistant/inbox/'
-                '${Uri.encodeComponent(messageId)}/read'),
-            headers: TroikaConfig.headers)
+          Uri.parse(
+            '${TroikaConfig.serverUrl}/v1/assistant/inbox/'
+            '${Uri.encodeComponent(messageId)}/read',
+          ),
+          headers: TroikaConfig.headers,
+        )
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Сообщение не обновлено');
   }
 
   Future<TroikaNotificationPreferences> getNotificationPreferences() async {
     final response = await http
-        .get(Uri.parse('${TroikaConfig.serverUrl}/v1/notification-preferences'),
-            headers: TroikaConfig.headers)
+        .get(
+          Uri.parse('${TroikaConfig.serverUrl}/v1/notification-preferences'),
+          headers: TroikaConfig.headers,
+        )
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Настройки уведомлений недоступны');
     return TroikaNotificationPreferences.fromJson(
-        json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>);
+      json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>,
+    );
   }
 
   Future<void> setNotificationPreferences(
-      TroikaNotificationPreferences preferences) async {
+    TroikaNotificationPreferences preferences,
+  ) async {
     final response = await http
-        .put(Uri.parse('${TroikaConfig.serverUrl}/v1/notification-preferences'),
-            headers: TroikaConfig.headers,
-            body: json.encode(preferences.toJson()))
+        .put(
+          Uri.parse('${TroikaConfig.serverUrl}/v1/notification-preferences'),
+          headers: TroikaConfig.headers,
+          body: json.encode(preferences.toJson()),
+        )
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Настройки уведомлений не сохранены');
   }
@@ -1158,8 +1296,10 @@ class TroikaApiService {
 
   Future<List<TroikaMemory>> listMemories() async {
     final response = await http
-        .get(Uri.parse('${TroikaConfig.serverUrl}/v1/memories'),
-            headers: TroikaConfig.headers)
+        .get(
+          Uri.parse('${TroikaConfig.serverUrl}/v1/memories'),
+          headers: TroikaConfig.headers,
+        )
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Память недоступна');
     final data =
@@ -1170,55 +1310,73 @@ class TroikaApiService {
         .toList();
   }
 
-  Future<TroikaMemory> createMemory(
-      {required String kind,
-      required String title,
-      required String content}) async {
+  Future<TroikaMemory> createMemory({
+    required String kind,
+    required String title,
+    required String content,
+  }) async {
     final response = await http
-        .post(Uri.parse('${TroikaConfig.serverUrl}/v1/memories'),
-            headers: {
-              ...TroikaConfig.headers,
-              'Idempotency-Key':
-                  'android-memory-${DateTime.now().microsecondsSinceEpoch}'
-            },
-            body:
-                json.encode({'kind': kind, 'title': title, 'content': content}))
+        .post(
+          Uri.parse('${TroikaConfig.serverUrl}/v1/memories'),
+          headers: {
+            ...TroikaConfig.headers,
+            'Idempotency-Key':
+                'android-memory-${DateTime.now().microsecondsSinceEpoch}',
+          },
+          body: json.encode({'kind': kind, 'title': title, 'content': content}),
+        )
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Запись не сохранена');
-    return TroikaMemory.fromJson((json.decode(utf8.decode(response.bodyBytes))
-        as Map<String, dynamic>)['memory'] as Map<String, dynamic>);
+    return TroikaMemory.fromJson(
+      (json.decode(utf8.decode(response.bodyBytes))
+              as Map<String, dynamic>)['memory']
+          as Map<String, dynamic>,
+    );
   }
 
-  Future<TroikaMemory> updateMemory(String memoryId,
-      {required String kind,
-      required String title,
-      required String content}) async {
+  Future<TroikaMemory> updateMemory(
+    String memoryId, {
+    required String kind,
+    required String title,
+    required String content,
+  }) async {
     final response = await http
         .patch(
-            Uri.parse('${TroikaConfig.serverUrl}/v1/memories/'
-                '${Uri.encodeComponent(memoryId)}'),
-            headers: TroikaConfig.headers,
-            body:
-                json.encode({'kind': kind, 'title': title, 'content': content}))
+          Uri.parse(
+            '${TroikaConfig.serverUrl}/v1/memories/'
+            '${Uri.encodeComponent(memoryId)}',
+          ),
+          headers: TroikaConfig.headers,
+          body: json.encode({'kind': kind, 'title': title, 'content': content}),
+        )
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Запись не обновлена');
-    return TroikaMemory.fromJson((json.decode(utf8.decode(response.bodyBytes))
-        as Map<String, dynamic>)['memory'] as Map<String, dynamic>);
+    return TroikaMemory.fromJson(
+      (json.decode(utf8.decode(response.bodyBytes))
+              as Map<String, dynamic>)['memory']
+          as Map<String, dynamic>,
+    );
   }
 
   Future<void> deleteMemory(String memoryId) async {
     final response = await http
         .delete(
-            Uri.parse('${TroikaConfig.serverUrl}/v1/memories/'
-                '${Uri.encodeComponent(memoryId)}'),
-            headers: TroikaConfig.headers)
+          Uri.parse(
+            '${TroikaConfig.serverUrl}/v1/memories/'
+            '${Uri.encodeComponent(memoryId)}',
+          ),
+          headers: TroikaConfig.headers,
+        )
         .timeout(const Duration(seconds: 15));
     _checkAssistantResponse(response, 'Запись не удалена');
   }
 
   static void _checkAssistantResponse(http.Response response, String fallback) {
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw TroikaApiException('$fallback (${response.statusCode}).');
+      throw TroikaApiException(
+        '$fallback (${response.statusCode}).',
+        statusCode: response.statusCode,
+      );
     }
   }
 
@@ -1286,128 +1444,139 @@ class TroikaApiService {
 class TroikaProject {
   final String id, name, summary, status;
   final bool isActive;
-  TroikaProject(
-      {required this.id,
-      required this.name,
-      required this.summary,
-      required this.status,
-      required this.isActive});
+  TroikaProject({
+    required this.id,
+    required this.name,
+    required this.summary,
+    required this.status,
+    required this.isActive,
+  });
   factory TroikaProject.fromJson(Map<String, dynamic> j) => TroikaProject(
-      id: (j['id'] ?? '').toString(),
-      name: (j['name'] ?? '').toString(),
-      summary: (j['summary'] ?? '').toString(),
-      status: (j['status'] ?? '').toString(),
-      isActive: j['is_active'] == true);
+    id: (j['id'] ?? '').toString(),
+    name: (j['name'] ?? '').toString(),
+    summary: (j['summary'] ?? '').toString(),
+    status: (j['status'] ?? '').toString(),
+    isActive: j['is_active'] == true,
+  );
 }
 
 class TroikaMemory {
   final String id, kind, title, content, createdAt, updatedAt;
-  TroikaMemory(
-      {required this.id,
-      required this.kind,
-      required this.title,
-      required this.content,
-      required this.createdAt,
-      required this.updatedAt});
+  TroikaMemory({
+    required this.id,
+    required this.kind,
+    required this.title,
+    required this.content,
+    required this.createdAt,
+    required this.updatedAt,
+  });
   factory TroikaMemory.fromJson(Map<String, dynamic> j) => TroikaMemory(
-      id: (j['id'] ?? '').toString(),
-      kind: (j['kind'] ?? 'fact').toString(),
-      title: (j['title'] ?? '').toString(),
-      content: (j['content'] ?? '').toString(),
-      createdAt: (j['created_at'] ?? '').toString(),
-      updatedAt: (j['updated_at'] ?? '').toString());
+    id: (j['id'] ?? '').toString(),
+    kind: (j['kind'] ?? 'fact').toString(),
+    title: (j['title'] ?? '').toString(),
+    content: (j['content'] ?? '').toString(),
+    createdAt: (j['created_at'] ?? '').toString(),
+    updatedAt: (j['updated_at'] ?? '').toString(),
+  );
 }
 
 class TroikaTask {
   final String id, projectId, title, details, status, actionMode, dueAt;
   final bool requiresApproval;
-  TroikaTask(
-      {required this.id,
-      required this.projectId,
-      required this.title,
-      required this.details,
-      required this.status,
-      required this.actionMode,
-      required this.dueAt,
-      required this.requiresApproval});
+  TroikaTask({
+    required this.id,
+    required this.projectId,
+    required this.title,
+    required this.details,
+    required this.status,
+    required this.actionMode,
+    required this.dueAt,
+    required this.requiresApproval,
+  });
   factory TroikaTask.fromJson(Map<String, dynamic> j) => TroikaTask(
-      id: (j['id'] ?? '').toString(),
-      projectId: (j['project_id'] ?? '').toString(),
-      title: (j['title'] ?? '').toString(),
-      details: (j['details'] ?? '').toString(),
-      status: (j['status'] ?? '').toString(),
-      actionMode: (j['action_mode'] ?? 'remind').toString(),
-      dueAt: (j['due_at'] ?? '').toString(),
-      requiresApproval: j['requires_approval'] == true);
+    id: (j['id'] ?? '').toString(),
+    projectId: (j['project_id'] ?? '').toString(),
+    title: (j['title'] ?? '').toString(),
+    details: (j['details'] ?? '').toString(),
+    status: (j['status'] ?? '').toString(),
+    actionMode: (j['action_mode'] ?? 'remind').toString(),
+    dueAt: (j['due_at'] ?? '').toString(),
+    requiresApproval: j['requires_approval'] == true,
+  );
 }
 
 class TroikaInboxMessage {
   final String id, kind, category, title, body, reason, availableAt;
   final bool requiresApproval;
   final bool isRead;
-  TroikaInboxMessage(
-      {required this.id,
-      required this.kind,
-      required this.category,
-      required this.title,
-      required this.body,
-      required this.reason,
-      required this.availableAt,
-      required this.requiresApproval,
-      required this.isRead});
+  TroikaInboxMessage({
+    required this.id,
+    required this.kind,
+    required this.category,
+    required this.title,
+    required this.body,
+    required this.reason,
+    required this.availableAt,
+    required this.requiresApproval,
+    required this.isRead,
+  });
   factory TroikaInboxMessage.fromJson(Map<String, dynamic> j) =>
       TroikaInboxMessage(
-          id: (j['id'] ?? '').toString(),
-          kind: (j['kind'] ?? '').toString(),
-          category: (j['category'] ?? '').toString(),
-          title: (j['title'] ?? '').toString(),
-          body: (j['body'] ?? '').toString(),
-          reason: (j['reason'] ?? '').toString(),
-          availableAt: (j['available_at'] ?? '').toString(),
-          requiresApproval: j['requires_approval'] == true,
-          isRead: j['read_at'] != null);
+        id: (j['id'] ?? '').toString(),
+        kind: (j['kind'] ?? '').toString(),
+        category: (j['category'] ?? '').toString(),
+        title: (j['title'] ?? '').toString(),
+        body: (j['body'] ?? '').toString(),
+        reason: (j['reason'] ?? '').toString(),
+        availableAt: (j['available_at'] ?? '').toString(),
+        requiresApproval: j['requires_approval'] == true,
+        isRead: j['read_at'] != null,
+      );
 }
 
 class TroikaNotificationPreferences {
   final bool remindersEnabled, proactiveEnabled, quietHoursEnabled;
   final String timezone, quietStart, quietEnd;
-  TroikaNotificationPreferences(
-      {required this.remindersEnabled,
-      required this.proactiveEnabled,
-      required this.quietHoursEnabled,
-      required this.timezone,
-      required this.quietStart,
-      required this.quietEnd});
+  TroikaNotificationPreferences({
+    required this.remindersEnabled,
+    required this.proactiveEnabled,
+    required this.quietHoursEnabled,
+    required this.timezone,
+    required this.quietStart,
+    required this.quietEnd,
+  });
   factory TroikaNotificationPreferences.fromJson(Map<String, dynamic> j) =>
       TroikaNotificationPreferences(
-          remindersEnabled: j['reminders_enabled'] == true,
-          proactiveEnabled: j['proactive_enabled'] == true,
-          quietHoursEnabled: j['quiet_hours_enabled'] == true,
-          timezone: (j['timezone'] ?? 'UTC').toString(),
-          quietStart: (j['quiet_start'] ?? '22:00').toString(),
-          quietEnd: (j['quiet_end'] ?? '08:00').toString());
+        remindersEnabled: j['reminders_enabled'] == true,
+        proactiveEnabled: j['proactive_enabled'] == true,
+        quietHoursEnabled: j['quiet_hours_enabled'] == true,
+        timezone: (j['timezone'] ?? 'UTC').toString(),
+        quietStart: (j['quiet_start'] ?? '22:00').toString(),
+        quietEnd: (j['quiet_end'] ?? '08:00').toString(),
+      );
   Map<String, dynamic> toJson() => {
-        'reminders_enabled': remindersEnabled,
-        'proactive_enabled': proactiveEnabled,
-        'quiet_hours_enabled': quietHoursEnabled,
-        'timezone': timezone,
-        'quiet_start': quietStart,
-        'quiet_end': quietEnd
-      };
-  TroikaNotificationPreferences copyWith(
-          {bool? remindersEnabled,
-          bool? proactiveEnabled,
-          bool? quietHoursEnabled,
-          String? timezone,
-          String? quietStart,
-          String? quietEnd}) =>
-      TroikaNotificationPreferences(
-          remindersEnabled: remindersEnabled ?? this.remindersEnabled,
-          proactiveEnabled: proactiveEnabled ?? this.proactiveEnabled,
-          quietHoursEnabled: quietHoursEnabled ?? this.quietHoursEnabled,
-          timezone: timezone ?? this.timezone,
-          quietStart: quietStart ?? this.quietStart,
-          quietEnd: quietEnd ?? this.quietEnd);
+    'reminders_enabled': remindersEnabled,
+    'proactive_enabled': proactiveEnabled,
+    'quiet_hours_enabled': quietHoursEnabled,
+    'timezone': timezone,
+    'quiet_start': quietStart,
+    'quiet_end': quietEnd,
+  };
+  TroikaNotificationPreferences copyWith({
+    bool? remindersEnabled,
+    bool? proactiveEnabled,
+    bool? quietHoursEnabled,
+    String? timezone,
+    String? quietStart,
+    String? quietEnd,
+  }) => TroikaNotificationPreferences(
+    remindersEnabled: remindersEnabled ?? this.remindersEnabled,
+    proactiveEnabled: proactiveEnabled ?? this.proactiveEnabled,
+    quietHoursEnabled: quietHoursEnabled ?? this.quietHoursEnabled,
+    timezone: timezone ?? this.timezone,
+    quietStart: quietStart ?? this.quietStart,
+    quietEnd: quietEnd ?? this.quietEnd,
+  );
 }
 
 class SessionSummary {
@@ -1428,13 +1597,13 @@ class SessionSummary {
   });
 
   factory SessionSummary.fromJson(Map<String, dynamic> j) => SessionSummary(
-        id: (j['id'] ?? '').toString(),
-        source: j['source']?.toString(),
-        title: j['title']?.toString(),
-        preview: j['preview']?.toString(),
-        messageCount: (j['message_count'] as num?)?.toInt() ?? 0,
-        lastActive: (j['last_active'] as num?)?.toDouble(),
-      );
+    id: (j['id'] ?? '').toString(),
+    source: j['source']?.toString(),
+    title: j['title']?.toString(),
+    preview: j['preview']?.toString(),
+    messageCount: (j['message_count'] as num?)?.toInt() ?? 0,
+    lastActive: (j['last_active'] as num?)?.toDouble(),
+  );
 }
 
 class SessionMessage {
@@ -1445,10 +1614,10 @@ class SessionMessage {
   SessionMessage({required this.role, required this.content, this.timestamp});
 
   factory SessionMessage.fromJson(Map<String, dynamic> j) => SessionMessage(
-        role: (j['role'] ?? 'user').toString(),
-        content: (j['content'] ?? '').toString(),
-        timestamp: (j['timestamp'] as num?)?.toDouble(),
-      );
+    role: (j['role'] ?? 'user').toString(),
+    content: (j['content'] ?? '').toString(),
+    timestamp: (j['timestamp'] as num?)?.toDouble(),
+  );
 }
 
 class TroikaApiException implements Exception {

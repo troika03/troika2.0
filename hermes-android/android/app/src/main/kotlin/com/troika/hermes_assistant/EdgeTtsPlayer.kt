@@ -34,33 +34,57 @@ class EdgeTtsPlayer(
     private val rate: Double = 1.0,     // 0.5..1.5x — скорость речи
     private val pitch: Int = 0,         // -50..+50 Hz — тон (выше = женственнее)
     private val volume: Int = 0,        // -100..+100% — громкость
+    expectedIdentity: NativeAccountSession.Identity? = null,
 ) {
     private val tag = "EdgeTts"
     private val player = AtomicReference<MediaPlayer?>(null)
     private val currentSource = AtomicReference<MediaDataSource?>(null)
     private val legacyCacheDir = File(ctx.cacheDir, "edge_tts")
     private val currentDoneCallback = AtomicReference<(() -> Unit)?>(null)
+    private val currentUnavailableCallback = AtomicReference<(() -> Unit)?>(null)
     private val streamCancelled = AtomicBoolean(false)
     private val speechRequests = java.util.concurrent.ConcurrentHashMap.newKeySet<HttpURLConnection>()
     private val preparedStreams = java.util.concurrent.ConcurrentHashMap.newKeySet<NativeStreamingSpeech>()
     private val speechEpoch = AtomicInteger(0)
     private val progressivePlayer = NativeSpeechPlayer(ctx)
+    private val accountPreferences = ctx.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+    private val accountIdentity = if (expectedIdentity != null) expectedIdentity.takeIf {
+        it.serverUrl == serverUrl.trimEnd('/') && NativeAccountSession.current(ctx, it)
+    } else NativeAccountSession.snapshot(ctx, serverUrl)?.takeIf {
+        HermesListenerService.resolvedKey(accountPreferences) == apiKey
+    }
+    private val identityListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+        if (!isCurrentAccount()) stop()
+    }
+
+    fun isCurrentAccount(): Boolean = accountIdentity?.let { NativeAccountSession.current(ctx, it) } == true
+
+    private fun freshAccessToken(): String {
+        val identity = accountIdentity ?: throw java.io.IOException("Speech account unavailable")
+        val token = NativeAccountSession.accessToken(ctx, identity)
+        if (token.isBlank() || !NativeAccountSession.current(ctx, identity)) {
+            throw java.io.IOException("Speech account changed or unavailable")
+        }
+        return token
+    }
 
     /** Return an owned stream immediately; downloading continues during playback. */
     fun prepareSpeech(text: String): NativeSpeechQueue.PreparedAudio {
+        accountPreferences.registerOnSharedPreferenceChangeListener(identityListener)
         val epoch = speechEpoch.get()
         val audio = NativeStreamingSpeech(
             fetch = { stream -> synthesizeStreaming(text, stream) },
             onClosed = { preparedStreams.remove(it) },
         )
         preparedStreams.add(audio)
-        if (speechEpoch.get() != epoch) audio.close() else audio.start()
+        if (speechEpoch.get() != epoch || !isCurrentAccount()) audio.close() else audio.start()
         return audio
     }
 
     @Synchronized
     fun playPreparedSpeech(audio: NativeSpeechQueue.PreparedAudio, onDone: () -> Unit) {
         val myGen = beginPlayback(onDone)
+        if (!isCurrentAccount()) { audio.close(); invokeDoneOnce(myGen); return }
         val stream = audio as? NativeStreamingSpeech
         if (stream == null) { audio.close(); invokeDoneOnce(myGen); return }
         progressivePlayer.play(stream) { success ->
@@ -115,9 +139,11 @@ class EdgeTtsPlayer(
      * Дальше каждый шаг проверяет generation.get() == myGen.
      */
     @Synchronized
-    private fun beginPlayback(onDone: (() -> Unit)?): Int {
+    private fun beginPlayback(onDone: (() -> Unit)?, onUnavailable: (() -> Unit)? = null): Int {
+        accountPreferences.registerOnSharedPreferenceChangeListener(identityListener)
         val myGen = generation.incrementAndGet()
         progressivePlayer.stop()
+        currentUnavailableCallback.set(null)
         // Прервать предыдущую речь, не трогая НАШ ещё-не-установленный колбэк.
         streamCancelled.set(true)
         try {
@@ -135,33 +161,36 @@ class EdgeTtsPlayer(
         // Теперь это наша озвучка.
         streamCancelled.set(false)
         currentDoneCallback.set(onDone)
+        currentUnavailableCallback.set(onUnavailable)
         return myGen
     }
 
     /** Синхронно скачивает MP3 и проигрывает; колбэк вызывается когда озвучка закончилась. */
-    fun speak(text: String, onDone: (() -> Unit)? = null) {
+    fun speak(text: String, onDone: (() -> Unit)? = null) = speak(text, onDone, null)
+
+    fun speak(text: String, onDone: (() -> Unit)?, onUnavailable: (() -> Unit)?) {
         val cleaned = extractTone(text.replace(Regex("[*#`]+"), "").trim())
         if (cleaned.isEmpty()) { onDone?.invoke(); return }
-        speakResolved(cleaned, currentTone.get(), onDone)
+        speakResolved(cleaned, currentTone.get(), onDone, onUnavailable)
     }
 
     /** Озвучить уже очищенный текст с явным тоном (тег уже вырезан). */
-    private fun speakResolved(cleaned: String, tone: String?, onDone: (() -> Unit)?) {
-        val myGen = beginPlayback(onDone)
+    private fun speakResolved(cleaned: String, tone: String?, onDone: (() -> Unit)?, onUnavailable: (() -> Unit)? = null) {
+        val myGen = beginPlayback(onDone, onUnavailable)
 
         val t = Thread {
             try {
-                val audio = synthesize(cleaned, tone)
+                val audio = synthesize(cleaned, tone, myGen)
                 if (generation.get() != myGen) return@Thread  // нас перебили — молчим
                 if (audio != null && audio.isNotEmpty()) {
                     playBytes(audio, myGen)
                 } else {
                     Log.w(tag, "synth returned empty, fallback to silence")
-                    invokeDoneOnce(myGen)
+                    invokeFailedOnce(myGen)
                 }
             } catch (e: Exception) {
                 Log.e(tag, "speak error: ${e.message}", e)
-                invokeDoneOnce(myGen)
+                invokeFailedOnce(myGen)
             }
         }
         t.name = "EdgeTtsFetch"
@@ -171,10 +200,12 @@ class EdgeTtsPlayer(
     /** Прервать текущее воспроизведение. Вызовет onDone из текущего speak(), если он ещё не отстрелял. */
     @Synchronized
     fun stop() {
+        accountPreferences.unregisterOnSharedPreferenceChangeListener(identityListener)
         // Инкремент поколения — любой in-flight синтез/проигрывание увидит, что
         // устарел, и не запустит звук.
         generation.incrementAndGet()
         speechEpoch.incrementAndGet()
+        currentUnavailableCallback.set(null)
         streamCancelled.set(true)
         progressivePlayer.stop()
         preparedStreams.toList().forEach { it.close() }
@@ -243,7 +274,7 @@ class EdgeTtsPlayer(
                 val i = nextIndex.getAndIncrement()
                 if (i >= n) return
                 val audio: ByteArray? = try {
-                    synthesize(sentences[i], tone)
+                    synthesize(sentences[i], tone, myGen)
                 } catch (e: Exception) {
                     Log.e(tag, "stream synth #$i: ${e.message}"); null
                 }
@@ -309,7 +340,7 @@ class EdgeTtsPlayer(
 
     /** Синхронное проигрывание аудио из памяти — блокирует до завершения. */
     private fun playBytesBlocking(audio: ByteArray, myGen: Int) {
-        if (generation.get() != myGen) return  // нас перебили до старта
+        if (generation.get() != myGen || !isCurrentAccount()) return
         val done = Object()
         val mp = MediaPlayer()
         val source = ByteArraySource(audio)
@@ -338,7 +369,7 @@ class EdgeTtsPlayer(
             }
             mp.prepare()
             // Финальная проверка: если за время prepare() нас перебили — не играем.
-            if (generation.get() != myGen) {
+            if (generation.get() != myGen || !isCurrentAccount()) {
                 try { source.close() } catch (_: Exception) {}
                 try { mp.release() } catch (_: Exception) {}
                 return
@@ -368,11 +399,22 @@ class EdgeTtsPlayer(
         // Колбэк отстреливаем только если мы всё ещё актуальная озвучка —
         // иначе beginPlayback() уже вызвал onDone предыдущего поколения.
         if (generation.get() != myGen) return
+        currentUnavailableCallback.set(null)
         val cb = currentDoneCallback.getAndSet(null) ?: return
         try { cb() } catch (e: Exception) { Log.e(tag, "onDone error: ${e.message}") }
     }
 
+    @Synchronized
+    private fun invokeFailedOnce(myGen: Int) {
+        if (generation.get() != myGen) return
+        val fallback = currentUnavailableCallback.getAndSet(null)
+        if (fallback == null) { invokeDoneOnce(myGen); return }
+        currentDoneCallback.set(null)
+        fallback()
+    }
+
     private fun synthesizeStreaming(text: String, stream: NativeStreamingSpeech) {
+        val token = freshAccessToken()
         val body = JSONObject().apply {
             put("input", text)
             put("voice", voice)
@@ -382,11 +424,12 @@ class EdgeTtsPlayer(
             put("stream", true)
         }.toString().toByteArray(Charsets.UTF_8)
         val request = Request.Builder().url("$serverUrl/v1/audio/speech")
-            .header("Authorization", "Bearer $apiKey").header("Accept", "audio/mpeg")
+            .header("Authorization", "Bearer $token").header("Accept", "audio/mpeg")
             .post(body.toRequestBody("application/json; charset=utf-8".toMediaType())).build()
         val call = STREAM_HTTP.newCall(request)
         if (!stream.attach(call)) return
         call.execute().use { response ->
+            if (!isCurrentAccount()) throw java.io.IOException("Speech account changed")
             if (response.code != 200) throw java.io.IOException("Speech HTTP failure")
             if (response.header("Content-Type")?.substringBefore(';')?.trim()?.lowercase() != "audio/mpeg") {
                 throw java.io.IOException("Unexpected speech response type")
@@ -396,6 +439,7 @@ class EdgeTtsPlayer(
             var total = 0
             try {
                 while (true) {
+                    if (!isCurrentAccount()) throw java.io.IOException("Speech account changed")
                     val count = input.read(chunk)
                     if (count < 0) break
                     stream.buffer.append(chunk, count)
@@ -408,7 +452,10 @@ class EdgeTtsPlayer(
         }
     }
 
-    private fun synthesize(text: String, tone: String? = null): ByteArray? {
+    private fun synthesize(text: String, tone: String? = null, expectedGeneration: Int): ByteArray? {
+        if (generation.get() != expectedGeneration) return null
+        val epoch = speechEpoch.get()
+        val token = freshAccessToken()
         val url = "$serverUrl/v1/audio/speech"
         val body = JSONObject().apply {
             put("input", text)
@@ -424,12 +471,14 @@ class EdgeTtsPlayer(
             doOutput = true
             connectTimeout = 8000
             readTimeout = 60000
-            setRequestProperty("Authorization", "Bearer $apiKey")
+            instanceFollowRedirects = false
+            setRequestProperty("Authorization", "Bearer $token")
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
             setRequestProperty("Accept", "audio/mpeg")
         }
         speechRequests.add(conn)
         try {
+            if (generation.get() != expectedGeneration || speechEpoch.get() != epoch || !isCurrentAccount()) return null
             conn.outputStream.use { it.write(body) }
 
             if (conn.responseCode != 200) {
@@ -441,6 +490,7 @@ class EdgeTtsPlayer(
             val buffer = ByteArray(8192)
             conn.inputStream.use { input ->
                 while (true) {
+                    if (generation.get() != expectedGeneration || speechEpoch.get() != epoch || !isCurrentAccount()) return null
                     val count = input.read(buffer)
                     if (count < 0) break
                     if (output.size() + count > MAX_AUDIO_BYTES) {
@@ -449,7 +499,7 @@ class EdgeTtsPlayer(
                     output.write(buffer, 0, count)
                 }
             }
-            return output.toByteArray()
+            return if (generation.get() == expectedGeneration && speechEpoch.get() == epoch && isCurrentAccount()) output.toByteArray() else null
         } finally {
             speechRequests.remove(conn)
             conn.disconnect()
@@ -457,7 +507,7 @@ class EdgeTtsPlayer(
     }
 
     private fun playBytes(audio: ByteArray, myGen: Int) {
-        if (generation.get() != myGen) return  // нас перебили до старта
+        if (generation.get() != myGen || !isCurrentAccount()) return
         val mp = MediaPlayer()
         val source = ByteArraySource(audio)
         try {
@@ -486,7 +536,7 @@ class EdgeTtsPlayer(
                 currentSource.compareAndSet(source, null)
                 try { p.release() } catch (_: Exception) {}
                 player.compareAndSet(p, null)
-                invokeDoneOnce(myGen)
+                invokeFailedOnce(myGen)
                 true
             }
             mp.setOnPreparedListener {
@@ -495,7 +545,7 @@ class EdgeTtsPlayer(
             }
             mp.prepare()
             // Если за время prepare() пришёл новый speak() — не играем устаревшее.
-            if (generation.get() != myGen) {
+            if (generation.get() != myGen || !isCurrentAccount()) {
                 try { source.close() } catch (_: Exception) {}
                 try { mp.release() } catch (_: Exception) {}
                 return
@@ -508,7 +558,7 @@ class EdgeTtsPlayer(
             Log.e(tag, "play error: ${e.message}", e)
             try { source.close() } catch (_: Exception) {}
             try { mp.release() } catch (_: Exception) {}
-            invokeDoneOnce(myGen)
+            invokeFailedOnce(myGen)
         }
     }
 

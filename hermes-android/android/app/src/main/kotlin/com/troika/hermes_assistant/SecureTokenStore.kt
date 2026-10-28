@@ -6,6 +6,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import java.security.KeyStore
+import java.security.MessageDigest
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -17,6 +18,7 @@ object SecureTokenStore {
     private const val PREFS = "troika_secure_tokens"
     private const val CIPHERTEXT = "refresh_ciphertext"
     private const val IV = "refresh_iv"
+    private const val BINDING = "refresh_binding"
 
     private fun key(): SecretKey {
         require(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
@@ -38,20 +40,27 @@ object SecureTokenStore {
         return generator.generateKey()
     }
 
-    fun put(context: Context, token: String): Boolean {
+    @Synchronized fun put(context: Context, token: String, binding: String? = null): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || token.isBlank()) return false
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, key())
-        val encrypted = cipher.doFinal(token.toByteArray(Charsets.UTF_8))
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString(CIPHERTEXT, Base64.encodeToString(encrypted, Base64.NO_WRAP))
-            .putString(IV, Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
-            .commit()
+        return try {
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.ENCRYPT_MODE, key())
+            val encrypted = cipher.doFinal(token.toByteArray(Charsets.UTF_8))
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putString(CIPHERTEXT, Base64.encodeToString(encrypted, Base64.NO_WRAP))
+                .putString(IV, Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
+                .putString(BINDING, binding?.let(::digest))
+                .commit()
+        } catch (_: Exception) {
+            false
+        }
     }
 
-    fun get(context: Context): String? {
+    @Synchronized fun get(context: Context, binding: String? = null): String? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val savedBinding = prefs.getString(BINDING, null)
+        if (binding != null && savedBinding != null && savedBinding != digest(binding)) return null
         val ciphertext = prefs.getString(CIPHERTEXT, null) ?: return null
         val iv = prefs.getString(IV, null) ?: return null
         return try {
@@ -71,7 +80,10 @@ object SecureTokenStore {
         }
     }
 
-    fun clear(context: Context) {
+    @Synchronized fun clear(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().commit()
     }
+
+    private fun digest(value: String): String = MessageDigest.getInstance("SHA-256")
+        .digest(value.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
 }
