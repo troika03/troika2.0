@@ -23,6 +23,8 @@ import android.util.Base64
 import androidx.core.app.NotificationCompat
 import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.plugin.common.MethodChannel
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -290,7 +292,21 @@ class HermesListenerService : Service() {
      * паттерн speak(x) + speak("") {wait}, который запускал ДВЕ озвучки подряд
      * и накладывал голоса. Один speak — одно ожидание.
      */
-    private val voiceReplyConnection = java.util.concurrent.atomic.AtomicReference<HttpURLConnection?>(null)
+    private val voiceReplyConnection = java.util.concurrent.atomic.AtomicReference<okhttp3.Call?>(null)
+    private val voiceReplyHttp = okhttp3.OkHttpClient.Builder()
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(180, TimeUnit.SECONDS)
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .build()
+    private val activeReplySpeech = java.util.concurrent.atomic.AtomicReference<NativeSpeechQueue?>(null)
+    private val replySpeechGeneration = java.util.concurrent.atomic.AtomicInteger(0)
+
+    private fun cancelReplySpeech() {
+        replySpeechGeneration.incrementAndGet()
+        activeReplySpeech.getAndSet(null)?.cancel()
+        try { voiceReplyConnection.getAndSet(null)?.cancel() } catch (_: Exception) {}
+    }
 
     private fun speakBlocking(text: String, timeoutMs: Long = 120000) {
         val cleaned = text.replace(Regex("[*#`]+"), "").trim()
@@ -349,9 +365,10 @@ class HermesListenerService : Service() {
         val floor = minOf(savedFloor, 500)
         val monitor = BargeInMonitor(floorThreshold = floor) {
             // barge-in сработал: рубим TTS и будим runDialog
+            cancelReplySpeech()
             try { edgeTts?.stop() } catch (_: Exception) {}
             try { tts?.stop() } catch (_: Exception) {}
-            try { voiceReplyConnection.getAndSet(null)?.disconnect() } catch (_: Exception) {}
+            try { voiceReplyConnection.getAndSet(null)?.cancel() } catch (_: Exception) {}
             synchronized(ttsDone) { ttsDone.notify() }
         }
         monitor.start()
@@ -399,6 +416,7 @@ class HermesListenerService : Service() {
             ACTION_INTERRUPT_TTS -> {
                 // Мгновенная остановка любой текущей речи (Edge TTS + Android TTS).
                 // Вызывается тапом по орбу когда Тройка говорит.
+                cancelReplySpeech()
                 try { edgeTts?.stop() } catch (_: Exception) {}
                 try { tts?.stop() } catch (_: Exception) {}
             }
@@ -1315,6 +1333,7 @@ class HermesListenerService : Service() {
                 val bargeMonitor = java.util.concurrent.atomic.AtomicReference<BargeInMonitor?>(null)
                 val speechStarted = java.util.concurrent.atomic.AtomicBoolean(false)
                 val voicePlayer = edgeTts
+                val speechGeneration = replySpeechGeneration.get()
                 val replySpeech = NativeSpeechQueue(
                     speak = { phrase, done ->
                         if (speechStarted.compareAndSet(false, true)) {
@@ -1322,7 +1341,8 @@ class HermesListenerService : Service() {
                         }
                         speak(phrase, done)
                     },
-                    shouldStop = { !isInDialog.get() || bargeMonitor.get()?.wasTriggered() == true },
+                    shouldStop = { replySpeechGeneration.get() != speechGeneration ||
+                        !isInDialog.get() || bargeMonitor.get()?.wasTriggered() == true },
                     prepare = if (voicePlayer == null) null else { phrase -> voicePlayer.prepareSpeech(phrase) },
                     playPrepared = { audio, done ->
                         if (speechStarted.compareAndSet(false, true)) {
@@ -1331,8 +1351,11 @@ class HermesListenerService : Service() {
                         voicePlayer?.playPreparedSpeech(audio, done) ?: done()
                     },
                 )
+                activeReplySpeech.getAndSet(replySpeech)?.cancel()
+                if (replySpeechGeneration.get() != speechGeneration) replySpeech.cancel()
                 val answer = chatWithHermesHistory(history, replySpeech::add) {
-                    !isInDialog.get() || bargeMonitor.get()?.wasTriggered() == true
+                    replySpeechGeneration.get() != speechGeneration ||
+                        !isInDialog.get() || bargeMonitor.get()?.wasTriggered() == true
                 }
                 if (answer.isEmpty()) {
                     replySpeech.cancel()
@@ -1350,6 +1373,7 @@ class HermesListenerService : Service() {
 
                 HermesOverlay.get(this).updateStatus(answer.take(120))
                 replySpeech.finish()
+                activeReplySpeech.compareAndSet(replySpeech, null)
                 val bargedIn = bargeMonitor.get()?.wasTriggered() == true
                 bargeMonitor.get()?.stop()
                 if (!bargedIn) Thread.sleep(300)
@@ -1383,6 +1407,8 @@ class HermesListenerService : Service() {
             android.util.Log.e("HermesListener", "Dialog error: ${e.message}")
             HermesOverlay.get(this).hide()
         } finally {
+            cancelReplySpeech()
+            try { edgeTts?.stop() } catch (_: Exception) {}
             isInDialog.set(false)
             manualDialogActive.set(false)
             listenerPaused.set(false)
@@ -1519,25 +1545,34 @@ class HermesListenerService : Service() {
         onDelta: ((String) -> Unit)? = null,
         shouldStop: () -> Boolean = { false },
     ): String {
+        val requestGeneration = replySpeechGeneration.get()
+        fun stopRequested() = shouldStop() || replySpeechGeneration.get() != requestGeneration
+        if (stopRequested()) return ""
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val serverUrl = resolvedUrl(prefs)
         if (serverUrl.isBlank()) {
             android.util.Log.w("HermesListener", "Chat skipped: server is not configured")
             return ""
         }
+        if (stopRequested()) return ""
         val apiKey = resolvedKey(prefs)
+        if (stopRequested()) return ""
         val url = "$serverUrl/v1/chat/completions"
 
+        var ownedCall: okhttp3.Call? = null
         return try {
+            if (stopRequested()) return ""
             val capabilityConnection = java.net.URL("$serverUrl/v1/capabilities").openConnection() as java.net.HttpURLConnection
             val supportsLocalFiles = try {
                 capabilityConnection.connectTimeout = 15000
                 capabilityConnection.readTimeout = 15000
+                capabilityConnection.instanceFollowRedirects = false
                 capabilityConnection.setRequestProperty("Authorization", "Bearer $apiKey")
                 capabilityConnection.responseCode == 200 && JSONObject(
                     capabilityConnection.inputStream.bufferedReader(Charsets.UTF_8).readText()
                 ).optJSONObject("features")?.optBoolean("device_file_delivery") == true
             } finally { capabilityConnection.disconnect() }
+            if (stopRequested()) return ""
             if (!supportsLocalFiles) return "Сервер Тройки нужно обновить для локальных файлов и разработки."
             val body = JSONObject().apply {
                 put("model", "troika-agent")
@@ -1581,72 +1616,77 @@ class HermesListenerService : Service() {
                 put("stream", onDelta != null)
             }
 
-            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                doOutput = true
-                connectTimeout = 8000
-                // Большой timeout — Hermes может ходить в браузер/искать/работать с файлами
-                readTimeout = 180000
+            val request = okhttp3.Request.Builder().url(url).apply {
                 if (apiKey.isNotBlank()) {
-                    setRequestProperty("Authorization", "Bearer $apiKey")
+                    header("Authorization", "Bearer $apiKey")
                 }
-                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                header("Content-Type", "application/json; charset=utf-8")
                 // One random session identity per app installation; Flutter sends
                 // the same values so voice and text share only this user's history.
-                OwnProviderSession.headers(this@HermesListenerService, url, apiKey).forEach { (name, value) -> setRequestProperty(name, value) }
-                setRequestProperty("X-Hermes-Session-Key", resolvedSessionKey(prefs))
-                setRequestProperty("X-Hermes-Session-Id", resolvedSessionId(prefs))
+                OwnProviderSession.headers(this@HermesListenerService, url, apiKey).forEach { (name, value) -> header(name, value) }
+                header("X-Hermes-Session-Key", resolvedSessionKey(prefs))
+                header("X-Hermes-Session-Id", resolvedSessionId(prefs))
                 // Контекст устройства для режима «где я» — Wi-Fi BSSID,
                 // bluetooth, тип сети. Сервер маппит в дом/работа/машина.
                 try {
                     val ctxHeader = DeviceContext.asHeaderValue(applicationContext)
                     if (ctxHeader.isNotEmpty()) {
-                        setRequestProperty("X-Hermes-Device-Context", ctxHeader)
+                        header("X-Hermes-Device-Context", ctxHeader)
                     }
                 } catch (_: Exception) {}
-            }
-            voiceReplyConnection.set(conn)
-            conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+            }.post(body.toString().toByteArray(Charsets.UTF_8)
+                .toRequestBody("application/json; charset=utf-8".toMediaType())).build()
+            val call = voiceReplyHttp.newCall(request)
+            ownedCall = call
+            voiceReplyConnection.set(call)
+            if (stopRequested()) { call.cancel(); return "" }
 
-            if (conn.responseCode == 200) {
-                val content = if (onDelta != null) {
-                    val answer = StringBuilder()
-                    var completed = false
-                    conn.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
-                        while (true) {
-                            if (shouldStop()) break
-                            val line = try { reader.readLine() } catch (error: Exception) {
-                                if (shouldStop()) break else throw error
-                            } ?: break
-                            if (!line.startsWith("data:")) continue
-                            val data = line.removePrefix("data:").trim()
-                            if (data == "[DONE]") { completed = true; break }
-                            val chunk = JSONObject(data)
-                            if (chunk.has("error")) throw IllegalStateException("Voice response interrupted")
-                            val choice = chunk.optJSONArray("choices")?.optJSONObject(0) ?: continue
-                            if (choice.optString("finish_reason") == "error") throw IllegalStateException("Voice response interrupted")
-                            val delta = choice.optJSONObject("delta")?.optString("content", "") ?: ""
-                            if (delta.isNotEmpty() && !shouldStop()) { answer.append(delta); onDelta(delta) }
+            call.execute().use { response ->
+                if (stopRequested()) return ""
+                if (response.code == 200) {
+                    val responseBody = response.body ?: throw IllegalStateException("Voice response missing")
+                    val content = if (onDelta != null) {
+                        val answer = StringBuilder()
+                        var completed = false
+                        responseBody.byteStream().bufferedReader(Charsets.UTF_8).use { reader ->
+                            while (true) {
+                                if (stopRequested()) break
+                                val line = try { reader.readLine() } catch (error: Exception) {
+                                    if (stopRequested()) break else throw error
+                                } ?: break
+                                if (!line.startsWith("data:")) continue
+                                val data = line.removePrefix("data:").trim()
+                                if (data == "[DONE]") { completed = true; break }
+                                val chunk = JSONObject(data)
+                                if (chunk.has("error")) throw IllegalStateException("Voice response interrupted")
+                                val choice = chunk.optJSONArray("choices")?.optJSONObject(0) ?: continue
+                                if (choice.optString("finish_reason") == "error") throw IllegalStateException("Voice response interrupted")
+                                val delta = choice.optJSONObject("delta")?.optString("content", "") ?: ""
+                                if (delta.isNotEmpty() && !stopRequested()) { answer.append(delta); onDelta(delta) }
+                            }
                         }
+                        if (!completed && !stopRequested()) throw IllegalStateException("Voice response incomplete")
+                        answer.toString()
+                    } else {
+                        val json = JSONObject(responseBody.byteStream().bufferedReader(Charsets.UTF_8).use { it.readText() })
+                        json.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")?.optString("content", "") ?: ""
                     }
-                    if (!completed && !shouldStop()) throw IllegalStateException("Voice response incomplete")
-                    answer.toString()
+                    response.close()
+                    if (stopRequested()) return ""
+                    if (stopRequested()) "" else content
                 } else {
-                    val json = JSONObject(conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
-                    json.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")?.optString("content", "") ?: ""
+                    android.util.Log.e("HermesListener", "Chat HTTP ${response.code}")
+                    ""
                 }
-                conn.disconnect()
-                content
-            } else {
-                android.util.Log.e("HermesListener", "Chat HTTP ${conn.responseCode}")
-                conn.disconnect()
-                ""
             }
         } catch (e: Exception) {
             android.util.Log.e("HermesListener", "Voice response unavailable: ${e.javaClass.simpleName}")
             ""
         } finally {
-            try { voiceReplyConnection.getAndSet(null)?.disconnect() } catch (_: Exception) {}
+            ownedCall?.let { call ->
+                voiceReplyConnection.compareAndSet(call, null)
+                call.cancel()
+            }
         }
     }
 
@@ -1809,6 +1849,8 @@ class HermesListenerService : Service() {
     }
 
     override fun onDestroy() {
+        isInDialog.set(false)
+        cancelReplySpeech()
         projectSpeechHost = null
         serviceActive = false
         isRunning.set(false)

@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "record_date": "2026-10-27",
-  "state": "primary_installed_slow_both_voice_modes_backend_deployed_verified",
+  "state": "primary_native_streaming_installed_pre_eof_position_verified_subjective_background_feedback_positive",
   "primary_apk": {
     "application_id": "com.troika.hermes_assistant",
     "bytes": 81424163,
-    "sha256": "d64ef4d6c547ee2215710de84b704a4b2cf0fb87a0412f9cd07666c6c11bf774",
+    "sha256": "b19a6f749825447441f55a6b2a4ecf6b8d7662643f79a00b58b52cbdb633f7c0",
     "installed_sha256_matches": true,
     "server_url": "https://api.zhulebino-teahouse.ru",
     "original_signer_preserved": true,
@@ -30,7 +30,34 @@
       "timing_origin": "banner_visible",
       "subjective": true,
       "timing_trace_available": false,
-      "measured_from_end_of_speech": false
+      "measured_from_end_of_speech": false,
+      "apk_sha256_at_report": "d64ef4d6c547ee2215710de84b704a4b2cf0fb87a0412f9cd07666c6c11bf774",
+      "before_native_streaming_update": true
+    },
+    "native_streaming_update_installed": true,
+    "previous_apk_sha256": "d64ef4d6c547ee2215710de84b704a4b2cf0fb87a0412f9cd07666c6c11bf774",
+    "installed_utc": "2026-10-27T18:49:55.156617+00:00",
+    "prior_apk_ui_launch_verified": true,
+    "user_reports_slow_scope": "before_native_streaming_update",
+    "latest_ui_launch": {
+      "status": "ok",
+      "state": "WARM",
+      "total_ms": 2604,
+      "is_voice_timing": false
+    },
+    "latest_owner_feedback": {
+      "after_native_update": true,
+      "apk_sha256": "b19a6f749825447441f55a6b2a4ecf6b8d7662643f79a00b58b52cbdb633f7c0",
+      "scope": "background_voice",
+      "assessment": "positive_subjective",
+      "paraphrase_only": true,
+      "verbatim_message_stored": false,
+      "quantitative_latency_confirmed": false,
+      "stop_separately_confirmed": false,
+      "foreground_confirmed": false,
+      "acoustic_onset_measured": false,
+      "full_voice_e2e_verified": false,
+      "stable_one_to_two_seconds_verified": false
     }
   },
   "separate_diagnostics_package": {
@@ -213,7 +240,31 @@
       "receipt_available": false,
       "latency_result_available": false,
       "deployment_outcome_inferred": false
-    }
+    },
+    "server_loopback_after_verified_update_3": {
+      "observations": 1,
+      "started_utc": "2026-10-27T18:44:40.351713+00:00",
+      "completed_utc": "2026-10-27T18:44:45.566110+00:00",
+      "transport": "server_loopback_http",
+      "first_safe_delta_ms": 1722.66,
+      "first_phrase_ready_ms": 1812.14,
+      "tts_request_ms": 1813.31,
+      "tts_first_byte_ms": 2601.99,
+      "tts_first_byte_after_request_ms": 788.69,
+      "tts_eof_ms": 4948.0,
+      "tts_total_after_request_ms": 3134.73,
+      "audio_bytes": 81083,
+      "first_byte_to_eof_ms": 2346.01,
+      "model_override": false,
+      "byok_supplied": false,
+      "first_delta_ends_period": true,
+      "first_delta_ends_whitespace": false,
+      "cleanup_status": "deleted",
+      "cleanup_http_status": 200,
+      "after_successful_deployment": true,
+      "runtime_image_verified_before_probe": true
+    },
+    "successful_post_deployment_observations": 2
   },
   "routing": {
     "free_models_only": true,
@@ -246,18 +297,226 @@
     "Post-deployment synthetic API/TTS observations exclude STT, Android player and acoustic onset.",
     "The observations do not establish controlled A/B, p50, p95 or a stable 1-2 second voice target.",
     "No new full-suite pass is claimed.",
-    "The latest owner estimate is approximately 3-4 seconds after the background banner, with no timing trace; it is not measured from end of speech."
+    "The latest owner estimate is approximately 3-4 seconds after the background banner, with no timing trace; it is not measured from end of speech.",
+    "The two successful post-deployment loopbacks vary substantially; no causal latency improvement or percentile is established.",
+    "The 2346.01 ms first-byte-to-EOF interval is an opportunity for streaming, not a measured phone speedup.",
+    "One initiated synthesis Call per phrase does not establish wire-level exactly-once delivery under transport retries.",
+    "The owner estimate of 3-4 seconds after the banner describes the APK before the latest native update.",
+    "Fresh Flutter checks were reused after unchanged Dart inputs were proved; the final native assembleRelease passed.",
+    "The updated main UI and positive native playback position before EOF are verified; acoustic onset and full voice E2E remain unverified.",
+    "The capture contains 16 phrase IDs, not 16 turns; queued fragments cannot establish first-response timing or percentiles.",
+    "The owner gave positive subjective feedback on background voice after the update; duration, separate Stop, foreground, acoustic onset and full voice E2E are not confirmed."
   ],
   "production_deployed": true,
   "production_deployment_verified": true,
-  "evidence_cutoff_utc": "2026-10-27T12:09:49.411170+00:00",
+  "evidence_cutoff_utc": "2026-10-27T18:53:23.477808+00:00",
   "work_preservation": {
-    "existing_product_only": true,
+    "scope": "native_streaming_doc_record_stage",
+    "root_working_paths_guarded": 86,
+    "original_wip_paths": 79,
+    "root_working_unchanged": true,
+    "raw_index_unchanged": true,
+    "owner_memory_staged_lines_preserved": 29,
+    "owner_memory_unstaged_blank_deletions_preserved": 2,
     "new_checkouts_created": false,
-    "new_apks_created": false,
-    "source77_unchanged": true,
-    "owner_memory_layers_preserved": true,
-    "scope": "documentation_record_stage"
+    "new_diagnostic_packages_created": false,
+    "primary_native_update_build_pending": false,
+    "primary_native_update_installed": true
   },
-  "evidence_cutoff_scope": "machine_receipts"
+  "evidence_cutoff_scope": "completed_machine_receipts; subsequent_subjective_owner_feedback_included_without_timing_trace",
+  "native_streaming_source": {
+    "source_status": "reviewed",
+    "source_files": 9,
+    "base_head": "2a580e6e8de95ead8721f63406d450585ec872f6",
+    "projection_sha256": "fcc794f2b72c1e30bd5d1248530e429abbf55b7770379d9214679b2c2ec831c5",
+    "media3_version": "1.4.1",
+    "same_version_as_just_audio": true,
+    "prepared_handle_before_eof": true,
+    "ram_limit_bytes_per_phrase": 10485760,
+    "speech_stream_true": true,
+    "reopen_and_seek_from_ram_only": true,
+    "ordered_playback": true,
+    "prefetch_ahead_limit": 2,
+    "owned_active_prefetched_and_late_handles": true,
+    "close_on_stop_completion_and_deadlines": true,
+    "turn_generation_and_call_cancel": true,
+    "late_player_start_suppressed": true,
+    "download_failure_is_error_not_eof": true,
+    "automatic_audio_focus_enabled": false,
+    "assistant_audio_usage_preserved": true,
+    "foreign_native_reminder_account_wip_excluded_from_build": true,
+    "numeric_timing_fields": [
+      "id",
+      "phase",
+      "elapsed_ms",
+      "bytes",
+      "eof"
+    ],
+    "numeric_timing_phases": [
+      "request",
+      "first_byte",
+      "eof",
+      "playback_position"
+    ],
+    "timing_includes_text_urls_keys_or_audio": false,
+    "free_model_and_natural_voice_unchanged": true,
+    "installed": true,
+    "on_device_playback_before_eof_verified": true,
+    "physical_voice_e2e_verified": false,
+    "checks": {
+      "jvm": {
+        "passed": 14,
+        "failed": 0,
+        "compiler_version": "2.2.20",
+        "junit_version": "4.13.2",
+        "compile_exit": 0,
+        "test_exit": 0,
+        "exact_source_sha256": {
+          "hermes-android\\android\\app\\src\\main\\kotlin\\com\\troika\\hermes_assistant\\NativeSpeechQueue.kt": "7149cf5f25e9fd7b42246075d8cec9f22e78d01faab10e2ab20f7c3d0de106e8",
+          "hermes-android\\android\\app\\src\\main\\kotlin\\com\\troika\\hermes_assistant\\SpeechAudioBuffer.kt": "499114feb55b6334df8e6ee684dfe7082e372a0ccb42b9478d404a8ce894be02",
+          "hermes-android\\android\\app\\src\\test\\kotlin\\com\\troika\\hermes_assistant\\NativeSpeechQueueTest.kt": "9fc1a0d459b4722e23cc6271e601f217ef509c0c6a27abb6448e7f99e9cc4cfc",
+          "hermes-android\\android\\app\\src\\test\\kotlin\\com\\troika\\hermes_assistant\\SpeechAudioBufferTest.kt": "bbd9b85f0c5db22f928fc26d315b87d1bcc0d5b036c11bd9a7e9b82fae4d758c"
+        },
+        "second_prefetched_handle_barrier_included": true
+      },
+      "flutter": {
+        "passed": 210,
+        "skipped": 2,
+        "exit_code": 0
+      },
+      "analyze": {
+        "exit_code": 0,
+        "errors": 0,
+        "warnings": 0,
+        "infos": 59
+      },
+      "full_suite_green": false
+    },
+    "build": {
+      "status": "passed",
+      "current_attempt": 3,
+      "assemble_release_complete": true,
+      "apk_sha256": "b19a6f749825447441f55a6b2a4ecf6b8d7662643f79a00b58b52cbdb633f7c0",
+      "existing_full_client_reused": true,
+      "application_id": "com.troika.hermes_assistant",
+      "server_url": "https://api.zhulebino-teahouse.ru",
+      "signer_compatibility_target": "original_primary_signer",
+      "first_implicit_online_pub_attempt_stopped": true,
+      "second_attempt_stopped_before_apk_for_audio_focus_fix": true,
+      "focus_fix_source_sha256": "29c8daaf8031f5f2592121815f923321ccbae2f7f0f79d4a2dc657f96eeb1742",
+      "dart_inputs_unchanged_after_focus_fix": true,
+      "fresh_flutter_checks_reused": true,
+      "raw_logs_and_generated_file_repair_proof_preserved": true,
+      "usb_device_visible": true,
+      "exit_code": 0,
+      "completed_utc": "2026-10-27T18:47:52.308576+00:00",
+      "apk_bytes": 81424163,
+      "certificate_sha256": "848fc21c869cb54698d6040743c01eba7487a726af5a5b681fd5945d5f7a1a91",
+      "debuggable": false,
+      "packaged_host_verified": true,
+      "invalid_host_absent": true,
+      "dex_new_classes_and_timing_markers_verified": true,
+      "prior_apk_markers_absent": true,
+      "installed_by_build_step": false
+    },
+    "synthesis_calls_initiated_per_phrase": 1,
+    "wire_exactly_once_verified": false,
+    "installation": {
+      "status": "updated_and_verified",
+      "installed_utc": "2026-10-27T18:49:55.156617+00:00",
+      "installed_apk_sha256": "b19a6f749825447441f55a6b2a4ecf6b8d7662643f79a00b58b52cbdb633f7c0",
+      "sha_matches_build": true,
+      "first_install_time_preserved": true,
+      "data_directory_preserved": true,
+      "uninstall_performed": false,
+      "data_clear_performed": false,
+      "permissions_auto_granted": false,
+      "fresh_ui_launch_verified": true,
+      "voice_e2e_verified": false
+    },
+    "playback_before_eof_proof": "positive_player_position_with_eof_received_false",
+    "device_timing": {
+      "captured_utc": "2026-10-27T18:53:23.477808+00:00",
+      "phrase_ids_captured": 16,
+      "turn_count": null,
+      "clock_origin": "phrase_handle_creation",
+      "selected_pre_eof_examples": [
+        {
+          "phrase_id": 1,
+          "request_ms": 1,
+          "first_byte_ms": 1157,
+          "positive_player_position_ms": 2759,
+          "eof_ms": 3171,
+          "eof_bytes": 77739,
+          "position_before_eof_ms": 412
+        },
+        {
+          "phrase_id": 8,
+          "request_ms": 0,
+          "first_byte_ms": 812,
+          "positive_player_position_ms": 1532,
+          "eof_ms": 3534,
+          "eof_bytes": 95293,
+          "position_before_eof_ms": 2002
+        },
+        {
+          "phrase_id": 11,
+          "request_ms": 2,
+          "first_byte_ms": 1380,
+          "positive_player_position_ms": 1992,
+          "eof_ms": 3923,
+          "eof_bytes": 91114,
+          "position_before_eof_ms": 1931
+        },
+        {
+          "phrase_id": 14,
+          "request_ms": 0,
+          "first_byte_ms": 2173,
+          "positive_player_position_ms": 2785,
+          "eof_ms": 6461,
+          "eof_bytes": 163003,
+          "position_before_eof_ms": 3676
+        }
+      ],
+      "selected_examples_are_not_a_latency_distribution": true,
+      "post_eof_position_ids": [
+        2,
+        4,
+        5,
+        6,
+        7,
+        12,
+        13,
+        15,
+        16
+      ],
+      "no_position_event_ids": [
+        3,
+        9,
+        10
+      ],
+      "absence_reason_determined": false,
+      "first_turn_mapping_available": false,
+      "stt_llm_end_of_speech_included": false,
+      "acoustic_onset_measured": false,
+      "raw_logs_saved": false,
+      "text_or_audio_saved": false,
+      "owner_background_and_stop_feedback": "positive_subjective_background_stop_not_separately_confirmed"
+    },
+    "owner_feedback": {
+      "after_native_update": true,
+      "apk_sha256": "b19a6f749825447441f55a6b2a4ecf6b8d7662643f79a00b58b52cbdb633f7c0",
+      "scope": "background_voice",
+      "assessment": "positive_subjective",
+      "paraphrase_only": true,
+      "verbatim_message_stored": false,
+      "quantitative_latency_confirmed": false,
+      "stop_separately_confirmed": false,
+      "foreground_confirmed": false,
+      "acoustic_onset_measured": false,
+      "full_voice_e2e_verified": false,
+      "stable_one_to_two_seconds_verified": false
+    }
+  },
+  "updated_date": "2026-10-28"
 }

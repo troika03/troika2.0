@@ -5,6 +5,10 @@ import android.media.MediaDataSource
 import android.media.MediaPlayer
 import android.util.Log
 import org.json.JSONObject
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.HttpURLConnection
@@ -38,13 +42,33 @@ class EdgeTtsPlayer(
     private val currentDoneCallback = AtomicReference<(() -> Unit)?>(null)
     private val streamCancelled = AtomicBoolean(false)
     private val speechRequests = java.util.concurrent.ConcurrentHashMap.newKeySet<HttpURLConnection>()
+    private val preparedStreams = java.util.concurrent.ConcurrentHashMap.newKeySet<NativeStreamingSpeech>()
+    private val speechEpoch = AtomicInteger(0)
+    private val progressivePlayer = NativeSpeechPlayer(ctx)
 
-    /** Prepare the next phrase while the preceding phrase is playing. */
-    fun prepareSpeech(text: String): ByteArray? = synthesize(text)
+    /** Return an owned stream immediately; downloading continues during playback. */
+    fun prepareSpeech(text: String): NativeSpeechQueue.PreparedAudio {
+        val epoch = speechEpoch.get()
+        val audio = NativeStreamingSpeech(
+            fetch = { stream -> synthesizeStreaming(text, stream) },
+            onClosed = { preparedStreams.remove(it) },
+        )
+        preparedStreams.add(audio)
+        if (speechEpoch.get() != epoch) audio.close() else audio.start()
+        return audio
+    }
 
-    fun playPreparedSpeech(audio: ByteArray, onDone: () -> Unit) {
+    @Synchronized
+    fun playPreparedSpeech(audio: NativeSpeechQueue.PreparedAudio, onDone: () -> Unit) {
         val myGen = beginPlayback(onDone)
-        if (audio.isEmpty()) invokeDoneOnce(myGen) else playBytes(audio, myGen)
+        val stream = audio as? NativeStreamingSpeech
+        if (stream == null) { audio.close(); invokeDoneOnce(myGen); return }
+        progressivePlayer.play(stream) { success ->
+            synchronized(this) {
+                if (generation.get() == myGen && success) completedSpeechGeneration.set(myGen)
+                invokeDoneOnce(myGen)
+            }
+        }
     }
 
     // Эмоция текущей озвучки. Мозг ставит [emo:joy] в начале ПОЛНОГО ответа;
@@ -90,8 +114,10 @@ class EdgeTtsPlayer(
      * стрима + отстрел старого onDone) и возвращает номер своего поколения.
      * Дальше каждый шаг проверяет generation.get() == myGen.
      */
+    @Synchronized
     private fun beginPlayback(onDone: (() -> Unit)?): Int {
         val myGen = generation.incrementAndGet()
+        progressivePlayer.stop()
         // Прервать предыдущую речь, не трогая НАШ ещё-не-установленный колбэк.
         streamCancelled.set(true)
         try {
@@ -143,12 +169,16 @@ class EdgeTtsPlayer(
     }
 
     /** Прервать текущее воспроизведение. Вызовет onDone из текущего speak(), если он ещё не отстрелял. */
+    @Synchronized
     fun stop() {
-        speechRequests.forEach { try { it.disconnect() } catch (_: Exception) {} }
         // Инкремент поколения — любой in-flight синтез/проигрывание увидит, что
         // устарел, и не запустит звук.
         generation.incrementAndGet()
+        speechEpoch.incrementAndGet()
         streamCancelled.set(true)
+        progressivePlayer.stop()
+        preparedStreams.toList().forEach { it.close() }
+        speechRequests.forEach { try { it.disconnect() } catch (_: Exception) {} }
         try {
             player.getAndSet(null)?.let {
                 try { if (it.isPlaying) it.stop() } catch (_: Exception) {}
@@ -333,12 +363,49 @@ class EdgeTtsPlayer(
         }
     }
 
+    @Synchronized
     private fun invokeDoneOnce(myGen: Int) {
         // Колбэк отстреливаем только если мы всё ещё актуальная озвучка —
         // иначе beginPlayback() уже вызвал onDone предыдущего поколения.
         if (generation.get() != myGen) return
         val cb = currentDoneCallback.getAndSet(null) ?: return
         try { cb() } catch (e: Exception) { Log.e(tag, "onDone error: ${e.message}") }
+    }
+
+    private fun synthesizeStreaming(text: String, stream: NativeStreamingSpeech) {
+        val body = JSONObject().apply {
+            put("input", text)
+            put("voice", voice)
+            put("speed", rate)
+            put("pitch", pitch)
+            put("volume", volume)
+            put("stream", true)
+        }.toString().toByteArray(Charsets.UTF_8)
+        val request = Request.Builder().url("$serverUrl/v1/audio/speech")
+            .header("Authorization", "Bearer $apiKey").header("Accept", "audio/mpeg")
+            .post(body.toRequestBody("application/json; charset=utf-8".toMediaType())).build()
+        val call = STREAM_HTTP.newCall(request)
+        if (!stream.attach(call)) return
+        call.execute().use { response ->
+            if (response.code != 200) throw java.io.IOException("Speech HTTP failure")
+            if (response.header("Content-Type")?.substringBefore(';')?.trim()?.lowercase() != "audio/mpeg") {
+                throw java.io.IOException("Unexpected speech response type")
+            }
+            val input = response.body?.byteStream() ?: throw java.io.IOException("Missing speech response")
+            val chunk = ByteArray(8192)
+            var total = 0
+            try {
+                while (true) {
+                    val count = input.read(chunk)
+                    if (count < 0) break
+                    stream.buffer.append(chunk, count)
+                    if (total == 0 && count > 0) stream.trace("first_byte")
+                    total += count
+                }
+                stream.trace("eof", total)
+                stream.buffer.finish()
+            } finally { chunk.fill(0) }
+        }
     }
 
     private fun synthesize(text: String, tone: String? = null): ByteArray? {
@@ -473,5 +540,9 @@ class EdgeTtsPlayer(
 
     companion object {
         private const val MAX_AUDIO_BYTES = 10 * 1024 * 1024
+        private val STREAM_HTTP = OkHttpClient.Builder()
+            .connectTimeout(8, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS)
+            .callTimeout(90, TimeUnit.SECONDS)
+            .followRedirects(false).followSslRedirects(false).build()
     }
 }
