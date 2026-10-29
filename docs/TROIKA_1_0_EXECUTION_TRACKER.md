@@ -68,9 +68,23 @@ standby/reboot, реальный expiry/revoke и полный voice E2E ост�
 run.failed/cancelled/EOF, timezone identity и отложенный native voice_message.
 Полный Flutter набор 282 passed/2 skipped; analyze 0 errors/0 warnings/61 info;
 release compilation и запуск прошли. Backend этой поставкой не менялся.
-Физическая приёмка новой версии и оставшиеся backend/backup/Office gates открыты.
+Владелец подтвердил Stop и напоминание, затем нормальный ответ после отдельного
+серверного ремонта. Полный voice E2E и backend/backup/Office gates открыты.
 Разделы запуска целиком не закрываются.
 [Состав, доказательства и ограничения](audit/TROIKA_EVERYDAY_CLIENT_2026_10_29.md).
+
+## Обычный ответ — checkpoint 29 октября 2026
+
+После сообщения о «user safety safe» случайный free-router заменён проверенной
+`nvidia/nemotron-3.5-lightning:free`. Точная zero-price запись добавлена в реальный
+mounted config; reasoning отключён, платные fallback-цепочки пусты. Текущий API
+container/image, APK, ключи и данные владельца сохранены. Владелец подтвердил
+нормальный ответ. Четыре серверных синтетических ответа корректны; повторные
+первые тексты 0,761–1,038 с, первый после restart 13,621 с. Это текстовый loopback,
+не полная голосовая задержка. 115 целевых Python tests passed; прежний общий
+красный baseline не перезапускался. Холодный старт и физический voice E2E открыты.
+EGM применён к production README; инструкции merge/upgrade уточнены.
+[Состав и доказательства](audit/TROIKA_FREE_CHAT_ROUTING_2026_10_29.md).
 
 ## Следующий шаг
 

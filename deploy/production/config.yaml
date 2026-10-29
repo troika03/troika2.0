@@ -1,7 +1,12 @@
 model:
-  default: openrouter/free
+  # Pin a conversational agent: the random free router can select classifiers.
+  default: nvidia/nemotron-3.5-lightning:free
   provider: openrouter
   base_url: https://openrouter.ai/api/v1
+
+# A failed free request must not activate a paid provider or legacy fallback.
+fallback_providers: []
+fallback_model: null
 
 toolsets:
   - troika-product
@@ -15,6 +20,17 @@ platforms:
     enabled: true
     extra:
       product_voice_enabled: true
+      product_resource_prices:
+        nvidia/nemotron-3.5-lightning:free:
+          provider: openrouter
+          version: free-agent-2026-10-29
+          debit_mode: model_tokens
+          input_rub: 0
+          output_rub: 0
+          cache_read_rub: 0
+          cache_write_rub: 0
+          default_output_tokens: 8192
+          maximum_output_tokens: 65536
       product_speech:
         backend: openrouter
         voice: ""
@@ -35,6 +51,7 @@ agent:
   max_turns: 90
   tool_use_enforcement: true
   api_max_retries: 3
+  reasoning_effort: none
 
 stt:
   enabled: true

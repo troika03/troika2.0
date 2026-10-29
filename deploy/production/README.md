@@ -37,9 +37,32 @@ PY
 Keep this file outside Git and preserve it during upgrades. The SearXNG image
 is pinned by digest. Review and test a new digest before updating it.
 
+`config.yaml` is mounted read-only into the API as `/opt/troika/config.yaml`.
+The ordinary hosted agent is pinned to `nvidia/nemotron-3.5-lightning:free`, with
+reasoning disabled and both fallback chains empty. Recheck the full OpenRouter
+price map and text/tool capabilities before replacing this model; a classifier
+is not a conversational agent. Keep the exact model's zero-price accounting entry
+in `platforms.api_server.extra.product_resource_prices` alongside `model.default`.
+The `openrouter/free` entry remains available for the separate development route.
+
+`resource-beta.yaml` is a reference fragment, not an automatically imported file.
+When enabling its settings, merge them into the existing
+`platforms.api_server.extra` mapping in the real mounted config. Preserve existing
+entries within `product_resource_prices` and `product_resource_services`; a shallow
+replacement can remove the Fish voice service. Restart the API after validation:
+resource settings are captured at startup. Keep an owner-readable rollback copy
+on the server and preserve credentials and account data.
+
+For an existing installation, retain its reviewed API image digest and all active
+Compose environment/override files. A bare `compose up` can fall back to `:local`
+and replace the current runtime. A config-only repair needs no image rebuild;
+restart the existing API container and verify both health and the mounted config.
+The commands below are for an initial deployment, with an explicitly selected tag.
+
 Deploy from a clean source tree copied to `/srv/troika/releases/<revision>`:
 
 ```bash
+: "${TROIKA_IMAGE_TAG:?Set a reviewed immutable release tag before building}"
 docker compose -f deploy/production/compose.yaml build
 docker compose -f deploy/production/compose.yaml up -d
 docker compose -f deploy/production/compose.yaml ps
