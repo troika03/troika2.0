@@ -23,7 +23,8 @@ class _Requests {
   Future<void>? tokenResponseGate;
   Completer<void>? tokenResponseEntered;
   String events =
-      'data: {"event":"message.delta","delta":"Synthetic answer"}\n\n';
+      'data: {"event":"message.delta","delta":"Synthetic answer"}\n\n'
+      'data: {"event":"run.completed"}\n\n';
 
   late final client = MockClient.streaming((request, body) async {
     final payload = await body.bytesToString();
@@ -83,7 +84,10 @@ class _Requests {
           fallbackEntered!.complete();
         }
         if (fallbackGate != null) await fallbackGate;
-        return jsonResponse({'output': 'Synthetic fallback'});
+        return jsonResponse({
+          'status': 'completed',
+          'output': 'Synthetic fallback',
+        });
       case '/v1/chat/completions':
         return jsonResponse({
           'choices': [
@@ -323,7 +327,8 @@ void main() {
     final requests = _Requests()
       ..events =
           'data: {"event":"approval.request","choices":["once","deny"]}\n\n'
-          'data: {"event":"message.delta","delta":"Synthetic answer"}\n\n';
+          'data: {"event":"message.delta","delta":"Synthetic answer"}\n\n'
+          'data: {"event":"run.completed"}\n\n';
     await http.runWithClient(() async {
       expect(
         await TroikaApiService().streamMessage(

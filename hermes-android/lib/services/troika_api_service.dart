@@ -659,6 +659,7 @@ class TroikaApiService {
       identity.check();
       final startResp = await retryTlsHandshake(() {
         final request = http.Request('POST', identity.uri('/v1/runs'))
+          ..followRedirects = false
           ..headers.addAll(identity.chatHeaders(chatHdrs))
           ..body = json.encode(startBody);
         return client.send(request).timeout(_timeout);
@@ -689,6 +690,7 @@ class TroikaApiService {
       final evResp = await retryTlsHandshake(() {
         identity.check();
         final request = http.Request('GET', evUri)
+          ..followRedirects = false
           ..headers.addAll(identity.headers());
         return client.send(request).timeout(_timeout);
       });
@@ -701,7 +703,9 @@ class TroikaApiService {
 
       final answer = StringBuffer();
       String lastThought = '';
-      bool runFailed = false;
+      String? terminal;
+      String completedOutput = '';
+      events:
       await for (final raw
           in evResp.stream
               .transform(utf8.decoder)
@@ -776,28 +780,39 @@ class TroikaApiService {
             identity.check();
             break;
           case 'run.failed':
-            runFailed = true;
-            break;
+            terminal = 'failed';
+            break events;
+          case 'run.cancelled':
+          case 'run.canceled':
+            terminal = 'cancelled';
+            break events;
           case 'run.completed':
-            // Поток закроется сам; выходим из чтения.
-            break;
+            terminal = 'completed';
+            completedOutput = _extractText(ev['output']).trim();
+            break events;
         }
       }
 
       identity.check();
       final full = answer.toString().trim();
-      if (runFailed && full.isEmpty) {
+      if (terminal == 'cancelled') {
+        throw TroikaApiException('Запрос остановлен.');
+      }
+      if (terminal == 'failed') {
         // Run упал на сервере — достаём причину из статуса, чтобы показать
         // понятную ошибку, а не пустой пузырь.
         final reason = await _fetchRunError(client, runId, identity);
         throw TroikaApiException(reason);
       }
-      if (full.isEmpty) {
-        // Финал не пришёл дельтами — добираем через статус run.
+      if (terminal == 'completed' && completedOutput.isNotEmpty) {
+        return completedOutput;
+      }
+      if (terminal != 'completed' || full.isEmpty) {
+        // EOF is not completion. Recover only a confirmed canonical result.
         final r = await _fetchRunResult(client, runId, identity);
         if (r.isEmpty) {
           throw TroikaApiException(
-            await _fetchRunError(client, runId, identity),
+            'Ответ прервался до завершения. Повтори запрос.',
           );
         }
         return r;
@@ -864,7 +879,9 @@ class TroikaApiService {
   ) async {
     try {
       final uri = identity.uri('/v1/runs/${Uri.encodeComponent(runId)}');
-      final req = http.Request('GET', uri)..headers.addAll(identity.headers());
+      final req = http.Request('GET', uri)
+        ..followRedirects = false
+        ..headers.addAll(identity.headers());
       final resp = await client.send(req).timeout(const Duration(seconds: 20));
       identity.check();
       final body = await resp.stream.bytesToString();
@@ -894,13 +911,16 @@ class TroikaApiService {
   ) async {
     try {
       final uri = identity.uri('/v1/runs/${Uri.encodeComponent(runId)}');
-      final req = http.Request('GET', uri)..headers.addAll(identity.headers());
+      final req = http.Request('GET', uri)
+        ..followRedirects = false
+        ..headers.addAll(identity.headers());
       final resp = await client.send(req).timeout(const Duration(seconds: 30));
       identity.check();
       final body = await resp.stream.bytesToString();
       identity.check();
       if (resp.statusCode != 200) return '';
       final data = json.decode(body) as Map<String, dynamic>;
+      if (data['status'] != 'completed') return '';
       final out = data['output'] ?? data['result'] ?? data['content'] ?? '';
       return _extractText(out).trim();
     } on RequestIdentityChanged {
@@ -917,14 +937,24 @@ class TroikaApiService {
   /// Загрузить историю общей сессии с сервера (для отрисовки ленты при входе).
   /// Возвращает сообщения по порядку (старые → новые).
   Future<List<ChatMessage>> loadSessionHistory({int limit = 60}) async {
-    final encoded = Uri.encodeComponent(TroikaConfig.sessionId);
-    final uri = Uri.parse(
-      '${TroikaConfig.serverUrl}/v1/sessions/$encoded/messages?limit=$limit',
-    );
+    final identity = TroikaRequestIdentity();
+    final encoded = Uri.encodeComponent(identity.session);
+    final uri = identity.uri('/v1/sessions/$encoded/messages?limit=$limit');
+    final client = http.Client();
     try {
-      final response = await http
-          .get(uri, headers: TroikaConfig.headers)
+      await AccountService().ensureFreshSession(checkRequest: identity.check);
+      identity.check();
+      final request = http.Request('GET', uri)
+        ..followRedirects = false
+        ..headers.addAll(identity.headers());
+      final stream = await client
+          .send(request)
           .timeout(const Duration(seconds: 15));
+      identity.check();
+      final response = await http.Response.fromStream(
+        stream,
+      ).timeout(const Duration(seconds: 15));
+      identity.check();
       if (response.statusCode == 404) {
         return []; // сессии ещё нет — пустой чат
       }
@@ -960,6 +990,8 @@ class TroikaApiService {
       );
     } on TimeoutException {
       throw TroikaApiException('Сервер не ответил вовремя.');
+    } finally {
+      client.close();
     }
   }
 
@@ -1278,21 +1310,80 @@ class TroikaApiService {
 
   /// Keep account reminder calculations aligned with the phone's time zone.
   /// This is best-effort: a temporary network failure must not block login.
-  Future<bool> syncDeviceTimeZone() async {
+  Future<bool> syncDeviceTimeZone({
+    Future<String?> Function()? readTimeZone,
+  }) async {
     if (!TroikaConfig.signedIn) return false;
+    final identity = TroikaRequestIdentity();
+    final client = http.Client();
     try {
-      final timezone = await TroikaConfig.deviceTimeZone();
+      final timezone = await (readTimeZone ?? TroikaConfig.deviceTimeZone)();
+      identity.check();
       if (timezone == null) return false;
-      final preferences = await getNotificationPreferences();
-      if (preferences.timezone == timezone) return true;
-      await setNotificationPreferences(
-        preferences.copyWith(timezone: timezone),
+      final response = await _timeZonePreferencesRequest(
+        client,
+        identity,
+        'GET',
       );
+      identity.check();
+      _checkAssistantResponse(response, 'Настройки уведомлений недоступны');
+      final preferences = TroikaNotificationPreferences.fromJson(
+        json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>,
+      );
+      if (preferences.timezone == timezone) return true;
+      final updated = await _timeZonePreferencesRequest(
+        client,
+        identity,
+        'PUT',
+        body: json.encode(preferences.copyWith(timezone: timezone).toJson()),
+      );
+      identity.check();
+      _checkAssistantResponse(updated, 'Настройки уведомлений не сохранены');
       return true;
     } catch (_) {
       return false;
+    } finally {
+      client.close();
     }
   }
+
+  Future<http.Response> _timeZonePreferencesRequest(
+    http.Client client,
+    TroikaRequestIdentity identity,
+    String method, {
+    String? body,
+  }) => (() async {
+    identity.check();
+    final request =
+        http.Request(method, identity.uri('/v1/notification-preferences'))
+          ..followRedirects = false
+          ..headers.addAll(identity.headers());
+    if (body != null) request.body = body;
+    final response = await client.send(request);
+    identity.check();
+    const maxBytes = 64 * 1024;
+    if ((response.contentLength ?? 0) > maxBytes) {
+      throw const FormatException(
+        'Notification preferences response too large',
+      );
+    }
+    final bytes = <int>[];
+    await for (final chunk in response.stream) {
+      identity.check();
+      if (bytes.length + chunk.length > maxBytes) {
+        throw const FormatException(
+          'Notification preferences response too large',
+        );
+      }
+      bytes.addAll(chunk);
+    }
+    identity.check();
+    return http.Response.bytes(
+      bytes,
+      response.statusCode,
+      headers: response.headers,
+    );
+  })().timeout(const Duration(seconds: 15));
 
   Future<List<TroikaMemory>> listMemories() async {
     final response = await http

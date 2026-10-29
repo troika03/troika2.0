@@ -22,6 +22,28 @@ object NativeAccountSession {
         val generation: Long,
     )
 
+    /** Event ownership also covers local commands and manually configured gateways. */
+    data class EventIdentity internal constructor(
+        val serverUrl: String,
+        val owner: String,
+        val sessionKey: String,
+        val sessionId: String,
+        val generation: Long,
+        val signedIn: Boolean,
+        internal val accountIdentity: Identity?,
+    )
+
+    fun eventSnapshot(context: Context): EventIdentity = synchronized(SecureTokenStore) {
+        val prefs = preferences(context)
+        val owner = prefs.getString(EMAIL, "").orEmpty().trim().lowercase()
+        EventIdentity(value(prefs, "server_url").trimEnd('/'), owner,
+            value(prefs, "session_key"), value(prefs, "session_id"),
+            prefs.getLong(IDENTITY_REVISION, 0),
+            owner.isNotEmpty() && value(prefs, "api_key").startsWith("trk_live_"), snapshot(context))
+    }
+
+    fun currentEvent(context: Context, identity: EventIdentity): Boolean = eventSnapshot(context) == identity
+
     fun snapshot(context: Context, requestedServerUrl: String? = null): Identity? = synchronized(SecureTokenStore) {
         val prefs = preferences(context)
         val origin = value(prefs, "server_url").trimEnd('/')

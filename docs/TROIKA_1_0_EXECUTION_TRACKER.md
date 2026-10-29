@@ -23,7 +23,7 @@ installed-client E2E или релизной готовности. `[-]` — ч�
 | 2. Продукт и аудитория | [x] | Product copy ориентируется на результат; экспериментальные инструменты не продаются как готовые. |
 | 3. Границы 1.0 | [x] | Product allowlist/default-off policy реализованы. Незавершённые обязательные области остаются в следующих разделах. |
 | 4. Voice-first дизайн | [x] | Orb states, secondary text, result cards, approval modal и темы покрыты Flutter tests. |
-| 5. Android | [-] | 28 октября основная APK обновлена с единым native refresh и защищённой синхронизацией reminders; 38 Kotlin/JUnit и 235 Flutter tests прошли. Владелец подтвердил фоновый голос. Физическое напоминание, Stop новой APK, standby/reboot и реальные expiry/revoke ещё не приняты. [Аудит](audit/TROIKA_BACKGROUND_RELIABILITY_2026_10_28.md). |
+| 5. Android | [-] | 29 октября основная APK обновлена: file delivery/ACK, history, terminal status, timezone и native-event identity guards; 282 Flutter tests прошли, 2 skipped, analyze без errors/warnings. Фоновый голос подтверждён владельцем на предыдущей APK 28 октября; физическое напоминание, свежий Stop, standby/reboot и реальные expiry/revoke открыты. [Аудит](audit/TROIKA_EVERYDAY_CLIENT_2026_10_29.md). |
 | 6. Windows | [-] | WPF с автопилотом установлен; точный EXE прошёл SDK E2E: API, пауза/продолжение, DPAPI checkpoint, owner isolation, локальный файл и очередь без дубля. Обновлённый source с UI/голосом собирается и проходит проверки. Физический микрофон/звук, настоящее закрытие в tray, background reminders и signed installer остаются отдельными gates. [Аудит](audit/AUTOPILOT_COMPLETION_2026_10_16.md). |
 | 7. Сайт и аккаунт | [-] | Сайт опубликован на cm444726.tw1.ru: HTTPS, вход/регистрация, ресурс, устройства, память, export/delete, изолированная поддержка SQLite и локальные загрузки. 12 локальных и 52 проверки Timeweb прошли; оба установщика сверены по SHA-256, тестовые аккаунты удалены. Исходный Sites остался закрытым. Оплата/почта отложены, recovery/verification, legal, подпись и общие release gates открыты. [Аудит](audit/WEBSITE_TIMEWEB_2026_10_16.md). |
 | 8. Billing/ресурс | [-] | Месячный runtime и личный API включены 14 октября. Corporate Free: prompt + completion; личный ключ: 0 за модель без corporate fallback. Free 500 тыс., Plus 5 млн, Pro 10 млн; Run/voice/API/Android/WPF, две Pro beta-выдачи, public HTTPS E2E, APK установлен без сброса. Оплата/почта отложены; checkout/verification/refund в коде, flags false. До продаж остаются финансовые lifecycle/unknown bills/anti-abuse. [Проверки](audit/SUBSCRIPTION_RUNTIME_2026_10_13.md), [настройка](development/SUBSCRIPTION_SETUP.md). |
@@ -59,6 +59,18 @@ release сборка прошла. Backend этой поставкой не ме
 standby/reboot, реальный expiry/revoke и полный voice E2E остаются открытыми.
 Все разделы целиком этой поставкой не закрываются.
 [Доказательства и ограничения](audit/TROIKA_BACKGROUND_RELIABILITY_2026_10_28.md).
+
+## Повседневный клиент — checkpoint 29 октября 2026
+
+Основная APK обновлена с сохранением данных; точный установленный SHA и прежний
+сертификат проверены. Исправлены переход старых file ACK/UI callbacks в новый
+аккаунт, восстановление metadata до ACK, гонки истории, ложный успех после
+run.failed/cancelled/EOF, timezone identity и отложенный native voice_message.
+Полный Flutter набор 282 passed/2 skipped; analyze 0 errors/0 warnings/61 info;
+release compilation и запуск прошли. Backend этой поставкой не менялся.
+Физическая приёмка новой версии и оставшиеся backend/backup/Office gates открыты.
+Разделы запуска целиком не закрываются.
+[Состав, доказательства и ограничения](audit/TROIKA_EVERYDAY_CLIENT_2026_10_29.md).
 
 ## Следующий шаг
 

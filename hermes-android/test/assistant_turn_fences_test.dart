@@ -11,8 +11,18 @@ import 'package:troika_assistant/services/assistant_service.dart';
 import 'package:troika_assistant/services/reminder_delivery_service.dart';
 
 class _Api {
-  _Api({this.holdStart = false, this.holdStop = false});
+  _Api({
+    this.holdStart = false,
+    this.holdStop = false,
+    this.holdHistory = false,
+  });
   final bool holdStart, holdStop;
+  final bool holdHistory;
+  final historyEntered = Completer<void>(), releaseHistory = Completer<void>();
+  final startBodies = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> history = [];
+  Map<String, dynamic> runStatus = {'status': 'running'};
+  int historyRequests = 0;
   final firstStart = Completer<void>(), releaseStart = Completer<void>();
   final stopEntered = Completer<void>(), releaseStop = Completer<void>();
   final events = <int, StreamController<List<int>>>{};
@@ -34,10 +44,22 @@ class _Api {
       return response('{"features":{"device_file_delivery":true}}', 200);
     }
     if (request.url.path == '/v1/runs') {
+      startBodies.add(jsonDecode(payload) as Map<String, dynamic>);
       final number = ++starts;
       if (!firstStart.isCompleted) firstStart.complete();
       if (holdStart && number == 1) await releaseStart.future;
       return response(jsonEncode({'run_id': 'run_$number'}), 202);
+    }
+    if (request.url.path.startsWith('/v1/sessions/') &&
+        request.url.path.endsWith('/messages')) {
+      final snapshot = List<Map<String, dynamic>>.of(history);
+      historyRequests++;
+      if (!historyEntered.isCompleted) historyEntered.complete();
+      if (holdHistory && historyRequests == 1) await releaseHistory.future;
+      return response(jsonEncode({'messages': snapshot}), 200);
+    }
+    if (RegExp(r'^/v1/runs/run_[0-9]+$').hasMatch(request.url.path)) {
+      return response(jsonEncode(runStatus), 200);
     }
     if (request.url.path.endsWith('/events')) {
       final number = int.parse(request.url.path.split('/')[3].substring(4));
@@ -88,6 +110,14 @@ class _Api {
     }
   }
 
+  Future<void> terminate(int number, String? terminal) async {
+    final stream = events[number]!;
+    if (terminal != null) {
+      stream.add(utf8.encode('data: ${jsonEncode({'event': terminal})}\n\n'));
+    }
+    await stream.close();
+  }
+
   void approval(int number) => events[number]!.add(
     utf8.encode(
       'data: ${jsonEncode({
@@ -102,6 +132,7 @@ class _Api {
   Future<void> dispose() async {
     if (!releaseStart.isCompleted) releaseStart.complete();
     if (!releaseStop.isCompleted) releaseStop.complete();
+    if (!releaseHistory.isCompleted) releaseHistory.complete();
     for (final stream in events.values) {
       if (!stream.isClosed) await stream.close();
     }
@@ -445,6 +476,188 @@ void main() {
           );
           expect(api.speechRequests, 1);
           expect(api.stops, isEmpty);
+        }, () => api.client);
+      } finally {
+        service.dispose();
+        await api.dispose();
+      }
+    },
+  );
+
+  test(
+    'late history cannot overwrite a newer completed conversation',
+    () async {
+      final api = _Api(holdHistory: true)
+        ..history = [
+          {'role': 'assistant', 'content': 'Старый синтетический архив'},
+        ];
+      final service = assistant();
+      try {
+        await http.runWithClient(() async {
+          final oldHistory = service.loadHistory();
+          await api.historyEntered.future;
+          final turn = service.sendTextQuery('Почему вечером небо красное?');
+          await api.waitEvents(1);
+          api.delta(1, 'Актуальный синтетический ответ');
+          await api.finish(1);
+          await turn;
+          api.releaseHistory.complete();
+          await oldHistory;
+          expect(service.messages.map((m) => m.text), [
+            'Почему вечером небо красное?',
+            'Актуальный синтетический ответ',
+          ]);
+        }, () => api.client);
+      } finally {
+        service.dispose();
+        await api.dispose();
+      }
+    },
+  );
+
+  test(
+    'a newer history snapshot wins over an older simultaneous load',
+    () async {
+      final api = _Api(holdHistory: true)
+        ..history = [
+          {'role': 'assistant', 'content': 'Старый архив'},
+        ];
+      final service = assistant();
+      try {
+        await http.runWithClient(() async {
+          final oldHistory = service.loadHistory();
+          await api.historyEntered.future;
+          api.history = [
+            {'role': 'assistant', 'content': 'Новый архив'},
+          ];
+          await service.loadHistory();
+          api.releaseHistory.complete();
+          await oldHistory;
+          expect(service.messages.single.text, 'Новый архив');
+        }, () => api.client);
+      } finally {
+        service.dispose();
+        await api.dispose();
+      }
+    },
+  );
+
+  test(
+    'identity replacement clears old text, result and next-turn context',
+    () async {
+      final api = _Api()
+        ..history = [
+          {'role': 'assistant', 'content': 'Синтетический контекст A'},
+        ];
+      final service = assistant();
+      try {
+        await http.runWithClient(() async {
+          await service.loadHistory();
+          final first = service.sendTextQuery(
+            'Почему у дневного неба синий цвет?',
+          );
+          await api.waitEvents(1);
+          api.delta(1, 'Синтетический ответ A');
+          await api.finish(1);
+          await first;
+          expect(service.lastResult, isNotNull);
+          await TroikaConfig.saveAccount(
+            email: 'other@example.invalid',
+            token: 'trk_live_other',
+            homeSessionId: 'ses_other',
+            replaceIdentity: true,
+          );
+          expect(service.messages, isEmpty);
+          expect(service.lastUserText, isEmpty);
+          expect(service.lastTroikaText, isEmpty);
+          expect(service.lastResult, isNull);
+          final second = service.sendTextQuery('Почему вечером небо красное?');
+          await api.waitEvents(2);
+          expect(api.startBodies.last['conversation_history'], isNull);
+          api.delta(2, 'Синтетический ответ B');
+          await api.finish(2);
+          await second;
+        }, () => api.client);
+      } finally {
+        service.dispose();
+        await api.dispose();
+      }
+    },
+  );
+
+  for (final terminal in ['run.failed', 'run.cancelled', null]) {
+    test(
+      'partial text with terminal $terminal never becomes a successful result',
+      () async {
+        final api = _Api(), service = assistant();
+        try {
+          await http.runWithClient(() async {
+            final turn = service.sendTextQuery(
+              'Почему у дневного неба синий цвет?',
+            );
+            await api.waitEvents(1);
+            api.delta(1, 'Незавершённая синтетическая часть');
+            await api.terminate(1, terminal);
+            await turn.timeout(const Duration(seconds: 2));
+            expect(service.state, AssistantState.error);
+            expect(service.lastResult, isNull);
+            expect(service.lastTroikaText, isEmpty);
+            expect(service.messages.where((m) => !m.isUser), isEmpty);
+            expect(service.errorMessage, isNotEmpty);
+          }, () => api.client);
+        } finally {
+          service.dispose();
+          await api.dispose();
+        }
+      },
+    );
+  }
+
+  test(
+    'EOF recovers canonical output only after completed server status',
+    () async {
+      final api = _Api()
+        ..runStatus = {
+          'status': 'completed',
+          'output': 'Полный канонический ответ',
+        };
+      final service = assistant();
+      try {
+        await http.runWithClient(() async {
+          final turn = service.sendTextQuery('Почему вечером небо красное?');
+          await api.waitEvents(1);
+          api.delta(1, 'Обрезанная часть');
+          await api.terminate(1, null);
+          await turn;
+          expect(service.lastTroikaText, 'Полный канонический ответ');
+          expect(service.state, AssistantState.idle);
+        }, () => api.client);
+      } finally {
+        service.dispose();
+        await api.dispose();
+      }
+    },
+  );
+
+  test(
+    'an unscoped legacy result is never restored for another account',
+    () async {
+      await TroikaConfig.signOut();
+      final prefs = await SharedPreferences.getInstance();
+      final legacy = jsonEncode({
+        'kind': 'file',
+        'title': 'Синтетический документ прежнего владельца',
+        'summary': 'Синтетические данные',
+        'resource_id': 'legacy',
+      });
+      await prefs.setString('troika_last_action_result', legacy);
+      final api = _Api(), service = assistant();
+      try {
+        await http.runWithClient(() async {
+          await service.init();
+          await service.loadHistory();
+          expect(service.lastResult, isNull);
+          expect(prefs.getString('troika_last_action_result'), legacy);
         }, () => api.client);
       } finally {
         service.dispose();

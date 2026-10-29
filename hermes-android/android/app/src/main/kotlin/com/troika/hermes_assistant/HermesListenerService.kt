@@ -1179,9 +1179,9 @@ class HermesListenerService : Service() {
      * История сообщений сохраняется между итерациями для follow-up вопросов.
      */
     private fun runDialog(manual: Boolean = false) {
-        val dialogIdentity = NativeAccountSession.snapshot(this)
-        fun currentDialog() = if (dialogIdentity != null) NativeAccountSession.current(this, dialogIdentity)
-            else resolvedUrl(getSharedPreferences(PREFS, MODE_PRIVATE)).isBlank()
+        val dialogEventIdentity = NativeAccountSession.eventSnapshot(this)
+        val dialogIdentity = dialogEventIdentity.accountIdentity
+        fun currentDialog() = NativeAccountSession.currentEvent(this, dialogEventIdentity)
         DevelopmentService.interruptReport()
         listenerPaused.set(true)
         dialogStartMs.set(System.currentTimeMillis())
@@ -1311,6 +1311,7 @@ class HermesListenerService : Service() {
 
                 HermesOverlay.get(this).updateStatus("Ты: $rawQuestion")
                 Thread.sleep(300)
+                if (!currentDialog()) break
 
                 // Локальный матчер команд телефона — пробуем выполнить ДО вызова LLM
                 val localResult = PhoneCommands.tryExecute(
@@ -1327,8 +1328,8 @@ class HermesListenerService : Service() {
                     history.add(JSONObject().apply {
                         put("role", "assistant"); put("content", localResult)
                     })
-                    sendChatToFlutter("user", rawQuestion)
-                    sendChatToFlutter("assistant", localResult)
+                    sendChatToFlutter("user", rawQuestion, dialogEventIdentity)
+                    sendChatToFlutter("assistant", localResult, dialogEventIdentity)
                     firstTurn = false
                     continue
                 }
@@ -1345,7 +1346,7 @@ class HermesListenerService : Service() {
                     // незаметный в TTS т.к. это вход, а не ответ.
                     put("content", currentDatePrefix() + rawQuestion)
                 })
-                sendChatToFlutter("user", rawQuestion)
+                sendChatToFlutter("user", rawQuestion, dialogEventIdentity)
                 val ttsDone = Object()
                 val bargeMonitor = java.util.concurrent.atomic.AtomicReference<BargeInMonitor?>(null)
                 val speechStarted = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -1387,7 +1388,7 @@ class HermesListenerService : Service() {
                     put("role", "assistant")
                     put("content", answer)
                 })
-                sendChatToFlutter("assistant", answer)
+                sendChatToFlutter("assistant", answer, dialogEventIdentity)
 
                 HermesOverlay.get(this).updateStatus(answer.take(120))
                 replySpeech.finish()
@@ -1853,7 +1854,8 @@ class HermesListenerService : Service() {
 
     /// Прокинуть реплику голосового диалога в Flutter-чат, чтобы голос и текст
     /// складывались в одну общую ленту этой установки приложения.
-    private fun sendChatToFlutter(role: String, content: String) {
+    private fun sendChatToFlutter(role: String, content: String, identity: NativeAccountSession.EventIdentity) {
+        if (!NativeAccountSession.currentEvent(this, identity)) return
         val engine = FlutterEngineCache.getInstance().get("main_engine") ?: return
         val channel = MethodChannel(
             engine.dartExecutor.binaryMessenger, FLUTTER_CHANNEL
@@ -1864,7 +1866,17 @@ class HermesListenerService : Service() {
         val payload = HashMap<String, Any>()
         payload["role"] = role
         payload["content"] = visible
+        payload["identity"] = hashMapOf<String, Any>(
+            "version" to 1,
+            "origin" to identity.serverUrl,
+            "owner" to identity.owner,
+            "session_id" to identity.sessionId,
+            "session_key" to identity.sessionKey,
+            "native_generation" to identity.generation,
+            "signed_in" to identity.signedIn,
+        )
         android.os.Handler(mainLooper).post {
+            if (!NativeAccountSession.currentEvent(this, identity)) return@post
             channel.invokeMethod("voice_message", payload)
         }
     }

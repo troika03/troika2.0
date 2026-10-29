@@ -1,43 +1,73 @@
 import '../widgets/troika_page.dart';
 import 'package:flutter/material.dart';
+import '../config/troika_config.dart';
 import '../services/files_service.dart';
+import '../services/request_identity.dart';
 import 'local_documents_screen.dart';
 
 /// Личные документы текущего аккаунта Тройки.
 class FilesScreen extends StatefulWidget {
-  const FilesScreen({super.key});
+  const FilesScreen({super.key, this.files});
+
+  final FilesService? files;
 
   @override
   State<FilesScreen> createState() => _FilesScreenState();
 }
 
 class _FilesScreenState extends State<FilesScreen> {
-  final FilesService _svc = FilesService();
+  late final FilesService _svc;
   List<TroikaFile> _items = [];
   bool _loading = true;
   String? _error;
   String _busyId = '';
+  int _loadGeneration = 0;
 
   @override
   void initState() {
     super.initState();
+    _svc = widget.files ?? FilesService();
+    TroikaConfig.voiceIdentityChanges.addListener(_identityChanged);
     _load();
   }
 
+  @override
+  void dispose() {
+    TroikaConfig.voiceIdentityChanges.removeListener(_identityChanged);
+    _loadGeneration++;
+    super.dispose();
+  }
+
+  void _identityChanged() {
+    _loadGeneration++;
+    if (!mounted) return;
+    setState(() {
+      _items = [];
+      _busyId = '';
+      _loading = false;
+      _error = null;
+    });
+    // Config emits again after an atomic sign-in or connection change finishes.
+    if (TroikaConfig.voiceSessionAvailable) _load();
+  }
+
   Future<void> _load() async {
+    final generation = ++_loadGeneration;
+    final identity = TroikaRequestIdentity();
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final items = await _svc.list();
-      if (!mounted) return;
+      identity.check();
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _items = items;
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _error = e.toString();
         _loading = false;
@@ -46,9 +76,15 @@ class _FilesScreenState extends State<FilesScreen> {
   }
 
   Future<void> _openFile(TroikaFile f) async {
+    final identity = TroikaRequestIdentity();
     setState(() => _busyId = f.id);
     final err = await _svc.openFile(f);
     if (!mounted) return;
+    try {
+      identity.check();
+    } on RequestIdentityChanged {
+      return;
+    }
     setState(() => _busyId = '');
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
@@ -56,9 +92,15 @@ class _FilesScreenState extends State<FilesScreen> {
   }
 
   Future<void> _shareFile(TroikaFile f) async {
+    final identity = TroikaRequestIdentity();
     setState(() => _busyId = f.id);
     final err = await _svc.shareFile(f);
     if (!mounted) return;
+    try {
+      identity.check();
+    } on RequestIdentityChanged {
+      return;
+    }
     setState(() => _busyId = '');
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
@@ -66,9 +108,15 @@ class _FilesScreenState extends State<FilesScreen> {
   }
 
   Future<void> _saveFile(TroikaFile f) async {
+    final identity = TroikaRequestIdentity();
     setState(() => _busyId = f.id);
     final result = await _svc.saveToDevice(f);
     if (!mounted) return;
+    try {
+      identity.check();
+    } on RequestIdentityChanged {
+      return;
+    }
     setState(() => _busyId = '');
     if (result.error != null) {
       ScaffoldMessenger.of(
@@ -84,6 +132,7 @@ class _FilesScreenState extends State<FilesScreen> {
   }
 
   Future<void> _deleteFile(TroikaFile f) async {
+    final identity = TroikaRequestIdentity();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -102,9 +151,19 @@ class _FilesScreenState extends State<FilesScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
+    try {
+      identity.check();
+    } on RequestIdentityChanged {
+      return;
+    }
     setState(() => _busyId = f.id);
     final err = await _svc.deleteFile(f);
     if (!mounted) return;
+    try {
+      identity.check();
+    } on RequestIdentityChanged {
+      return;
+    }
     setState(() => _busyId = '');
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
@@ -128,10 +187,7 @@ class _FilesScreenState extends State<FilesScreen> {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: _buildBody(),
-      ),
+      body: RefreshIndicator(onRefresh: _load, child: _buildBody()),
     );
   }
 
@@ -143,11 +199,12 @@ class _FilesScreenState extends State<FilesScreen> {
       return ListView(
         children: [
           TroikaEmptyState(
-              icon: Icons.cloud_off_outlined,
-              title: 'Не удалось загрузить файлы',
-              message: _error!,
-              actionLabel: 'Повторить',
-              onAction: _load),
+            icon: Icons.cloud_off_outlined,
+            title: 'Не удалось загрузить файлы',
+            message: _error!,
+            actionLabel: 'Повторить',
+            onAction: _load,
+          ),
         ],
       );
     }
@@ -155,16 +212,19 @@ class _FilesScreenState extends State<FilesScreen> {
       return ListView(
         children: [
           TroikaEmptyState(
-              icon: Icons.folder_open_outlined,
-              title: 'Здесь пока пусто',
-              message:
-                  'Создай документ или попроси Тройку подготовить файл. Сохранённые результаты появятся здесь.',
-              actionLabel: 'Создать документ',
-              onAction: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const TroikaPageScope(
-                          child: LocalDocumentsScreen())))),
+            icon: Icons.folder_open_outlined,
+            title: 'Здесь пока пусто',
+            message:
+                'Создай документ или попроси Тройку подготовить файл. Сохранённые результаты появятся здесь.',
+            actionLabel: 'Создать документ',
+            onAction: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    const TroikaPageScope(child: LocalDocumentsScreen()),
+              ),
+            ),
+          ),
         ],
       );
     }
@@ -180,60 +240,63 @@ class _FilesScreenState extends State<FilesScreen> {
   Widget _row(TroikaFile f) {
     final isBusy = _busyId == f.id;
     return Card(
-        clipBehavior: Clip.antiAlias,
-        child: ListTile(
-          leading:
-              TroikaIcon(icon: _iconForExt(f.ext), color: _colorForExt(f.ext)),
-          title: Text(
-            f.name,
-            style:
-                TextStyle(color: TroikaPalette.of(context).text, fontSize: 15),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
+      clipBehavior: Clip.antiAlias,
+      child: ListTile(
+        leading: TroikaIcon(
+          icon: _iconForExt(f.ext),
+          color: _colorForExt(f.ext),
+        ),
+        title: Text(
+          f.name,
+          style: TextStyle(color: TroikaPalette.of(context).text, fontSize: 15),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Text(
+          '${_fmtSize(f.size)} · ${_fmtDate(f.time)}',
+          style: TextStyle(
+            color: TroikaPalette.of(context).textFaint,
+            fontSize: 12,
           ),
-          subtitle: Text(
-            '${_fmtSize(f.size)} · ${_fmtDate(f.time)}',
-            style: TextStyle(
-                color: TroikaPalette.of(context).textFaint, fontSize: 12),
-          ),
-          trailing: isBusy
-              ? const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      tooltip: 'Сохранить на телефон',
-                      icon: const Icon(Icons.download_outlined),
-                      onPressed: () => _saveFile(f),
-                    ),
-                    PopupMenuButton<String>(
-                      tooltip: 'Другие действия',
-                      onSelected: (action) {
-                        if (action == 'open') _openFile(f);
-                        if (action == 'save') _saveFile(f);
-                        if (action == 'share') _shareFile(f);
-                        if (action == 'delete') _deleteFile(f);
-                      },
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(value: 'open', child: Text('Открыть')),
-                        PopupMenuItem(
-                          value: 'save',
-                          child: Text('Сохранить на телефон'),
-                        ),
-                        PopupMenuItem(
-                            value: 'share', child: Text('Поделиться')),
-                        PopupMenuDivider(),
-                        PopupMenuItem(value: 'delete', child: Text('Удалить')),
-                      ],
-                    ),
-                  ],
-                ),
-          onTap: isBusy ? null : () => _openFile(f),
-        ));
+        ),
+        trailing: isBusy
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Сохранить на телефон',
+                    icon: const Icon(Icons.download_outlined),
+                    onPressed: () => _saveFile(f),
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: 'Другие действия',
+                    onSelected: (action) {
+                      if (action == 'open') _openFile(f);
+                      if (action == 'save') _saveFile(f);
+                      if (action == 'share') _shareFile(f);
+                      if (action == 'delete') _deleteFile(f);
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'open', child: Text('Открыть')),
+                      PopupMenuItem(
+                        value: 'save',
+                        child: Text('Сохранить на телефон'),
+                      ),
+                      PopupMenuItem(value: 'share', child: Text('Поделиться')),
+                      PopupMenuDivider(),
+                      PopupMenuItem(value: 'delete', child: Text('Удалить')),
+                    ],
+                  ),
+                ],
+              ),
+        onTap: isBusy ? null : () => _openFile(f),
+      ),
+    );
   }
 
   static IconData _iconForExt(String ext) {
@@ -283,7 +346,8 @@ class _FilesScreenState extends State<FilesScreen> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final that = DateTime(d.year, d.month, d.day);
-    final hm = '${d.hour.toString().padLeft(2, '0')}:'
+    final hm =
+        '${d.hour.toString().padLeft(2, '0')}:'
         '${d.minute.toString().padLeft(2, '0')}';
     if (that == today) return 'сегодня $hm';
     return '${d.day.toString().padLeft(2, '0')}.'

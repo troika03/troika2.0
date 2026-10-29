@@ -2,6 +2,7 @@ import 'dart:async';
 import 'web_sources.dart';
 import 'dart:convert';
 import 'dart:io' show Platform;
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -18,6 +19,7 @@ import 'files_service.dart';
 import '../config/troika_config.dart';
 import 'account_service.dart';
 import 'reminder_delivery_service.dart';
+import 'request_identity.dart';
 
 enum AssistantState {
   idle,
@@ -71,6 +73,7 @@ class AssistantService extends ChangeNotifier {
   // Единая лента диалога — голос и текст вперемешку, как в мессенджере.
   final List<ChatMessage> _messages = [];
   bool _historyLoaded = false;
+  int _historyGeneration = 0;
   Timer? _accountSyncTimer;
   bool _accountSyncInFlight = false;
   bool _projectReportSpeaking = false;
@@ -129,6 +132,17 @@ class AssistantService extends ChangeNotifier {
   void _voiceIdentityChanged() {
     if (_disposed) return;
     unawaited(_invalidateTurn().catchError((Object _) {}));
+    _historyGeneration++;
+    _messages.clear();
+    _historyLoaded = false;
+    _lastUserText = '';
+    _lastTroikaText = '';
+    _lastResult = null;
+    _webSources = WebSourceTrace();
+    _pendingUiAction = null;
+    _pendingUiPrompt = '';
+    _errorMessage = '';
+    _debugHeard = '';
     _actionInProgress = false;
     _activityStatus = '';
     _setState(AssistantState.idle);
@@ -283,8 +297,16 @@ class AssistantService extends ChangeNotifier {
     _accountSyncInFlight = true;
     try {
       await AccountService().ensureFreshSession();
+      if (_disposed ||
+          _state != AssistantState.idle ||
+          _activeTurn != null ||
+          _messages.any((message) => message.pending)) {
+        return;
+      }
       unawaited(_replyDelivery.syncWithDeviceTimeZone());
       await loadHistory();
+    } catch (_) {
+      // Periodic sync must not surface an unhandled Future while offline.
     } finally {
       _accountSyncInFlight = false;
     }
@@ -292,8 +314,24 @@ class AssistantService extends ChangeNotifier {
 
   /// Загрузить ленту общей сессии (голос+текст) с сервера.
   Future<void> loadHistory({bool replaceEvenIfEmpty = false}) async {
+    if (_disposed ||
+        _activeTurn != null ||
+        _messages.any((message) => message.pending)) {
+      return;
+    }
+    final identity = TroikaRequestIdentity();
+    final generation = ++_historyGeneration;
+    final turnGeneration = _turnGeneration;
+    bool current() =>
+        !_disposed &&
+        generation == _historyGeneration &&
+        turnGeneration == _turnGeneration &&
+        _activeTurn == null &&
+        !_messages.any((message) => message.pending);
     try {
       final loaded = await _troika.loadSessionHistory();
+      identity.check();
+      if (!current()) return;
       if (loaded.isNotEmpty || replaceEvenIfEmpty) {
         _messages
           ..clear()
@@ -305,6 +343,12 @@ class AssistantService extends ChangeNotifier {
       _historyLoaded = true;
       notifyListeners();
     } catch (e) {
+      if (!current()) return;
+      try {
+        identity.check();
+      } on RequestIdentityChanged {
+        return;
+      }
       debugPrint('[Assistant] loadHistory failed: $e');
       _historyLoaded = true; // не блокируем UI
       notifyListeners();
@@ -390,6 +434,7 @@ class AssistantService extends ChangeNotifier {
   void _onVoiceMessage(String role, String content) {
     final text = content.trim();
     if (text.isEmpty) return;
+    _historyGeneration++;
     // снять pending-«печатает», если был
     if (role == 'assistant') {
       unawaited(ReminderDeliveryService.instance.sync());
@@ -904,6 +949,7 @@ class AssistantService extends ChangeNotifier {
 
   /// Стереть локальную ленту (визуально). Серверную сессию не трогает.
   void clearConversation() {
+    _historyGeneration++;
     _messages.clear();
     _webSources = WebSourceTrace();
     _lastUserText = '';
@@ -918,32 +964,57 @@ class AssistantService extends ChangeNotifier {
     unawaited(_storeLastResult(result));
   }
 
+  String _storedResultKey(TroikaRequestIdentity identity) =>
+      '${_lastResultKey}_${sha256.convert(utf8.encode(jsonEncode([identity.origin, identity.owner.isEmpty ? identity.session : identity.owner.toLowerCase()])))}';
+
   Future<void> _restoreLastResult() async {
+    final identity = TroikaRequestIdentity();
+    final key = _storedResultKey(identity);
+    final generation = _historyGeneration;
     try {
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_lastResultKey);
+      identity.check();
+      if (_disposed || generation != _historyGeneration) return;
+      final raw = prefs.getString(key);
       if (raw == null || raw.isEmpty) return;
       final decoded = json.decode(raw);
       if (decoded is! Map<String, dynamic>) return;
       final restored = AssistantResult.fromJson(decoded);
       if (restored.kind != AssistantResultKind.answer) _lastResult = restored;
+    } on RequestIdentityChanged {
+      return;
     } catch (_) {
       await _clearStoredResult();
     }
   }
 
   Future<void> _storeLastResult(AssistantResult result) async {
+    final identity = TroikaRequestIdentity();
+    final key = _storedResultKey(identity);
     final prefs = await SharedPreferences.getInstance();
-    if (result.kind == AssistantResultKind.answer) {
-      await prefs.remove(_lastResultKey);
+    try {
+      identity.check();
+    } on RequestIdentityChanged {
       return;
     }
-    await prefs.setString(_lastResultKey, json.encode(result.toJson()));
+    if (_disposed) return;
+    if (result.kind == AssistantResultKind.answer) {
+      await prefs.remove(key);
+      return;
+    }
+    await prefs.setString(key, json.encode(result.toJson()));
   }
 
   Future<void> _clearStoredResult() async {
+    final identity = TroikaRequestIdentity();
+    final key = _storedResultKey(identity);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_lastResultKey);
+    try {
+      identity.check();
+    } on RequestIdentityChanged {
+      return;
+    }
+    await prefs.remove(key);
   }
 
   void _setState(AssistantState s) {
