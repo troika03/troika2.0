@@ -9,7 +9,6 @@ import android.net.Uri
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
 import android.os.PowerManager
 import android.provider.Settings
 import android.speech.RecognitionListener
@@ -39,7 +38,7 @@ class MainActivity : FlutterActivity() {
     private var pendingLocalSpeechResult: MethodChannel.Result? = null
     private var preferAgentSpeechConversation = false
     private var localSpeechRecognizer: SpeechRecognizer? = null
-    private var backgroundWakePausedForSpeech = false
+    private var resumeBackgroundWake: (() -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -640,9 +639,7 @@ class MainActivity : FlutterActivity() {
             return "permission_required"
         }
         if (!isBatteryOptimizationIgnored()) return "system_disabled"
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-            !SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
-        ) return "unavailable"
+        if (HermesListenerService.localWakeUnavailable()) return "unavailable"
         return if (HermesListenerService.serviceActive) "working" else "system_disabled"
     }
 
@@ -679,6 +676,10 @@ class MainActivity : FlutterActivity() {
     ) {
         if (pendingLocalSpeechResult != null) {
             result.error("speech_pending", "Распознавание уже запущено", null)
+            return
+        }
+        if (HermesListenerService.projectReportBlocker() in setOf("dialog", "manual_dialog")) {
+            result.error("speech_pending", "Голосовой разговор уже идёт", null)
             return
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
@@ -725,6 +726,7 @@ class MainActivity : FlutterActivity() {
             override fun onEvent(eventType: Int, params: Bundle?) = Unit
 
             override fun onPartialResults(partialResults: Bundle?) {
+                if (pendingLocalSpeechResult !== result || localSpeechRecognizer !== recognizer) return
                 val partial = partialResults
                     ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     ?.firstOrNull()
@@ -736,6 +738,7 @@ class MainActivity : FlutterActivity() {
             }
 
             override fun onResults(results: Bundle?) {
+                if (pendingLocalSpeechResult !== result || localSpeechRecognizer !== recognizer) return
                 val heard = results
                     ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     ?.firstOrNull()
@@ -745,6 +748,7 @@ class MainActivity : FlutterActivity() {
             }
 
             override fun onError(error: Int) {
+                if (pendingLocalSpeechResult !== result || localSpeechRecognizer !== recognizer) return
                 android.util.Log.i("MainActivity", "System speech ended with code=$error")
                 finishLocalSpeechRecognition("")
             }
@@ -761,10 +765,8 @@ class MainActivity : FlutterActivity() {
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
         }
-        pauseBackgroundWakeForSpeech()
-        val startDelayMs = if (backgroundWakePausedForSpeech) 300L else 0L
-        Handler(mainLooper).postDelayed({
-            if (pendingLocalSpeechResult !== result) return@postDelayed
+        pauseBackgroundWakeForSpeech startSpeech@{
+            if (pendingLocalSpeechResult !== result || localSpeechRecognizer !== recognizer) return@startSpeech
             try {
                 recognizer.startListening(intent)
             } catch (e: Exception) {
@@ -776,7 +778,7 @@ class MainActivity : FlutterActivity() {
                     null,
                 )
             }
-        }, startDelayMs)
+        }
     }
 
     private fun finishLocalSpeechRecognition(heard: String) {
@@ -809,20 +811,21 @@ class MainActivity : FlutterActivity() {
         resumeBackgroundWakeAfterSpeech()
     }
 
-    private fun pauseBackgroundWakeForSpeech() {
-        if (!HermesListenerService.serviceActive) return
-        backgroundWakePausedForSpeech = true
-        startService(Intent(this, HermesListenerService::class.java).apply {
-            action = HermesListenerService.ACTION_PAUSE_WAKE_FOR_FOREGROUND_SPEECH
-        })
+    private fun pauseBackgroundWakeForSpeech(onStopped: () -> Unit) {
+        if (!HermesListenerService.serviceActive) {
+            onStopped()
+            return
+        }
+        resumeBackgroundWake = HermesListenerService.pauseForForegroundSpeech(onStopped)
+        if (resumeBackgroundWake == null) {
+            onStopped()
+        }
     }
 
     private fun resumeBackgroundWakeAfterSpeech() {
-        if (!backgroundWakePausedForSpeech) return
-        backgroundWakePausedForSpeech = false
-        startService(Intent(this, HermesListenerService::class.java).apply {
-            action = HermesListenerService.ACTION_RESUME_WAKE_AFTER_FOREGROUND_SPEECH
-        })
+        val resume = resumeBackgroundWake
+        resumeBackgroundWake = null
+        resume?.invoke()
     }
 
     @Suppress("BatteryLife")

@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "libraries": [
+    {
+      "filename": "vosk-android-0.3.75.aar",
+      "url": "https://repo.maven.apache.org/maven2/com/alphacephei/vosk-android/0.3.75/vosk-android-0.3.75.aar",
+      "sha256": "ab2f8b91ac8051561aa325546b35fed9a68b36b8121bac5c6fb927525c4adfad",
+      "size": 13472638,
+      "license": "Apache-2.0"
+    },
+    {
+      "filename": "jna-5.18.1.aar",
+      "url": "https://repo.maven.apache.org/maven2/net/java/dev/jna/jna/5.18.1/jna-5.18.1.aar",
+      "sha256": "7f053e3ec99e14dd71259c82c1c8a02738d64a13c31226b2acc170f3060951e0",
+      "size": 522677,
+      "license": "Apache-2.0 OR LGPL-2.1-or-later",
+      "selected_license": "Apache-2.0"
+    }
+  ],
+  "model": {
+    "version": "vosk-model-small-ru-0.22",
+    "filename": "vosk-model-small-ru-0.22.zip",
+    "url": "https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip",
+    "archive_root": "vosk-model-small-ru-0.22",
+    "sha256": "961d5ff98a17f4aa6de69864d0aa71fa5bac682301d2b5d17a3f24c5c99a46d4",
+    "size": 46236750,
+    "manifest_sha256": "5f45cd2377e3523554f20311bd0c18bbb2e9bcefef26b1f0fc98c0754151b236",
+    "license": "Apache-2.0",
+    "license_source": "https://alphacephei.com/vosk/models"
+  }
+}

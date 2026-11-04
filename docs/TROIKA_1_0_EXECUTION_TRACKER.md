@@ -23,7 +23,7 @@ installed-client E2E или релизной готовности. `[-]` — ч�
 | 2. Продукт и аудитория | [x] | Product copy ориентируется на результат; экспериментальные инструменты не продаются как готовые. |
 | 3. Границы 1.0 | [x] | Product allowlist/default-off policy реализованы. Незавершённые обязательные области остаются в следующих разделах. |
 | 4. Voice-first дизайн | [x] | Общие мятные темы, меню Android/WPF, голосовая главная и контролы проверены. Полный перенос всех макетов и физический voice E2E отдельно. [Аудит](audit/TROIKA_GREEN_UI_2026_11_03.md). |
-| 5. Android | [-] | 4 ноября зелёная APK и ремонт wake lifecycle установлены без сброса, SHA/UID/firstInstallTime сохранены. Flutter/JVM прошли. После ручного разрешения микрофона владелец подтвердил повторные звуки; требуется отдельный локальный детектор пробуждения. Standby/reboot открыты. |
+| 5. Android | [-] | Зелёная APK установлена 4 ноября. После повторной жалобы собран отдельный локальный Vosk wake без idle SpeechRecognizer: 70 JVM, 6 provisioning tests и release прошли. Установка этой новой версии и физические звуки/wake/standby/reboot ещё открыты. [Аудит](audit/TROIKA_OFFLINE_WAKE_2026_11_04.md). |
 | 6. Windows | [-] | 4 ноября установлен зелёный WPF fca59a4f2235, общие разделы и переходы Главная/Разговоры проверены; 62 checks и обе темы/compact прошли. Физический голос, фоновые сценарии и общий release scope ещё открыты. |
 | 7. Сайт и аккаунт | [-] | Сайт опубликован на cm444726.tw1.ru: HTTPS, вход/регистрация, ресурс, устройства, память, export/delete, изолированная поддержка SQLite и локальные загрузки. 12 локальных и 52 проверки Timeweb прошли; оба установщика сверены по SHA-256, тестовые аккаунты удалены. Исходный Sites остался закрытым. Оплата/почта отложены, recovery/verification, legal, подпись и общие release gates открыты. [Аудит](audit/WEBSITE_TIMEWEB_2026_10_16.md). |
 | 8. Billing/ресурс | [-] | Месячный runtime и личный API включены 14 октября. Corporate Free: prompt + completion; личный ключ: 0 за модель без corporate fallback. Free 500 тыс., Plus 5 млн, Pro 10 млн; Run/voice/API/Android/WPF, две Pro beta-выдачи, public HTTPS E2E, APK установлен без сброса. Оплата/почта отложены; checkout/verification/refund в коде, flags false. До продаж остаются финансовые lifecycle/unknown bills/anti-abuse. [Проверки](audit/SUBSCRIPTION_RUNTIME_2026_10_13.md), [настройка](development/SUBSCRIPTION_SETUP.md). |
@@ -39,6 +39,17 @@ installed-client E2E или релизной готовности. `[-]` — ч�
 | 18. Closed beta | [ ] | Предыдущие device smokes не заменяют закрытую beta на реальных пользователях. |
 | 19. Public launch | [ ] | Публичная продажа запрещена до всех gates. |
 | 20. Final DoD | [ ] | Сквозной путь site/register/download/voice/result/pay/cancel/delete ещё не проходит. |
+
+## Локальное пробуждение Android — 4 ноября 2026
+
+После подтверждения повторных звуков подготовлен непрерывный локальный Vosk
+детектор «Тройка» со встроенной русской моделью. Idle SpeechRecognizer и legacy
+ambient/server wake route удалены. Передача микрофона, Stop, identity callbacks
+и resume lease проверены по исходникам; 70 JVM tests, 6 provisioning tests,
+компиляция и release APK прошли. Проверены модель, библиотеки, лицензии,
+подпись, package и host. Физическая тишина и wake этой версии пока не приняты.
+Это не закрывает общий Android/release gate.
+[Доказательства и поставка](audit/TROIKA_OFFLINE_WAKE_2026_11_04.md).
 
 ## Зелёный интерфейс и фоновый микрофон — 4 ноября 2026
 

@@ -69,6 +69,9 @@ flutter {
 }
 
 dependencies {
+    // Provisioned from the pinned, hash-verified wake dependency lock before building.
+    implementation files('wake-dependencies/vosk-android-0.3.75.aar')
+    implementation files('wake-dependencies/jna-5.18.1.aar')
     testImplementation 'junit:junit:4.13.2'
     // Same version already used by just_audio; native background speech streams from RAM.
     implementation 'androidx.media3:media3-exoplayer:1.4.1'
@@ -77,3 +80,48 @@ dependencies {
     // FileProvider для безопасной передачи URI камере
     implementation 'androidx.core:core-ktx:1.13.1'
 }
+
+tasks.register('verifyOfflineWakeAssets') {
+    doLast {
+        def required = [
+            'wake-dependencies/vosk-android-0.3.75.aar',
+            'wake-dependencies/jna-5.18.1.aar',
+            'src/main/assets/model-wake-ru/manifest.json',
+            'src/main/assets/model-wake-ru/am/final.mdl',
+            'src/main/assets/model-wake-ru/conf/model.conf',
+            'src/main/assets/model-wake-ru/graph/Gr.fst'
+        ]
+        if (required.any { !file(it).isFile() }) {
+            throw new GradleException('Offline wake assets are missing. Run the pinned wake provisioning script before building.')
+        }
+        def lock = new groovy.json.JsonSlurper().parse(file('../../tool/offline-wake.lock.json'))
+        def digest = { asset ->
+            def checksum = java.security.MessageDigest.getInstance('SHA-256')
+            asset.withInputStream { input ->
+                byte[] buffer = new byte[65536]
+                int count
+                while ((count = input.read(buffer)) != -1) checksum.update(buffer, 0, count)
+            }
+            checksum.digest().encodeHex().toString()
+        }
+        lock.libraries.each { library ->
+            def asset = file('wake-dependencies/' + library.filename)
+            if (asset.length() != library.size || digest(asset) != library.sha256) {
+                throw new GradleException('Offline wake library differs from its lock: ' + library.filename)
+            }
+        }
+        def modelRoot = file('src/main/assets/model-wake-ru')
+        def manifestFile = new File(modelRoot, 'manifest.json')
+        if (digest(manifestFile) != lock.model.manifest_sha256) {
+            throw new GradleException('Offline wake model manifest differs from its lock.')
+        }
+        def manifest = new groovy.json.JsonSlurper().parse(manifestFile)
+        manifest.files.each { entry ->
+            def asset = new File(modelRoot, entry.path)
+            if (!asset.isFile() || asset.length() != entry.size || digest(asset) != entry.sha256) {
+                throw new GradleException('Offline wake model file differs from its lock: ' + entry.path)
+            }
+        }
+    }
+}
+tasks.named('preBuild').configure { dependsOn('verifyOfflineWakeAssets') }

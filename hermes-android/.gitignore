@@ -1,0 +1,4 @@
+# Pinned offline wake assets are prepared by tool/prepare_offline_wake.py.
+/.offline-wake-cache/
+/android/app/wake-dependencies/
+/android/app/src/main/assets/model-wake-ru/

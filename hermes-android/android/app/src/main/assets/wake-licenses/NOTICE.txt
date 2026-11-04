@@ -1,0 +1,24 @@
+Offline wake recognition dependencies
+
+Vosk Android 0.3.75
+Alpha Cephei Inc.
+https://github.com/alphacep/vosk-api
+License: Apache License, Version 2.0 (APACHE-2.0.txt).
+The upstream library is distributed without modification.
+
+Russian speech model: vosk-model-small-ru-0.22
+Alpha Cephei Inc.
+https://alphacephei.com/vosk/models
+License: Apache License, Version 2.0, as stated in the official model catalog.
+The model is distributed without modification. Its original README is retained
+inside the model-wake-ru asset directory. Troika adds an integrity manifest.
+
+Java Native Access (JNA) 5.18.1
+Timothy Wall and contributors.
+https://github.com/java-native-access/jna/tree/5.18.1
+JNA is dual-licensed. Troika uses the Apache License, Version 2.0 option.
+The original license declaration is retained in JNA-LICENSE.txt.
+The upstream library is distributed without modification.
+
+The exact official download URLs and SHA-256 digests are recorded in
+tool/offline-wake.lock.json in the Troika source distribution.
