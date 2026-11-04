@@ -490,10 +490,10 @@ class TroikaConfig {
   }
 
   static String get interfaceAccent =>
-      _prefs.getString(_keyInterfaceAccent) ?? 'amber';
+      _prefs.getString(_keyInterfaceAccent) ?? 'mint';
 
   static Future<void> setInterfaceAccent(String value) async {
-    const choices = {'amber', 'teal', 'blue', 'violet', 'rose', 'green'};
+    const choices = {'mint', 'amber', 'teal', 'blue', 'violet', 'rose', 'green'};
     if (choices.contains(value)) {
       await _prefs.setString(_keyInterfaceAccent, value);
     }

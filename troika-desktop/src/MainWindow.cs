@@ -60,7 +60,7 @@ namespace Troika.Desktop {
             api.Account = preview ? new AccountSession() : store.LoadSession(); api.SessionId = api.Account.HomeSession; api.SaveSession = store.SaveSession; api.PersonalProviders = new PersonalProviderStore(store.Root);
             Build();
             StartReminders();
-            SizeChanged += delegate { if (voiceVisual != null) { voiceVisual.Height = Math.Max(180, Math.Min(260, ActualHeight - 380)); heroTitle.FontSize = 24; } };
+            SizeChanged += delegate { if (voiceVisual != null) { voiceVisual.Height = Math.Max(180, Math.Min(260, ActualHeight - 380)); heroTitle.FontSize = ActualHeight < 600 ? 28 : 32; if (!compact) body.ColumnDefinitions[0].Width = new GridLength(NavigationWidth); } };
             WindowChrome.SetWindowChrome(this, new WindowChrome { CaptionHeight = 0, ResizeBorderThickness = new Thickness(6), CornerRadius = new CornerRadius(14), GlassFrameThickness = new Thickness(0) });
             SourceInitialized += delegate {
                 handle = new WindowInteropHelper(this).Handle;
@@ -113,16 +113,20 @@ namespace Troika.Desktop {
         private static Brush Color(string value) { var brush = new SolidColorBrush((System.Windows.Media.Color)ColorConverter.ConvertFromString(value)); brush.Freeze(); return brush; }
         private TextBlock Label(string value, double size, Brush brush) { return new TextBlock { Text = value, FontSize = size, Foreground = brush, TextWrapping = TextWrapping.Wrap }; }
         private static void AccessibleName(DependencyObject control, string value) { AutomationProperties.SetName(control, value); }
+        private double NavigationWidth { get { return (ActualWidth > 0 ? ActualWidth : Width) >= 1100 ? 256 : 192; } }
         private Button Button(string value, Action action, bool primary) {
-            var button = new Button { Content = value, Tag = primary, Foreground = primary ? accentText : text, Background = primary ? accent : Brushes.Transparent, BorderBrush = primary ? Brushes.Transparent : line, BorderThickness = new Thickness(primary ? 0 : 1), Padding = new Thickness(16, 8, 16, 8), MinHeight = 44, Margin = new Thickness(0, 0, 8, 0), Cursor = Cursors.Hand, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center, FontSize = 14 };
-            var border = new FrameworkElementFactory(typeof(Border)); border.SetValue(Border.CornerRadiusProperty, new CornerRadius(8)); border.SetBinding(Border.BackgroundProperty, new System.Windows.Data.Binding("Background") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) }); border.SetBinding(Border.BorderBrushProperty, new System.Windows.Data.Binding("BorderBrush") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) }); border.SetBinding(Border.BorderThicknessProperty, new System.Windows.Data.Binding("BorderThickness") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) }); border.SetBinding(Border.PaddingProperty, new System.Windows.Data.Binding("Padding") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
+            var button = new Button { Content = value, Tag = primary, Foreground = primary ? accentText : text, Background = primary ? accent : glass, BorderBrush = primary ? accent : line, BorderThickness = new Thickness(1), Padding = new Thickness(16, 8, 16, 8), MinHeight = 44, Margin = new Thickness(0, 0, 8, 0), Cursor = Cursors.Hand, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center, FontSize = 14 };
+            var border = new FrameworkElementFactory(typeof(Border), "outline"); border.SetValue(Border.CornerRadiusProperty, new CornerRadius(22)); border.SetBinding(Border.BackgroundProperty, new System.Windows.Data.Binding("Background") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) }); border.SetBinding(Border.BorderBrushProperty, new System.Windows.Data.Binding("BorderBrush") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) }); border.SetBinding(Border.BorderThicknessProperty, new System.Windows.Data.Binding("BorderThickness") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) }); border.SetBinding(Border.PaddingProperty, new System.Windows.Data.Binding("Padding") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
             var presenter = new FrameworkElementFactory(typeof(ContentPresenter)); presenter.SetBinding(ContentPresenter.HorizontalAlignmentProperty, new System.Windows.Data.Binding("HorizontalContentAlignment") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) }); presenter.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center); border.AppendChild(presenter);
-            button.Template = new ControlTemplate(typeof(Button)) { VisualTree = border };
-            var originalBorder = button.BorderBrush; button.MouseEnter += delegate { button.BorderBrush = accent; if (primary) button.Opacity = .9; }; button.MouseLeave += delegate { button.BorderBrush = originalBorder; button.Opacity = 1; }; button.IsEnabledChanged += delegate { button.Opacity = button.IsEnabled ? 1 : .4; };
+            var template = new ControlTemplate(typeof(Button)) { VisualTree = border };
+            var hover = new Trigger { Property = IsMouseOverProperty, Value = true }; hover.Setters.Add(new Setter(OpacityProperty, .86, "outline")); template.Triggers.Add(hover);
+            var pressed = new Trigger { Property = System.Windows.Controls.Primitives.ButtonBase.IsPressedProperty, Value = true }; pressed.Setters.Add(new Setter(OpacityProperty, .68, "outline")); template.Triggers.Add(pressed);
+            var focus = new Trigger { Property = IsKeyboardFocusedProperty, Value = true }; focus.Setters.Add(new Setter(Border.BorderBrushProperty, accent, "outline")); focus.Setters.Add(new Setter(Border.BorderThicknessProperty, new Thickness(2), "outline")); template.Triggers.Add(focus);
+            var disabled = new Trigger { Property = IsEnabledProperty, Value = false }; disabled.Setters.Add(new Setter(OpacityProperty, .4)); template.Triggers.Add(disabled); button.Template = template;
             button.Click += delegate { action(); }; AccessibleName(button, value); return button;
         }
         private TextBox Field(string placeholder, bool multiline) {
-            var field = new TextBox { Foreground = text, Background = surface, BorderBrush = line, BorderThickness = new Thickness(1), Padding = new Thickness(11), FontSize = 14, Margin = new Thickness(0, 6, 0, 12), MinHeight = multiline ? 72 : 42, AcceptsReturn = multiline, TextWrapping = TextWrapping.Wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, CaretBrush = accent };
+            var field = new TextBox { Foreground = text, Background = background, BorderBrush = line, BorderThickness = new Thickness(1), Padding = new Thickness(12), FontSize = 14, Margin = new Thickness(0, 6, 0, 16), MinHeight = multiline ? 88 : 44, AcceptsReturn = multiline, TextWrapping = TextWrapping.Wrap, VerticalContentAlignment = VerticalAlignment.Center, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, CaretBrush = accent };
             AccessibleName(field, placeholder); return field;
         }
         private void Build() {
@@ -131,7 +135,7 @@ namespace Troika.Desktop {
             Background = background; Foreground = text;
             var style = new Style(typeof(ScrollViewer)); style.Setters.Add(new Setter(ScrollViewer.PanningModeProperty, PanningMode.VerticalOnly)); Resources[typeof(ScrollViewer)] = style;
             Resources[SystemParameters.VerticalScrollBarWidthKey] = 6.0;
-            Resources[typeof(System.Windows.Controls.Primitives.ScrollBar)] = System.Windows.Markup.XamlReader.Parse(@"<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='{x:Type ScrollBar}'><Setter Property='Width' Value='8'/><Setter Property='Background' Value='Transparent'/><Setter Property='Template'><Setter.Value><ControlTemplate TargetType='{x:Type ScrollBar}'><Track x:Name='PART_Track' IsDirectionReversed='True' Orientation='{TemplateBinding Orientation}' Minimum='{TemplateBinding Minimum}' Maximum='{TemplateBinding Maximum}' ViewportSize='{TemplateBinding ViewportSize}' Value='{Binding Value, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}'><Track.Thumb><Thumb><Thumb.Template><ControlTemplate TargetType='{x:Type Thumb}'><Border Background='#786F61' CornerRadius='4' Margin='2,0,0,0'/></ControlTemplate></Thumb.Template></Thumb></Track.Thumb></Track></ControlTemplate></Setter.Value></Setter></Style>");
+            Resources[typeof(System.Windows.Controls.Primitives.ScrollBar)] = System.Windows.Markup.XamlReader.Parse(@"<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='{x:Type ScrollBar}'><Setter Property='Width' Value='8'/><Setter Property='Background' Value='Transparent'/><Setter Property='Template'><Setter.Value><ControlTemplate TargetType='{x:Type ScrollBar}'><Track x:Name='PART_Track' IsDirectionReversed='True' Orientation='{TemplateBinding Orientation}' Minimum='{TemplateBinding Minimum}' Maximum='{TemplateBinding Maximum}' ViewportSize='{TemplateBinding ViewportSize}' Value='{Binding Value, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}'><Track.Thumb><Thumb><Thumb.Template><ControlTemplate TargetType='{x:Type Thumb}'><Border Background='{DynamicResource TroikaLine}' CornerRadius='4' Margin='2,0,0,0'/></ControlTemplate></Thumb.Template></Thumb></Track.Thumb></Track></ControlTemplate></Setter.Value></Setter></Style>");
             root = new Grid { Background = background }; root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(58) }); root.RowDefinitions.Add(new RowDefinition());
             var outline = new Border { BorderBrush = line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(14), Child = root, ClipToBounds = true }; Content = outline;
             var titlebar = new Grid { Margin = new Thickness(21, 0, 9, 0) }; titlebar.ColumnDefinitions.Add(new ColumnDefinition()); titlebar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -143,9 +147,9 @@ namespace Troika.Desktop {
             controls.Children.Add(Button("▱", ToggleCompact, false)); controls.Children.Add(Button("—", () => WindowState = WindowState.Minimized, false)); controls.Children.Add(Button("□", () => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized, false)); controls.Children.Add(Button("×", Close, false));
             AccessibleName((Button)controls.Children[0], "Компактное окно"); AccessibleName((Button)controls.Children[1], "Свернуть"); AccessibleName((Button)controls.Children[2], "Развернуть"); AccessibleName((Button)controls.Children[3], "Закрыть"); Grid.SetColumn(controls, 1); titlebar.Children.Add(controls); root.Children.Add(titlebar);
             stop = Button("Стоп", () => { var task = Stop(); }, false); stop.Visibility = Visibility.Collapsed; controls.Children.Insert(0, stop);
-            body = new Grid { Margin = new Thickness(12, 0, 12, 12) }; body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(180) }); body.ColumnDefinitions.Add(new ColumnDefinition()); body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0) }); Grid.SetRow(body, 1); root.Children.Add(body);
+            body = new Grid { Margin = new Thickness(12, 0, 12, 12) }; body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(NavigationWidth) }); body.ColumnDefinitions.Add(new ColumnDefinition()); body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0) }); Grid.SetRow(body, 1); root.Children.Add(body);
             BuildSidebar(); BuildCenter();
-            inspector = new Border { Background = glass, BorderBrush = line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(14), Padding = new Thickness(24), Margin = new Thickness(10, 0, 0, 0), Visibility = Visibility.Collapsed };
+            inspector = new Border { Background = background, Padding = new Thickness(24), Margin = new Thickness(10, 0, 0, 0), Visibility = Visibility.Collapsed };
             var panelGrid = new Grid(); panelGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); panelGrid.RowDefinitions.Add(new RowDefinition());
             var panelHead = new DockPanel { Margin = new Thickness(0, 0, 0, 20) }; var close = Button("×", ClosePanel, false); close.Margin = new Thickness(0); DockPanel.SetDock(close, Dock.Right); AccessibleName(close, "Закрыть панель"); panelHead.Children.Add(close); panelTitle = Label("", 21, text); panelTitle.VerticalAlignment = VerticalAlignment.Center; panelHead.Children.Add(panelTitle); panelGrid.Children.Add(panelHead);
             panelContent = new StackPanel(); var scroller = new ScrollViewer { Content = panelContent, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled }; Grid.SetRow(scroller, 1); panelGrid.Children.Add(scroller); inspector.Child = panelGrid; Grid.SetColumn(inspector, 2); body.Children.Add(inspector);
@@ -153,47 +157,47 @@ namespace Troika.Desktop {
             UpdateNavigation(); if (preview) SetStatus("Предпросмотр", false);
         }
         private void BuildSidebar() {
-            sidebar = new Border { Background = glass, BorderBrush = line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(14), Padding = new Thickness(8, 16, 8, 12), Margin = new Thickness(0, 0, 10, 0) };
+            sidebar = new Border { Background = navigationSurface, CornerRadius = new CornerRadius(12), Padding = new Thickness(8, 16, 8, 12), Margin = new Thickness(0, 0, 10, 0) };
             var grid = new Grid(); grid.RowDefinitions.Add(new RowDefinition()); grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); sidebar.Child = grid;
             var top = new StackPanel();
-            top.Children.Add(NavigationButton("Главная", "home", "")); top.Children.Add(NavigationButton("Дела", "tasks", "Дела")); top.Children.Add(NavigationButton("Файлы", "files", "Файлы"));
-            top.Children.Add(new Border { Height = 12 }); top.Children.Add(NavigationButton("Возможности", "spark", "Возможности")); top.Children.Add(NavigationButton("Память", "memory", "Память")); top.Children.Add(NavigationButton("Разработка", "code", "Разработка"));
+            top.Children.Add(NavigationButton("Главная", "home", "")); top.Children.Add(NavigationButton("Разговоры", "history", "Разговоры"));
+            top.Children.Add(NavigationButton("Дела", "tasks", "Дела")); top.Children.Add(NavigationButton("Файлы", "files", "Файлы"));
+            top.Children.Add(NavigationButton("Разработка", "code", "Разработка")); top.Children.Add(NavigationButton("Память", "memory", "Память")); top.Children.Add(NavigationButton("Возможности", "spark", "Возможности"));
             var create = Button("+  Новый разговор", NewConversation, false); create.FontSize = 12; create.Padding = new Thickness(8); create.Margin = new Thickness(4, 16, 4, 16); top.Children.Add(create); var recent = Label("Недавнее", 12, muted); recent.Margin = new Thickness(12, 0, 0, 0); top.Children.Add(recent);
             history = new StackPanel { Margin = new Thickness(8, 12, 8, 12) }; top.Children.Add(history); var scroll = new ScrollViewer { Content = top, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled }; grid.Children.Add(scroll); RenderHistory();
-            var bottom = new StackPanel(); bottom.Children.Add(NavigationButton("Профиль", "profile", "Аккаунт"));
+            var bottom = new StackPanel(); bottom.Children.Add(NavigationButton("Настройки", "profile", "Аккаунт"));
             // Authentication status remains separate from the persistent profile destination.
             profile = Button(api.Account.SignedIn ? "Аккаунт" : "Войти", () => OpenPanel("Аккаунт"), false); profile.Visibility = Visibility.Collapsed; bottom.Children.Add(profile); Grid.SetRow(bottom, 1); grid.Children.Add(bottom); body.Children.Add(sidebar);
         }
         private void BuildCenter() {
-            center = new Grid { Margin = new Thickness(13, 0, 3, 0) }; center.RowDefinitions.Add(new RowDefinition { Height = new GridLength(42) }); center.RowDefinitions.Add(new RowDefinition()); center.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            center = new Grid { Margin = new Thickness(13, 0, 3, 0), MaxWidth = 820 }; center.RowDefinitions.Add(new RowDefinition { Height = new GridLength(16) }); center.RowDefinitions.Add(new RowDefinition()); center.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             Grid.SetColumn(center, 1); body.Children.Add(center);
-            var tools = new DockPanel(); var utilities = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right }; DockPanel.SetDock(utilities, Dock.Right);
-            utilities.Children.Add(Button("Текст", () => composer.Focus(), false)); tools.Children.Add(utilities); var section = Label("Голосовой помощник", 14, muted); section.VerticalAlignment = VerticalAlignment.Center; tools.Children.Add(section); center.Children.Add(tools);
             var work = new Grid(); Grid.SetRow(work, 1); center.Children.Add(work);
             hero = new Grid { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 0, 10) }; hero.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); hero.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); hero.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); hero.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             var visual = new Grid { Width = 260, Height = 260, HorizontalAlignment = HorizontalAlignment.Center };
             voiceVisual = visual; visual.Height = Math.Max(180, Math.Min(260, Height - 380));
-            orb = new Orb { Motion = !reducedMotion && SystemParameters.ClientAreaAnimation }; visual.Children.Add(orb);
+            orb = new Orb { LightTheme = light, Motion = !reducedMotion && SystemParameters.ClientAreaAnimation }; visual.Children.Add(orb);
             var orbButton = Button("", () => { var task = ToggleVoice(); }, false); orbButton.Background = Brushes.Transparent; orbButton.BorderThickness = new Thickness(0); orbButton.Margin = new Thickness(0); orbButton.HorizontalAlignment = HorizontalAlignment.Stretch; orbButton.VerticalAlignment = VerticalAlignment.Stretch; orbButton.ToolTip = "Нажмите и скажите задачу"; AccessibleName(orbButton, "Начать или остановить голосовой запрос"); visual.Children.Add(orbButton); Grid.SetRow(visual, 2); hero.Children.Add(visual);
-            heroTitle = Label("Скажи, что нужно", 24, text); heroTitle.FontWeight = FontWeights.Medium; heroTitle.HorizontalAlignment = HorizontalAlignment.Center; heroTitle.Margin = new Thickness(0, 0, 0, 12); Grid.SetRow(heroTitle, 0); hero.Children.Add(heroTitle);
-            heroHint = Label("Нажмите и говорите. Можно просто сказать задачу.", 14, muted); heroHint.HorizontalAlignment = HorizontalAlignment.Center; heroHint.TextAlignment = TextAlignment.Center; Grid.SetRow(heroHint, 1); hero.Children.Add(heroHint);
+            heroTitle = Label("Чем помочь?", Height < 600 ? 28 : 32, text); heroTitle.FontWeight = FontWeights.Medium; heroTitle.HorizontalAlignment = HorizontalAlignment.Center; heroTitle.Margin = new Thickness(0, 0, 0, 12); Grid.SetRow(heroTitle, 0); hero.Children.Add(heroTitle);
+            heroHint = Label("Нажмите на микрофон", 14, muted); heroHint.HorizontalAlignment = HorizontalAlignment.Center; heroHint.TextAlignment = TextAlignment.Center; Grid.SetRow(heroHint, 1); hero.Children.Add(heroHint);
             var shortcuts = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 21, 0, 0), MaxWidth = 490 };
-            shortcuts.Children.Add(Button("Поиск", () => Prepare("Найди и сравни "), false)); shortcuts.Children.Add(Button("Документ", () => Prepare("Создай DOCX: "), false)); shortcuts.Children.Add(Button("Презентация", () => Prepare("Создай PPTX: "), false)); shortcuts.Children.Add(Button("Код", () => OpenPanel("Разработка"), false)); Grid.SetRow(shortcuts, 3); hero.Children.Add(shortcuts); work.Children.Add(hero);
+            shortcuts.Children.Add(Button("Файлы", () => OpenPanel("Файлы"), false)); shortcuts.Children.Add(Button("Дела", () => OpenPanel("Дела"), false)); shortcuts.Children.Add(Button("Разработка", () => OpenPanel("Разработка"), false)); Grid.SetRow(shortcuts, 3); hero.Children.Add(shortcuts); work.Children.Add(hero);
             transcript = new StackPanel { Margin = new Thickness(5, 15, 12, 12) }; conversationScroll = new ScrollViewer { Content = transcript, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Visibility = Visibility.Collapsed }; work.Children.Add(conversationScroll);
             var bottom = new StackPanel { Margin = new Thickness(0, 10, 0, 0) };
-            inputBorder = new Border { Background = glass, BorderBrush = line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(14), Padding = new Thickness(16, 12, 12, 12) };
+            inputBorder = new Border { Background = glass, BorderBrush = line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(26), Padding = new Thickness(16, 12, 12, 12) };
             var input = new Grid(); input.ColumnDefinitions.Add(new ColumnDefinition()); input.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); input.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             composer = new TextBox { Background = Brushes.Transparent, Foreground = text, CaretBrush = accent, BorderThickness = new Thickness(0), FontSize = 15, MinHeight = 32, MaxHeight = 86, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, VerticalContentAlignment = VerticalAlignment.Center, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, ToolTip = "Напишите задачу. Enter — отправить, Shift+Enter — новая строка." }; AccessibleName(composer, "Текст задачи");
             composer.PreviewKeyDown += async delegate(object sender, KeyEventArgs e) { if (e.Key == Key.Enter && Keyboard.Modifiers != ModifierKeys.Shift) { e.Handled = true; await Send(); } }; input.Children.Add(composer);
+            composer.GotKeyboardFocus += delegate { inputBorder.BorderBrush = accent; }; composer.LostKeyboardFocus += delegate { inputBorder.BorderBrush = line; };
             var placeholder = Label("Напишите задачу…", 14, muted); placeholder.IsHitTestVisible = false; placeholder.Margin = new Thickness(4, 0, 0, 0); placeholder.VerticalAlignment = VerticalAlignment.Center; input.Children.Add(placeholder);
             composer.TextChanged += delegate { placeholder.Visibility = composer.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed; };
             microphone = Button("Говорить", () => { var task = ToggleVoice(); }, true); microphone.Margin = new Thickness(10, 0, 6, 0); microphone.MinWidth = 93; microphone.ToolTip = "Ctrl+Alt+T — голос. Повторное нажатие остановит запись или ответ."; Grid.SetColumn(microphone, 1); input.Children.Add(microphone);
             send = Button("↑", () => { var task = Send(); }, false); send.FontSize = 20; send.Padding = new Thickness(13, 4, 13, 4); send.Margin = new Thickness(0); AccessibleName(send, "Отправить задачу"); Grid.SetColumn(send, 2); input.Children.Add(send); inputBorder.Child = input; bottom.Children.Add(inputBorder);
-            var hint = Label("Текст задачи   ·   Enter отправить   ·   Ctrl+Alt+T голос", 10, muted); hint.HorizontalAlignment = HorizontalAlignment.Center; hint.Margin = new Thickness(0, 9, 0, 1); bottom.Children.Add(hint); Grid.SetRow(bottom, 2); center.Children.Add(bottom);
+            Grid.SetRow(bottom, 2); center.Children.Add(bottom);
         }
         private void RenderHistory() {
             history.Children.Clear();
-            if (sessions.Count == 0) { history.Children.Add(Label(api.Account.SignedIn ? "Разговоры появятся здесь после первой задачи." : "История появится после входа в аккаунт.", 12, muted)); return; }
+            if (sessions.Count == 0) { history.Children.Add(Label(api.Account.SignedIn ? "Пока нет разговоров" : "Войдите для истории", 12, muted)); return; }
             foreach (var item in sessions.Take(30)) {
                 var id = Json.Text(item, "id"); var title = Json.Text(item, "title"); if (title.Length == 0) title = Json.Text(item, "preview"); if (title.Length == 0) title = "Разговор";
                 if (title.Length > 56) title = title.Substring(0, 56) + "…";
@@ -202,16 +206,22 @@ namespace Troika.Desktop {
         }
         private void SetStatus(string value, bool error) { status.Text = value; status.Foreground = error ? Color(light ? "#A84632" : "#F0A994") : muted; status.ToolTip = value; UpdateStop(); }
         private void UpdateStop() { if (stop != null) stop.Visibility = busy || recorder.Recording || speaking || localCheck != null ? Visibility.Visible : Visibility.Collapsed; }
-        private void Idle() { orb.SetState("idle"); microphone.Content = "Говорить"; send.IsEnabled = !busy; UpdateStop(); if (hero.Visibility == Visibility.Visible) { heroTitle.Text = "Скажи, что нужно"; heroHint.Text = "Нажмите и говорите. Можно просто сказать задачу."; } }
+        private void Idle() { orb.SetState("idle"); microphone.Content = "Говорить"; send.IsEnabled = !busy; UpdateStop(); if (hero.Visibility == Visibility.Visible) { heroTitle.Text = "Чем помочь?"; heroHint.Text = "Нажмите на микрофон"; } }
         private async Task Safe(Func<Task> work) {
             try { await work(); }
             catch (OperationCanceledException) { if (!closed) SetStatus("Остановлено", false); }
             catch (ApiException error) { if (!closed) { SetStatus(error.Message, true); if (error.Status == 401 || error.Status == 403) { store.ForgetSession(); api.Account = new AccountSession(); api.SessionId = ""; sessions.Clear(); transcript.Children.Clear(); ShowHero(); RenderHistory(); profile.Content = "Войти"; if (openPanel == "Аккаунт") { var pending = Dispatcher.BeginInvoke(new Action(() => OpenPanel("Аккаунт"))); } } } }
             catch (Exception error) { if (!closed) SetStatus(error is System.Net.Http.HttpRequestException ? "Нет соединения. Проверьте интернет и повторите." : error.Message, true); }
         }
-        private void ShowHero() { hero.Visibility = Visibility.Visible; conversationScroll.Visibility = Visibility.Collapsed; }
+        private void ShowHero() { hero.Visibility = Visibility.Visible; conversationScroll.Visibility = Visibility.Collapsed; UpdateNavigation(); }
+        private void ShowConversation() { hero.Visibility = Visibility.Collapsed; conversationScroll.Visibility = Visibility.Visible; UpdateNavigation(); }
+        private void ShowHome() {
+            ClosePanel(); ShowHero();
+            if (!busy && !recorder.Recording && !speaking) Idle();
+        }
+        private void ContinueConversation() { ClosePanel(); ShowConversation(); }
         private TextBlock AddMessage(string role, string content) {
-            hero.Visibility = Visibility.Collapsed; conversationScroll.Visibility = Visibility.Visible;
+            ShowConversation();
             var block = new StackPanel { Margin = new Thickness(0, 0, 0, 24) };
             var label = Label(role == "user" ? "Вы" : "Тройка", 11, role == "user" ? muted : accent); label.FontWeight = FontWeights.SemiBold; label.Margin = new Thickness(0, 0, 0, 7); block.Children.Add(label);
             var message = new TextBlock { Foreground = text, FontSize = 16, TextWrapping = TextWrapping.Wrap, LineHeight = 25, Text = content }; block.Children.Add(message);
@@ -223,17 +233,18 @@ namespace Troika.Desktop {
         }
         private async Task LoadConversation(string id) {
             if (busy || recorder.Recording || speaking) { SetStatus("Сначала остановите текущую задачу.", true); return; }
+            int revision = panelRevision; string owner = api.Account.Email, device = api.Account.DeviceId, session = api.SessionId;
             await Safe(async () => {
                 var value = await api.Get("/v1/sessions/" + Uri.EscapeDataString(id) + "/messages?limit=60", CancellationToken.None);
+                if (closed || revision != panelRevision || owner != api.Account.Email || device.Length > 0 && device != api.Account.DeviceId || session != api.SessionId || busy || recorder.Recording || speaking) return;
                 api.SessionId = id; transcript.Children.Clear(); ShowHero();
                 foreach (var message in Json.Rows(value, "messages")) { var role = Json.Text(message, "role"); if (role == "user" || role == "assistant") { var content = Json.Content(Json.Get(message, "content")); content = System.Text.RegularExpressions.Regex.Replace(content, @"^\[сейчас [^\]]*\]\s*", ""); if (content.Length > 0) AddMessage(role, content); } }
-                ClosePanel(); RenderHistory(); SetStatus("История загружена", false);
+                ContinueConversation(); RenderHistory(); SetStatus("История загружена", false);
             });
         }
         private async Task RefreshAccount() {
             ObserveAutopilot();
             var value = await api.Get("/v1/sessions?limit=30", CancellationToken.None); sessions.Clear(); sessions.AddRange(Json.Rows(value, "sessions")); RenderHistory(); profile.Content = "Аккаунт";
-            if (transcript.Children.Count == 0 && api.SessionId.Length > 0) await LoadConversation(api.SessionId);
             await ReceiveFiles();
         }
         private async Task Send() {
@@ -346,15 +357,17 @@ namespace Troika.Desktop {
         }
         private async void OpenPanel(string title) { await OpenPanelTask(title); }
         private async Task OpenPanelTask(string title) {
+            if (title == "Каталог возможностей") title = "Возможности";
             if (pendingApproval != null && title != "Подтверждение") return;
             if (title != "Разработка" && developmentRelay != null && developmentRelay.Enabled) await developmentRelay.Disable();
             if (compact) { compact = false; MinWidth = 780; MinHeight = 540; Width = Math.Max(780, expandedWidth); Height = Math.Max(540, expandedHeight); ApplyCompact(); }
             openPanel = title; panelRevision++; int revision = panelRevision;
-            panelTitle.Text = title; panelContent.Children.Clear(); panelContent.Children.Add(Label("Загружаю…", 13, muted)); inspector.Visibility = Visibility.Visible;
-            center.Visibility = Visibility.Collapsed; sidebar.Visibility = Visibility.Visible; body.ColumnDefinitions[0].Width = new GridLength(180); body.ColumnDefinitions[2].Width = new GridLength(0); Grid.SetColumn(inspector, 1); Grid.SetColumnSpan(inspector, 2); UpdateNavigation();
+            panelTitle.Text = title == "Аккаунт" ? "Настройки" : title; panelContent.Children.Clear(); panelContent.Children.Add(Label("Загружаю…", 13, muted)); inspector.Visibility = Visibility.Visible;
+            center.Visibility = Visibility.Collapsed; sidebar.Visibility = Visibility.Visible; body.ColumnDefinitions[0].Width = new GridLength(NavigationWidth); body.ColumnDefinitions[2].Width = new GridLength(0); Grid.SetColumn(inspector, 1); Grid.SetColumnSpan(inspector, 2); UpdateNavigation();
             await Safe(async () => {
-                if (title == "Возможности") { RenderCapabilities(); return; }
-                if (title == "Каталог возможностей") { await LoadCapabilityCatalogue(); return; }
+                if (title == "Разговоры") { await RenderConversations(); return; }
+                if (title == "Возможности") { await LoadCapabilityCatalogue(); return; }
+                if (title == "Действия на ПК") { RenderCapabilities(); return; }
                 if (title == "Разработка") { RenderDevelopment(); return; }
                 if (title == "Аккаунт") { await RenderAccount(); return; }
                 if (title == "Файлы") { await RenderFiles(); return; }
@@ -371,16 +384,39 @@ namespace Troika.Desktop {
             if (pendingApproval != null) pendingApproval.TrySetResult("deny");
             openPanel = ""; panelRevision++; inspector.Visibility = Visibility.Collapsed; body.ColumnDefinitions[2].Width = new GridLength(0);
             center.Visibility = Visibility.Visible; Grid.SetColumn(inspector, 2); Grid.SetColumnSpan(inspector, 1); UpdateNavigation();
-            if (!compact) { sidebar.Visibility = Visibility.Visible; body.ColumnDefinitions[0].Width = new GridLength(180); }
+            if (!compact) { sidebar.Visibility = Visibility.Visible; body.ColumnDefinitions[0].Width = new GridLength(NavigationWidth); }
         }
         private void Gap() { panelContent.Children.Add(new Border { Height = 15 }); }
+        private async Task RenderConversations() {
+            panelContent.Children.Clear();
+            if (transcript.Children.Count > 0) AddPanelButton("Продолжить разговор", ContinueConversation, false);
+            if (!api.Account.SignedIn) {
+                panelContent.Children.Add(Label("Войдите, чтобы открыть разговоры.", 14, muted));
+                AddPanelButton("Войти", () => OpenPanel("Аккаунт"), true); return;
+            }
+            int revision = panelRevision; string owner = api.Account.Email;
+            panelContent.Children.Add(Label("Загружаю…", 14, muted));
+            var value = await api.Get("/v1/sessions?limit=30", CancellationToken.None);
+            if (revision != panelRevision || api.Account.Email != owner || !api.Account.SignedIn) return;
+            sessions.Clear(); sessions.AddRange(Json.Rows(value, "sessions")); RenderHistory(); panelContent.Children.Clear();
+            if (transcript.Children.Count > 0) AddPanelButton("Продолжить разговор", ContinueConversation, false);
+            if (sessions.Count == 0) EmptyState("Пока нет разговоров", "Начните с новой задачи.", "history");
+            foreach (var item in sessions) {
+                string id = Json.Text(item, "id"), title = Json.Text(item, "title");
+                if (title.Length == 0) title = Json.Text(item, "preview"); if (title.Length == 0) title = "Разговор";
+                var row = Button(title, () => { var task = LoadConversation(id); }, false);
+                row.Content = new TextBlock { Text = title, Foreground = text, TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap };
+                row.HorizontalContentAlignment = HorizontalAlignment.Left; row.Padding = new Thickness(16, 12, 16, 12); row.Margin = new Thickness(0, 0, 0, 8); panelContent.Children.Add(row);
+            }
+            AddPanelButton("Новый разговор", NewConversation, true);
+        }
         private void AddPanelButton(string title, Action action, bool primary) { var button = Button(title, action, primary); button.Margin = new Thickness(0, 6, 0, 4); button.HorizontalAlignment = HorizontalAlignment.Left; button.MaxWidth = 320; button.Content = Label(title, 14, primary ? accentText : text); panelContent.Children.Add(button); }
         private async Task RenderAccount() {
             panelContent.Children.Clear();
             if (!api.Account.SignedIn) {
                 int signIn = panelContent.Children.Count;
                 panelContent.Children.Add(Label("Почта", 12, muted)); var email = Field("Почта", false); panelContent.Children.Add(email);
-                panelContent.Children.Add(Label("Пароль", 12, muted)); var password = new PasswordBox { Background = surface, Foreground = text, BorderBrush = line, Padding = new Thickness(11), Margin = new Thickness(0, 6, 0, 12) }; AccessibleName(password, "Пароль"); panelContent.Children.Add(password);
+                panelContent.Children.Add(Label("Пароль", 12, muted)); var password = new PasswordBox { Background = background, Foreground = text, BorderBrush = line, Padding = new Thickness(12), Margin = new Thickness(0, 6, 0, 16) }; AccessibleName(password, "Пароль"); panelContent.Children.Add(password);
                 var resultLabel = Label("", 12, muted); bool authenticating = false;
                 Action<bool> login = async register => {
                     if (authenticating || busy) return;
@@ -390,7 +426,7 @@ namespace Troika.Desktop {
                     } catch (Exception error) { resultLabel.Text = error is System.Net.Http.HttpRequestException ? "Нет соединения с сервером." : error.Message; } finally { authenticating = false; }
                 };
                 int actions = panelContent.Children.Count; AddPanelButton("Войти", () => login(false), true); AddPanelButton("Создать аккаунт", () => login(true), false); CompactActions(actions); panelContent.Children.Add(resultLabel);
-                panelContent.Children.Add(Label("Пароль нового аккаунта: от 10 символов. Ключи моделей не нужны.", 11, muted)); SurfaceGroup(signIn, "Ваш голос. Ваш контекст.", "Войдите в тот же аккаунт, что на телефоне. История и память будут доступны здесь.", "profile"); AddAppearanceSettings(); return;
+                panelContent.Children.Add(Label("Новый пароль: от 10 символов.", 12, muted)); SurfaceGroup(signIn, "Вход", "Один аккаунт для телефона и ПК.", "profile"); AddAppearanceSettings(); AddPanelButton("Действия на ПК", () => OpenPanel("Действия на ПК"), false); return;
             }
             int revision = panelRevision; var subscription = await api.Get("/v1/subscription", CancellationToken.None); if (revision != panelRevision) return;
             RenderAccountDetails(api.Account.Email, subscription);
@@ -412,6 +448,7 @@ namespace Troika.Desktop {
             SurfaceGroup(settings, "На этом компьютере", "Голос и поведение окна", "home"); AddAppearanceSettings();
             int management = panelContent.Children.Count;
             AddPanelButton("Устройства", () => { var task = ShowDevices(); }, false);
+            AddPanelButton("Действия на ПК", () => OpenPanel("Действия на ПК"), false);
             AddPanelButton("Напоминания и тихие часы", () => { var task = ShowNotifications(); }, false);
             AddPanelButton("Экспорт данных аккаунта…", () => { var task = ExportAccount(); }, false);
             CompactActions(management); SurfaceGroup(management, "Устройства и данные", "", "files"); int access = panelContent.Children.Count;
@@ -523,7 +560,7 @@ namespace Troika.Desktop {
             ApplyCompact();
         }
         private void ApplyCompact() {
-            ClosePanel(); sidebar.Visibility = compact ? Visibility.Collapsed : Visibility.Visible; body.ColumnDefinitions[0].Width = new GridLength(compact ? 0 : 180);
+            ClosePanel(); sidebar.Visibility = compact ? Visibility.Collapsed : Visibility.Visible; body.ColumnDefinitions[0].Width = new GridLength(compact ? 0 : NavigationWidth);
             if (compact) { center.Margin = new Thickness(9, 0, 9, 0); MinWidth = 440; } else center.Margin = new Thickness(13, 0, 3, 0);
         }
         public void RenderTo(string path) {

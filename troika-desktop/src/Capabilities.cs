@@ -33,7 +33,7 @@ namespace Troika.Desktop {
             panelContent.Children.Clear();
             panelContent.Children.Add(Label("Скажите задачу — или выберите действие", 14, muted)); Gap();
             var cards = CapabilityCards();
-            AddCapabilityCard(cards, "Навыки и плагины", "Каталог инструментов Тройки", "spark", () => OpenPanel("Каталог возможностей"));
+            AddCapabilityCard(cards, "Возможности", "Плагины, навыки и инструменты", "spark", () => OpenPanel("Возможности"));
             AddCapabilityCard(cards, "Поиск и сравнение", "Информация и источники", "spark", () => Prepare("Найди через веб-поиск и сравни "));
             AddCapabilityCard(cards, "Документ DOCX", "Текст и таблицы", "files", () => Prepare("Создай DOCX: "));
             AddCapabilityCard(cards, "Документ PDF", "Готовый документ", "files", () => Prepare("Создай PDF: "));
@@ -42,7 +42,7 @@ namespace Troika.Desktop {
             AddCapabilityCard(cards, "Проекты и дела", "Задачи и напоминания", "tasks", () => OpenPanel("Дела"));
             AddCapabilityCard(cards, "Файлы на этом ПК", "Сохранённые результаты", "files", () => OpenPanel("Файлы"));
             AddCapabilityCard(cards, "Память", "Посмотреть и изменить", "memory", () => OpenPanel("Память"));
-            AddCapabilityCard(cards, "Профиль", "Аккаунт, тариф и устройства", "profile", () => OpenPanel("Аккаунт"));
+            AddCapabilityCard(cards, "Настройки", "Аккаунт, тариф и устройства", "profile", () => OpenPanel("Аккаунт"));
             panelContent.Children.Add(cards); Gap();
             panelContent.Children.Add(Label("Действия на ПК", 16, text));
             Gap(); var local = CapabilityCards();

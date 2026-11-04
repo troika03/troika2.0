@@ -7,10 +7,7 @@ using System.Windows.Markup;
 namespace Troika.Desktop {
     public sealed partial class MainWindow {
         private Brush CardSurface() {
-            var tone = ((SolidColorBrush)surface).Color;
-            return new LinearGradientBrush(
-                System.Windows.Media.Color.FromArgb(245, tone.R, tone.G, tone.B),
-                System.Windows.Media.Color.FromArgb(190, tone.R, tone.G, tone.B), 45);
+            return surface;
         }
 
         // Reparent controls without replacing their values or event handlers.
@@ -56,22 +53,23 @@ namespace Troika.Desktop {
  <Style TargetType='{x:Type TextBox}'>
   <Setter Property='SelectionBrush' Value='{DynamicResource TroikaAccent}'/>
   <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='{x:Type TextBox}'>
-   <Border x:Name='outline' CornerRadius='8' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='{TemplateBinding BorderThickness}'>
+   <Border x:Name='outline' CornerRadius='12' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='{TemplateBinding BorderThickness}'>
     <ScrollViewer x:Name='PART_ContentHost'/>
    </Border>
-   <ControlTemplate.Triggers><Trigger Property='IsKeyboardFocusWithin' Value='True'><Setter TargetName='outline' Property='BorderBrush' Value='{DynamicResource TroikaAccent}'/></Trigger></ControlTemplate.Triggers>
+   <ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'><Setter TargetName='outline' Property='BorderBrush' Value='{DynamicResource TroikaAccent}'/></Trigger><Trigger Property='IsKeyboardFocusWithin' Value='True'><Setter TargetName='outline' Property='BorderBrush' Value='{DynamicResource TroikaAccent}'/></Trigger><Trigger Property='IsEnabled' Value='False'><Setter Property='Opacity' Value='.4'/></Trigger></ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
  <Style TargetType='{x:Type PasswordBox}'>
+  <Setter Property='MinHeight' Value='44'/><Setter Property='VerticalContentAlignment' Value='Center'/>
   <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='{x:Type PasswordBox}'>
-   <Border x:Name='outline' CornerRadius='8' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='{TemplateBinding BorderThickness}'><ScrollViewer x:Name='PART_ContentHost'/></Border>
+   <Border x:Name='outline' CornerRadius='12' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='{TemplateBinding BorderThickness}'><ScrollViewer x:Name='PART_ContentHost'/></Border>
    <ControlTemplate.Triggers><Trigger Property='IsKeyboardFocusWithin' Value='True'><Setter TargetName='outline' Property='BorderBrush' Value='{DynamicResource TroikaAccent}'/></Trigger></ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
  <Style TargetType='{x:Type DatePickerTextBox}'>
   <Setter Property='Background' Value='{DynamicResource TroikaSurface}'/><Setter Property='Foreground' Value='{DynamicResource TroikaText}'/><Setter Property='Padding' Value='9'/><Setter Property='BorderBrush' Value='{DynamicResource TroikaLine}'/>
   <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='{x:Type DatePickerTextBox}'>
-   <Border CornerRadius='8' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='1'><Grid><ScrollViewer x:Name='PART_ContentHost'/><ContentControl x:Name='PART_Watermark' Content='Выберите дату' Foreground='{DynamicResource TroikaText}' IsHitTestVisible='False' Margin='9' Visibility='Collapsed'/></Grid></Border>
+   <Border CornerRadius='12' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='1'><Grid><ScrollViewer x:Name='PART_ContentHost'/><ContentControl x:Name='PART_Watermark' Content='Выберите дату' Foreground='{DynamicResource TroikaText}' IsHitTestVisible='False' Margin='9' Visibility='Collapsed'/></Grid></Border>
    <ControlTemplate.Triggers><Trigger Property='Text' Value=''><Setter TargetName='PART_Watermark' Property='Visibility' Value='Visible'/></Trigger></ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
@@ -80,8 +78,8 @@ namespace Troika.Desktop {
    <StackPanel>
     <ToggleButton Content='{TemplateBinding Header}' IsChecked='{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}' HorizontalContentAlignment='Left'>
      <ToggleButton.Template><ControlTemplate TargetType='{x:Type ToggleButton}'>
-      <Border x:Name='outline' CornerRadius='8' BorderBrush='{DynamicResource TroikaLine}' BorderThickness='1' Background='{DynamicResource TroikaSurface}' Padding='14,12'><DockPanel><TextBlock x:Name='symbol' Text='＋' Foreground='{DynamicResource TroikaAccent}' Margin='0,0,9,0'/><ContentPresenter/></DockPanel></Border>
-      <ControlTemplate.Triggers><Trigger Property='IsChecked' Value='True'><Setter TargetName='symbol' Property='Text' Value='−'/></Trigger><Trigger Property='IsMouseOver' Value='True'><Setter TargetName='outline' Property='BorderBrush' Value='{DynamicResource TroikaAccent}'/></Trigger></ControlTemplate.Triggers>
+      <Border x:Name='outline' CornerRadius='12' BorderBrush='{DynamicResource TroikaLine}' BorderThickness='1' Background='{DynamicResource TroikaSurface}' Padding='14,12'><DockPanel><TextBlock x:Name='symbol' Text='＋' Foreground='{DynamicResource TroikaAccent}' Margin='0,0,9,0'/><ContentPresenter/></DockPanel></Border>
+      <ControlTemplate.Triggers><Trigger Property='IsChecked' Value='True'><Setter TargetName='symbol' Property='Text' Value='−'/></Trigger><Trigger Property='IsMouseOver' Value='True'><Setter TargetName='outline' Property='BorderBrush' Value='{DynamicResource TroikaAccent}'/></Trigger><Trigger Property='IsKeyboardFocused' Value='True'><Setter TargetName='outline' Property='BorderBrush' Value='{DynamicResource TroikaAccent}'/></Trigger></ControlTemplate.Triggers>
      </ControlTemplate></ToggleButton.Template>
     </ToggleButton>
     <ContentPresenter x:Name='details' ContentSource='Content' Margin='0,10,0,0' Visibility='Collapsed'/>
@@ -90,23 +88,40 @@ namespace Troika.Desktop {
  </Style>
  <Style TargetType='{x:Type ComboBox}'>
   <Setter Property='Foreground' Value='{DynamicResource TroikaText}'/><Setter Property='Background' Value='{DynamicResource TroikaSurface}'/><Setter Property='BorderBrush' Value='{DynamicResource TroikaLine}'/>
-  <Setter Property='MinHeight' Value='42'/><Setter Property='Padding' Value='12,9'/><Setter Property='FontSize' Value='14'/>
+  <Setter Property='MinHeight' Value='44'/><Setter Property='Padding' Value='12,9'/><Setter Property='FontSize' Value='14'/>
   <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='{x:Type ComboBox}'>
    <Grid>
     <ToggleButton Focusable='False' IsChecked='{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}'>
-     <ToggleButton.Template><ControlTemplate TargetType='{x:Type ToggleButton}'><Border x:Name='outline' CornerRadius='8' Background='{DynamicResource TroikaSurface}' BorderBrush='{DynamicResource TroikaLine}' BorderThickness='1'><TextBlock Text='⌄' Foreground='{DynamicResource TroikaText}' HorizontalAlignment='Right' VerticalAlignment='Center' Margin='0,0,12,0'/></Border><ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'><Setter TargetName='outline' Property='BorderBrush' Value='{DynamicResource TroikaAccent}'/></Trigger></ControlTemplate.Triggers></ControlTemplate></ToggleButton.Template>
+     <ToggleButton.Template><ControlTemplate TargetType='{x:Type ToggleButton}'><Border x:Name='outline' CornerRadius='12' Background='{DynamicResource TroikaSurface}' BorderBrush='{DynamicResource TroikaLine}' BorderThickness='1'><TextBlock Text='⌄' Foreground='{DynamicResource TroikaText}' HorizontalAlignment='Right' VerticalAlignment='Center' Margin='0,0,12,0'/></Border><ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'><Setter TargetName='outline' Property='BorderBrush' Value='{DynamicResource TroikaAccent}'/></Trigger></ControlTemplate.Triggers></ControlTemplate></ToggleButton.Template>
     </ToggleButton>
     <ContentPresenter IsHitTestVisible='False' Content='{TemplateBinding SelectionBoxItem}' ContentTemplate='{TemplateBinding SelectionBoxItemTemplate}' Margin='12,8,36,8' VerticalAlignment='Center'/>
+    <Border x:Name='focus' CornerRadius='12' BorderThickness='2' BorderBrush='Transparent' IsHitTestVisible='False'/>
     <Popup x:Name='PART_Popup' Placement='Bottom' IsOpen='{TemplateBinding IsDropDownOpen}' AllowsTransparency='True' Focusable='False'>
-     <Border Background='{DynamicResource TroikaSurface}' BorderBrush='{DynamicResource TroikaLine}' BorderThickness='1' CornerRadius='8' Padding='4' MinWidth='{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}' MaxHeight='280'><ScrollViewer><ItemsPresenter KeyboardNavigation.DirectionalNavigation='Contained'/></ScrollViewer></Border>
+     <Border Background='{DynamicResource TroikaSurface}' BorderBrush='{DynamicResource TroikaLine}' BorderThickness='1' CornerRadius='12' Padding='4' MinWidth='{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}' MaxHeight='280'><ScrollViewer><ItemsPresenter KeyboardNavigation.DirectionalNavigation='Contained'/></ScrollViewer></Border>
     </Popup>
    </Grid>
-   <ControlTemplate.Triggers><Trigger Property='IsEnabled' Value='False'><Setter Property='Opacity' Value='.4'/></Trigger></ControlTemplate.Triggers>
+   <ControlTemplate.Triggers><Trigger Property='IsKeyboardFocusWithin' Value='True'><Setter TargetName='focus' Property='BorderBrush' Value='{DynamicResource TroikaAccent}'/></Trigger><Trigger Property='IsEnabled' Value='False'><Setter Property='Opacity' Value='.4'/></Trigger></ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
  <Style TargetType='{x:Type ComboBoxItem}'>
   <Setter Property='Foreground' Value='{DynamicResource TroikaText}'/><Setter Property='Padding' Value='10,8'/>
   <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='{x:Type ComboBoxItem}'><Border x:Name='item' CornerRadius='5' Padding='{TemplateBinding Padding}' Background='Transparent'><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property='IsHighlighted' Value='True'><Setter TargetName='item' Property='Background' Value='{DynamicResource TroikaTint}'/></Trigger><Trigger Property='IsSelected' Value='True'><Setter TargetName='item' Property='Background' Value='{DynamicResource TroikaTint}'/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style TargetType='{x:Type CheckBox}'>
+  <Setter Property='MinHeight' Value='44'/><Setter Property='Cursor' Value='Hand'/>
+  <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='{x:Type CheckBox}'>
+   <Grid><Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='Auto'/></Grid.ColumnDefinitions>
+    <ContentPresenter VerticalAlignment='Center' RecognizesAccessKey='True' Margin='0,0,16,0'/>
+    <Border x:Name='track' Grid.Column='1' Width='36' Height='22' CornerRadius='11' Background='{DynamicResource TroikaLine}' BorderBrush='{DynamicResource TroikaLine}' BorderThickness='1' VerticalAlignment='Center'>
+     <Ellipse x:Name='thumb' Width='16' Height='16' Fill='{DynamicResource TroikaText}' HorizontalAlignment='Left' Margin='2,0'/>
+    </Border>
+   </Grid>
+   <ControlTemplate.Triggers>
+    <Trigger Property='IsChecked' Value='True'><Setter TargetName='track' Property='Background' Value='{DynamicResource TroikaAccent}'/><Setter TargetName='thumb' Property='HorizontalAlignment' Value='Right'/><Setter TargetName='thumb' Property='Fill' Value='{DynamicResource TroikaSurface}'/></Trigger>
+    <Trigger Property='IsKeyboardFocused' Value='True'><Setter TargetName='track' Property='BorderBrush' Value='{DynamicResource TroikaAccent}'/><Setter TargetName='track' Property='BorderThickness' Value='2'/></Trigger>
+    <Trigger Property='IsEnabled' Value='False'><Setter Property='Opacity' Value='.4'/></Trigger>
+   </ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
  </Style>
 </ResourceDictionary>");
             foreach (object key in styles.Keys) Resources[key] = styles[key];

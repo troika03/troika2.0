@@ -74,67 +74,80 @@ class _InterfaceSettingsScreenState extends State<InterfaceSettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          const TroikaIntro(
-              icon: Icons.palette_outlined,
-              title: 'Как тебе удобно',
-              subtitle:
-                  'Выбери оформление и размер текста. Изменения видны сразу.'),
-          const Text('Тема', style: TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 10),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'system', label: Text('Система')),
-              ButtonSegment(value: 'dark', label: Text('Тёмная')),
-              ButtonSegment(value: 'light', label: Text('Светлая')),
+          const Text('Тема', style: TextStyle(fontWeight: FontWeight.w500)),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final option in const [
+                ('system', 'Система'),
+                ('dark', 'Тёмная'),
+                ('light', 'Светлая'),
+              ])
+                ChoiceChip(
+                  label: Text(option.$2),
+                  selected: _theme == option.$1,
+                  onSelected: (_) => _setTheme(option.$1),
+                ),
             ],
-            selected: {_theme},
-            showSelectedIcon: false,
-            onSelectionChanged: (values) => _setTheme(values.first),
           ),
+          const SizedBox(height: 24),
           const SizedBox(height: 8),
           Card(
-              child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Цвет акцента',
-                            style: TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 4),
-                        Text('Кнопки, выделения и голосовой круг',
-                            style: TextStyle(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant)),
-                        const SizedBox(height: 16),
-                        Wrap(spacing: 8, runSpacing: 8, children: [
-                          for (final (id, label) in troikaAccentChoices)
-                            ChoiceChip(
-                                avatar: CircleAvatar(
-                                    backgroundColor: TroikaColors.accentFor(id,
-                                        dark: Theme.of(context).brightness ==
-                                            Brightness.dark),
-                                    radius: 9),
-                                label: Text(label),
-                                selected: _accent == id,
-                                showCheckmark: false,
-                                onSelected: (_) => _setAccent(id)),
-                        ]),
-                      ]))),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Цвет акцента',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final (id, label) in troikaAccentChoices)
+                        ChoiceChip(
+                          avatar: CircleAvatar(
+                            backgroundColor: TroikaColors.accentFor(
+                              id,
+                              dark:
+                                  Theme.of(context).brightness ==
+                                  Brightness.dark,
+                            ),
+                            radius: 9,
+                          ),
+                          label: Text(label),
+                          selected: _accent == id,
+                          showCheckmark: true,
+                          onSelected: (_) => _setAccent(id),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
           const Divider(),
           Card(
-              child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Так будет выглядеть текст',
-                            style: Theme.of(context).textTheme.titleLarge),
-                        const SizedBox(height: 8),
-                        const Text(
-                            'Тройка рядом, когда нужна помощь. Все настройки можно изменить позже.'),
-                      ]))),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Предпросмотр',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text('Тройка рядом, когда нужна помощь.'),
+                ],
+              ),
+            ),
+          ),
           const ListTile(
             contentPadding: EdgeInsets.zero,
             title: Text('Язык'),

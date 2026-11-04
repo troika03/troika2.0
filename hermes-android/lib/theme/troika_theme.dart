@@ -4,39 +4,37 @@ import '../services/assistant_service.dart';
 
 /// Единая дизайн-система Тройки.
 ///
-/// Принципы: один тёплый фирменный акцент (Troika Amber), тёплый почти-чёрный
-/// фон, Golos Text и спокойные поверхности из согласованных макетов.
-/// Тёплая палитра читается как «человеческое», а не «холодное AI».
+/// Графитовые поверхности, Golos Text и зелёный голосовой контур.
 class TroikaColors {
   TroikaColors._();
 
-  /// Фирменный акцент — тёплый медово-янтарный. Лицо бренда.
-  static const Color brand = Color(0xFFF5A623);
-  static const Color brandDeep = Color(0xFFE08A12);
-  static const Color brandSoft = Color(0xFFFFC65C);
+  static const Color brand = Color(0xFF8DE0B4);
+  static const Color brandDeep = Color(0xFF286747);
+  static const Color brandSoft = Color(0xFFA7E4BF);
 
   /// Keep accent tones readable on both neutral backgrounds.
   static Color accentFor(String name, {required bool dark}) => switch (name) {
-        'teal' => dark ? const Color(0xFF65C8B9) : const Color(0xFF00695C),
-        'blue' => dark ? const Color(0xFF82B9F5) : const Color(0xFF245B9A),
-        'violet' => dark ? const Color(0xFFB6A2F4) : const Color(0xFF6246A3),
-        'rose' => dark ? const Color(0xFFFFA1AE) : const Color(0xFFAD3E56),
-        'green' => dark ? const Color(0xFFA6CF82) : const Color(0xFF537735),
-        _ => dark ? brand : const Color(0xFF8E5419),
-      };
+    'amber' => dark ? const Color(0xFFF5A623) : const Color(0xFF8E5419),
+    'teal' => dark ? const Color(0xFF65C8B9) : const Color(0xFF00695C),
+    'blue' => dark ? const Color(0xFF82B9F5) : const Color(0xFF245B9A),
+    'violet' => dark ? const Color(0xFFB6A2F4) : const Color(0xFF6246A3),
+    'rose' => dark ? const Color(0xFFFFA1AE) : const Color(0xFFAD3E56),
+    'green' => dark ? const Color(0xFFA6CF82) : const Color(0xFF537735),
+    _ => dark ? brandSoft : brandDeep,
+  };
 
-  /// Фон — тёплый почти-чёрный (не чистый #000, чуть тёплее).
-  static const Color bg = Color(0xFF0C0B0A);
-  static const Color surface = Color(0xFF21211D);
-  static const Color surfaceHi = Color(0xFF2A2A24);
+  static const Color bg = Color(0xFF202322);
+  static const Color navigation = Color(0xFF181B1A);
+  static const Color surface = Color(0xFF2C302E);
+  static const Color surfaceHi = Color(0xFF363B38);
+  static const Color line = Color(0xFF3A413D);
+  static const Color accentSurface = Color(0xFF293A30);
 
-  /// Текст — тёплый off-white и приглушённый.
-  static const Color text = Color(0xFFF3F0EA);
-  static const Color textMuted = Color(0xFFB2B0A3);
-  static const Color textFaint = Color(0xFF55524B);
+  static const Color text = Color(0xFFF4F7F4);
+  static const Color textMuted = Color(0xFFA4ADA6);
+  static const Color textFaint = Color(0xFF8D9991);
 
-  /// Единственный «не-акцентный» цвет — мягкая тёплая ошибка.
-  static const Color error = Color(0xFFE5604D);
+  static const Color error = Color(0xFFF2A69A);
 
   /// Цвет под состояние ассистента. Бренд держим постоянным, играем
   /// яркостью/мотивом, ошибка — единственное исключение.
@@ -65,13 +63,13 @@ class TroikaColors {
       case AssistantState.wakeDetected:
         return 'да, слушаю';
       case AssistantState.recording:
-        return 'слушаю — нажми, чтобы отправить';
+        return 'нажми, чтобы отправить';
       case AssistantState.processing:
-        return 'думаю';
+        return 'разбираюсь';
       case AssistantState.speaking:
         return 'нажми, чтобы прервать';
       case AssistantState.error:
-        return 'ошибка — нажми, чтобы повторить';
+        return 'нажми, чтобы повторить';
     }
   }
 }
@@ -81,60 +79,152 @@ class TroikaColors {
 class TroikaLightColors {
   TroikaLightColors._();
 
-  static const Color bg = Color(0xFFF3F0EA);
-  static const Color surface = Color(0xFFFFFFFF);
-  static const Color surfaceHi = Color(0xFFEDEAE2);
-  static const Color text = Color(0xFF0C0B0A);
-  static const Color textMuted = Color(0xFF68675E);
+  static const Color bg = Color(0xFFFAFCF9);
+  static const Color navigation = Color(0xFFF0F3EE);
+  static const Color surface = Color(0xFFEDF2EC);
+  static const Color surfaceHi = Color(0xFFE5EBE3);
+  static const Color line = Color(0xFFDDE5DB);
+  static const Color accentSurface = Color(0xFFE6F3E9);
+  static const Color text = Color(0xFF1F2923);
+  static const Color textMuted = Color(0xFF68756B);
+  static const Color error = Color(0xFFA53830);
 }
 
 /// Тема приложения.
-ThemeData buildTroikaTheme() {
-  final accent =
-      TroikaColors.accentFor(TroikaConfig.interfaceAccent, dark: true);
-  return ThemeData(
-    fontFamily: 'Golos Text',
-    brightness: Brightness.dark,
-    scaffoldBackgroundColor: TroikaColors.bg,
-    colorScheme: ColorScheme.dark(
-      primary: accent,
-      secondary: accent,
-      surface: TroikaColors.surface,
-      onSurface: TroikaColors.text,
-      onSurfaceVariant: TroikaColors.textMuted,
-      outline: const Color(0xFF36362E),
-      outlineVariant: const Color(0xFF36362E),
-      error: TroikaColors.error,
-      onPrimary: const Color(0xFF1A1206),
-    ),
-    useMaterial3: true,
-    navigationBarTheme: _navigationTheme(accent, TroikaColors.textMuted),
-    textTheme: _troikaTextTheme(TroikaColors.text),
-  );
-}
+ThemeData buildTroikaTheme() => _buildTroikaTheme(dark: true);
 
-/// Светлая тема использует тот же янтарный акцент и ту же типографику.
-ThemeData buildTroikaLightTheme() {
-  final accent =
-      TroikaColors.accentFor(TroikaConfig.interfaceAccent, dark: false);
+ThemeData buildTroikaLightTheme() => _buildTroikaTheme(dark: false);
+
+ThemeData _buildTroikaTheme({required bool dark}) {
+  final accent = TroikaColors.accentFor(
+    TroikaConfig.interfaceAccent,
+    dark: dark,
+  );
+  final background = dark ? TroikaColors.bg : TroikaLightColors.bg;
+  final surface = dark ? TroikaColors.surface : TroikaLightColors.surface;
+  final text = dark ? TroikaColors.text : TroikaLightColors.text;
+  final muted = dark ? TroikaColors.textMuted : TroikaLightColors.textMuted;
+  final line = dark ? TroikaColors.line : TroikaLightColors.line;
+  final onAccent = dark ? TroikaLightColors.text : Colors.white;
+  final error = dark ? TroikaColors.error : TroikaLightColors.error;
+  final scheme =
+      ColorScheme.fromSeed(
+        seedColor: accent,
+        brightness: dark ? Brightness.dark : Brightness.light,
+      ).copyWith(
+        primary: accent,
+        secondary: accent,
+        primaryContainer: dark
+            ? TroikaColors.accentSurface
+            : TroikaLightColors.accentSurface,
+        onPrimary: onAccent,
+        onSecondary: onAccent,
+        onPrimaryContainer: text,
+        surface: surface,
+        onSurface: text,
+        onSurfaceVariant: muted,
+        outline: muted,
+        outlineVariant: line,
+        error: error,
+        onError: dark ? TroikaLightColors.text : Colors.white,
+      );
+  final buttonShape = RoundedRectangleBorder(
+    borderRadius: BorderRadius.circular(24),
+  );
+  final fieldBorder = OutlineInputBorder(
+    borderRadius: BorderRadius.circular(12),
+    borderSide: BorderSide(color: line),
+  );
   return ThemeData(
     fontFamily: 'Golos Text',
-    brightness: Brightness.light,
-    scaffoldBackgroundColor: TroikaLightColors.bg,
-    colorScheme: ColorScheme.light(
-      primary: accent,
-      secondary: accent,
-      surface: TroikaLightColors.surface,
-      onSurface: TroikaLightColors.text,
-      onSurfaceVariant: TroikaLightColors.textMuted,
-      outline: const Color(0xFFDEDBD1),
-      outlineVariant: const Color(0xFFDEDBD1),
-      error: TroikaColors.error,
-      onPrimary: const Color(0xFFFFFFFF),
-    ),
+    brightness: scheme.brightness,
+    scaffoldBackgroundColor: background,
+    colorScheme: scheme,
     useMaterial3: true,
-    navigationBarTheme: _navigationTheme(accent, TroikaLightColors.textMuted),
-    textTheme: _troikaTextTheme(TroikaLightColors.text),
+    textTheme: _troikaTextTheme(text),
+    appBarTheme: AppBarTheme(
+      backgroundColor: background,
+      foregroundColor: text,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      titleTextStyle: TextStyle(
+        fontFamily: 'Golos Text',
+        fontSize: 18,
+        fontWeight: FontWeight.w500,
+        color: text,
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: accent,
+        foregroundColor: onAccent,
+        minimumSize: const Size(48, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        elevation: 0,
+        shape: buttonShape,
+      ),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: accent,
+        foregroundColor: onAccent,
+        minimumSize: const Size(48, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        elevation: 0,
+        shape: buttonShape,
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: text,
+        minimumSize: const Size(48, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        side: BorderSide(color: line),
+        shape: buttonShape,
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: accent,
+        minimumSize: const Size(44, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        shape: buttonShape,
+      ),
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: IconButton.styleFrom(
+        foregroundColor: text,
+        minimumSize: const Size(44, 44),
+        shape: const CircleBorder(),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: surface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      border: fieldBorder,
+      enabledBorder: fieldBorder,
+      focusedBorder: fieldBorder.copyWith(
+        borderSide: BorderSide(color: accent, width: 1.5),
+      ),
+      errorBorder: fieldBorder.copyWith(borderSide: BorderSide(color: error)),
+      focusedErrorBorder: fieldBorder.copyWith(
+        borderSide: BorderSide(color: error, width: 1.5),
+      ),
+      hintStyle: TextStyle(color: muted, fontSize: 14),
+      labelStyle: TextStyle(color: muted, fontSize: 14),
+      floatingLabelStyle: TextStyle(color: accent, fontSize: 14),
+      errorMaxLines: 3,
+    ),
+    dividerTheme: DividerThemeData(color: line, thickness: 1, space: 24),
+    drawerTheme: DrawerThemeData(
+      backgroundColor: dark
+          ? TroikaColors.navigation
+          : TroikaLightColors.navigation,
+      surfaceTintColor: Colors.transparent,
+    ),
+    navigationBarTheme: _navigationTheme(accent, muted),
   );
 }
 
@@ -142,32 +232,37 @@ TextTheme _troikaTextTheme(Color color) {
   return TextTheme(
     displaySmall: TextStyle(
       color: color,
-      fontSize: 24,
-      height: 1.25,
+      fontSize: 30,
+      height: 1.3,
       fontWeight: FontWeight.w500,
     ),
     titleLarge: TextStyle(
       color: color,
-      fontSize: 20,
-      height: 1.2,
+      fontSize: 26,
+      height: 1.3,
       fontWeight: FontWeight.w500,
     ),
-    bodyLarge: TextStyle(color: color, fontSize: 16, height: 1.4),
-    bodyMedium: TextStyle(color: color, fontSize: 14, height: 1.4),
+    bodyLarge: TextStyle(color: color, fontSize: 16, height: 1.6),
+    bodyMedium: TextStyle(color: color, fontSize: 14, height: 1.55),
+    bodySmall: TextStyle(color: color, fontSize: 12, height: 1.5),
   );
 }
 
 NavigationBarThemeData _navigationTheme(Color accent, Color muted) =>
     NavigationBarThemeData(
       indicatorColor: Colors.transparent,
-      iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
-            size: 16,
-            color: states.contains(WidgetState.selected) ? accent : muted,
-          )),
-      labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
-            fontFamily: 'Golos Text',
-            fontSize: 12,
-            fontWeight: FontWeight.w400,
-            color: states.contains(WidgetState.selected) ? accent : muted,
-          )),
+      iconTheme: WidgetStateProperty.resolveWith(
+        (states) => IconThemeData(
+          size: 20,
+          color: states.contains(WidgetState.selected) ? accent : muted,
+        ),
+      ),
+      labelTextStyle: WidgetStateProperty.resolveWith(
+        (states) => TextStyle(
+          fontFamily: 'Golos Text',
+          fontSize: 12,
+          fontWeight: FontWeight.w400,
+          color: states.contains(WidgetState.selected) ? accent : muted,
+        ),
+      ),
     );

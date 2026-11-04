@@ -16,40 +16,61 @@ void main() {
     expect(TroikaConfig.screenSnapshotBetaEnabled, isFalse);
   });
 
-  test('migrates legacy preferences without losing account or consent',
-      () async {
-    SharedPreferences.setMockInitialValues({
-      'hermes_server_url': 'https://legacy.example.test',
-      'hermes_api_key': 'trk_live_legacy',
-      'troika_account_email': 'owner@example.com',
-      'hermes_wake_word_enabled': true,
-      'hermes_onboarding_done': true,
-      'hermes_session_key': 'mobile-legacy-session',
-      'hermes_session_id': 'mobile-legacy-session',
-      'hermes_location_context_enabled': true,
-      'hermes_phone_control_enabled': true,
-    });
-
+  test('new appearance uses mint without rewriting saved accents', () async {
+    expect(TroikaConfig.interfaceAccent, 'mint');
+    for (final accent in ['amber', 'teal', 'blue', 'violet', 'rose', 'green']) {
+      SharedPreferences.setMockInitialValues({
+        'troika_interface_accent': accent,
+      });
+      await TroikaConfig.init();
+      expect(TroikaConfig.interfaceAccent, accent);
+    }
+    await TroikaConfig.setInterfaceAccent('mint');
     await TroikaConfig.init();
-
-    expect(TroikaConfig.serverUrl, 'https://legacy.example.test');
-    expect(TroikaConfig.apiKey, 'trk_live_legacy');
-    expect(TroikaConfig.signedIn, isTrue);
-    expect(TroikaConfig.wakeWordEnabled, isTrue);
-    expect(TroikaConfig.onboardingDone, isTrue);
-    expect(TroikaConfig.sessionId, 'mobile-legacy-session');
-    expect(TroikaConfig.locationContextEnabled, isTrue);
-    expect(TroikaConfig.phoneControlEnabled, isTrue);
-
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('troika_server_url'), 'https://legacy.example.test');
-    expect(prefs.getString('troika_api_key'), 'trk_live_legacy');
-    expect(prefs.getString('troika_session_id'), 'mobile-legacy-session');
-    expect(prefs.getBool('troika_wake_word_enabled'), isTrue);
-    expect(prefs.getBool('troika_location_context_enabled'), isTrue);
-    expect(prefs.getBool('troika_phone_control_enabled'), isTrue);
-    expect(prefs.getInt('troika_brand_migration_version'), 1);
+    expect(TroikaConfig.interfaceAccent, 'mint');
+    await TroikaConfig.setInterfaceAccent('unavailable');
+    expect(TroikaConfig.interfaceAccent, 'mint');
   });
+
+  test(
+    'migrates legacy preferences without losing account or consent',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'hermes_server_url': 'https://legacy.example.test',
+        'hermes_api_key': 'trk_live_legacy',
+        'troika_account_email': 'owner@example.com',
+        'hermes_wake_word_enabled': true,
+        'hermes_onboarding_done': true,
+        'hermes_session_key': 'mobile-legacy-session',
+        'hermes_session_id': 'mobile-legacy-session',
+        'hermes_location_context_enabled': true,
+        'hermes_phone_control_enabled': true,
+      });
+
+      await TroikaConfig.init();
+
+      expect(TroikaConfig.serverUrl, 'https://legacy.example.test');
+      expect(TroikaConfig.apiKey, 'trk_live_legacy');
+      expect(TroikaConfig.signedIn, isTrue);
+      expect(TroikaConfig.wakeWordEnabled, isTrue);
+      expect(TroikaConfig.onboardingDone, isTrue);
+      expect(TroikaConfig.sessionId, 'mobile-legacy-session');
+      expect(TroikaConfig.locationContextEnabled, isTrue);
+      expect(TroikaConfig.phoneControlEnabled, isTrue);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        prefs.getString('troika_server_url'),
+        'https://legacy.example.test',
+      );
+      expect(prefs.getString('troika_api_key'), 'trk_live_legacy');
+      expect(prefs.getString('troika_session_id'), 'mobile-legacy-session');
+      expect(prefs.getBool('troika_wake_word_enabled'), isTrue);
+      expect(prefs.getBool('troika_location_context_enabled'), isTrue);
+      expect(prefs.getBool('troika_phone_control_enabled'), isTrue);
+      expect(prefs.getInt('troika_brand_migration_version'), 1);
+    },
+  );
 
   test(
     'hosted build migrates local beta account without clearing local data',
@@ -107,20 +128,28 @@ void main() {
   test('product STT preserves HTTPS origin, prefix and port', () {
     TroikaConfig.apiKey = 'trk_live_test';
     TroikaConfig.serverUrl = 'https://example.test:9443/troika/';
-    expect(TroikaConfig.transcriptionUri.toString(),
-        'https://example.test:9443/troika/v1/audio/transcriptions');
+    expect(
+      TroikaConfig.transcriptionUri.toString(),
+      'https://example.test:9443/troika/v1/audio/transcriptions',
+    );
     TroikaConfig.serverUrl = 'http://127.0.0.1:8765';
     expect(TroikaConfig.transcriptionUri.port, 8765);
   });
 
   test('product account export uses authenticated server origin', () {
     TroikaConfig.serverUrl = 'https://example.test:9443/troika';
-    expect(TroikaConfig.accountExportUrl,
-        'https://example.test:9443/troika/v1/account/export');
-    expect(TroikaConfig.accountDevicesUrl,
-        'https://example.test:9443/troika/v1/account/devices');
-    expect(TroikaConfig.subscriptionUrl,
-        'https://example.test:9443/troika/v1/subscription');
+    expect(
+      TroikaConfig.accountExportUrl,
+      'https://example.test:9443/troika/v1/account/export',
+    );
+    expect(
+      TroikaConfig.accountDevicesUrl,
+      'https://example.test:9443/troika/v1/account/devices',
+    );
+    expect(
+      TroikaConfig.subscriptionUrl,
+      'https://example.test:9443/troika/v1/subscription',
+    );
   });
 
   test('parses owner-visible subscription status', () {
@@ -202,47 +231,51 @@ void main() {
     expect(TroikaConfig.phoneControlEnabled, isTrue);
   });
 
-  test('clears deleted account credentials and rotates local session',
-      () async {
-    TroikaConfig.apiKey = 'trk_live_private';
-    TroikaConfig.onboardingDone = true;
-    await TroikaConfig.setLocationContextEnabled(true);
-    await TroikaConfig.setPhoneControlEnabled(true);
-    final previousSession = TroikaConfig.sessionId;
+  test(
+    'clears deleted account credentials and rotates local session',
+    () async {
+      TroikaConfig.apiKey = 'trk_live_private';
+      TroikaConfig.onboardingDone = true;
+      await TroikaConfig.setLocationContextEnabled(true);
+      await TroikaConfig.setPhoneControlEnabled(true);
+      final previousSession = TroikaConfig.sessionId;
 
-    await TroikaConfig.clearDeletedAccount();
+      await TroikaConfig.clearDeletedAccount();
 
-    expect(TroikaConfig.apiKey, isEmpty);
-    expect(TroikaConfig.onboardingDone, isFalse);
-    expect(TroikaConfig.locationContextEnabled, isFalse);
-    expect(TroikaConfig.phoneControlEnabled, isFalse);
-    expect(TroikaConfig.sessionId, isEmpty);
+      expect(TroikaConfig.apiKey, isEmpty);
+      expect(TroikaConfig.onboardingDone, isFalse);
+      expect(TroikaConfig.locationContextEnabled, isFalse);
+      expect(TroikaConfig.phoneControlEnabled, isFalse);
+      expect(TroikaConfig.sessionId, isEmpty);
 
-    await TroikaConfig.init();
-    expect(TroikaConfig.sessionId, startsWith('mobile-'));
-    expect(TroikaConfig.sessionId, isNot(previousSession));
-  });
+      await TroikaConfig.init();
+      expect(TroikaConfig.sessionId, startsWith('mobile-'));
+      expect(TroikaConfig.sessionId, isNot(previousSession));
+    },
+  );
 
-  test('clears revoked device credentials and immediately rotates session',
-      () async {
-    await TroikaConfig.saveAccount(
-      email: 'owner@example.com',
-      token: 'trk_live_private',
-    );
-    TroikaConfig.onboardingDone = true;
-    await TroikaConfig.setLocationContextEnabled(true);
-    await TroikaConfig.setPhoneControlEnabled(true);
-    final previousSession = TroikaConfig.sessionId;
+  test(
+    'clears revoked device credentials and immediately rotates session',
+    () async {
+      await TroikaConfig.saveAccount(
+        email: 'owner@example.com',
+        token: 'trk_live_private',
+      );
+      TroikaConfig.onboardingDone = true;
+      await TroikaConfig.setLocationContextEnabled(true);
+      await TroikaConfig.setPhoneControlEnabled(true);
+      final previousSession = TroikaConfig.sessionId;
 
-    await TroikaConfig.clearRevokedDevice();
+      await TroikaConfig.clearRevokedDevice();
 
-    expect(TroikaConfig.signedIn, isFalse);
-    expect(TroikaConfig.accountEmail, isEmpty);
-    expect(TroikaConfig.apiKey, isEmpty);
-    expect(TroikaConfig.phoneControlEnabled, isFalse);
-    expect(TroikaConfig.onboardingDone, isTrue);
-    expect(TroikaConfig.locationContextEnabled, isFalse);
-    expect(TroikaConfig.sessionId, startsWith('mobile-'));
-    expect(TroikaConfig.sessionId, isNot(previousSession));
-  });
+      expect(TroikaConfig.signedIn, isFalse);
+      expect(TroikaConfig.accountEmail, isEmpty);
+      expect(TroikaConfig.apiKey, isEmpty);
+      expect(TroikaConfig.phoneControlEnabled, isFalse);
+      expect(TroikaConfig.onboardingDone, isTrue);
+      expect(TroikaConfig.locationContextEnabled, isFalse);
+      expect(TroikaConfig.sessionId, startsWith('mobile-'));
+      expect(TroikaConfig.sessionId, isNot(previousSession));
+    },
+  );
 }

@@ -5,11 +5,12 @@ using System.Windows.Media;
 using System.Windows.Threading;
 
 namespace Troika.Desktop {
-    // One amber contour, using the Android StatusOrb geometry and durations.
+    // Shared mint contour, using the Android StatusOrb geometry and durations.
     public sealed class Orb : FrameworkElement {
         private readonly DispatcherTimer timer;
         private readonly Stopwatch clock = new Stopwatch();
         public string State = "idle";
+        public bool LightTheme;
         public bool Motion = SystemParameters.ClientAreaAnimation;
         public Orb() {
             IsHitTestVisible = false;
@@ -43,7 +44,7 @@ namespace Troika.Desktop {
             double triangle=elapsed/breathDuration%2;if(triangle>1)triangle=2-triangle;
             double breath=.5-.5*Math.Cos(triangle*Math.PI),phase=elapsed/motionDuration*2*Math.PI;
             double scale=.93+breath*.08,radius=size*.34*scale;
-            Color color=State=="error"?Color.FromRgb(229,96,77):Color.FromRgb(245,166,35);
+            Color color=State=="error"?Color.FromRgb(229,96,77):Color.FromRgb(141,224,180);
             drawing.DrawEllipse(Glow(color,.28,.13,.48),null,center,size*.52,size*.52);
             drawing.DrawEllipse(Glow(color,.96,.54,.56),null,center,size*.25*scale,size*.25*scale);
             double amplitude=State=="listening"?8:State=="speaking"?10:State=="acting"?5:State=="thinking"?3:2+breath*2;
@@ -61,7 +62,7 @@ namespace Troika.Desktop {
             DrawSignal(drawing,center,size,phase);
         }
         private void DrawSignal(DrawingContext drawing,Point center,double size,double phase){
-            var ink=new SolidColorBrush(Color.FromRgb(255,248,231));
+            var ink=new SolidColorBrush(LightTheme?Color.FromRgb(31,41,35):Color.FromRgb(244,247,244));
             var pen=new Pen(ink,2.5){StartLineCap=PenLineCap.Round,EndLineCap=PenLineCap.Round,LineJoin=PenLineJoin.Round};
             if(State=="listening"||State=="speaking"){
                 for(int i=0;i<5;i++){double h=12+(Math.Sin(phase*2+i*.9)+1)*14;drawing.DrawRoundedRectangle(ink,null,new Rect(center.X-18+i*8,center.Y-h/2,4,h),2,2);}return;
@@ -74,7 +75,11 @@ namespace Troika.Desktop {
             if(State=="done"){drawing.DrawLine(pen,new Point(center.X-10,center.Y),new Point(center.X-2,center.Y+8));drawing.DrawLine(pen,new Point(center.X-2,center.Y+8),new Point(center.X+12,center.Y-9));return;}
             if(State=="error"){drawing.DrawLine(pen,new Point(center.X,center.Y-12),new Point(center.X,center.Y+5));drawing.DrawEllipse(ink,null,new Point(center.X,center.Y+12),1.6,1.6);return;}
             var microphone=BrandAssets.Load(State=="acting"?"voice-acting.png":State=="approval"?"voice-approval.png":"mic.png");
-            if(microphone!=null){double icon=size*36/260;drawing.DrawImage(microphone,new Rect(center.X-icon/2,center.Y-icon/2,icon,icon));}
+            if(microphone!=null){
+                double icon=size*36/260;var rectangle=new Rect(center.X-icon/2,center.Y-icon/2,icon,icon);
+                if(LightTheme){drawing.PushOpacityMask(new ImageBrush(microphone){Stretch=Stretch.Uniform});drawing.DrawRectangle(ink,null,rectangle);drawing.Pop();}
+                else drawing.DrawImage(microphone,rectangle);
+            }
         }
     }
 }

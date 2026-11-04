@@ -22,11 +22,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
     _reload();
   }
 
-  void _reload() => setState(() => _future = _api.listSessions(limit: 100));
+  void _reload() {
+    final future = _api.listSessions(limit: 100);
+    setState(() {
+      _future = future;
+    });
+  }
 
   @override
   Widget build(BuildContext context) => TroikaPage(
-        appBar: AppBar(title: const Text('История'), actions: [
+        appBar: AppBar(title: const Text('Разговоры'), actions: [
           IconButton(
               tooltip: 'Обновить',
               onPressed: _reload,

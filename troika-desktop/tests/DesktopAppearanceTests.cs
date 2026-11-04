@@ -2,6 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Net;
+using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -11,6 +14,11 @@ using System.Windows.Media;
 using Troika.Desktop;
 
 public static class DesktopAppearanceTests {
+    private sealed class NavigationHandler : HttpMessageHandler {
+        public Func<HttpRequestMessage, Task<HttpResponseMessage>> Route;
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellation) { return Route(request); }
+    }
+    private static HttpResponseMessage Messages(string content) { return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(Json.Encode(new { messages = new[] { new { role = "assistant", content } } })) }; }
     private static object Field(MainWindow window, string name) { return typeof(MainWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(window); }
     private static object Call(MainWindow window, string name, params object[] args) { return typeof(MainWindow).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(window, args); }
     private static void Assert(bool value, string message) { if (!value) throw new InvalidOperationException(message); }
@@ -28,7 +36,18 @@ public static class DesktopAppearanceTests {
             window.Dispatcher.BeginInvoke(new Action(async delegate {
                 try {
                     window.UpdateLayout();
+                    Assert(((Grid)Field(window, "hero")).Visibility == Visibility.Visible && ((ScrollViewer)Field(window, "conversationScroll")).Visibility == Visibility.Collapsed, "Opening the application must show the voice home.");
                     var navigation = (Dictionary<string, Button>)Field(window, "navigation");
+                    string[] destinations = { "", "Разговоры", "Дела", "Файлы", "Разработка", "Память", "Возможности", "Аккаунт" };
+                    string[] labels = { "Главная", "Разговоры", "Дела", "Файлы", "Разработка", "Память", "Возможности", "Настройки" };
+                    for (int index = 0; index < destinations.Length; index++) {
+                        Assert(navigation.ContainsKey(destinations[index]) && AutomationProperties.GetName(navigation[destinations[index]]) == labels[index], "A shared destination is missing or mislabeled: " + labels[index]);
+                    }
+                    await (Task)Call(window, "OpenPanelTask", "Разговоры");
+                    window.UpdateLayout();
+                    Assert((string)Field(window, "openPanel") == "Разговоры" && ((TextBlock)Field(window, "panelTitle")).Text == "Разговоры", "Conversation navigation does not open its own destination.");
+                    Assert(Descendants<TextBlock>(window).Any(block => block.Text == "Войдите, чтобы открыть разговоры."), "Unsigned conversation history fails to offer the account entry.");
+                    Call(window, "ClosePanel");
                     var profile = navigation["Аккаунт"];
                     var point = profile.TranslatePoint(new Point(0, 0), window);
                     Assert(profile.IsVisible && point.Y >= 0 && point.Y + profile.ActualHeight <= window.ActualHeight, "Profile is clipped at the minimum window size.");
@@ -36,10 +55,24 @@ public static class DesktopAppearanceTests {
                     Assert(((Border)Field(window, "sidebar")).IsVisible, "Opening a destination hides navigation.");
                     navigation[""].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                     Assert(((Grid)Field(window, "center")).Visibility == Visibility.Visible, "Home destination does not restore the assistant.");
-                    Console.WriteLine("PASS navigation and profile remain reachable at minimum size");
+                    Console.WriteLine("PASS shared destinations open correctly and settings remain reachable at minimum size");
 
                     ((TextBox)Field(window, "composer")).Text = "Несохранённый черновик";
                     var answer = (TextBlock)Call(window, "AddMessage", "assistant", "Результат для проверки.");
+                    var currentApi = (ApiClient)Field(window, "api"); currentApi.SessionId = "desktop-navigation-fixture";
+                    var currentTranscript = (StackPanel)Field(window, "transcript"); int messageCount = currentTranscript.Children.Count;
+                    Assert(AutomationProperties.GetHelpText(navigation["Разговоры"]) == "Текущий раздел", "An open conversation is incorrectly labeled as Home.");
+                    navigation[""].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Assert(((Grid)Field(window, "hero")).Visibility == Visibility.Visible && ((ScrollViewer)Field(window, "conversationScroll")).Visibility == Visibility.Collapsed, "Home navigation keeps the transcript visible instead of the voice home.");
+                    Assert(currentTranscript.Children.Count == messageCount && answer.Text == "Результат для проверки." && ((TextBox)Field(window, "composer")).Text == "Несохранённый черновик" && currentApi.SessionId == "desktop-navigation-fixture", "Returning Home loses messages, the unsent draft or the current session.");
+                    await (Task)Call(window, "OpenPanelTask", "Дела"); Call(window, "ClosePanel");
+                    Assert(((Grid)Field(window, "hero")).Visibility == Visibility.Visible, "Closing a panel opened from Home unexpectedly restores the conversation.");
+                    await (Task)Call(window, "OpenPanelTask", "Разговоры");
+                    Descendants<Button>(window).Single(button => AutomationProperties.GetName(button) == "Продолжить разговор").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Assert(((ScrollViewer)Field(window, "conversationScroll")).Visibility == Visibility.Visible && currentTranscript.Children.Count == messageCount && ((TextBox)Field(window, "composer")).Text == "Несохранённый черновик", "Continuing a conversation reloads or loses its local content.");
+                    await (Task)Call(window, "OpenPanelTask", "Дела"); Call(window, "ClosePanel");
+                    Assert(((ScrollViewer)Field(window, "conversationScroll")).Visibility == Visibility.Visible && AutomationProperties.GetHelpText(navigation["Разговоры"]) == "Текущий раздел", "Closing a panel loses the conversation destination.");
+                    Console.WriteLine("PASS voice Home and conversation navigation preserve messages, draft and session");
                     typeof(MainWindow).GetField("light", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(window, true);
                     Call(window, "RebuildAppearance");
                     Assert(((TextBox)Field(window, "composer")).Text == "Несохранённый черновик" && answer.Text == "Результат для проверки.", "Appearance change loses conversation or draft.");
@@ -47,7 +80,11 @@ public static class DesktopAppearanceTests {
                     Assert(((ScrollViewer)Field(window, "conversationScroll")).Visibility == Visibility.Visible, "Appearance change hides the saved conversation.");
                     Console.WriteLine("PASS changing appearance preserves conversation and unsent draft");
 
-                    await (Task)Call(window, "OpenPanelTask", "Возможности");
+                    await (Task)Call(window, "OpenPanelTask", "Возможности"); window.UpdateLayout();
+                    Assert(Descendants<TextBlock>(window).Any(block => block.Text == "Войдите, чтобы управлять возможностями аккаунта."), "Capabilities navigation opens device actions instead of the account catalogue.");
+                    await (Task)Call(window, "OpenPanelTask", "Каталог возможностей");
+                    Assert((string)Field(window, "openPanel") == "Возможности", "The legacy catalogue route fails to select the shared destination.");
+                    await (Task)Call(window, "OpenPanelTask", "Действия на ПК");
                     foreach (double width in new[] { 780.0, 960.0 }) {
                         window.Width = width; window.UpdateLayout();
                         var cards = ((StackPanel)Field(window, "panelContent")).Children.OfType<WrapPanel>().First();
@@ -90,6 +127,31 @@ public static class DesktopAppearanceTests {
                     Assert(taskName.Text == "Несохранённое дело" && reminderDate.SelectedDate == DateTime.Today.AddDays(2), "Collapsing the task form loses its draft or reminder date.");
                     Console.WriteLine("PASS task form preserves draft and date while calendar remains available");
 
+                    var originalApi = (ApiClient)Field(window, "api");
+                    var handler = new NavigationHandler();
+                    using (var historyApi = new ApiClient(handler, "https://example.test") { Account = new AccountSession { Email = "navigation@example.test", DeviceId = "fixture-device", Token = "trk_live_fixture", RefreshToken = "trk_refresh_fixture", HomeSession = "fixture-home", ExpiresAt = 9999999999 }, SessionId = "fixture-current" }) {
+                        typeof(MainWindow).GetField("api", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(window, historyApi);
+                        try {
+                            var delayed = new TaskCompletionSource<HttpResponseMessage>(); handler.Route = httpRequest => delayed.Task;
+                            Call(window, "ShowHome"); var pendingHistory = (Task)Call(window, "LoadConversation", "fixture-old");
+                            Call(window, "ShowHome"); delayed.SetResult(Messages("Запоздалая история")); await pendingHistory;
+                            Assert(((Grid)Field(window, "hero")).Visibility == Visibility.Visible && historyApi.SessionId == "fixture-current", "A delayed history response overrides a later Home action.");
+                            handler.Route = httpRequest => {
+                                historyApi.Account = new AccountSession { Email = "navigation@example.test", DeviceId = "fixture-device", Token = "trk_live_refreshed_fixture", RefreshToken = "trk_refresh_refreshed_fixture", HomeSession = "fixture-home", ExpiresAt = 9999999999 };
+                                return Task.FromResult(Messages("Сохранённый разговор"));
+                            };
+                            await (Task)Call(window, "LoadConversation", "fixture-restored");
+                            window.UpdateLayout();
+                            Assert(historyApi.SessionId == "fixture-restored" && ((ScrollViewer)Field(window, "conversationScroll")).Visibility == Visibility.Visible && Descendants<TextBlock>(window).Any(block => block.Text == "Сохранённый разговор"), "Refreshing a session for the same account incorrectly hides the selected conversation: session=" + historyApi.SessionId + ", status=" + ((TextBlock)Field(window, "status")).Text);
+                            delayed = new TaskCompletionSource<HttpResponseMessage>(); handler.Route = httpRequest => delayed.Task;
+                            pendingHistory = (Task)Call(window, "LoadConversation", "fixture-other");
+                            historyApi.Account = new AccountSession { Email = "other@example.test", DeviceId = "other-device", Token = "trk_live_other_fixture", RefreshToken = "trk_refresh_other_fixture", HomeSession = "other-home", ExpiresAt = 9999999999 };
+                            delayed.SetResult(Messages("Чужая история")); await pendingHistory;
+                            Assert(historyApi.SessionId == "fixture-restored" && !Descendants<TextBlock>(window).Any(block => block.Text == "Чужая история"), "A history response crosses an account change.");
+                        } finally { typeof(MainWindow).GetField("api", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(window, originalApi); }
+                    }
+                    Console.WriteLine("PASS delayed history respects Home, account changes and same-account refresh");
+
                     var approval = new TaskCompletionSource<string>();
                     typeof(MainWindow).GetField("pendingApproval", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(window, approval);
                     await (Task)Call(window, "OpenPanelTask", "Подтверждение");
@@ -98,7 +160,7 @@ public static class DesktopAppearanceTests {
                     Call(window, "ClosePanel");
                     Assert(approval.Task.IsCompleted && approval.Task.Result == "deny", "Closing approval does not deny the action.");
                     Console.WriteLine("PASS navigation preserves approval and closing it denies the action");
-                    exit = 0; Console.WriteLine("6 desktop appearance checks passed.");
+                    exit = 0; Console.WriteLine("8 desktop appearance checks passed.");
                 } catch (Exception error) { Console.Error.WriteLine(error); }
                 finally { window.Close(); app.Shutdown(exit); }
             }));

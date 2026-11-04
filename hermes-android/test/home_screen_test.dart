@@ -4,9 +4,13 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:troika_assistant/config/troika_config.dart';
 import 'package:troika_assistant/screens/chat_screen.dart';
+import 'package:troika_assistant/screens/capabilities_screen.dart';
+import 'package:troika_assistant/screens/development_screen.dart';
+import 'package:troika_assistant/screens/history_screen.dart';
 import 'package:troika_assistant/screens/home_screen.dart';
 import 'package:troika_assistant/screens/settings_overview_screen.dart';
 import 'package:troika_assistant/services/assistant_service.dart';
+import 'package:troika_assistant/services/development_autopilot_service.dart';
 import 'package:troika_assistant/services/assistant_result.dart';
 import 'package:troika_assistant/services/troika_api_service.dart';
 import 'package:troika_assistant/theme/troika_theme.dart';
@@ -23,8 +27,9 @@ void main() {
     await TroikaConfig.init();
   });
 
-  testWidgets('mobile home is voice-first and chat is secondary',
-      (tester) async {
+  testWidgets('mobile home is voice-first and chat is secondary', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -35,24 +40,117 @@ void main() {
     await tester.pump();
 
     expect(find.byType(StatusOrb), findsOneWidget);
-    expect(find.text('Скажи, что нужно'), findsOneWidget);
-    expect(find.text('Нажми и говори'), findsOneWidget);
-    expect(find.text('Можно начать с любой задачи'), findsOneWidget);
+    expect(find.text('Чем помочь?'), findsOneWidget);
+    expect(find.text('Можно просто сказать'), findsOneWidget);
+    expect(find.text('Нажми на микрофон'), findsOneWidget);
     expect(_orb(tester).state, VoiceOrbState.idle);
-    expect(find.text('Текст'), findsOneWidget);
+    expect(find.byTooltip('Текст'), findsOneWidget);
     expect(find.byType(ChatScreen), findsNothing);
+    expect(find.byType(NavigationBar), findsNothing);
+    expect(find.text('Спроси что угодно'), findsOneWidget);
+    await tester.tap(find.byTooltip('Меню'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Главная'), findsOneWidget);
-    expect(find.text('Дела'), findsOneWidget);
-    expect(find.text('Файлы'), findsOneWidget);
-    expect(find.text('Профиль'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Дела'), findsOneWidget);
+    expect(find.text('Разговоры'), findsOneWidget);
+    expect(find.text('Настройки'), findsOneWidget);
+    await tester.tap(find.text('Главная'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
-    await tester.tap(find.text('Текст'));
+    await tester.tap(find.byTooltip('Текст'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
 
     expect(find.byType(ChatScreen), findsOneWidget);
     expect(find.text('Сообщение…'), findsOneWidget);
 
+    await tester.pumpWidget(const SizedBox.shrink());
+    assistant.dispose();
+  });
+
+  testWidgets(
+    'mobile navigation exposes the same product sections as Windows',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final assistant = AssistantService();
+      await tester.pumpWidget(_app(assistant));
+      await tester.pump();
+      await tester.tap(find.byTooltip('Меню'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      final tiles = find.descendant(
+        of: find.byType(Drawer),
+        matching: find.byType(ListTile),
+      );
+      expect(
+        tester
+            .widgetList<ListTile>(tiles)
+            .map((tile) => (tile.title! as Text).data),
+        [
+          'Главная',
+          'Разговоры',
+          'Дела',
+          'Файлы',
+          'Разработка',
+          'Память',
+          'Возможности',
+          'Настройки',
+        ],
+      );
+      await tester.tap(find.widgetWithText(ListTile, 'Разговоры'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byType(HistoryScreen), findsOneWidget);
+      tester.state<NavigatorState>(find.byType(Navigator)).pop();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      for (final (label, type) in [
+        ('Разработка', DevelopmentScreen),
+        ('Возможности', CapabilitiesScreen),
+      ]) {
+        await tester.tap(find.byTooltip('Меню'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.tap(find.widgetWithText(ListTile, label));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byType(type), findsOneWidget);
+        tester.state<NavigatorState>(find.byType(Navigator)).pop();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      assistant.dispose();
+      DevelopmentAutopilotService.instance.dispose();
+    },
+  );
+
+  testWidgets('home input sends once and opens the shared conversation', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final assistant = _QueryAssistant();
+    await tester.pumpWidget(_app(assistant));
+    await tester.pump();
+    final send = tester.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Icons.arrow_upward_rounded),
+    );
+    expect(send.onPressed, isNull);
+    await tester.enterText(find.byType(TextField), 'Подготовь план');
+    await tester.pump();
+    await tester.tap(find.byTooltip('Отправить'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(assistant.queries, ['Подготовь план']);
+    expect(find.byType(ChatScreen), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     assistant.dispose();
   });
@@ -68,8 +166,8 @@ void main() {
     await tester.pump();
 
     expect(find.byType(StatusOrb), findsOneWidget);
-    expect(find.text('Скажи, что нужно'), findsOneWidget);
-    expect(find.text('Текст'), findsOneWidget);
+    expect(find.text('Чем помочь?'), findsOneWidget);
+    expect(find.byTooltip('Текст'), findsOneWidget);
     expect(find.byType(ChatScreen), findsNothing);
     expect(find.byType(NavigationBar), findsNothing);
 
@@ -77,8 +175,9 @@ void main() {
     assistant.dispose();
   });
 
-  testWidgets('Windows switches between Command Center and Compact Assistant',
-      (tester) async {
+  testWidgets('Windows switches between Command Center and Compact Assistant', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -89,8 +188,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('Главная'), findsOneWidget);
-    expect(find.text('Дела'), findsOneWidget);
-    expect(find.text('История'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Дела'), findsOneWidget);
+    expect(find.text('Разговоры'), findsOneWidget);
     expect(find.text('Память'), findsOneWidget);
     expect(find.text('Compact'), findsOneWidget);
 
@@ -110,8 +209,9 @@ void main() {
     assistant.dispose();
   });
 
-  testWidgets('home prioritizes a completed file over the long answer',
-      (tester) async {
+  testWidgets('home prioritizes a completed file over the long answer', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -143,8 +243,9 @@ void main() {
     assistant.dispose();
   });
 
-  testWidgets('unconfirmed answer does not show the completed-action orb',
-      (tester) async {
+  testWidgets('unconfirmed answer does not show the completed-action orb', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -167,8 +268,9 @@ void main() {
     assistant.dispose();
   });
 
-  testWidgets('saved task opens the task surface instead of chat',
-      (tester) async {
+  testWidgets('saved task opens the task surface instead of chat', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -193,8 +295,9 @@ void main() {
     assistant.dispose();
   });
 
-  testWidgets('working state shows one assistant without internal routing',
-      (tester) async {
+  testWidgets('working state shows one assistant without internal routing', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -210,7 +313,7 @@ void main() {
     expect(find.textContaining('инструмент'), findsNothing);
     expect(find.textContaining('модель'), findsNothing);
 
-    await tester.tap(find.text('Текст'));
+    await tester.tap(find.byTooltip('Текст'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.textContaining('Ход мыслей'), findsNothing);
@@ -220,55 +323,64 @@ void main() {
     assistant.dispose();
   });
 
-  testWidgets('normal settings stay small and hide technical connection fields',
-      (tester) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final assistant = AssistantService();
+  testWidgets(
+    'normal settings stay small and hide technical connection fields',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final assistant = AssistantService();
 
-    await tester.pumpWidget(_app(assistant));
-    await tester.tap(find.text('Профиль'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 250));
+      await tester.pumpWidget(_app(assistant));
+      await tester.tap(find.byTooltip('Меню'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('Настройки'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
 
-    expect(find.byType(SettingsOverviewScreen), findsOneWidget);
-    expect(find.text('Голос'), findsOneWidget);
-    expect(find.text('Аккаунт'), findsOneWidget);
-    expect(find.text('Устройства'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Память и приватность'), 160,
-        scrollable: find.byType(Scrollable).first);
-    expect(find.text('Память и приватность'), findsOneWidget);
-    expect(find.text('Фоновое пробуждение'), findsOneWidget);
-    expect(find.text('Выключено'), findsOneWidget);
-    expect(find.text('Что помнит Тройка'), findsOneWidget);
-    expect(find.text('URL сервера'), findsNothing);
-    expect(find.text('API ключ'), findsNothing);
+      expect(find.byType(SettingsOverviewScreen), findsOneWidget);
+      expect(find.text('Голос'), findsOneWidget);
+      expect(find.text('Аккаунт'), findsOneWidget);
+      expect(find.text('Устройства'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('Память и приватность'),
+        160,
+        scrollable: find.byType(Scrollable).last,
+      );
+      expect(find.text('Память и приватность'), findsOneWidget);
+      expect(find.text('Фоновое пробуждение'), findsOneWidget);
+      expect(find.text('Выключено'), findsOneWidget);
+      expect(find.text('Что помнит Тройка'), findsOneWidget);
+      expect(find.text('URL сервера'), findsNothing);
+      expect(find.text('API ключ'), findsNothing);
 
-    await tester.tap(find.text('Этот телефон и разрешения'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 250));
-    expect(find.text('Управление телефоном'), findsOneWidget);
-    expect(find.text('URL сервера'), findsNothing);
-    tester.state<NavigatorState>(find.byType(Navigator)).pop();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.text('Этот телефон и разрешения'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.text('Управление телефоном'), findsOneWidget);
+      expect(find.text('URL сервера'), findsNothing);
+      tester.state<NavigatorState>(find.byType(Navigator)).pop();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
-    await tester.scrollUntilVisible(
-      find.text('Интерфейс'),
-      250,
-      scrollable: find.byType(Scrollable).last,
-    );
-    expect(find.text('Интерфейс'), findsOneWidget);
-    expect(find.text('Дополнительно'), findsNothing);
+      await tester.scrollUntilVisible(
+        find.text('Интерфейс'),
+        250,
+        scrollable: find.byType(Scrollable).last,
+      );
+      expect(find.text('Интерфейс'), findsOneWidget);
+      expect(find.text('Дополнительно'), findsNothing);
 
-    await tester.pumpWidget(const SizedBox.shrink());
-    assistant.dispose();
-  });
+      await tester.pumpWidget(const SizedBox.shrink());
+      assistant.dispose();
+    },
+  );
 
-  testWidgets('sensitive action asks for one-time approval on home',
-      (tester) async {
+  testWidgets('sensitive action asks for one-time approval on home', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -292,8 +404,9 @@ void main() {
     assistant.dispose();
   });
 
-  testWidgets('listening shows animated orb and one-line transcript',
-      (tester) async {
+  testWidgets('listening shows animated orb and one-line transcript', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -306,10 +419,7 @@ void main() {
     expect(_orb(tester).state, VoiceOrbState.listening);
     expect(find.text('Слушаю'), findsWidgets);
     expect(find.text('“Создай отчёт к пятнице”'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('voice-live-transcript')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('voice-live-transcript')), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     assistant.dispose();
@@ -345,7 +455,7 @@ void main() {
     final theme = buildTroikaLightTheme();
 
     expect(theme.brightness, Brightness.light);
-    expect(theme.colorScheme.primary, const Color(0xFF8E5419));
+    expect(theme.colorScheme.primary, TroikaColors.brandDeep);
     expect(theme.scaffoldBackgroundColor, TroikaLightColors.bg);
     expect(theme.textTheme.bodyLarge?.color, TroikaLightColors.text);
   });
@@ -372,6 +482,20 @@ void main() {
 
 StatusOrb _orb(WidgetTester tester) {
   return tester.widget<StatusOrb>(find.byType(StatusOrb));
+}
+
+class _QueryAssistant extends AssistantService {
+  final queries = <String>[];
+
+  @override
+  Future<void> sendTextQuery(
+    String text, {
+    List<String> imageDataUrls = const [],
+    bool speak = false,
+    bool fromVoice = false,
+  }) async {
+    queries.add(text);
+  }
 }
 
 class _ResultAssistant extends AssistantService {

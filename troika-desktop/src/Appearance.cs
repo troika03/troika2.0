@@ -9,17 +9,19 @@ using System.Windows.Shapes;
 namespace Troika.Desktop {
     // The Android palette is shared visually; Windows keeps its own native layout.
     public sealed partial class MainWindow {
-        private string interfaceAccent = "amber";
+        private string interfaceAccent = "mint";
         private readonly Dictionary<string, Button> navigation = new Dictionary<string, Button>();
-        private Brush glass, tint;
+        private Brush glass, tint, navigationSurface;
 
         private void ApplyPalette() {
-            background = Color(light ? "#F3F0EA" : "#0C0B0A");
-            surface = Color(light ? "#FFFFFF" : "#21211D");
-            text = Color(light ? "#0C0B0A" : "#F3F0EA");
-            muted = Color(light ? "#68675E" : "#B2B0A3");
-            line = Color(light ? "#DEDBD1" : "#36362E");
+            background = Color(light ? "#FAFCF9" : "#202322");
+            navigationSurface = Color(light ? "#F0F3EE" : "#181B1A");
+            surface = Color(light ? "#EDF2EC" : "#2C302E");
+            text = Color(light ? "#1F2923" : "#F4F7F4");
+            muted = Color(light ? "#68756B" : "#A4ADA6");
+            line = Color(light ? "#DDE5DB" : "#3A413D");
             var accents = new Dictionary<string, string[]> {
+                { "mint", new[] { "#286747", "#A7E4BF" } },
                 { "amber", new[] { "#8E5419", "#F5A623" } },
                 { "teal", new[] { "#00695C", "#65C8B9" } },
                 { "blue", new[] { "#245B9A", "#82B9F5" } },
@@ -27,16 +29,18 @@ namespace Troika.Desktop {
                 { "rose", new[] { "#AD3E56", "#FFA1AE" } },
                 { "green", new[] { "#537735", "#A6CF82" } }
             };
-            if (!accents.ContainsKey(interfaceAccent)) interfaceAccent = "amber";
+            // Older saved accent choices remain intact; only an absent/unknown choice uses the new default.
+            if (!accents.ContainsKey(interfaceAccent)) interfaceAccent = "mint";
             accent = Color(accents[interfaceAccent][light ? 0 : 1]);
-            accentText = Color(light ? "#FFFFFF" : "#211A11");
-            glass = surface;
+            accentText = Color(light ? "#FFFFFF" : "#1F2923");
+            var pane = ((SolidColorBrush)surface).Color;
+            glass = new SolidColorBrush(System.Windows.Media.Color.FromArgb(224, pane.R, pane.G, pane.B));
             var tone = ((SolidColorBrush)accent).Color;
-            tint = new SolidColorBrush(System.Windows.Media.Color.FromArgb(light ? (byte)24 : (byte)40, tone.R, tone.G, tone.B));
+            tint = interfaceAccent == "mint" ? Color(light ? "#E6F3E9" : "#293A30") : new SolidColorBrush(System.Windows.Media.Color.FromArgb(light ? (byte)24 : (byte)40, tone.R, tone.G, tone.B));
         }
 
         private Button NavigationButton(string title, string icon, string panel) {
-            var button = Button(title, () => { if (panel.Length == 0) ClosePanel(); else OpenPanel(panel); }, false);
+            var button = Button(title, () => { if (panel.Length == 0) ShowHome(); else OpenPanel(panel); }, false);
             var row = new StackPanel { Orientation = Orientation.Horizontal };
             row.Children.Add(OutlineIcon(icon, text));
             var label = Label(title, 14, text); label.Margin = new Thickness(12, 0, 0, 0); label.VerticalAlignment = VerticalAlignment.Center; row.Children.Add(label);
@@ -46,8 +50,9 @@ namespace Troika.Desktop {
         }
 
         private void UpdateNavigation() {
+            string destination = openPanel.Length > 0 ? openPanel : conversationScroll != null && conversationScroll.Visibility == Visibility.Visible ? "Разговоры" : "";
             foreach (var entry in navigation) {
-                bool selected = entry.Key == openPanel;
+                bool selected = entry.Key == destination || entry.Key == "Аккаунт" && destination == "Действия на ПК";
                 var button = entry.Value; button.Background = selected ? tint : Brushes.Transparent;
                 var row = (StackPanel)button.Content;
                 ((Path)row.Children[0]).Stroke = selected ? accent : muted;
@@ -61,6 +66,7 @@ namespace Troika.Desktop {
             string geometry;
             switch (name) {
                 case "home": geometry = "M3,10 L12,3 21,10 M5,9 L5,21 10,21 10,15 14,15 14,21 19,21 19,9"; break;
+                case "history": geometry = "M3,5 L3,11 9,11 M3,11 A9,9 0 1 1 5,19 M12,7 L12,12 16,14"; break;
                 case "tasks": geometry = "M3,6 L5,8 8,4 M11,6 L21,6 M3,14 L5,16 8,12 M11,14 L21,14 M11,21 L21,21"; break;
                 case "files": geometry = "M3,6 L10,6 12,8 21,8 21,20 3,20 Z M3,6 L3,4 9,4 11,6"; break;
                 case "profile": geometry = "M16,7 A4,4 0 1 1 8,7 A4,4 0 1 1 16,7 M4,21 L4,19 C4,12 20,12 20,19 L20,21"; break;
@@ -77,8 +83,8 @@ namespace Troika.Desktop {
                 if (busy || recorder.Recording || speaking || localCheck != null || developmentRelay != null && developmentRelay.Checking) { SetStatus("Сначала остановите текущую задачу.", true); return; }
                 light = value; RebuildAppearance();
             });
-            var choices = new[] { "amber", "teal", "blue", "violet", "rose", "green" };
-            var names = new[] { "Янтарный", "Бирюзовый", "Синий", "Фиолетовый", "Розовый", "Зелёный" };
+            var choices = new[] { "mint", "amber", "teal", "blue", "violet", "rose", "green" };
+            var names = new[] { "Мятный · Тройка", "Янтарный", "Бирюзовый", "Синий", "Фиолетовый", "Розовый", "Зелёный" };
             var picker = new ComboBox { ItemsSource = names, SelectedIndex = Array.IndexOf(choices, interfaceAccent), MinHeight = 44, FontSize = 14, Margin = new Thickness(0, 8, 0, 0) };
             AccessibleName(picker, "Цвет акцента");
             picker.SelectionChanged += delegate {
@@ -87,7 +93,7 @@ namespace Troika.Desktop {
                 interfaceAccent = choices[picker.SelectedIndex]; RebuildAppearance();
             };
             panelContent.Children.Add(Label("Цвет акцента", 14, muted)); panelContent.Children.Add(picker);
-            SurfaceGroup(appearance, "Интерфейс", "Тема и акцент сохраняются на этом ПК.", "spark");
+            SurfaceGroup(appearance, "Интерфейс", "", "spark");
         }
 
         private void RebuildAppearance() {
@@ -98,7 +104,7 @@ namespace Troika.Desktop {
             transcript.Children.Clear(); SaveSettings(); Build();
             foreach (var message in messages) { Restyle(message); transcript.Children.Add(message); }
             composer.Text = draft;
-            if (showingConversation) { hero.Visibility = Visibility.Collapsed; conversationScroll.Visibility = Visibility.Visible; }
+            if (showingConversation) ShowConversation();
             OpenPanel("Аккаунт");
         }
 

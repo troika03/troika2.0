@@ -22,11 +22,7 @@ class StatusOrb extends StatefulWidget {
   final VoiceOrbState state;
   final double size;
 
-  const StatusOrb({
-    super.key,
-    required this.state,
-    this.size = 230,
-  });
+  const StatusOrb({super.key, required this.state, this.size = 230});
 
   @override
   State<StatusOrb> createState() => _StatusOrbState();
@@ -79,8 +75,7 @@ class _StatusOrbState extends State<StatusOrb> with TickerProviderStateMixin {
       VoiceOrbState.thinking => const Duration(milliseconds: 1800),
       VoiceOrbState.acting => const Duration(milliseconds: 2200),
       VoiceOrbState.listening ||
-      VoiceOrbState.speaking =>
-        const Duration(milliseconds: 1200),
+      VoiceOrbState.speaking => const Duration(milliseconds: 1200),
       _ => const Duration(seconds: 8),
     };
     _breath
@@ -201,6 +196,9 @@ class _CenterSignal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final signal = Theme.of(context).brightness == Brightness.dark
+        ? TroikaColors.text
+        : TroikaLightColors.text;
     if (state == VoiceOrbState.listening || state == VoiceOrbState.speaking) {
       return Row(
         mainAxisSize: MainAxisSize.min,
@@ -211,7 +209,7 @@ class _CenterSignal extends StatelessWidget {
             height: 12 + wave * 28,
             margin: const EdgeInsets.symmetric(horizontal: 2),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.9),
+              color: signal,
               borderRadius: BorderRadius.circular(4),
             ),
           );
@@ -226,14 +224,13 @@ class _CenterSignal extends StatelessWidget {
         child: CircularProgressIndicator(
           value: MediaQuery.disableAnimationsOf(context) ? 0.72 : null,
           strokeWidth: 2.5,
-          color: Colors.white,
+          color: signal,
         ),
       );
     }
 
     if (state == VoiceOrbState.idle) {
-      return TroikaSvgIcon('mic',
-          color: const Color(0xFFFFF8E7), size: size * 36 / 260);
+      return TroikaSvgIcon('mic', color: signal, size: size * 36 / 260);
     }
 
     final icon = switch (state) {
@@ -244,7 +241,7 @@ class _CenterSignal extends StatelessWidget {
       VoiceOrbState.error => Icons.priority_high_rounded,
       _ => Icons.circle,
     };
-    return Icon(icon, color: Colors.white, size: size * 36 / 260);
+    return Icon(icon, color: signal, size: size * 36 / 260);
   }
 }
 
@@ -281,7 +278,8 @@ class _OrbContourPainter extends CustomPainter {
     const steps = 96;
     for (var index = 0; index <= steps; index++) {
       final angle = index / steps * 2 * math.pi;
-      final value = radius +
+      final value =
+          radius +
           math.sin(angle * 3 + phase) * amplitude +
           math.cos(angle * 2 - phase * 0.7) * amplitude * 0.45;
       final point =

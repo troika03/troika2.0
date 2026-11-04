@@ -20,11 +20,7 @@ class ChatScreen extends StatefulWidget {
   final VoidCallback? onOpenCommands;
   final VoidCallback? onOpenDocuments;
 
-  const ChatScreen({
-    super.key,
-    this.onOpenCommands,
-    this.onOpenDocuments,
-  });
+  const ChatScreen({super.key, this.onOpenCommands, this.onOpenDocuments});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -52,8 +48,11 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!_scroll.hasClients) return;
       final target = _scroll.position.maxScrollExtent;
       if (animated) {
-        _scroll.animateTo(target,
-            duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+        _scroll.animateTo(
+          target,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
       } else {
         _scroll.jumpTo(target);
       }
@@ -149,8 +148,10 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _sheetItem(IconData icon, String label, VoidCallback onTap) {
     return ListTile(
       leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
-      title:
-          Text(label, style: TextStyle(color: TroikaPalette.of(context).text)),
+      title: Text(
+        label,
+        style: TextStyle(color: TroikaPalette.of(context).text),
+      ),
       onTap: onTap,
     );
   }
@@ -215,7 +216,8 @@ class _ChatScreenState extends State<ChatScreen> {
       _lastCount = messages.length;
       _scrollToBottom();
     }
-    final isBusy = a.state == AssistantState.processing ||
+    final isBusy =
+        a.state == AssistantState.processing ||
         a.state == AssistantState.recording ||
         a.state == AssistantState.speaking;
 
@@ -244,10 +246,10 @@ class _ChatScreenState extends State<ChatScreen> {
     final greeting = hour < 6
         ? 'Доброй ночи'
         : hour < 12
-            ? 'Доброе утро'
-            : hour < 18
-                ? 'Добрый день'
-                : 'Добрый вечер';
+        ? 'Доброе утро'
+        : hour < 18
+        ? 'Добрый день'
+        : 'Добрый вечер';
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(22, 34, 22, 20),
       child: Center(
@@ -269,7 +271,9 @@ class _ChatScreenState extends State<ChatScreen> {
               Text(
                 'Локальные команды готовы. Интернет не нужен.',
                 style: TextStyle(
-                    color: TroikaPalette.of(context).textMuted, fontSize: 15),
+                  color: TroikaPalette.of(context).textMuted,
+                  fontSize: 15,
+                ),
               ),
               const SizedBox(height: 26),
               Wrap(
@@ -313,8 +317,10 @@ class _ChatScreenState extends State<ChatScreen> {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: TroikaColors.error.withOpacity(0.3)),
       ),
-      child: Text(msg,
-          style: const TextStyle(color: TroikaColors.error, fontSize: 13)),
+      child: Text(
+        msg,
+        style: const TextStyle(color: TroikaColors.error, fontSize: 13),
+      ),
     );
   }
 
@@ -335,19 +341,27 @@ class _ChatScreenState extends State<ChatScreen> {
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: bytes != null
-                    ? Image.memory(bytes,
-                        width: 64, height: 64, fit: BoxFit.cover)
+                    ? Image.memory(
+                        bytes,
+                        width: 64,
+                        height: 64,
+                        fit: BoxFit.cover,
+                      )
                     : Container(
                         width: 64,
                         height: 64,
-                        color: TroikaPalette.of(context).surfaceHi),
+                        color: TroikaPalette.of(context).surfaceHi,
+                      ),
               ),
               Positioned(
                 top: -6,
                 right: -6,
                 child: IconButton(
-                  icon: Icon(Icons.cancel,
-                      size: 18, color: TroikaPalette.of(context).textMuted),
+                  icon: Icon(
+                    Icons.cancel,
+                    size: 18,
+                    color: TroikaPalette.of(context).textMuted,
+                  ),
                   onPressed: () => setState(() => _pendingImages.removeAt(i)),
                 ),
               ),
@@ -359,61 +373,81 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _inputBar(AssistantService a, bool isBusy) {
+    final p = TroikaPalette.of(context);
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.add_circle_outline),
-              color: Theme.of(context).colorScheme.primary,
-              onPressed: _attachSheet,
-            ),
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: TroikaPalette.of(context).surface,
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(color: TroikaPalette.of(context).line),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                child: TextField(
-                  controller: _input,
-                  style: TextStyle(color: TroikaPalette.of(context).text),
-                  minLines: 1,
-                  maxLines: 5,
-                  textInputAction: TextInputAction.newline,
-                  decoration: InputDecoration(
-                    hintText: 'Сообщение…',
-                    hintStyle:
-                        TextStyle(color: TroikaPalette.of(context).textFaint),
-                    border: InputBorder.none,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        child: Container(
+          decoration: BoxDecoration(
+            color: p.surface,
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: p.line),
+          ),
+          padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _input,
+                style: TextStyle(color: p.text, fontSize: 16),
+                minLines: 1,
+                maxLines: 5,
+                textInputAction: TextInputAction.newline,
+                decoration: InputDecoration(
+                  hintText: 'Сообщение…',
+                  hintStyle: TextStyle(color: p.textMuted),
+                  filled: false,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
                   ),
                 ),
               ),
-            ),
-            const SizedBox(width: 4),
-            // Микрофон — запуск голосового диалога.
-            IconButton(
-              icon: Icon(isBusy ? Icons.stop_circle : Icons.mic_none),
-              color: Theme.of(context).colorScheme.primary,
-              onPressed: () {
-                // Десктопный push-to-talk: идёт запись → повторное нажатие
-                // останавливает и обрабатывает (STT → Troika → TTS).
-                if (a.state == AssistantState.recording) {
-                  a.stopRecordingAndProcess();
-                } else if (isBusy) {
-                  a.interrupt();
-                } else {
-                  a.startManualRecording();
-                }
-              },
-            ),
-            // Отправить.
-            _SendButton(onTap: () => _send(a)),
-          ],
+              Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Прикрепить',
+                    icon: const Icon(Icons.add_rounded, size: 22),
+                    color: p.textMuted,
+                    onPressed: _attachSheet,
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: isBusy ? 'Остановить' : 'Говорить',
+                    icon: Icon(
+                      isBusy ? Icons.stop_rounded : Icons.mic_none_rounded,
+                    ),
+                    color: p.text,
+                    onPressed: () {
+                      if (a.state == AssistantState.recording) {
+                        a.stopRecordingAndProcess();
+                      } else if (isBusy) {
+                        a.interrupt();
+                      } else {
+                        a.startManualRecording();
+                      }
+                    },
+                  ),
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _input,
+                    builder: (context, value, _) => _SendButton(
+                      onTap:
+                          isBusy ||
+                              a.pendingApproval != null ||
+                              (value.text.trim().isEmpty &&
+                                  _pendingImages.isEmpty)
+                          ? null
+                          : () => _send(a),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -462,11 +496,16 @@ class _QuickCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(icon,
-                    color: Theme.of(context).colorScheme.primary, size: 22),
+                Icon(
+                  icon,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 22,
+                ),
                 const SizedBox(height: 16),
-                Text(title,
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 3),
                 Text(
                   subtitle,
@@ -485,25 +524,16 @@ class _QuickCard extends StatelessWidget {
 }
 
 class _SendButton extends StatelessWidget {
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   const _SendButton({required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primary,
-          shape: BoxShape.circle,
-        ),
-        child:
-            const Icon(Icons.arrow_upward, color: Color(0xFF1A1206), size: 22),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => IconButton.filled(
+    tooltip: 'Отправить',
+    onPressed: onTap,
+    style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
+    icon: const Icon(Icons.arrow_upward_rounded, size: 22),
+  );
 }
 
 class _MessageBubble extends StatelessWidget {
@@ -538,8 +568,9 @@ class _MessageBubble extends StatelessWidget {
           ),
         ),
         child: Column(
-          crossAxisAlignment:
-              isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          crossAxisAlignment: isUser
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.start,
           children: [
             // Картинки
             for (final url in message.imageDataUrls) _imageThumb(url),
@@ -549,10 +580,7 @@ class _MessageBubble extends StatelessWidget {
             if (TroikaConfig.developerDiagnosticsEnabled &&
                 !isUser &&
                 message.hasThoughts)
-              _ThoughtsView(
-                thoughts: message.thoughts,
-                live: message.pending,
-              ),
+              _ThoughtsView(thoughts: message.thoughts, live: message.pending),
             // Текст / индикатор «печатает»
             if (message.pending &&
                 (!TroikaConfig.developerDiagnosticsEnabled ||
@@ -569,8 +597,11 @@ class _MessageBubble extends StatelessWidget {
             if (message.fromVoice)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Icon(Icons.graphic_eq,
-                    size: 12, color: TroikaPalette.of(context).textFaint),
+                child: Icon(
+                  Icons.graphic_eq,
+                  size: 12,
+                  color: TroikaPalette.of(context).textFaint,
+                ),
               ),
           ],
         ),
@@ -600,8 +631,9 @@ class _TypingDots extends StatefulWidget {
 class _TypingDotsState extends State<_TypingDots>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 900))
-    ..repeat();
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat();
 
   @override
   void dispose() {
@@ -625,8 +657,9 @@ class _TypingDotsState extends State<_TypingDots>
               child: Opacity(
                 opacity: op.toDouble(),
                 child: CircleAvatar(
-                    radius: 3,
-                    backgroundColor: TroikaPalette.of(context).textMuted),
+                  radius: 3,
+                  backgroundColor: TroikaPalette.of(context).textMuted,
+                ),
               ),
             );
           }),
@@ -672,9 +705,9 @@ class _LinkifiedTextState extends State<_LinkifiedText> {
     } catch (_) {}
     await Clipboard.setData(ClipboardData(text: url));
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ссылка скопирована')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Ссылка скопирована')));
     }
   }
 
@@ -697,14 +730,16 @@ class _LinkifiedTextState extends State<_LinkifiedText> {
       final url = raw.startsWith('http') ? raw : 'https://$raw';
       final rec = TapGestureRecognizer()..onTap = () => _open(url);
       _recognizers.add(rec);
-      spans.add(TextSpan(
-        text: raw,
-        style: TextStyle(
-          color: Theme.of(context).colorScheme.primary,
-          decoration: TextDecoration.underline,
+      spans.add(
+        TextSpan(
+          text: raw,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.primary,
+            decoration: TextDecoration.underline,
+          ),
+          recognizer: rec,
         ),
-        recognizer: rec,
-      ));
+      );
       last = m.end;
     }
     if (last < text.length) {
@@ -763,8 +798,10 @@ class _ThoughtsViewState extends State<_ThoughtsView> {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               child: Row(
                 children: [
-                  Text(widget.live ? '💭' : '🧠',
-                      style: const TextStyle(fontSize: 13)),
+                  Text(
+                    widget.live ? '💭' : '🧠',
+                    style: const TextStyle(fontSize: 13),
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     widget.live ? 'Размышляет…' : 'Ход мыслей ($count)',
@@ -789,9 +826,7 @@ class _ThoughtsViewState extends State<_ThoughtsView> {
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (final s in widget.thoughts) _stepRow(s),
-                ],
+                children: [for (final s in widget.thoughts) _stepRow(s)],
               ),
             ),
         ],
@@ -835,13 +870,19 @@ class _ThoughtsViewState extends State<_ThoughtsView> {
             child: s.kind == ThoughtKind.thinking
                 ? _TranslatedText(
                     text: text,
-                    style:
-                        TextStyle(color: color, fontSize: 12.5, height: 1.35),
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 12.5,
+                      height: 1.35,
+                    ),
                   )
                 : Text(
                     text,
-                    style:
-                        TextStyle(color: color, fontSize: 12.5, height: 1.35),
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 12.5,
+                      height: 1.35,
+                    ),
                   ),
           ),
         ],

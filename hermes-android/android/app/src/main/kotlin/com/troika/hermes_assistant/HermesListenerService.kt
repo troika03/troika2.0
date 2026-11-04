@@ -12,6 +12,7 @@ import android.os.BatteryManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.speech.RecognitionListener
@@ -44,13 +45,7 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 
-/**
- * Фоновый сервис с rolling buffer:
- *   - один поток постоянно читает с микрофона
- *   - все семплы накапливаются в кольцевой буфер на 4 секунды
- *   - когда амплитуда выше порога — копируем последние 3 сек и отправляем на STT
- *   - если в тексте есть "тройка" — будим UI
- */
+/** Фоновое локальное распознавание ключевого слова и последующий голосовой диалог. */
 class HermesListenerService : Service() {
 
     companion object {
@@ -165,6 +160,11 @@ class HermesListenerService : Service() {
     private var listenerThread: Thread? = null
     private var localWakeRecognizer: SpeechRecognizer? = null
     private val localWakeActive = AtomicBoolean(false)
+    private val localWakeHandler = Handler(Looper.getMainLooper())
+    private val localWakeLifecycle = WakeRecognitionLifecycle()
+    private var localWakePending: Runnable? = null
+    @Volatile private var listenerDestroyed = false
+    private var localWakeUnavailableReason: String? = null
     private var usingOnDeviceWake = false
     private var serviceStartedAt = 0L
     private var serviceStartedBattery = -1
@@ -411,14 +411,16 @@ class HermesListenerService : Service() {
         }
 
         when (intent?.action) {
-            ACTION_STOP -> { stopSelf(); return START_NOT_STICKY }
+            ACTION_STOP -> {
+                isRunning.set(false)
+                stopLocalWakeListener()
+                stopSelf()
+                return START_NOT_STICKY
+            }
             ACTION_TRIGGER_DIALOG -> {
                 if (wakeWordEnabled()) startListening() else startEdgeTts()
                 if (isInDialog.compareAndSet(false, true)) {
-                    if (usingOnDeviceWake) {
-                        try { localWakeRecognizer?.cancel() } catch (_: Exception) {}
-                        localWakeActive.set(false)
-                    }
+                    stopLocalWakeListener()
                     manualDialogActive.set(true)
                     thread(name = "HermesDialogManual") { runDialog(manual = true) }
                 }
@@ -432,8 +434,7 @@ class HermesListenerService : Service() {
             }
             ACTION_PAUSE_WAKE_FOR_FOREGROUND_SPEECH -> {
                 listenerPaused.set(true)
-                try { localWakeRecognizer?.cancel() } catch (_: Exception) {}
-                localWakeActive.set(false)
+                stopLocalWakeListener()
             }
             ACTION_RESUME_WAKE_AFTER_FOREGROUND_SPEECH -> {
                 listenerPaused.set(false)
@@ -460,7 +461,7 @@ class HermesListenerService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun startListening() {
-        if (!wakeWordEnabled()) return
+        if (listenerDestroyed || !wakeWordEnabled()) return
         // startForeground уже вызван в onStartCommand — здесь не дублируем
         if (wakeLock == null) {
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -521,8 +522,8 @@ class HermesListenerService : Service() {
         val now = System.currentTimeMillis()
         sampleBatteryDrain()
 
-        if (usingOnDeviceWake) {
-            if (!isInDialog.get() && !listenerPaused.get() && !localWakeActive.get()) {
+        if (usingOnDeviceWake || wakeWordEnabled()) {
+            if (usingOnDeviceWake && !isInDialog.get() && !listenerPaused.get() && !localWakeActive.get()) {
                 logWatchdog("on-device wake inactive → restart")
                 startLocalWakeCycle(250)
             }
@@ -786,50 +787,135 @@ class HermesListenerService : Service() {
     private fun startOnDeviceWakeListener(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
             !SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
-        ) return false
+        ) {
+            stopLocalWakeListener()
+            updateLocalWakeAvailability("Локальное распознавание русского языка недоступно.")
+            return false
+        }
         isRunning.set(true)
+        localWakeLifecycle.retryAfterExplicitStart()
+        updateLocalWakeAvailability(null)
         startLocalWakeCycle(0)
         return true
     }
 
     private fun startLocalWakeCycle(delayMs: Long) {
-        Handler(mainLooper).postDelayed({
-            if (!wakeWordEnabled() || isInDialog.get() || listenerPaused.get()) return@postDelayed
-            try {
-                if (localWakeRecognizer == null) {
-                    localWakeRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
-                    localWakeRecognizer?.setRecognitionListener(object : RecognitionListener {
-                        override fun onReadyForSpeech(params: Bundle?) { localWakeActive.set(true) }
+        val enqueue: () -> Unit = enqueue@{
+            if (!canListenForWake()) return@enqueue
+            val ticket = localWakeLifecycle.schedule() ?: return@enqueue
+            val pending = Runnable {
+                localWakePending = null
+                if (!canListenForWake()) {
+                    localWakeLifecycle.invalidate()
+                    return@Runnable
+                }
+                if (!localWakeLifecycle.start(ticket)) return@Runnable
+                localWakeActive.set(true)
+                try {
+                    val recognizer = localWakeRecognizer
+                        ?: SpeechRecognizer.createOnDeviceSpeechRecognizer(this).also {
+                            localWakeRecognizer = it
+                        }
+                    recognizer.setRecognitionListener(object : RecognitionListener {
+                        override fun onReadyForSpeech(params: Bundle?) = Unit
                         override fun onBeginningOfSpeech() = Unit
                         override fun onRmsChanged(rmsdB: Float) = Unit
                         override fun onBufferReceived(buffer: ByteArray?) = Unit
                         override fun onEndOfSpeech() = Unit
                         override fun onEvent(eventType: Int, params: Bundle?) = Unit
-                        override fun onPartialResults(results: Bundle?) { inspectLocalWakeResults(results) }
+                        override fun onPartialResults(results: Bundle?) {
+                            if (localWakeLifecycle.isCurrent(ticket) && canListenForWake()) {
+                                inspectLocalWakeResults(results)
+                            }
+                        }
                         override fun onResults(results: Bundle?) {
-                            localWakeActive.set(false)
-                            if (!inspectLocalWakeResults(results)) startLocalWakeCycle(250)
+                            if (!localWakeLifecycle.isCurrent(ticket) || !canListenForWake()) return
+                            if (!inspectLocalWakeResults(results)) {
+                                finishLocalWakeAttempt(ticket, WakeRecognitionLifecycle.Failure.NO_SPEECH)
+                            }
                         }
                         override fun onError(error: Int) {
-                            localWakeActive.set(false)
-                            if (!isInDialog.get() && wakeWordEnabled()) startLocalWakeCycle(700)
+                            finishLocalWakeAttempt(ticket, when (error) {
+                                SpeechRecognizer.ERROR_NO_MATCH,
+                                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> WakeRecognitionLifecycle.Failure.NO_SPEECH
+                                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> WakeRecognitionLifecycle.Failure.BUSY
+                                SpeechRecognizer.ERROR_AUDIO -> WakeRecognitionLifecycle.Failure.AUDIO
+                                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> WakeRecognitionLifecycle.Failure.PERMISSION
+                                SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED,
+                                SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> WakeRecognitionLifecycle.Failure.UNAVAILABLE
+                                else -> WakeRecognitionLifecycle.Failure.TRANSIENT
+                            })
                         }
                     })
+                    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                        putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+                        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                        putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+                        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+                    }
+                    recognizer.startListening(intent)
+                } catch (error: Exception) {
+                    finishLocalWakeAttempt(ticket, if (error is SecurityException) {
+                        WakeRecognitionLifecycle.Failure.PERMISSION
+                    } else {
+                        WakeRecognitionLifecycle.Failure.TRANSIENT
+                    })
+                    android.util.Log.e("HermesListener", "On-device wake start failed: ${error.javaClass.simpleName}")
                 }
-                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
-                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                    putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-                }
-                localWakeActive.set(true)
-                localWakeRecognizer?.startListening(intent)
-            } catch (e: Exception) {
-                localWakeActive.set(false)
-                android.util.Log.e("HermesListener", "On-device wake failed: ${e.message}")
             }
-        }, delayMs)
+            localWakePending = pending
+            localWakeHandler.postDelayed(pending, delayMs)
+        }
+        // Reserve the delayed retry before an already queued watchdog request can run.
+        if (Looper.myLooper() == localWakeHandler.looper) enqueue()
+        else localWakeHandler.post { enqueue() }
+    }
+
+    private fun canListenForWake(): Boolean = !listenerDestroyed && isRunning.get() &&
+        wakeWordEnabled() && !isInDialog.get() && !listenerPaused.get()
+
+    private fun finishLocalWakeAttempt(ticket: Long, failure: WakeRecognitionLifecycle.Failure) {
+        if (!localWakeLifecycle.isCurrent(ticket)) return
+        val delayMs = localWakeLifecycle.complete(ticket, failure)
+        localWakeActive.set(false)
+        if (failure != WakeRecognitionLifecycle.Failure.NO_SPEECH) {
+            try { localWakeRecognizer?.destroy() } catch (_: Exception) {}
+            localWakeRecognizer = null
+        }
+        if (delayMs == null) {
+            android.util.Log.w("HermesListener", "On-device wake needs user action: $failure")
+            updateLocalWakeAvailability(if (failure == WakeRecognitionLifecycle.Failure.PERMISSION) {
+                "Разреши доступ к микрофону в настройках Тройки."
+            } else {
+                "Локальное распознавание русского языка недоступно."
+            })
+        }
+        if (delayMs != null && canListenForWake()) startLocalWakeCycle(delayMs)
+    }
+
+    /** Called on the main thread before handing the microphone to another owner. */
+    private fun stopLocalWakeListener() {
+        localWakeLifecycle.invalidate()
+        localWakePending?.let { localWakeHandler.removeCallbacks(it) }
+        localWakePending = null
+        localWakeActive.set(false)
+        val recognizer = localWakeRecognizer
+        localWakeRecognizer = null
+        try { recognizer?.cancel() } catch (_: Exception) {}
+        try { recognizer?.destroy() } catch (_: Exception) {}
+    }
+
+    private fun updateLocalWakeAvailability(reason: String?) {
+        if (localWakeUnavailableReason == reason) return
+        localWakeUnavailableReason = reason
+        if (!listenerDestroyed && serviceActive) {
+            try {
+                getSystemService(NotificationManager::class.java)?.notify(NOTIF_ID, buildNotification())
+            } catch (_: Exception) {
+                android.util.Log.w("HermesListener", "Wake status notification unavailable")
+            }
+        }
     }
 
     private fun inspectLocalWakeResults(bundle: Bundle?): Boolean {
@@ -844,10 +930,9 @@ class HermesListenerService : Service() {
         if (!matched) return false
         val now = SystemClock.elapsedRealtime()
         val lastWake = lastWakeAcceptedMs.get()
-        if (lastWake != 0L && now - lastWake < 12_000) return true
-        localWakeActive.set(false)
-        try { localWakeRecognizer?.cancel() } catch (_: Exception) {}
+        if (lastWake != 0L && now - lastWake < 12_000) return false
         if (isInDialog.compareAndSet(false, true)) {
+            stopLocalWakeListener()
             lastWakeAcceptedMs.set(now)
             val metrics = getSharedPreferences(PREFS, MODE_PRIVATE)
             metrics.edit().putLong(
@@ -855,10 +940,6 @@ class HermesListenerService : Service() {
                 metrics.getLong("troika_wake_matches", 0) + 1
             ).apply()
             android.util.Log.i("HermesListener", "LOCAL WAKE_WORD accepted")
-            Handler(mainLooper).post {
-                try { localWakeRecognizer?.destroy() } catch (_: Exception) {}
-                localWakeRecognizer = null
-            }
             thread(name = "TroikaDialog") { runDialog() }
         }
         return true
@@ -1909,6 +1990,7 @@ class HermesListenerService : Service() {
     }
 
     override fun onDestroy() {
+        listenerDestroyed = true
         getSharedPreferences(PREFS, MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(accountIdentityListener)
         isInDialog.set(false)
         cancelReplySpeech()
@@ -1917,11 +1999,7 @@ class HermesListenerService : Service() {
         isRunning.set(false)
         manualDialogActive.set(false)
         listenerThread?.interrupt()
-        Handler(mainLooper).post {
-            try { localWakeRecognizer?.destroy() } catch (_: Exception) {}
-            localWakeRecognizer = null
-            localWakeActive.set(false)
-        }
+        stopLocalWakeListener()
         watchdogThread?.interrupt()
         watchdogThread = null
         wakeLock?.let { if (it.isHeld) it.release() }
@@ -1974,10 +2052,15 @@ class HermesListenerService : Service() {
         )
 
         val wakeEnabled = wakeWordEnabled()
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(if (wakeEnabled) "Тройка слушает" else "Тройка активна")
+        val unavailable = if (wakeEnabled) localWakeUnavailableReason else null
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle(when {
+                unavailable != null -> "Пробуждение приостановлено"
+                wakeEnabled -> "Тройка слушает"
+                else -> "Тройка активна"
+            })
             .setContentText(
-                if (wakeEnabled) "Скажи «Тройка» чтобы активировать"
+                unavailable ?: if (wakeEnabled) "Скажи «Тройка» чтобы активировать"
                 else "Идёт голосовой диалог или подключено управление телефоном"
             )
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
@@ -1985,9 +2068,18 @@ class HermesListenerService : Service() {
             .addAction(android.R.drawable.ic_delete, "Остановить", stopPi)
             .setOngoing(true)
             .setSilent(true)
+            .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .build()
+        if (unavailable != null) {
+            val retry = Intent(this, HermesListenerService::class.java).apply { action = ACTION_START }
+            val retryPi = PendingIntent.getService(
+                this, 2, retry,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            notification.addAction(android.R.drawable.ic_menu_rotate, "Повторить", retryPi)
+        }
+        return notification.build()
     }
 
     private fun createNotificationChannel() {

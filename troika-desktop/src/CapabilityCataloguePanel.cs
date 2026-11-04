@@ -30,7 +30,7 @@ namespace Troika.Desktop {
                 panelContent.Children.Add(Label(outdated != null && outdated.Status == 404
                     ? "Каталог возможностей пока недоступен. Попробуйте позже."
                     : "Не удалось загрузить возможности. Проверьте соединение и повторите.", 14, muted));
-                AddPanelButton("Повторить", () => OpenPanel("Каталог возможностей"), false);
+                AddPanelButton("Повторить", () => OpenPanel("Возможности"), false);
                 throw;
             }
         }
@@ -67,8 +67,8 @@ namespace Troika.Desktop {
                 SurfaceGroup(itemCard, Json.Text(item, "title"), "", "spark");
             }
             int actions = panelContent.Children.Count;
-            AddPanelButton("Обновить", () => OpenPanel("Каталог возможностей"), false);
-            AddPanelButton("Назад", () => OpenPanel("Возможности"), false);
+            AddPanelButton("Обновить", () => OpenPanel("Возможности"), false);
+            AddPanelButton("Готово", ClosePanel, false);
             CompactActions(actions);
         }
         private async Task SaveCapabilityPreference(string id, bool enabled) {

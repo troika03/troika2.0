@@ -27,33 +27,43 @@ void main() {
       'xyz.luan/audioplayers.global/events',
     ]) {
       messenger.setMockMethodCallHandler(
-          MethodChannel(channel), (_) async => null);
+        MethodChannel(channel),
+        (_) async => null,
+      );
     }
     messenger.setMockMethodCallHandler(
-        const MethodChannel('xyz.luan/audioplayers'), (call) async {
-      if (call.method == 'create') {
-        final playerId = (call.arguments as Map)['playerId'];
-        messenger.setMockMethodCallHandler(
+      const MethodChannel('xyz.luan/audioplayers'),
+      (call) async {
+        if (call.method == 'create') {
+          final playerId = (call.arguments as Map)['playerId'];
+          messenger.setMockMethodCallHandler(
             MethodChannel('xyz.luan/audioplayers/events/$playerId'),
-            (_) async => null);
-      }
-      return null;
-    });
+            (_) async => null,
+          );
+        }
+        return null;
+      },
+    );
   });
 
   setUpAll(() async {
     final font = FontLoader('Golos Text')
       ..addFont(rootBundle.load('assets/fonts/GolosText-Variable.ttf'));
     await font.load();
+    final icons = FontLoader('MaterialIcons')
+      ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
+    await icons.load();
   });
 
   for (final dark in [true, false]) {
     for (final width in [360.0, 390.0, 430.0]) {
-      testWidgets('native home ${dark ? 'dark' : 'light'} at $width',
-          (tester) async {
+      testWidgets('native home ${dark ? 'dark' : 'light'} at $width', (
+        tester,
+      ) async {
         debugDisableShadows = false;
-        SharedPreferences.setMockInitialValues(
-            {'troika_server_url': 'https://example.invalid'});
+        SharedPreferences.setMockInitialValues({
+          'troika_server_url': 'https://example.invalid',
+        });
         await TroikaConfig.init();
         tester.view.physicalSize = Size(width, 844);
         tester.view.devicePixelRatio = 1;
@@ -61,35 +71,42 @@ void main() {
         addTearDown(tester.view.resetDevicePixelRatio);
         final assistant = AssistantService();
         final boundary = GlobalKey();
-        await tester.pumpWidget(ChangeNotifierProvider<AssistantService>.value(
-          value: assistant,
-          child: MaterialApp(
-            theme: dark ? buildTroikaTheme() : buildTroikaLightTheme(),
-            builder: (context, child) => MediaQuery(
-              data: MediaQuery.of(context).copyWith(
+        await tester.pumpWidget(
+          ChangeNotifierProvider<AssistantService>.value(
+            value: assistant,
+            child: MaterialApp(
+              theme: dark ? buildTroikaTheme() : buildTroikaLightTheme(),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
                   disableAnimations: true,
-                  textScaler: TextScaler.linear(width == 360 ? 1.5 : 1)),
-              child: RepaintBoundary(key: boundary, child: child!),
+                  textScaler: TextScaler.linear(width == 360 ? 1.5 : 1),
+                ),
+                child: RepaintBoundary(key: boundary, child: child!),
+              ),
+              home: const HomeScreen(windowsShellOverride: false),
             ),
-            home: const HomeScreen(windowsShellOverride: false),
           ),
-        ));
+        );
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
         expect(find.byType(TroikaBrand), findsOneWidget);
-        expect(find.text('Скажи, что нужно'), findsOneWidget);
-        final text = tester.widget<Text>(find.text('Скажи, что нужно'));
-        final context = tester.element(find.text('Скажи, что нужно'));
+        expect(find.text('Чем помочь?'), findsOneWidget);
+        final text = tester.widget<Text>(find.text('Чем помочь?'));
+        final context = tester.element(find.text('Чем помочь?'));
         expect(
-            text.style?.fontFamily ??
-                Theme.of(context).textTheme.displaySmall?.fontFamily,
-            'Golos Text');
-        final talk = find.text('Текст');
+          text.style?.fontFamily ??
+              Theme.of(context).textTheme.displaySmall?.fontFamily,
+          'Golos Text',
+        );
+        final talk = find.byTooltip('Текст');
         expect(tester.getRect(talk).right, lessThanOrEqualTo(width));
-        expect(tester.getRect(find.text('Мои дела')).right,
-            lessThanOrEqualTo(width));
-        final render = boundary.currentContext!.findRenderObject()!
-            as RenderRepaintBoundary;
+        expect(
+          tester.getRect(find.text('Дела')).right,
+          lessThanOrEqualTo(width),
+        );
+        final render =
+            boundary.currentContext!.findRenderObject()!
+                as RenderRepaintBoundary;
         await tester.runAsync(() async {
           final image = await render.toImage();
           final png = await image.toByteData(format: ui.ImageByteFormat.png);
@@ -97,8 +114,8 @@ void main() {
               case final String folder) {
             await Directory(folder).create(recursive: true);
             await File(
-                    '$folder/android-${dark ? 'dark' : 'light'}-${width.toInt()}.png')
-                .writeAsBytes(png!.buffer.asUint8List());
+              '$folder/android-${dark ? 'dark' : 'light'}-${width.toInt()}.png',
+            ).writeAsBytes(png!.buffer.asUint8List());
           }
           image.dispose();
         });

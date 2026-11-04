@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Troika.Desktop;
@@ -36,13 +37,22 @@ public static class DesignReferenceTests {
             var app=new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};
             var window=new MainWindow(true){Width=960,Height=680,ShowActivated=false,WindowStartupLocation=WindowStartupLocation.Manual,Left=-10000,Top=-10000};
             window.Show();
-            foreach(bool light in new[]{false,true}){
+            foreach(bool light in new[]{false,true})foreach(int width in new[]{780,960,1280,480}){
+                bool compact=width==480;int height=width==780?540:compact?600:width==1280?800:680;
                 typeof(MainWindow).GetField("light",BindingFlags.Instance|BindingFlags.NonPublic).SetValue(window,light);
+                typeof(MainWindow).GetField("compact",BindingFlags.Instance|BindingFlags.NonPublic).SetValue(window,compact);
+                window.MinWidth=compact?440:780;window.MinHeight=compact?520:540;window.Width=width;window.Height=height;
                 typeof(MainWindow).GetMethod("Build",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(window,null);
                 var voice=(Orb)typeof(MainWindow).GetField("orb",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(window);voice.Motion=false;voice.SetState("idle");
-                var image=Render(window,960,680);if(!string.IsNullOrEmpty(output))Save(image,Path.Combine(output,"windows-"+(light?"light":"dark")+"-960.png"));
+                var image=Render(window,width,height);
+                foreach(string controlName in new[]{"composer","microphone","send","heroTitle"}){
+                    var control=(FrameworkElement)typeof(MainWindow).GetField(controlName,BindingFlags.Instance|BindingFlags.NonPublic).GetValue(window);
+                    var point=control.TranslatePoint(new Point(0,0),window);
+                    Assert(control.IsVisible&&point.X>=0&&point.Y>=0&&point.X+control.ActualWidth<=width+1&&point.Y+control.ActualHeight<=height+1,"Home control clips at width "+width+": "+controlName);
+                }
+                if(!string.IsNullOrEmpty(output))Save(image,Path.Combine(output,"windows-"+(light?"light":"dark")+"-"+(compact?"compact":width.ToString())+".png"));
             }
-            window.Close();app.Shutdown();Console.WriteLine("PASS native Windows home renders in both themes with a temporary profile");return 0;
+            window.Close();app.Shutdown();Console.WriteLine("PASS native Windows home and compact controls fit 780/960/1280/480 in both themes with a temporary profile");return 0;
         }catch(Exception e){Console.Error.WriteLine(e);return 1;}
     }
 }

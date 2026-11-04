@@ -1,6 +1,6 @@
 # Troika 1.0: трекер реализации
 
-Обновлено 2026-10-15. Требования: [главный Word-план](Troika_1.0_Launch_Plan_Final_Updated.docx),
+Обновлено 2026-11-04. Требования: [главный Word-план](Troika_1.0_Launch_Plan_Final_Updated.docx),
 решение от 6 октября в [основном плане ремонта](../PRODUCTIZATION_PLAN.md)
 и [политика подписки](TROIKA_SUBSCRIPTION_ECONOMICS.md), согласованная 12 октября.
 Проверки и дефекты: [аудит функций](TROIKA_FUNCTIONAL_AUDIT.md).
@@ -22,9 +22,9 @@ installed-client E2E или релизной готовности. `[-]` — ч�
 | 1. Видение | [x] | Voice-first home, short statuses/results, owner memory и risk-based approvals реализованы. |
 | 2. Продукт и аудитория | [x] | Product copy ориентируется на результат; экспериментальные инструменты не продаются как готовые. |
 | 3. Границы 1.0 | [x] | Product allowlist/default-off policy реализованы. Незавершённые обязательные области остаются в следующих разделах. |
-| 4. Voice-first дизайн | [x] | Orb states, secondary text, result cards, approval modal и темы покрыты Flutter tests. |
-| 5. Android | [-] | 29 октября основная APK обновлена: file delivery/ACK, history, terminal status, timezone и native-event identity guards; 282 Flutter tests прошли, 2 skipped, analyze без errors/warnings. Фоновый голос подтверждён владельцем на предыдущей APK 28 октября; физическое напоминание, свежий Stop, standby/reboot и реальные expiry/revoke открыты. [Аудит](audit/TROIKA_EVERYDAY_CLIENT_2026_10_29.md). |
-| 6. Windows | [-] | WPF с автопилотом установлен; точный EXE прошёл SDK E2E: API, пауза/продолжение, DPAPI checkpoint, owner isolation, локальный файл и очередь без дубля. Обновлённый source с UI/голосом собирается и проходит проверки. Физический микрофон/звук, настоящее закрытие в tray, background reminders и signed installer остаются отдельными gates. [Аудит](audit/AUTOPILOT_COMPLETION_2026_10_16.md). |
+| 4. Voice-first дизайн | [x] | Общие мятные темы, меню Android/WPF, голосовая главная и контролы проверены. Полный перенос всех макетов и физический voice E2E отдельно. [Аудит](audit/TROIKA_GREEN_UI_2026_11_03.md). |
+| 5. Android | [-] | 4 ноября зелёная APK и ремонт wake lifecycle установлены без сброса, SHA/UID/firstInstallTime сохранены. Flutter/JVM прошли. После ручного разрешения микрофона владелец подтвердил повторные звуки; требуется отдельный локальный детектор пробуждения. Standby/reboot открыты. |
+| 6. Windows | [-] | 4 ноября установлен зелёный WPF fca59a4f2235, общие разделы и переходы Главная/Разговоры проверены; 62 checks и обе темы/compact прошли. Физический голос, фоновые сценарии и общий release scope ещё открыты. |
 | 7. Сайт и аккаунт | [-] | Сайт опубликован на cm444726.tw1.ru: HTTPS, вход/регистрация, ресурс, устройства, память, export/delete, изолированная поддержка SQLite и локальные загрузки. 12 локальных и 52 проверки Timeweb прошли; оба установщика сверены по SHA-256, тестовые аккаунты удалены. Исходный Sites остался закрытым. Оплата/почта отложены, recovery/verification, legal, подпись и общие release gates открыты. [Аудит](audit/WEBSITE_TIMEWEB_2026_10_16.md). |
 | 8. Billing/ресурс | [-] | Месячный runtime и личный API включены 14 октября. Corporate Free: prompt + completion; личный ключ: 0 за модель без corporate fallback. Free 500 тыс., Plus 5 млн, Pro 10 млн; Run/voice/API/Android/WPF, две Pro beta-выдачи, public HTTPS E2E, APK установлен без сброса. Оплата/почта отложены; checkout/verification/refund в коде, flags false. До продаж остаются финансовые lifecycle/unknown bills/anti-abuse. [Проверки](audit/SUBSCRIPTION_RUNTIME_2026_10_13.md), [настройка](development/SUBSCRIPTION_SETUP.md). |
 | 9. Backend | [ ] | Auth, owner stores, runs и tools существуют; весь раздел ещё не принят. |
@@ -39,6 +39,21 @@ installed-client E2E или релизной готовности. `[-]` — ч�
 | 18. Closed beta | [ ] | Предыдущие device smokes не заменяют закрытую beta на реальных пользователях. |
 | 19. Public launch | [ ] | Публичная продажа запрещена до всех gates. |
 | 20. Final DoD | [ ] | Сквозной путь site/register/download/voice/result/pay/cancel/delete ещё не проходит. |
+
+## Зелёный интерфейс и фоновый микрофон — 4 ноября 2026
+
+Общее меню Android/WPF и мятные темы внедрены. Главная WPF возвращает голосовой
+экран с сохранением разговора и черновика; каталог возможностей открывается
+одинаково. Windows установлен и просмотрен, 62 проверки прошли. Android APK
+установлена без сброса, подпись/идентичность и установленный SHA проверены.
+Flutter 299 passed/2 skips, отдельная конфигурация 15 passed, analyze без ошибок
+и предупреждений. Отдельная UI-проекция прошла 37 tests/2 skips; 62 JVM tests
+проверили в том числе очередь фонового распознавания. При выключенном микрофоне
+после запуска один PERMISSION без быстрого повтора. Затем владелец вручную
+разрешил доступ и подтвердил повторные звуки. Нужен отдельный локальный детектор;
+голос и standby/reboot открыты. Этот этап
+не закрывает общий release gate и перенос всех макетов.
+[Состав и доказательства](audit/TROIKA_GREEN_UI_2026_11_03.md).
 
 ## Общий ремонт — checkpoint 19 октября 2026
 

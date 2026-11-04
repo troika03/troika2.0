@@ -18,6 +18,8 @@ import '../widgets/troika_brand.dart';
 import '../widgets/web_sources_view.dart';
 import 'chat_screen.dart';
 import 'commands_screen.dart';
+import 'capabilities_screen.dart';
+import 'development_screen.dart';
 import 'assistant_hub_screen.dart';
 import 'files_screen.dart';
 import 'files_hub_screen.dart';
@@ -25,7 +27,6 @@ import 'history_screen.dart';
 import 'local_documents_screen.dart';
 import 'memory_screen.dart';
 import 'settings_overview_screen.dart';
-import 'voice_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback? onSignedOut;
@@ -49,7 +50,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _windowsShellInitialized = false;
   bool _windowsCompact = false;
   bool _windowsPinned = TroikaConfig.windowsAlwaysOnTop;
-  int _mobileTab = 0;
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
   RunApprovalRequest? _shownApproval;
   bool _approvalDialogOpen = false;
 
@@ -200,7 +201,8 @@ class _HomeScreenState extends State<HomeScreen> {
     if (TroikaConfig.serverUrl.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Для анализа снимка нужен AI-подключение')),
+          content: Text('Для анализа снимка нужен AI-подключение'),
+        ),
       );
       return;
     }
@@ -240,22 +242,24 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _open(Widget screen) async {
-    await Navigator.push(context,
-        MaterialPageRoute(builder: (_) => TroikaPageScope(child: screen)));
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => TroikaPageScope(child: screen)),
+    );
   }
 
   Future<void> _openChat() => _open(
-        TroikaPage(
-          appBar: AppBar(
-            title: const Text('Текст'),
-            surfaceTintColor: Colors.transparent,
-          ),
-          body: ChatScreen(
-            onOpenCommands: () => _open(const CommandsScreen()),
-            onOpenDocuments: () => _open(const LocalDocumentsScreen()),
-          ),
-        ),
-      );
+    TroikaPage(
+      appBar: AppBar(
+        title: const Text('Текст'),
+        surfaceTintColor: Colors.transparent,
+      ),
+      body: ChatScreen(
+        onOpenCommands: () => _open(const CommandsScreen()),
+        onOpenDocuments: () => _open(const LocalDocumentsScreen()),
+      ),
+    ),
+  );
 
   @override
   void dispose() {
@@ -294,9 +298,21 @@ class _HomeScreenState extends State<HomeScreen> {
       onOpenText: _openChat,
       onOpenFiles: () => _open(const FilesScreen()),
       onOpenSaved: () => _open(const AssistantHubScreen()),
+      onOpenDevelopment: () => _open(const DevelopmentScreen()),
     );
 
     return Scaffold(
+      key: _scaffoldKey,
+      drawer: wide
+          ? null
+          : _MobileDrawer(
+              onOpen: (screen) {
+                Navigator.pop(context);
+                _open(screen);
+              },
+              onSignedOut: widget.onSignedOut,
+              onAppearanceChanged: widget.onAppearanceChanged,
+            ),
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         bottom: false,
@@ -311,13 +327,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   VerticalDivider(
-                      width: 1, color: Theme.of(context).dividerColor),
+                    width: 1,
+                    color: Theme.of(context).dividerColor,
+                  ),
                   Expanded(
                     child: Column(
                       children: [
                         _Header(
                           state: assistant.state,
                           connected: connected,
+                          onText: _openChat,
                           onCompact: _isWindows ? _showCompact : null,
                           onSettings: () => _open(
                             SettingsOverviewScreen(
@@ -331,74 +350,38 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   VerticalDivider(
-                      width: 1, color: Theme.of(context).dividerColor),
+                    width: 1,
+                    color: Theme.of(context).dividerColor,
+                  ),
                   SizedBox(
                     width: 270,
                     child: _RightRail(
                       open: _open,
-                      onCaptureScreen:
-                          _isWindows ? _captureScreenForVision : null,
+                      onCaptureScreen: _isWindows
+                          ? _captureScreenForVision
+                          : null,
                     ),
                   ),
                 ],
               )
-            : _mobileTab != 0
-                ? switch (_mobileTab) {
-                    1 => const AssistantHubScreen(),
-                    2 => const FilesHubScreen(),
-                    3 => SettingsOverviewScreen(
+            : Column(
+                children: [
+                  _Header(
+                    state: assistant.state,
+                    connected: connected,
+                    onMenu: () => _scaffoldKey.currentState?.openDrawer(),
+                    onText: _openChat,
+                    onSettings: () => _open(
+                      SettingsOverviewScreen(
                         onSignedOut: widget.onSignedOut,
-                        onAppearanceChanged: widget.onAppearanceChanged),
-                    _ => voiceHome,
-                  }
-                : Column(
-                    children: [
-                      _Header(
-                        state: assistant.state,
-                        connected: connected,
-                        onSettings: () => _open(
-                          SettingsOverviewScreen(
-                              onSignedOut: widget.onSignedOut),
-                        ),
+                        onAppearanceChanged: widget.onAppearanceChanged,
                       ),
-                      Expanded(child: voiceHome),
-                    ],
+                    ),
                   ),
-      ),
-      bottomNavigationBar: wide
-          ? null
-          : Container(
-              decoration: BoxDecoration(
-                  border: Border(
-                      top: BorderSide(
-                          color: Theme.of(context).colorScheme.outline))),
-              child: NavigationBar(
-                height: 77,
-                selectedIndex: _isWindows ? 0 : _mobileTab,
-                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-                indicatorColor: Colors.transparent,
-                onDestinationSelected: (index) {
-                  setState(() => _mobileTab = index);
-                },
-                destinations: const [
-                  NavigationDestination(
-                    icon: TroikaSvgIcon('audio-lines'),
-                    label: 'Главная',
-                  ),
-                  NavigationDestination(
-                    icon: TroikaSvgIcon('circle-check'),
-                    label: 'Дела',
-                  ),
-                  NavigationDestination(
-                    icon: TroikaSvgIcon('folder'),
-                    label: 'Файлы',
-                  ),
-                  NavigationDestination(
-                    icon: TroikaSvgIcon('sliders-horizontal'),
-                    label: 'Профиль',
-                  ),
+                  Expanded(child: voiceHome),
                 ],
-              )),
+              ),
+      ),
     );
   }
 }
@@ -407,22 +390,31 @@ class _Header extends StatelessWidget {
   final AssistantState state;
   final bool connected;
   final VoidCallback onSettings;
-  final VoidCallback? onCompact;
+  final VoidCallback? onCompact, onMenu, onText;
 
   const _Header({
     required this.state,
     required this.connected,
     required this.onSettings,
     this.onCompact,
+    this.onMenu,
+    this.onText,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 72,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
+          if (onMenu != null)
+            IconButton(
+              tooltip: 'Меню',
+              onPressed: onMenu,
+              icon: const Icon(Icons.menu_rounded, size: 22),
+            ),
+          const SizedBox(width: 4),
           const TroikaBrand(),
           const Spacer(),
           if (onCompact != null)
@@ -431,23 +423,24 @@ class _Header extends StatelessWidget {
               icon: const Icon(Icons.picture_in_picture_alt_outlined, size: 18),
               label: const Text('Compact'),
             ),
-          Text(
-            connected ? 'На связи' : 'Локально',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontSize: 12,
+          if (!connected)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Text(
+                'Локально',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 12,
+                ),
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          IconButton.filledTonal(
-            style: IconButton.styleFrom(
-              backgroundColor: TroikaPalette.of(context).surfaceHi,
-              foregroundColor: Theme.of(context).colorScheme.onSurface,
-              fixedSize: const Size(44, 44),
+          IconButton(
+            tooltip: onText == null ? 'Профиль и настройки' : 'Текст',
+            onPressed: onText ?? onSettings,
+            icon: TroikaSvgIcon(
+              onText == null ? 'user-round' : 'message-square',
+              size: 20,
             ),
-            tooltip: 'Профиль и настройки',
-            onPressed: onSettings,
-            icon: const TroikaSvgIcon('user-round'),
           ),
         ],
       ),
@@ -460,12 +453,14 @@ class _VoiceHome extends StatelessWidget {
   final VoidCallback onOpenText;
   final VoidCallback onOpenFiles;
   final VoidCallback onOpenSaved;
+  final VoidCallback onOpenDevelopment;
 
   const _VoiceHome({
     required this.assistant,
     required this.onOpenText,
     required this.onOpenFiles,
     required this.onOpenSaved,
+    required this.onOpenDevelopment,
   });
 
   @override
@@ -473,98 +468,255 @@ class _VoiceHome extends StatelessWidget {
     final orbState = _voiceOrbState(assistant);
     final label = _voiceStateLabel(assistant, orbState);
     final hint = _voiceStateHint(assistant, orbState);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final orbSize = constraints.maxWidth < 340 ? 230.0 : 260.0;
-        return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: 720,
-                minHeight: (constraints.maxHeight - 56)
-                    .clamp(0, double.infinity)
-                    .toDouble(),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    'Скажи, что нужно',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.displaySmall,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'От слов к делу.',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 14,
+    return Column(
+      children: [
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final orbSize = constraints.maxWidth < 380 ? 230.0 : 254.0;
+              return SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 720),
+                    child: Column(
+                      children: [
+                        Text(
+                          'Чем помочь?',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.displaySmall,
+                        ),
+                        const SizedBox(height: 24),
+                        _OrbButton(
+                          assistant: assistant,
+                          orbState: orbState,
+                          size: orbSize,
+                        ),
+                        Text(
+                          orbState == VoiceOrbState.idle
+                              ? 'Можно просто сказать'
+                              : label,
+                          key: const ValueKey('voice-state-label'),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: orbState == VoiceOrbState.idle
+                                ? Theme.of(context).colorScheme.onSurface
+                                : _voiceAccent(context, orbState),
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          orbState == VoiceOrbState.idle
+                              ? 'Нажми на микрофон'
+                              : hint,
+                          key: ValueKey(
+                            assistant.liveTranscript.isEmpty
+                                ? 'voice-state-hint'
+                                : 'voice-live-transcript',
+                          ),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+                        _CurrentCards(
+                          assistant: assistant,
+                          onOpenText: onOpenText,
+                          onOpenFiles: onOpenFiles,
+                          onOpenSaved: onOpenSaved,
+                        ),
+                      ],
                     ),
                   ),
-                  _OrbButton(
-                    assistant: assistant,
-                    orbState: orbState,
-                    size: orbSize,
-                  ),
-                  Text(
-                    orbState == VoiceOrbState.idle ? 'Нажми и говори' : label,
-                    key: const ValueKey('voice-state-label'),
-                    style: TextStyle(
-                        color: orbState == VoiceOrbState.idle
-                            ? Theme.of(context).colorScheme.onSurface
-                            : _voiceAccent(context, orbState),
-                        fontSize: 14),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    orbState == VoiceOrbState.idle
-                        ? 'Можно начать с любой задачи'
-                        : hint,
-                    key: ValueKey(
-                      assistant.liveTranscript.isEmpty
-                          ? 'voice-state-hint'
-                          : 'voice-live-transcript',
-                    ),
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      OutlinedButton.icon(
-                          onPressed: onOpenText,
-                          icon: const TroikaSvgIcon('message-square'),
-                          label: const Text('Текст')),
-                      OutlinedButton.icon(
-                          onPressed: onOpenSaved,
-                          icon: const TroikaSvgIcon('circle-check'),
-                          label: const Text('Мои дела')),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  _CurrentCards(
-                    assistant: assistant,
-                    onOpenText: onOpenText,
-                    onOpenFiles: onOpenFiles,
-                    onOpenSaved: onOpenSaved,
-                  ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
-        );
-      },
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: onOpenFiles,
+                icon: const TroikaSvgIcon('folder'),
+                label: const Text('Файлы'),
+              ),
+              OutlinedButton.icon(
+                onPressed: onOpenSaved,
+                icon: const TroikaSvgIcon('circle-check'),
+                label: const Text('Дела'),
+              ),
+              OutlinedButton.icon(
+                onPressed: onOpenDevelopment,
+                icon: const Icon(Icons.code_rounded, size: 16),
+                label: const Text('Разработка'),
+              ),
+            ],
+          ),
+        ),
+        _HomeComposer(assistant: assistant, onOpenText: onOpenText),
+      ],
     );
   }
 }
+
+class _HomeComposer extends StatefulWidget {
+  final AssistantService assistant;
+  final VoidCallback onOpenText;
+  const _HomeComposer({required this.assistant, required this.onOpenText});
+
+  @override
+  State<_HomeComposer> createState() => _HomeComposerState();
+}
+
+class _HomeComposerState extends State<_HomeComposer> {
+  final _input = TextEditingController();
+  bool get _busy =>
+      widget.assistant.pendingApproval != null ||
+      (widget.assistant.state != AssistantState.idle &&
+          widget.assistant.state != AssistantState.error);
+
+  @override
+  void dispose() {
+    _input.dispose();
+    super.dispose();
+  }
+
+  void _send() {
+    final value = _input.text.trim();
+    if (value.isEmpty || _busy) return;
+    _input.clear();
+    unawaited(widget.assistant.sendTextQuery(value));
+    widget.onOpenText();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = TroikaPalette.of(context);
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 720),
+          padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
+          decoration: BoxDecoration(
+            color: p.surface,
+            border: Border.all(color: p.line),
+            borderRadius: BorderRadius.circular(26),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _input,
+                  minLines: 1,
+                  maxLines: 4,
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: (_) => _send(),
+                  decoration: const InputDecoration(
+                    hintText: 'Спроси что угодно',
+                    filled: false,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+              ),
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _input,
+                builder: (context, value, _) => IconButton.filled(
+                  tooltip: 'Отправить',
+                  onPressed: value.text.trim().isEmpty || _busy ? null : _send,
+                  icon: const Icon(Icons.arrow_upward_rounded, size: 20),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MobileDrawer extends StatelessWidget {
+  final ValueChanged<Widget> onOpen;
+  final VoidCallback? onSignedOut, onAppearanceChanged;
+  const _MobileDrawer({
+    required this.onOpen,
+    this.onSignedOut,
+    this.onAppearanceChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = TroikaPalette.of(context);
+    return Drawer(
+      backgroundColor: p.bg,
+      child: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 24),
+              child: TroikaBrand(),
+            ),
+            ListTile(
+              leading: const Icon(Icons.home_outlined),
+              title: const Text('Главная'),
+              selected: true,
+              selectedTileColor: p.tint,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              onTap: () => Navigator.pop(context),
+            ),
+            for (final (label, icon, screen) in _secondaryPages(
+              onSignedOut: onSignedOut,
+              onAppearanceChanged: onAppearanceChanged,
+            ))
+              ListTile(
+                leading: Icon(icon, size: 20),
+                title: Text(label),
+                onTap: () => onOpen(screen),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+List<(String, IconData, Widget)> _secondaryPages({
+  VoidCallback? onSignedOut,
+  VoidCallback? onAppearanceChanged,
+}) => [
+  ('Разговоры', Icons.history_rounded, const HistoryScreen()),
+  ('Дела', Icons.checklist_rounded, const AssistantHubScreen()),
+  ('Файлы', Icons.folder_outlined, const FilesHubScreen()),
+  ('Разработка', Icons.code_rounded, const DevelopmentScreen()),
+  ('Память', Icons.psychology_outlined, const MemoryScreen()),
+  ('Возможности', Icons.extension_outlined, const CapabilitiesScreen()),
+  (
+    'Настройки',
+    Icons.settings_outlined,
+    SettingsOverviewScreen(
+      onSignedOut: onSignedOut,
+      onAppearanceChanged: onAppearanceChanged,
+    ),
+  ),
+];
 
 class _OrbButton extends StatelessWidget {
   final AssistantService assistant;
@@ -617,13 +769,13 @@ Future<void> _handleOrbTap(AssistantService assistant) async {
 VoiceOrbState _voiceOrbState(AssistantService assistant) {
   if (assistant.pendingApproval != null) return VoiceOrbState.approval;
   return switch (assistant.state) {
-    AssistantState.idle => assistant.lastResult == null ||
-            assistant.lastResult!.kind == AssistantResultKind.answer
-        ? VoiceOrbState.idle
-        : VoiceOrbState.done,
+    AssistantState.idle =>
+      assistant.lastResult == null ||
+              assistant.lastResult!.kind == AssistantResultKind.answer
+          ? VoiceOrbState.idle
+          : VoiceOrbState.done,
     AssistantState.wakeDetected ||
-    AssistantState.recording =>
-      VoiceOrbState.listening,
+    AssistantState.recording => VoiceOrbState.listening,
     AssistantState.processing =>
       assistant.isActing ? VoiceOrbState.acting : VoiceOrbState.thinking,
     AssistantState.speaking => VoiceOrbState.speaking,
@@ -656,9 +808,10 @@ String _voiceStateHint(AssistantService assistant, VoiceOrbState state) {
     VoiceOrbState.approval => 'Проверь действие ниже',
     VoiceOrbState.speaking => 'Нажми, чтобы прервать ответ',
     VoiceOrbState.done => 'Результат сохранён ниже',
-    VoiceOrbState.error => assistant.errorMessage.isEmpty
-        ? 'Нажми, чтобы попробовать снова'
-        : assistant.errorMessage,
+    VoiceOrbState.error =>
+      assistant.errorMessage.isEmpty
+          ? 'Нажми, чтобы попробовать снова'
+          : assistant.errorMessage,
   };
 }
 
@@ -667,8 +820,7 @@ Color _voiceAccent(BuildContext context, VoiceOrbState state) {
     VoiceOrbState.error => TroikaColors.error,
     VoiceOrbState.listening ||
     VoiceOrbState.speaking ||
-    VoiceOrbState.done =>
-      Theme.of(context).colorScheme.primary,
+    VoiceOrbState.done => Theme.of(context).colorScheme.primary,
     _ => Theme.of(context).colorScheme.primary,
   };
 }
@@ -689,24 +841,6 @@ class _CurrentCards extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cards = <Widget>[];
-    final approval = assistant.pendingApproval;
-    final orbState = _voiceOrbState(assistant);
-    if ((assistant.state == AssistantState.processing ||
-            assistant.state == AssistantState.error) &&
-        approval == null) {
-      cards.add(
-        _HomeCard(
-          icon: assistant.state == AssistantState.error
-              ? Icons.error_outline
-              : Icons.bolt_outlined,
-          title: _voiceStateLabel(assistant, orbState),
-          body: _voiceStateHint(assistant, orbState),
-          accent: assistant.state == AssistantState.error
-              ? TroikaColors.error
-              : Theme.of(context).colorScheme.primary,
-        ),
-      );
-    }
     final result = assistant.lastResult;
     if (result != null && result.summary.isNotEmpty) {
       cards.add(
@@ -717,19 +851,21 @@ class _CurrentCards extends StatelessWidget {
           actionLabel: result.kind == AssistantResultKind.file
               ? 'Открыть файлы'
               : result.kind == AssistantResultKind.saved
-                  ? 'Открыть задачи'
-                  : result.kind == AssistantResultKind.answer
-                      ? 'Открыть текст'
-                      : 'Подробнее',
+              ? 'Открыть задачи'
+              : result.kind == AssistantResultKind.answer
+              ? 'Открыть текст'
+              : 'Подробнее',
           onAction: result.kind == AssistantResultKind.file
               ? onOpenFiles
               : result.kind == AssistantResultKind.saved
-                  ? onOpenSaved
-                  : onOpenText,
+              ? onOpenSaved
+              : onOpenText,
         ),
       );
     }
-    if (assistant.lastUserText.trim().isNotEmpty && cards.length < 3) {
+    if (result == null &&
+        cards.isEmpty &&
+        assistant.lastUserText.trim().isNotEmpty) {
       cards.add(
         _HomeCard(
           icon: Icons.schedule_outlined,
@@ -750,9 +886,7 @@ class _CurrentCards extends StatelessWidget {
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 12),
-        ...cards.take(3).expand(
-              (card) => [card, const SizedBox(height: 8)],
-            ),
+        ...cards.take(3).expand((card) => [card, const SizedBox(height: 8)]),
         WebSourcesView(trace: assistant.webSources),
       ],
     );
@@ -763,7 +897,6 @@ class _HomeCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String body;
-  final Color? accent;
   final String? actionLabel;
   final VoidCallback? onAction;
 
@@ -771,14 +904,13 @@ class _HomeCard extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.body,
-    this.accent,
     this.actionLabel,
     this.onAction,
   });
 
   @override
   Widget build(BuildContext context) {
-    final accent = this.accent ?? Theme.of(context).colorScheme.primary;
+    final accent = Theme.of(context).colorScheme.primary;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -852,65 +984,39 @@ IconData _resultIcon(AssistantResultKind kind) {
 class _DesktopSidebar extends StatelessWidget {
   final Future<void> Function(Widget screen) open;
   final VoidCallback? onSignedOut;
-
   const _DesktopSidebar({required this.open, this.onSignedOut});
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 18, 14, 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(10, 6, 10, 24),
-            child: Text(
-              'Тройка',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-            ),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(14, 18, 14, 14),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(10, 6, 10, 24),
+          child: Text(
+            'Тройка',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
           ),
-          const _NavItem(
-            icon: Icons.home_outlined,
-            label: 'Главная',
-            active: true,
+        ),
+        const _NavItem(
+          icon: Icons.home_outlined,
+          label: 'Главная',
+          active: true,
+        ),
+        Expanded(
+          child: ListView(
+            children: [
+              for (final (label, icon, screen) in _secondaryPages(
+                onSignedOut: onSignedOut,
+              ))
+                _NavItem(icon: icon, label: label, onTap: () => open(screen)),
+            ],
           ),
-          _NavItem(
-            icon: Icons.checklist_rounded,
-            label: 'Дела',
-            onTap: () => open(const AssistantHubScreen()),
-          ),
-          _NavItem(
-            icon: Icons.folder_outlined,
-            label: 'Файлы',
-            onTap: () => open(const FilesHubScreen()),
-          ),
-          _NavItem(
-            icon: Icons.history_rounded,
-            label: 'История',
-            onTap: () => open(const HistoryScreen()),
-          ),
-          _NavItem(
-            icon: Icons.memory_outlined,
-            label: 'Память',
-            onTap: () => open(const MemoryScreen()),
-          ),
-          const Spacer(),
-          _NavItem(
-            icon: Icons.record_voice_over_outlined,
-            label: 'Голос',
-            onTap: () => open(const VoiceScreen()),
-          ),
-          _NavItem(
-            icon: Icons.settings_outlined,
-            label: 'Настройки',
-            onTap: () => open(
-              SettingsOverviewScreen(onSignedOut: onSignedOut),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
 }
 
 class _NavItem extends StatelessWidget {
@@ -1015,9 +1121,7 @@ class _CompactAssistant extends StatelessWidget {
   Widget build(BuildContext context) {
     final orbState = _voiceOrbState(assistant);
     return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.escape): onClose,
-      },
+      bindings: {const SingleActivator(LogicalKeyboardKey.escape): onClose},
       child: Focus(
         autofocus: true,
         child: Scaffold(
@@ -1089,9 +1193,10 @@ class _CompactAssistant extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
                         ),
                         const SizedBox(height: 6),
                         _OrbButton(
@@ -1130,10 +1235,10 @@ class _CompactAssistant extends StatelessWidget {
 }
 
 String _windowsHotkeyLabel(String preset) => switch (preset) {
-      'ctrlShiftSpace' => 'Ctrl + Shift + Space',
-      'ctrlAltT' => 'Ctrl + Alt + T',
-      _ => 'Ctrl + Alt + Space',
-    };
+  'ctrlShiftSpace' => 'Ctrl + Shift + Space',
+  'ctrlAltT' => 'Ctrl + Alt + T',
+  _ => 'Ctrl + Alt + Space',
+};
 
 const _railTitle = TextStyle(fontSize: 16, fontWeight: FontWeight.w600);
 
