@@ -213,7 +213,7 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     # so the agent can correctly report which model it is (workaround for API bug).
     # Stable for the lifetime of an agent instance — model and provider are fixed
     # at construction time.
-    if agent.provider == "alibaba":
+    if agent.provider == "alibaba" and not _troika_product_mode:
         _model_short = agent.model.split("/")[-1] if "/" in agent.model else agent.model
         stable_parts.append(
             f"You are powered by the model named {_model_short}. "
@@ -346,9 +346,10 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     timestamp_line = f"Conversation started: {now.strftime('%A, %B %d, %Y')}"
     if agent.pass_session_id and agent.session_id:
         timestamp_line += f"\nSession ID: {agent.session_id}"
-    if agent.model:
+    # Product identity stays independent of operator-selected model plumbing.
+    if not _troika_product_mode and agent.model:
         timestamp_line += f"\nModel: {agent.model}"
-    if agent.provider:
+    if not _troika_product_mode and agent.provider:
         timestamp_line += f"\nProvider: {agent.provider}"
     volatile_parts.append(timestamp_line)
 

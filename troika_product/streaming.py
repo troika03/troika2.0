@@ -3,6 +3,7 @@
 import re
 
 from troika_product.completion import CompletionEvidence, _CLAIMS, _DONE
+from troika_product.identity import public_reply, request_reply
 
 
 class GuardedTextStream:
@@ -23,9 +24,12 @@ class GuardedTextStream:
         self.sent = ""
         self.blocked = False
         self.closed = False
+        # Self-description and private-instruction requests have a truthful
+        # canonical answer. Do not speak an unverified model draft first.
+        self.identity_request = request_reply(user_message) is not None
 
     def feed(self, delta):
-        if self.closed or self.blocked or not isinstance(delta, str) or not delta:
+        if self.closed or self.blocked or self.identity_request or not isinstance(delta, str) or not delta:
             return
         self.pending += delta
         if not self.sent:
@@ -36,7 +40,8 @@ class GuardedTextStream:
             phrase = self.pending[:match.end()]
             if not phrase.strip():
                 break
-            if ("```" in phrase or _DONE.search(phrase)
+            if (public_reply(phrase, self.user_message) != phrase
+                    or "```" in phrase or _DONE.search(phrase)
                     or any(pattern.search(phrase) for pattern in _CLAIMS.values())
                     or CompletionEvidence().unsupported(phrase, self.user_message)):
                 self.blocked = True
@@ -67,6 +72,8 @@ class GuardedTextStream:
         final = result.get("final_response") or ""
         if not isinstance(final, str) or not final:
             return
+        final = public_reply(final, self.user_message)
+        result["final_response"] = final
         if final.startswith(self.sent):
             suffix = final[len(self.sent):]
         elif self.sent and final.startswith(self.sent.rstrip()):

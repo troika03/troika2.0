@@ -4024,6 +4024,11 @@ def run_conversation(
                     length_continue_retries = 0
                 
                 final_response = agent._strip_think_blocks(final_response).strip()
+                if product_completion_evidence is not None:
+                    from troika_product.identity import public_reply
+
+                    final_response = public_reply(final_response, original_user_message)
+                    assistant_message.content = final_response
                 if (
                     product_completion_evidence is not None
                     and product_completion_evidence.unsupported(final_response, original_user_message)
@@ -4185,6 +4190,16 @@ def run_conversation(
                     exc_info=True,
                 )
 
+    if product_completion_evidence is not None and final_response and not failed and not interrupted:
+        from troika_product.identity import public_reply
+
+        checked_response = public_reply(final_response, original_user_message)
+        if checked_response != final_response:
+            final_response = checked_response
+            # Touch only this turn's final message, never previous history.
+            if messages and messages[-1].get("role") == "assistant" and not messages[-1].get("tool_calls"):
+                messages[-1]["content"] = final_response
+
     # Cover budget summaries and empty-response fallbacks too, before history
     # persistence. These paths bypass the normal final-answer branch above.
     if (
@@ -4323,6 +4338,17 @@ def run_conversation(
     ):
         final_response = product_completion_evidence.fallback()
         _response_transformed = True
+
+    if product_completion_evidence is not None and final_response and not failed and not interrupted:
+        from troika_product.identity import public_reply
+
+        checked_response = public_reply(final_response, original_user_message)
+        if checked_response != final_response:
+            final_response = checked_response
+            _response_transformed = True
+            if messages and messages[-1].get("role") == "assistant" and not messages[-1].get("tool_calls"):
+                messages[-1]["content"] = final_response
+                agent._persist_session(messages, conversation_history)
 
     if final_response and not interrupted:
         try:
