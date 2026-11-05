@@ -2,3 +2,5 @@
 /.offline-wake-cache/
 /android/app/wake-dependencies/
 /android/app/src/main/assets/model-wake-ru/
+
+/android/app/src/main/assets/model-owner-voice/

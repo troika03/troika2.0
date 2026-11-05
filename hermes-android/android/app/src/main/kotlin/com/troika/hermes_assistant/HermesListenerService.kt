@@ -78,6 +78,19 @@ class HermesListenerService : Service() {
             }
         }
         fun localWakeUnavailable(): Boolean = projectSpeechHost?.localWakeUnavailableReason != null
+        fun ownerVoiceChanged() {
+            OwnerVoiceCapture.cancelActive()
+            MainActivity.ownerVoiceChanged()
+            val host = projectSpeechHost ?: return
+            host.manualDialogActive.set(false)
+            host.isInDialog.set(false)
+            host.cancelReplySpeech()
+            try { host.edgeTts?.stop() } catch (_: Exception) {}
+            try { host.tts?.stop() } catch (_: Exception) {}
+            host.stopLocalWakeListener {
+                if (host.canListenForWake()) host.startLocalWakeCycle(250)
+            }
+        }
         const val CHANNEL_ID = "hermes_listener"
         const val NOTIF_ID = 1001
         const val FLUTTER_CHANNEL = "com.troika.hermes/background"
@@ -326,6 +339,7 @@ class HermesListenerService : Service() {
         }
         val previous = observedAccountIdentity
         if (previous != null && !NativeAccountSession.currentEvent(this, previous)) {
+            OwnerVoiceCapture.cancelActive()
             stopLocalWakeListener()
             usingLocalWake = false
             cancelReplySpeech()
@@ -432,6 +446,7 @@ class HermesListenerService : Service() {
 
         when (intent?.action) {
             ACTION_STOP -> {
+                OwnerVoiceCapture.cancelActive()
                 isRunning.set(false)
                 foregroundPauseGeneration++
                 manualDialogActive.set(false)
@@ -456,6 +471,7 @@ class HermesListenerService : Service() {
                 }
             }
             ACTION_INTERRUPT_TTS -> {
+                OwnerVoiceCapture.cancelActive()
                 // Мгновенная остановка любой текущей речи (Edge TTS + Android TTS).
                 // Вызывается тапом по орбу когда Тройка говорит.
                 cancelReplySpeech()
@@ -749,9 +765,9 @@ class HermesListenerService : Service() {
                 localWakeActive.set(true)
                 val identity = NativeAccountSession.eventSnapshot(this)
                 val started = offlineWake.start(
-                    onWake = {
+                    onWake = { initialQuestion, voiceRevision ->
                         if (localWakeStillCurrent(ticket, identity)) {
-                            if (!acceptLocalWake()) {
+                            if (!acceptLocalWake(initialQuestion, voiceRevision)) {
                                 finishLocalWakeAttempt(ticket, WakeRecognitionLifecycle.Failure.NO_SPEECH)
                             }
                         }
@@ -833,7 +849,7 @@ class HermesListenerService : Service() {
         }
     }
 
-    private fun acceptLocalWake(): Boolean {
+    private fun acceptLocalWake(initialQuestion: String? = null, voiceRevision: Long = OwnerVoiceStore.revision): Boolean {
         val now = SystemClock.elapsedRealtime()
         val lastWake = lastWakeAcceptedMs.get()
         if (lastWake != 0L && now - lastWake < 12_000) return false
@@ -846,7 +862,7 @@ class HermesListenerService : Service() {
                 metrics.getLong("troika_wake_matches", 0) + 1
             ).apply()
             android.util.Log.i("HermesListener", "LOCAL WAKE_WORD accepted")
-            thread(name = "TroikaDialog") { runDialog() }
+            thread(name = "TroikaDialog") { runDialog(initialQuestion = initialQuestion, expectedVoiceRevision = voiceRevision) }
         }
         return true
     }
@@ -988,10 +1004,15 @@ class HermesListenerService : Service() {
      *   Выход если: 7 сек тишины ИЛИ юзер сказал "хватит/стоп/спасибо пока"
      * История сообщений сохраняется между итерациями для follow-up вопросов.
      */
-    private fun runDialog(manual: Boolean = false) {
+    private fun runDialog(manual: Boolean = false, initialQuestion: String? = null,
+                          expectedVoiceRevision: Long = OwnerVoiceStore.revision) {
         val dialogEventIdentity = NativeAccountSession.eventSnapshot(this)
         val dialogIdentity = dialogEventIdentity.accountIdentity
-        fun currentDialog() = NativeAccountSession.currentEvent(this, dialogEventIdentity)
+        val voiceRevision = expectedVoiceRevision
+        val cancellationRevision = OwnerVoiceCapture.cancellationRevision
+        fun currentDialog() = isInDialog.get() && !listenerDestroyed &&
+            NativeAccountSession.currentEvent(this, dialogEventIdentity) && voiceRevision == OwnerVoiceStore.revision &&
+            cancellationRevision == OwnerVoiceCapture.cancellationRevision
         DevelopmentService.interruptReport()
         listenerPaused.set(true)
         dialogStartMs.set(System.currentTimeMillis())
@@ -1000,6 +1021,7 @@ class HermesListenerService : Service() {
         val history = mutableListOf<JSONObject>()
         var firstTurn = true
         val localOnly = resolvedUrl(getSharedPreferences(PREFS, MODE_PRIVATE)).isBlank()
+        val protectedVoice = OwnerVoiceStore.enabled(this)
         val onDeviceSpeechAvailable =
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
                 SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
@@ -1013,10 +1035,11 @@ class HermesListenerService : Service() {
         )
 
         try {
+            if (!currentDialog()) return
             HermesOverlay.get(this).show("✨ Слушаю...")
             // Мгновенный звуковой сигнал — юзер сразу слышит что wake-word поймался,
             // даже до того как Edge TTS успеет синтезировать "Слушаю"
-            SoundFeedback.heard()
+            if (!protectedVoice || !initialQuestion.isNullOrBlank()) SoundFeedback.heard()
 
             // Короткое "Слушаю" только в начале диалога.
             // Случайная короткая фраза приветствия — Jarvis-стиль, без перебора с именем.
@@ -1031,7 +1054,7 @@ class HermesListenerService : Service() {
             // асинхронно, а запись стартует уже через короткую паузу (только чтобы
             // схлынуло эхо динамика). Если юзер заговорил сразу — recordUtterance
             // (свой AudioRecord с долгим окном тишины в начале) его поймает.
-            if (!localOnly) speak(greeting)
+            if (!localOnly && (!protectedVoice || !initialQuestion.isNullOrBlank())) speak(greeting)
             // 550мс → 250мс: greeting играет асинхронно, реально нужно только
             // чтобы схлынул щелчок старта плеера. Дальше warm-up внутри
             // recordUtterance (~350мс) прикрывает эхо. Экономия ~300мс до старта записи.
@@ -1043,7 +1066,15 @@ class HermesListenerService : Service() {
                     if (firstTurn) "🎙 Говори..." else "🎙 Продолжай..."
                 )
                 val maxMs = if (firstTurn) 9000L else 8000L
-                val rawQuestion = if (onDeviceSpeechAvailable) {
+                val rawQuestion = if (firstTurn && !initialQuestion.isNullOrBlank()) {
+                    initialQuestion
+                } else if (protectedVoice) {
+                    val capture = OwnerVoiceCapture(applicationContext)
+                    val captured = try { capture.capture(enrollment = false) {
+                        currentDialog() && isInDialog.get()
+                    } } catch (_: Exception) { null }
+                    if (currentDialog()) OwnerVoiceCapture.verifiedText(this, captured, OwnerVoiceStore.binding(dialogEventIdentity)).orEmpty() else ""
+                } else if (onDeviceSpeechAvailable) {
                     // Prefer Android's built-in recognizer for the whole dialog.
                     // No audio leaves the phone and short commands return faster.
                     recognizeCommandOnDevice(maxMs)?.trim() ?: ""
@@ -1706,6 +1737,7 @@ class HermesListenerService : Service() {
     }
 
     override fun onDestroy() {
+        OwnerVoiceCapture.cancelActive()
         listenerDestroyed = true
         foregroundPauseGeneration++
         getSharedPreferences(PREFS, MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(accountIdentityListener)

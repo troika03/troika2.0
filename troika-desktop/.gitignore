@@ -1,3 +1,5 @@
 /build/
 /test-results/
 *.user
+/.voice-id-cache/
+/assets/voice-id/

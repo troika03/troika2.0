@@ -122,6 +122,8 @@ object NativeAccountSession {
     }
 
     private fun invalidate(context: Context, mode: String = "signout"): Pair<Boolean, Long> {
+        OwnerVoiceCapture.cancelActive()
+        if (mode == "delete") OwnerVoiceStore.delete(context)
         val prefs = preferences(context)
         val generation = prefs.getLong(IDENTITY_REVISION, 0) + 1
         val editor = prefs.edit().remove(EMAIL).remove(EXPIRY).removeCompat("api_key")

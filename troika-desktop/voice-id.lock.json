@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "manifest_sha256": "3c587595b96d2cec42f228cb2828ddbf43c708b9ac7f84d19888dff5e5e5f12d",
+  "artifacts": [
+    {
+      "filename": "vosk-0.3.45-py3-none-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/c0/4c/deb0861f7da9696f8a255f1731bb73e9412cca29c4b3888a3fcb2a930a59/vosk-0.3.45-py3-none-win_amd64.whl",
+      "sha256": "6994ddc68556c7e5730c3b6f6bad13320e3519b13ce3ed2aa25a86724e7c10ac",
+      "size": 13997596,
+      "archive_root": "vosk",
+      "output": "native",
+      "selected_files": [
+        "libgcc_s_seh-1.dll",
+        "libstdc++-6.dll",
+        "libvosk.dll",
+        "libwinpthread-1.dll"
+      ]
+    },
+    {
+      "filename": "vosk-model-small-ru-0.22.zip",
+      "url": "https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip",
+      "sha256": "961d5ff98a17f4aa6de69864d0aa71fa5bac682301d2b5d17a3f24c5c99a46d4",
+      "size": 46236750,
+      "archive_root": "vosk-model-small-ru-0.22",
+      "output": "vosk-model-small-ru-0.22"
+    },
+    {
+      "filename": "vosk-model-spk-0.4.zip",
+      "url": "https://alphacephei.com/vosk/models/vosk-model-spk-0.4.zip",
+      "sha256": "a74d8f51144484813e16af689bb0f916b7a111e2347f467c4933c1166097b5a7",
+      "size": 13869103,
+      "archive_root": "vosk-model-spk-0.4",
+      "output": "vosk-model-spk-0.4"
+    }
+  ]
+}

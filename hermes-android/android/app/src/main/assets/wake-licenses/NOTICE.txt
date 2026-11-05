@@ -20,5 +20,13 @@ JNA is dual-licensed. Troika uses the Apache License, Version 2.0 option.
 The original license declaration is retained in JNA-LICENSE.txt.
 The upstream library is distributed without modification.
 
+Speaker identification model: vosk-model-spk-0.4
+Alpha Cephei Inc.
+https://alphacephei.com/vosk/models
+License: Apache License, Version 2.0, as stated in the official model catalog.
+The original model README is retained inside model-owner-voice.
+Troika adds a per-file integrity manifest. This is a convenience speaker filter,
+not authentication or protection against a recording of the enrolled voice.
+
 The exact official download URLs and SHA-256 digests are recorded in
 tool/offline-wake.lock.json in the Troika source distribution.

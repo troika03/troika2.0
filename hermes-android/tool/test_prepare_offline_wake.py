@@ -11,6 +11,26 @@ import prepare_offline_wake as provision
 
 
 class OfflineWakeProvisionTest(unittest.TestCase):
+    def test_speaker_model_requires_its_own_files_and_verifies_manifest(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            source = base / "speaker.zip"
+            required = ["mfcc.conf", "final.ext.raw", "mean.vec", "transform.mat"]
+            with zipfile.ZipFile(source, "w") as archive:
+                for name in required:
+                    archive.writestr("speaker/" + name, name.encode())
+            model = {"version": "test-speaker", "archive_root": "speaker", "required_files": required}
+            with zipfile.ZipFile(source) as archive:
+                entries = provision.model_entries(archive, "speaker", required)
+                manifest = provision.model_manifest(archive, entries, model)
+            model["manifest_sha256"] = hashlib.sha256(manifest).hexdigest()
+            target = base / "assets/model-owner-voice"
+            self.assertEqual(provision.install_model(source, model, target), "installed")
+            self.assertEqual(provision.install_model(source, model, target), "verified")
+            (target / "mean.vec").write_bytes(b"tampered")
+            with self.assertRaisesRegex(ValueError, "failed verification"):
+                provision.install_model(source, model, target)
+
     def test_offline_cache_rejects_corruption_without_overwrite(self):
         with tempfile.TemporaryDirectory() as temporary:
             cache = Path(temporary)

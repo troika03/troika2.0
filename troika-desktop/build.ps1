@@ -6,6 +6,8 @@ $compiler = Join-Path $framework 'csc.exe'
 if (!(Test-Path -LiteralPath $compiler)) { throw 'Install the Windows .NET Framework 4.8 developer tools.' }
 $output = if ($OutputDirectory) { [IO.Path]::GetFullPath($OutputDirectory) } else { Join-Path $root 'build' }
 New-Item -ItemType Directory -Path $output -Force | Out-Null
+& python (Join-Path (Split-Path $root) 'scripts\provision_windows_voice_id.py')
+if ($LASTEXITCODE -ne 0) { throw 'Offline voice identity asset provisioning failed.' }
 Copy-Item -LiteralPath (Join-Path $root 'assets') -Destination $output -Recurse -Force
 $references = @('System.dll','System.Core.dll','System.Windows.Forms.dll','System.Drawing.dll','System.Net.Http.dll','System.Web.Extensions.dll','System.Security.dll','System.IO.Compression.dll','System.IO.Compression.FileSystem.dll','WPF\WindowsBase.dll','WPF\PresentationCore.dll','WPF\PresentationFramework.dll','System.Xaml.dll') | ForEach-Object { '/reference:' + (Join-Path $framework $_) }
 $sources = Get-ChildItem -LiteralPath (Join-Path $root 'src') -Filter '*.cs' | ForEach-Object { $_.FullName }
@@ -48,6 +50,16 @@ if ($Test) {
     if ($LASTEXITCODE -ne 0) { throw 'Autopilot tests failed.' }
 }
 Write-Output ('Built: ' + (Join-Path $output 'TroikaDesktop.exe'))
+if ($Test) {
+    & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'VoiceIdentityTests.exe')) ('/reference:' + (Join-Path $output 'TroikaDesktop.exe')) $references (Join-Path $root 'tests\VoiceIdentityTests.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Voice identity test build failed.' }
+    & (Join-Path $output 'VoiceIdentityTests.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'Voice identity tests failed.' }
+    & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'VoiceIdentityUiTests.exe')) ('/reference:' + (Join-Path $output 'TroikaDesktop.exe')) $references (Join-Path $root 'tests\VoiceIdentityUiTests.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Voice identity UI test build failed.' }
+    & (Join-Path $output 'VoiceIdentityUiTests.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'Voice identity UI tests failed.' }
+}
 if ($Test) {
     & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'DesignReferenceTests.exe')) ('/reference:' + (Join-Path $output 'TroikaDesktop.exe')) $references (Join-Path $root 'tests\DesignReferenceTests.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Design reference test build failed.' }

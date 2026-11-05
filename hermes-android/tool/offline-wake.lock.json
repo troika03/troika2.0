@@ -17,6 +17,18 @@
       "selected_license": "Apache-2.0"
     }
   ],
+  "speaker_model": {
+    "version": "vosk-model-spk-0.4",
+    "filename": "vosk-model-spk-0.4.zip",
+    "url": "https://alphacephei.com/vosk/models/vosk-model-spk-0.4.zip",
+    "archive_root": "vosk-model-spk-0.4",
+    "sha256": "a74d8f51144484813e16af689bb0f916b7a111e2347f467c4933c1166097b5a7",
+    "size": 13869103,
+    "manifest_sha256": "da9730fb9aa684239cd312ac316e67fd9fb683c87203e3f5433837b27a82e2be",
+    "required_files": ["mfcc.conf", "final.ext.raw", "mean.vec", "transform.mat"],
+    "license": "Apache-2.0",
+    "license_source": "https://alphacephei.com/vosk/models"
+  },
   "model": {
     "version": "vosk-model-small-ru-0.22",
     "filename": "vosk-model-small-ru-0.22.zip",

@@ -9,6 +9,7 @@ import '../widgets/subscription_panel.dart';
 import 'memory_screen.dart';
 import 'settings_screen.dart';
 import 'voice_screen.dart';
+import 'owner_voice_screen.dart';
 import 'interface_settings_screen.dart';
 import 'capabilities_screen.dart';
 
@@ -116,6 +117,14 @@ class SettingsOverviewScreen extends StatelessWidget {
                     title: const Text('Голос и озвучка'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _open(context, const VoiceScreen()),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const TroikaIcon(icon: Icons.person_outline),
+                    title: const Text('Мой голос'),
+                    subtitle: const Text('Узнавать владельца перед командой'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _open(context, const OwnerVoiceScreen()),
                   ),
                 ],
               ),

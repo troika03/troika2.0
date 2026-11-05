@@ -1,0 +1,20 @@
+Offline voice identity in Troika for Windows
+
+Vosk API 0.3.45, Russian speech model vosk-model-small-ru-0.22,
+and speaker model vosk-model-spk-0.4 are provided by Alpha Cephei.
+Vosk and these models are licensed under Apache License 2.0.
+https://github.com/alphacep/vosk-api
+https://alphacephei.com/vosk/models
+
+The native Vosk Windows distribution includes GCC runtime libraries:
+libgcc_s_seh-1.dll, libstdc++-6.dll and libwinpthread-1.dll.
+The GCC libraries are distributed under GPLv3 with the GCC Runtime Library
+Exception. The winpthreads library includes permissive notices; the relevant
+upstream winpthreads COPYING is included in this directory.
+https://gcc.gnu.org/onlinedocs/libstdc++/manual/license.html
+https://github.com/mingw-w64/mingw-w64/tree/master/mingw-w64-libraries/winpthreads
+
+Exact archive versions, byte lengths and SHA-256 values are recorded in
+troika-desktop/voice-id.lock.json in the Troika source distribution.
+The application never downloads models at runtime. No voice training sample
+or personal recording is included in these assets.

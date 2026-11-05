@@ -27,6 +27,15 @@ import java.util.Locale
 import java.util.TimeZone
 
 class MainActivity : FlutterActivity() {
+    companion object {
+        private var voiceHost: MainActivity? = null
+        fun foregroundVoiceBusy(): Boolean = voiceHost?.pendingLocalSpeechResult != null
+        fun ownerVoiceChanged() {
+            val host = voiceHost ?: return
+            if (host.ownerVoiceCapture != null) host.ownerVoiceCapture?.cancel()
+            else if (host.pendingLocalSpeechResult != null) host.finishLocalSpeechRecognition("")
+        }
+    }
 
     private val FLUTTER_CHANNEL = "com.troika.hermes/background"
     private val REQ_CALENDAR = 7421
@@ -39,6 +48,17 @@ class MainActivity : FlutterActivity() {
     private var preferAgentSpeechConversation = false
     private var localSpeechRecognizer: SpeechRecognizer? = null
     private var resumeBackgroundWake: (() -> Unit)? = null
+    private var ownerVoiceBridge: OwnerVoiceBridge? = null
+    @Volatile private var ownerVoiceCapture: OwnerVoiceCapture? = null
+    @Volatile private var ownerVoiceResumed = false
+
+    override fun onResume() { super.onResume(); ownerVoiceResumed = true }
+    override fun onPause() {
+        ownerVoiceResumed = false
+        ownerVoiceBridge?.cancel()
+        ownerVoiceCapture?.cancel()
+        super.onPause()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -60,9 +80,13 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        voiceHost = this
         OwnProviderSession.attach(flutterEngine)
         DevelopmentCheckBridge(this, flutterEngine)
         DevelopmentBridge(this, flutterEngine)
+        ownerVoiceBridge = OwnerVoiceBridge(this, flutterEngine) {
+            ownerVoiceResumed && !isFinishing && !isDestroyed
+        }
         FlutterEngineCache.getInstance().put("main_engine", flutterEngine)
 
         methodChannel = MethodChannel(
@@ -330,6 +354,9 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        if (voiceHost === this) voiceHost = null
+        ownerVoiceBridge?.close()
+        ownerVoiceCapture?.cancel()
         try { localSpeechRecognizer?.cancel() } catch (_: Exception) {}
         try { localSpeechRecognizer?.destroy() } catch (_: Exception) {}
         localSpeechRecognizer = null
@@ -393,6 +420,8 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun interruptTts() {
+        ownerVoiceCapture?.cancel()
+        ownerVoiceBridge?.cancel()
         val intent = Intent(this, HermesListenerService::class.java).apply {
             action = HermesListenerService.ACTION_INTERRUPT_TTS
         }
@@ -674,7 +703,7 @@ class MainActivity : FlutterActivity() {
         result: MethodChannel.Result,
         preferAgentConversation: Boolean,
     ) {
-        if (pendingLocalSpeechResult != null) {
+        if (pendingLocalSpeechResult != null || ownerVoiceBridge?.isBusy == true) {
             result.error("speech_pending", "Распознавание уже запущено", null)
             return
         }
@@ -686,6 +715,10 @@ class MainActivity : FlutterActivity() {
             PackageManager.PERMISSION_GRANTED
         ) {
             result.error("microphone_denied", "Нет доступа к микрофону", null)
+            return
+        }
+        if (OwnerVoiceStore.enabled(this)) {
+            startProtectedLocalSpeechRecognition(result, preferAgentConversation)
             return
         }
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
@@ -802,13 +835,40 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun stopLocalSpeechRecognition() {
+        ownerVoiceCapture?.finish()
         try { localSpeechRecognizer?.stopListening() } catch (_: Exception) {}
     }
 
     private fun clearLocalSpeechRecognizer() {
+        ownerVoiceCapture = null
         try { localSpeechRecognizer?.destroy() } catch (_: Exception) {}
         localSpeechRecognizer = null
         resumeBackgroundWakeAfterSpeech()
+    }
+
+    private fun startProtectedLocalSpeechRecognition(result: MethodChannel.Result, preferAgentConversation: Boolean) {
+        pendingLocalSpeechResult = result
+        preferAgentSpeechConversation = preferAgentConversation
+        val identity = NativeAccountSession.eventSnapshot(this)
+        val voiceRevision = OwnerVoiceStore.revision
+        val capture = OwnerVoiceCapture(applicationContext)
+        ownerVoiceCapture = capture
+        pauseBackgroundWakeForSpeech {
+            if (pendingLocalSpeechResult !== result || ownerVoiceCapture !== capture) return@pauseBackgroundWakeForSpeech
+            kotlin.concurrent.thread(name = "TroikaOwnerVoice") {
+                fun current() = pendingLocalSpeechResult === result && ownerVoiceCapture === capture &&
+                    !capture.isCancelled && NativeAccountSession.currentEvent(this, identity) && OwnerVoiceStore.revision == voiceRevision
+                val heard = try {
+                    val captured = capture.capture(enrollment = false, current = ::current)
+                    if (current()) OwnerVoiceCapture.verifiedText(this, captured, OwnerVoiceStore.binding(identity)).orEmpty() else ""
+                } catch (_: Exception) { "" }
+                runOnUiThread {
+                    if (pendingLocalSpeechResult === result && ownerVoiceCapture === capture) {
+                        finishLocalSpeechRecognition(if (current()) heard else "")
+                    }
+                }
+            }
+        }
     }
 
     private fun pauseBackgroundWakeForSpeech(onStopped: () -> Unit) {

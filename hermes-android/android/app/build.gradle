@@ -110,16 +110,19 @@ tasks.register('verifyOfflineWakeAssets') {
                 throw new GradleException('Offline wake library differs from its lock: ' + library.filename)
             }
         }
-        def modelRoot = file('src/main/assets/model-wake-ru')
-        def manifestFile = new File(modelRoot, 'manifest.json')
-        if (digest(manifestFile) != lock.model.manifest_sha256) {
-            throw new GradleException('Offline wake model manifest differs from its lock.')
-        }
-        def manifest = new groovy.json.JsonSlurper().parse(manifestFile)
-        manifest.files.each { entry ->
-            def asset = new File(modelRoot, entry.path)
-            if (!asset.isFile() || asset.length() != entry.size || digest(asset) != entry.sha256) {
-                throw new GradleException('Offline wake model file differs from its lock: ' + entry.path)
+        [[directory: 'model-wake-ru', model: lock.model],
+         [directory: 'model-owner-voice', model: lock.speaker_model]].each { item ->
+            def modelRoot = file('src/main/assets/' + item.directory)
+            def manifestFile = new File(modelRoot, 'manifest.json')
+            if (!manifestFile.isFile() || digest(manifestFile) != item.model.manifest_sha256) {
+                throw new GradleException('Offline voice model manifest differs from its lock: ' + item.directory)
+            }
+            def manifest = new groovy.json.JsonSlurper().parse(manifestFile)
+            manifest.files.each { entry ->
+                def asset = new File(modelRoot, entry.path)
+                if (!asset.isFile() || asset.length() != entry.size || digest(asset) != entry.sha256) {
+                    throw new GradleException('Offline voice model file differs from its lock: ' + entry.path)
+                }
             }
         }
     }

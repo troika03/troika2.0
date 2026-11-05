@@ -111,7 +111,8 @@ def download(item: dict, cache: Path, offline: bool) -> Path:
     raise RuntimeError(f"Unable to obtain pinned {item['filename']}: {last_error}") from last_error
 
 
-def model_entries(archive: zipfile.ZipFile, root: str) -> list[tuple[zipfile.ZipInfo, str]]:
+def model_entries(archive: zipfile.ZipFile, root: str,
+                  required_files: list[str] | None = None) -> list[tuple[zipfile.ZipInfo, str]]:
     entries = archive.infolist()
     if len(entries) > MAX_FILES:
         raise ValueError("Model archive contains too many entries")
@@ -137,7 +138,8 @@ def model_entries(archive: zipfile.ZipFile, root: str) -> list[tuple[zipfile.Zip
         if entry.file_size > MAX_FILE_BYTES or total > MAX_EXPANDED_BYTES or entry.flag_bits & 1:
             raise ValueError("Model archive exceeds bounded extraction limits")
         result.append((entry, relative))
-    required = {"am/final.mdl", "conf/model.conf", "conf/mfcc.conf", "graph/HCLr.fst", "graph/Gr.fst"}
+    required = set(required_files) if required_files is not None else {
+        "am/final.mdl", "conf/model.conf", "conf/mfcc.conf", "graph/HCLr.fst", "graph/Gr.fst"}
     if not required.issubset({name for _, name in result}):
         raise ValueError("Model archive is missing required Russian model files")
     return sorted(result, key=lambda pair: pair[1])
@@ -178,7 +180,7 @@ def verify_model(directory: Path, manifest: bytes) -> None:
 def install_model(archive_path: Path, model: dict, destination: Path) -> str:
     ensure_safe_directory(destination.parent)
     with zipfile.ZipFile(archive_path) as archive:
-        entries = model_entries(archive, model["archive_root"])
+        entries = model_entries(archive, model["archive_root"], model.get("required_files"))
         manifest = model_manifest(archive, entries, model)
         if hashlib.sha256(manifest).hexdigest() != model["manifest_sha256"]:
             raise ValueError("Model manifest differs from the pinned manifest digest")
@@ -256,7 +258,11 @@ def main() -> None:
     model = lock["model"]
     source = download(model, cache, args.offline)
     status = install_model(source, model, project / "android/app/src/main/assets/model-wake-ru")
+    speaker = lock["speaker_model"]
+    speaker_source = download(speaker, cache, args.offline)
+    speaker_status = install_model(speaker_source, speaker, project / "android/app/src/main/assets/model-owner-voice")
     print(json.dumps({"project": str(project), "libraries": libraries, "model": status,
+                      "speaker_model": speaker_status,
                       "model_manifest_sha256": model["manifest_sha256"]}, indent=2))
 
 

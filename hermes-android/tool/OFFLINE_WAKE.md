@@ -1,7 +1,7 @@
 # Offline wake build assets
 
 The Android application bundles Vosk Android 0.3.75, JNA 5.18.1 and the small
-Russian Vosk model 0.22. Background wake detection uses local audio and requires
+Russian Vosk model 0.22 and speaker model 0.4. Background wake detection uses local audio and requires
 no runtime model download, account, API key or network connection.
 
 Before building a fresh checkout, run from the repository root:
@@ -10,7 +10,7 @@ Before building a fresh checkout, run from the repository root:
 python hermes-android/tool/prepare_offline_wake.py
 ```
 
-The script downloads only the three pinned official artifacts in
+The script downloads only the four pinned official artifacts in
 `offline-wake.lock.json`. It checks their exact lengths and SHA-256 digests before
 installing them. Use `--cache PATH --offline` to provision from an existing
 verified cache, or `--project PATH` to prepare another existing Flutter project.
@@ -41,3 +41,27 @@ retained. Official sources:
 Model and recorder memory usage, wake accuracy, standby behavior and physical
 microphone sounds must be tested on the target device. A successful build alone
 does not establish these properties.
+
+The optional owner voice filter adds `vosk-model-spk-0.4` (Apache 2.0) under
+`model-owner-voice`. Its official archive, exact byte length, SHA-256 and generated
+file manifest are pinned in the same lock. Gradle verifies both model directories.
+The original speaker-model README and existing Apache notices are packaged.
+
+Register three consistent phrases with at least 400 voiced frames each (about
+four seconds of speech). Enabling the filter is a separate action. In strict
+mode every voice command, including wake and follow-up, needs this amount of
+speech. Say a full sentence beginning with “Тройка” for background wake. The app
+keeps the verified initial command instead of asking the user to repeat it.
+Short, unmatched, missing or corrupt profiles do not permit voice actions.
+
+Only speaker vectors are stored, encrypted with an Android Keystore AES-GCM key,
+bound to the account and server, in `noBackupFilesDir`. Recording buffers remain
+in memory. The enrollment screen can cancel, disable or delete the local profile;
+account deletion removes it. Logout invalidates active work and preserves that
+account's local profile for a later login. Profiles do not sync to another device.
+
+The cosine threshold of 0.75 is a conservative initial setting, not a measured
+accuracy guarantee. This convenience filter does not authenticate payments or
+protect against voice recordings or voice cloning. Strict free-form local speech
+recognition may change latency, accuracy and battery use; those require physical
+device measurements with enrolled and unrelated speakers.
