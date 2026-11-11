@@ -594,6 +594,10 @@ namespace Troika.Desktop {
         [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
         public static readonly uint ActivationMessage = RegisterWindowMessage("TroikaDesktop.Activate.v1");
         [STAThread] public static int Main(string[] args) {
+            if (args.Length == 1 && args[0] == "--computer-use-prototype") {
+                var prototype = new Application();
+                return prototype.Run(new ComputerUsePrototypeWindow());
+            }
             System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.Tls12;
             bool design = args.Contains("--preview") || args.Contains("--render");
             bool acquired = false;
