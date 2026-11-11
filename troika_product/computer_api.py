@@ -36,6 +36,18 @@ def register_computer_dry_run_routes(app, adapter):
     def response(payload, status=200):
         return web.json_response(payload, status=status, headers={"Cache-Control": "private, no-store"})
 
+    async def pending(request):
+        auth_error = adapter._check_auth(request)
+        if auth_error is not None:
+            return auth_error
+        principal = adapter._product_principal(request)
+        if principal is None:
+            return response({"error": {"code": "authentication_required"}}, 401)
+        try:
+            return response(control.pending_for_device(principal))
+        except ComputerControlError as exc:
+            return response({"error": {"code": exc.code}}, exc.status)
+
     async def handle(request):
         auth_error = adapter._check_auth(request)
         if auth_error is not None:
@@ -67,4 +79,5 @@ def register_computer_dry_run_routes(app, adapter):
             adapter._computer_dry_run = None
 
     app.router.add_post("/v1/runs/{run_id}/computer-dry-run/{operation}", handle)
+    app.router.add_get("/v1/computer-dry-run/requests", pending)
     app.on_cleanup.append(cleanup)

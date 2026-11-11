@@ -1,4 +1,4 @@
-"""Versioned Computer Use simulation with no device or model transport."""
+"""Versioned Computer Use simulation with no device transport."""
 
 from dataclasses import dataclass, field
 import re
@@ -44,6 +44,7 @@ class ActionReceipt:
 class _Observation:
     id: str
     expires_at: float
+    model_inspect_id: str | None = None
 
     def payload(self):
         return {"id": self.id, "app": _APP, "elements": [
@@ -183,7 +184,7 @@ class ComputerDryRun:
         return grant.summary(now)
 
     @staticmethod
-    def _action(grant, body, now):
+    def _action(grant, body, now, *, model=False):
         action = body.get("action")
         if action not in ("inspect", "click"):
             raise ComputerControlError("unsupported_action", 400)
@@ -216,14 +217,64 @@ class ComputerDryRun:
         if action == "click" and (not fresh or grant.observation.id != observation_id):
             raise ComputerControlError("stale_state")
 
-        grant.observation = (_Observation(uuid4().hex, min(grant.expires_at, now + MAX_OBSERVATION_SECONDS))
+        grant.observation = (_Observation(uuid4().hex, min(grant.expires_at, now + MAX_OBSERVATION_SECONDS),
+                                         action_id if model else None)
                              if action == "inspect" else None)
         receipt = ActionReceipt(action_id, sequence, action)
         grant.actions[action_id] = (signature, receipt, grant.observation.id if grant.observation else None)
         result = {"receipt": receipt.payload()}
-        if grant.observation is not None:
+        if not model and grant.observation is not None:
             result["observation"] = grant.observation.payload()
         return result
+
+    def model_grant_status(self, principal, run_id):
+        with self._lock:
+            grant = self._grants.get(run_id)
+            if grant is None or grant.requester != principal:
+                return "pending"
+            if self._clock() >= grant.expires_at:
+                grant.close("expired")
+            if grant.status == "active":
+                self._check_live(run_id, grant)
+            return grant.status
+
+    def pending_for_device(self, principal):
+        with self._lock:
+            if not self._registry.principal_is_active(principal):
+                raise ComputerControlError("authentication_required", 401)
+            pending = []
+            for run_id, grant in tuple(self._grants.items()):
+                if (grant.status != "pending" or grant.requester.user_id != principal.user_id
+                        or grant.target_device_id != principal.device_id):
+                    continue
+                try:
+                    now = self._check_live(run_id, grant)
+                except ComputerControlError:
+                    continue
+                if grant.status == "pending":
+                    pending.append({"run_id": run_id, **grant.summary(now)})
+            return {"version": VERSION, "requests": pending}
+
+    def model_action(self, principal, run_id, action, inspect_id=None):
+        """Execute against the run's grant without exposing its private observation ID."""
+        with self._lock:
+            grant = self._grants.get(run_id)
+            if grant is None or grant.requester != principal:
+                raise ComputerControlError("grant_not_found", 404)
+            now = self._check_live(run_id, grant)
+            if grant.status != "active":
+                raise ComputerControlError("grant_" + grant.status)
+            body = {"version": VERSION, "grant_id": grant.id, "action_id": uuid4().hex,
+                    "sequence": len(grant.actions) + 1, "action": action}
+            if action == "click":
+                observed = grant.observation
+                if observed is None or not _id(inspect_id) or observed.model_inspect_id != inspect_id:
+                    raise ComputerControlError("stale_state")
+                body.update(observation_id=observed.id, element_id="preview")
+            if body["sequence"] > MAX_ACTIONS:
+                raise ComputerControlError("action_limit")
+            result = self._action(grant, body, now, model=True)
+            return result["receipt"]
 
     def stop_run(self, run_id):
         with self._lock:

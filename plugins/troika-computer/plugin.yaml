@@ -1,0 +1,4 @@
+name: troika-computer
+version: 1.0.0
+description: "Consent-scoped actions in a synthetic Troika Computer Use Run."
+kind: backend

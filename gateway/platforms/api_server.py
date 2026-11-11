@@ -31,6 +31,7 @@ Requires:
 """
 
 import asyncio
+from contextlib import nullcontext
 from datetime import datetime, timezone
 import hashlib
 import hmac
@@ -1932,12 +1933,15 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
 
         user_config = _load_gateway_config()
         enabled_toolsets = sorted(_get_platform_tools(user_config, "api_server"))
+        computer_dry_run = False
         if self._access_registry is not None:
             # Product API must never inherit a local operator's broad toolset.
             # Device/PC/server actions need a separately paired companion and
             # explicit product approval model before product exposure.
             from troika_product.capabilities import ROUTER_TOOLSET, wrap_progress
+            from troika_product.computer_agent import available as computer_run_bound
 
+            computer_dry_run = computer_run_bound()
             enabled_toolsets = [ROUTER_TOOLSET]
             tool_progress_callback = wrap_progress(tool_progress_callback)
             from troika_product.conversation_sessions import CONVERSATION_RULE, conversation_only
@@ -1950,14 +1954,16 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 reasoning_config = {"enabled": False}
 
         max_iterations = int(os.getenv("HERMES_MAX_ITERATIONS", "90"))
+        if computer_dry_run:
+            max_iterations = min(max_iterations, 12)
 
         # Load fallback provider chain so the API server platform has the
         # same fallback behaviour as Telegram/Discord/Slack (fixes #4954).
-        fallback_model = GatewayRunner._load_fallback_model()
+        fallback_model = None if computer_dry_run else GatewayRunner._load_fallback_model()
         from agent.provider_metering import current_provider_guard
         own = getattr(current_provider_guard(), "credentials", None)
         context = getattr(current_provider_guard(), "context", None)
-        if self._access_registry is not None and context is not None and session_id:
+        if self._access_registry is not None and context is not None and session_id and not computer_dry_run:
             from troika_product.conversation_sessions import ConversationSessions, conversation_only
             context.conversation_only = conversation_only(current_user_message)
             context.archive_messages = ConversationSessions(
@@ -1988,7 +1994,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             tool_progress_callback=tool_progress_callback,
             tool_start_callback=tool_start_callback,
             tool_complete_callback=tool_complete_callback,
-            session_db=self._ensure_session_db(),
+            session_db=None if computer_dry_run else self._ensure_session_db(),
             fallback_model=fallback_model,
             reasoning_config=reasoning_config,
             gateway_session_key=gateway_session_key,
@@ -1996,10 +2002,13 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             # Product memory must come only from tenant-owned stores until a
             # provider implements an account-deletable user scope.
             skip_memory=self._access_registry is not None,
+            skip_context_files=computer_dry_run,
         )
         # Product conversations can contain voice transcripts and private
         # document text. Keep raw user content out of the operator logs.
         agent._redact_content_logs = self._access_registry is not None
+        if computer_dry_run:
+            agent._session_json_enabled = False
         if self._access_registry is not None:
             from troika_product.agent_policy import install_agent_policy
             install_agent_policy(agent, self._product_resource_config, current_provider_guard())
@@ -5935,6 +5944,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         except Exception:
             workflow_body = {}
         if isinstance(workflow_body, dict) and workflow_body.get("workflow") == "development":
+            if workflow_body.get("computer_dry_run") is True:
+                return web.json_response(_openai_error("Computer dry run requires a conversation Run"), status=400)
             from troika_product.development_runtime import start_development_run
             return await start_development_run(self, request, workflow_body)
 
@@ -5963,6 +5974,15 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             body = await request.json()
         except Exception:
             return web.json_response(_openai_error("Invalid JSON"), status=400)
+
+        if not isinstance(body, dict) or type(body.get("computer_dry_run", False)) is not bool:
+            return web.json_response(_openai_error("Invalid Run options"), status=400)
+        principal = self._product_principal(request)
+        computer_control = self._computer_dry_run if body.get("computer_dry_run") else None
+        if body.get("computer_dry_run") and (computer_control is None or principal is None):
+            return web.json_response(
+                _openai_error("Computer dry run unavailable", code="computer_dry_run_unavailable"), status=404,
+            )
 
         delivery_mode = body.get("artifact_delivery", "server")
         if not isinstance(delivery_mode, str) or delivery_mode not in {"device", "server"}:
@@ -6023,16 +6043,24 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                     conversation_history.append({"role": msg["role"], "content": str(content)})
 
         run_id = f"run_{uuid.uuid4().hex}"
+        computer_run = None
+        if computer_control is not None:
+            from troika_product.computer_agent import ComputerAgentRun
+            computer_run = ComputerAgentRun(computer_control, principal, run_id)
         session_id = body.get("session_id") or stored_session_id or run_id
+        if computer_run is not None:
+            session_id = run_id
+            conversation_history = []
         session_auth_err = self._authorize_product_session(
             request, str(session_id), claim=True
         )
         if session_auth_err:
             return session_auth_err
 
-        session_id, conversation_history = self._prepare_product_conversation(
-            request, str(session_id), user_message, conversation_history
-        )
+        if computer_run is None:
+            session_id, conversation_history = self._prepare_product_conversation(
+                request, str(session_id), user_message, conversation_history
+            )
 
         quota_err = self._consume_product_request_quota(request)
         if quota_err:
@@ -6052,14 +6080,20 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 details=audit_details,
             )
 
-        approval_session_key = gateway_session_key or session_id or run_id
-        principal = self._product_principal(request)
+        approval_session_key = run_id if computer_run is not None else gateway_session_key or session_id or run_id
         memory_input = user_message if (
             isinstance(raw_input, str)
             or (isinstance(raw_input, list) and raw_input[-1].get("role", "user") == "user")
         ) else ""
-        private_project_context = self._assistant_context(request, user_message=memory_input)
+        private_project_context = (
+            self._assistant_context(request, user_message=memory_input) if computer_run is None else None
+        )
         ephemeral_system_prompt = instructions
+        if computer_run is not None:
+            ephemeral_system_prompt = (
+                "Выполни просьбу в тестовом окне. Все действия моделируются. "
+                "Осмотри окно перед нажатием. Успех симуляции не подтверждает действие на устройстве."
+            )
         if private_project_context:
             ephemeral_system_prompt = (
                 (str(ephemeral_system_prompt) + "\n\n") if ephemeral_system_prompt else ""
@@ -6112,10 +6146,24 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         }
         if principal is None:
             queued_fields["model"] = body.get("model", self._model_name)
+        if computer_run is not None:
+            queued_fields["mode"] = "computer_dry_run"
         self._set_run_status(run_id, "queued", **queued_fields)
 
         async def _run_and_close():
             try:
+                if computer_run is not None:
+                    from troika_product.computer_control import ComputerControlError
+
+                    self._set_run_status(run_id, "waiting_for_approval")
+                    try:
+                        await computer_run.wait_for_consent()
+                    except ComputerControlError as exc:
+                        error = "Пробный запуск завершён без разрешения устройства."
+                        self._set_run_status(run_id, "failed", error=error, error_code=exc.code, last_event="run.failed")
+                        q.put_nowait({"event": "run.failed", "run_id": run_id, "timestamp": time.time(),
+                                     "error": error, "error_code": exc.code})
+                        return
                 self._set_run_status(run_id, "running")
 
                 def _approval_notify(approval_data: Dict[str, Any]) -> None:
@@ -6248,24 +6296,29 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                                 "TROIKA_PRODUCT_WORKSPACE_ROOT"
                             )
                         product_stream = None
-                        if principal is not None:
-                            from troika_product.streaming import GuardedTextStream
-                            product_stream = GuardedTextStream(_text_cb, user_message)
-                        agent = self._create_agent(
-                            ephemeral_system_prompt=ephemeral_system_prompt,
-                            session_id=session_id,
-                            current_user_message=user_message,
-                            stream_delta_callback=product_stream.feed if product_stream else _text_cb,
-                            tool_progress_callback=event_cb,
-                            gateway_session_key=gateway_session_key,
-                        )
-                        self._active_run_agents[run_id] = agent
-                        register_gateway_notify(approval_session_key, _approval_notify)
-                        r = agent.run_conversation(
-                            user_message=user_message,
-                            conversation_history=conversation_history,
-                            task_id=effective_task_id,
-                        )
+                        stream_callback = None
+                        if computer_run is None:
+                            stream_callback = _text_cb
+                            if principal is not None:
+                                from troika_product.streaming import GuardedTextStream
+                                product_stream = GuardedTextStream(_text_cb, user_message)
+                                stream_callback = product_stream.feed
+                        with computer_run.bind() if computer_run is not None else nullcontext():
+                            agent = self._create_agent(
+                                ephemeral_system_prompt=ephemeral_system_prompt,
+                                session_id=session_id,
+                                current_user_message=user_message,
+                                stream_delta_callback=stream_callback,
+                                tool_progress_callback=event_cb,
+                                gateway_session_key=gateway_session_key if computer_run is None else None,
+                            )
+                            self._active_run_agents[run_id] = agent
+                            register_gateway_notify(approval_session_key, _approval_notify)
+                            r = agent.run_conversation(
+                                user_message=user_message,
+                                conversation_history=conversation_history,
+                                task_id=effective_task_id,
+                            )
                     finally:
                         try:
                             unregister_gateway_notify(approval_session_key)
@@ -6326,8 +6379,12 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                         last_event="run.failed",
                     )
                 else:
-                    final_response = result.get("final_response", "") if isinstance(result, dict) else ""
-                    if principal is not None and final_response and not result.get("_product_streamed"):
+                    if computer_run is not None:
+                        final_response = computer_run.final_response()
+                    else:
+                        final_response = result.get("final_response", "") if isinstance(result, dict) else ""
+                    if principal is not None and final_response and (
+                            computer_run is not None or not result.get("_product_streamed")):
                         q.put_nowait({
                             "event": "message.delta",
                             "run_id": run_id,

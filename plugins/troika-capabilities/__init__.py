@@ -7,9 +7,10 @@ def register(ctx):
         CALL_SCHEMA, CALL_TOOL, ROUTER_TOOLSET, SEARCH_SCHEMA, SEARCH_TOOL,
         discover, execute,
     )
+    from troika_product.computer_agent import available as computer_run_bound
 
     def product_mode():
-        return get_session_env("TROIKA_PRODUCT_MODE", "") == "1"
+        return get_session_env("TROIKA_PRODUCT_MODE", "") == "1" and not computer_run_bound()
 
     product_mode._hermes_skip_availability_cache = True
 
