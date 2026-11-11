@@ -594,6 +594,18 @@ namespace Troika.Desktop {
         [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
         public static readonly uint ActivationMessage = RegisterWindowMessage("TroikaDesktop.Activate.v1");
         [STAThread] public static int Main(string[] args) {
+            if (args.Contains("--computer-use-agent")) {
+                if (args.Length != 2 || args[0] != "--computer-use-agent") return 2;
+                try {
+                    using (var agent = new ComputerUseAgent(args[1], Environment.GetEnvironmentVariable("TROIKA_COMPUTER_LAB_TOKEN"))) {
+                        var lab = new Application();
+                        return lab.Run(new ComputerUsePrototypeWindow(new ComputerUseSession(), agent));
+                    }
+                } catch (ArgumentException error) {
+                    MessageBox.Show(error.Message, "Тройка — тест управления с моделью");
+                    return 2;
+                }
+            }
             if (args.Length == 1 && args[0] == "--computer-use-prototype") {
                 var prototype = new Application();
                 return prototype.Run(new ComputerUsePrototypeWindow());

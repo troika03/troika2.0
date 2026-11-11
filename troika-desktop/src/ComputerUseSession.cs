@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 
 namespace Troika.Desktop {
-    internal enum ComputerUseState { Pending, Active, Stopped, Expired, Verified, Failed }
+    internal enum ComputerUseState { Pending, Active, Stopped, Expired, Verified, Failed, Completed }
     internal enum ComputerUseStep { Write, Save }
 
     internal sealed class ComputerUsePermit {
@@ -95,6 +95,14 @@ namespace Troika.Desktop {
                 Expire();
                 if (state == ComputerUseState.Active)
                     Close(verified && completedSteps == 2 ? ComputerUseState.Verified : ComputerUseState.Failed);
+                return state;
+            }
+        }
+
+        internal ComputerUseState Complete() {
+            lock (gate) {
+                Expire();
+                if (state == ComputerUseState.Active) Close(ComputerUseState.Completed);
                 return state;
             }
         }

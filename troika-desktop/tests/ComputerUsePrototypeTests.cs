@@ -1,5 +1,9 @@
 using System;
 using System.IO;
+using System.Net;
+using System.Net.Http;
+using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Automation;
@@ -9,6 +13,10 @@ using System.Windows.Threading;
 using Troika.Desktop;
 
 static class ComputerUsePrototypeTests {
+    private const string LabToken = "test_computer_lab_token_for_one_process";
+    private const string ModelText = "Текст выбран ответом модели.";
+    private const string ModelGoal = "Напиши пробную строку и сохрани её.";
+
     private static void Assert(bool expected, string reason) {
         if (!expected) throw new InvalidOperationException(reason);
     }
@@ -40,8 +48,8 @@ static class ComputerUsePrototypeTests {
         Console.WriteLine("PASS consent, action order, replay rejection and exact expiry");
     }
 
-    private static async Task<ComputerUsePrototypeWindow> Open() {
-        var window = new ComputerUsePrototypeWindow {
+    private static async Task<ComputerUsePrototypeWindow> Open(ComputerUseAgent agent = null) {
+        var window = new ComputerUsePrototypeWindow(new ComputerUseSession(), agent) {
             ShowActivated = false, ShowInTaskbar = false,
             WindowStartupLocation = WindowStartupLocation.Manual, Left = -10000, Top = -10000,
         };
@@ -165,16 +173,96 @@ static class ComputerUsePrototypeTests {
         } finally { Cleanup(window); }
     }
 
-    [STAThread] public static int Main() {
+    private sealed class PlannerFixture : HttpMessageHandler {
+        internal readonly TaskCompletionSource<bool> WriteRequested = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal readonly TaskCompletionSource<bool> ReleaseWrite = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly bool delayWrite;
+        internal int Calls;
+
+        internal PlannerFixture(bool delayWrite = false) { this.delayWrite = delayWrite; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellation) {
+            Interlocked.Increment(ref Calls);
+            Assert(request.RequestUri == new Uri("http://127.0.0.1:8765/v1/computer-lab/next"), "Wrong model pilot endpoint.");
+            Assert(request.Headers.Authorization != null && request.Headers.Authorization.Parameter == LabToken, "Lab token missing.");
+            var body = Json.Parse(await request.Content.ReadAsStringAsync().ConfigureAwait(false));
+            Assert(body.Count == 4 && Json.Text(body, "goal") == ModelGoal, "Unexpected data sent to the test planner.");
+            var view = Json.Map(Json.Get(body, "observation"));
+            object reply;
+            if (view.Count == 0) {
+                reply = new { action = "inspect" };
+            } else {
+                Assert(view.Count == 3 && view.ContainsKey("id") && view.ContainsKey("can_write") && view.ContainsKey("can_save"),
+                    "The planner received extra observation fields.");
+                if (Json.Flag(view, "can_write")) {
+                    WriteRequested.TrySetResult(true);
+                    if (delayWrite) await ReleaseWrite.Task.ConfigureAwait(false);
+                    reply = new { action = "write", observation_id = Json.Text(view, "id"), text = ModelText };
+                } else {
+                    Assert(Json.Flag(view, "can_save"), "The editor did not expose save after write.");
+                    reply = new { action = "save", observation_id = Json.Text(view, "id") };
+                }
+            }
+            return new HttpResponseMessage(HttpStatusCode.OK) {
+                Content = new StringContent(Json.Encode(reply), Encoding.UTF8, "application/json"),
+            };
+        }
+    }
+
+    private static async Task CheckModelPlan(ComputerUseAgent agent, PlannerFixture fixture = null) {
+        var window = await Open(agent);
+        try {
+            window.TaskInput.Text = ModelGoal;
+            Assert(window.Execution == null && (fixture == null || fixture.Calls == 0), "The planner ran before local consent.");
+            Click(window.AllowButton);
+            Assert(await Bounded(window.Execution) == ComputerUseState.Verified, "The selected model commands did not finish.");
+            Assert(File.ReadAllText(window.OutputFile) == ModelText, "The file does not contain the planner's chosen text.");
+            Assert(fixture == null || fixture.Calls == 4, "The planner was not asked to select each of the four commands.");
+            Console.WriteLine("PASS model-selected inspect, write, fresh inspect and verified save");
+        } finally { Cleanup(window); }
+    }
+
+    private static async Task CheckStopCancelsPlanner() {
+        var fixture = new PlannerFixture(true);
+        using (var agent = new ComputerUseAgent("http://127.0.0.1:8765", LabToken, fixture)) {
+            var window = await Open(agent);
+            try {
+                window.TaskInput.Text = ModelGoal;
+                Click(window.AllowButton);
+                Assert(await Bounded(fixture.WriteRequested.Task), "The planner did not reach the pending write.");
+                Click(window.StopButton);
+                fixture.ReleaseWrite.TrySetResult(true);
+                Assert(await Bounded(window.Execution) == ComputerUseState.Stopped, "Late model reply overrode local Stop.");
+                Assert(!File.Exists(window.OutputFile) && fixture.Calls == 2, "A stopped model session dispatched another command.");
+                var handle = new WindowInteropHelper(window).Handle;
+                string editor = AutomationProperties.GetAutomationId(window) + "-editor";
+                var text = await Task.Run(() => ((ValuePattern)FindFixture(handle, editor).GetCurrentPattern(ValuePattern.Pattern)).Current.Value);
+                Assert(text.Length == 0, "A late model reply wrote to the editor after Stop.");
+                Console.WriteLine("PASS local Stop rejects a late model reply before mutation");
+            } finally { fixture.ReleaseWrite.TrySetResult(true); Cleanup(window); }
+        }
+    }
+
+    [STAThread] public static int Main(string[] args) {
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         app.Dispatcher.BeginInvoke(new Action(async () => {
             try {
+                if (args.Length == 2 && args[0] == "--lab-endpoint") {
+                    using (var agent = new ComputerUseAgent(args[1], Environment.GetEnvironmentVariable("TROIKA_COMPUTER_LAB_TOKEN")))
+                        await CheckModelPlan(agent);
+                    app.Shutdown(0);
+                    return;
+                }
                 CheckConsentAndExpiry();
                 await CheckNativeSave();
                 await CheckLateSaveAfterStop();
                 await CheckNoOverwrite();
                 await CheckWindowIdentity();
                 await CheckDistinctCommands();
+                var planner = new PlannerFixture();
+                using (var agent = new ComputerUseAgent("http://127.0.0.1:8765", LabToken, planner))
+                    await CheckModelPlan(agent, planner);
+                await CheckStopCancelsPlanner();
                 app.Shutdown(0);
             } catch (Exception error) {
                 Console.Error.WriteLine(error.Message);

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Automation;
@@ -17,6 +18,9 @@ namespace Troika.Desktop {
         private readonly TextBlock status;
         private readonly TextBlock remaining;
         private readonly TextBox editor;
+        private readonly ComputerUseAgent agent;
+        private CancellationTokenSource running;
+        internal readonly TextBox TaskInput;
         internal readonly ComputerUseSession Session;
         internal readonly Button AllowButton;
         internal readonly Button StopButton;
@@ -25,10 +29,11 @@ namespace Troika.Desktop {
 
         internal ComputerUsePrototypeWindow() : this(new ComputerUseSession()) { }
 
-        internal ComputerUsePrototypeWindow(ComputerUseSession session) {
+        internal ComputerUsePrototypeWindow(ComputerUseSession session, ComputerUseAgent agent = null) {
             Session = session;
+            this.agent = agent;
             OutputFile = Path.Combine(Path.GetTempPath(), "TroikaComputerUse-" + Guid.NewGuid().ToString("N"), "preview.txt");
-            Title = "Тройка — проба управления Windows";
+            Title = agent == null ? "Тройка — проба управления Windows" : "Тройка — тест управления с моделью";
             Width = 540;
             MinWidth = 380;
             SizeToContent = SizeToContent.Height;
@@ -40,11 +45,19 @@ namespace Troika.Desktop {
             AutomationProperties.SetAutomationId(this, targetId);
 
             var body = new StackPanel { Margin = new Thickness(24) };
-            var heading = Text("Проба управления Windows");
+            var heading = Text(agent == null ? "Проба управления Windows" : "Тест управления с моделью");
             heading.FontSize = 22;
             heading.FontWeight = FontWeights.SemiBold;
             body.Children.Add(heading);
-            body.Children.Add(Text("Разрешить Тройке заполнить тестовый редактор и сохранить образец в отдельный временный файл."));
+            if (agent == null) {
+                body.Children.Add(Text("Разрешить Тройке заполнить тестовый редактор и сохранить образец в отдельный временный файл."));
+            } else {
+                body.Children.Add(Text("Текст задачи отправится в OpenRouter. Доступ ограничен этим редактором и отдельным временным файлом."));
+                body.Children.Add(Text("Задача для тестового редактора"));
+                TaskInput = new TextBox { MaxLength = 512, MinHeight = 36, Margin = new Thickness(0, 0, 0, 12), Padding = new Thickness(8) };
+                AutomationProperties.SetName(TaskInput, "Задача для тестового редактора");
+                body.Children.Add(TaskInput);
+            }
             var actions = new WrapPanel();
             AllowButton = ButtonFor("Разрешить и запустить", Start);
             StopButton = ButtonFor("Остановить (Esc)", Stop);
@@ -76,7 +89,8 @@ namespace Troika.Desktop {
             PreviewKeyDown += (sender, args) => {
                 if (args.Key == Key.Escape) { args.Handled = true; Stop(); }
             };
-            Closed += (sender, args) => { Session.Stop(); timer.Stop(); };
+            Closed += (sender, args) => { Session.Stop(); CancelRequest(); timer.Stop(); };
+            if (TaskInput != null) TaskInput.TextChanged += (sender, args) => Refresh();
             Refresh();
         }
 
@@ -118,34 +132,46 @@ namespace Troika.Desktop {
         }
 
         private async void Start() {
+            string goal = TaskInput == null ? null : TaskInput.Text.Trim();
+            if (agent != null && !ComputerUseAgent.ValidGoal(goal)) return;
             if (!Session.Allow()) return;
+            running = new CancellationTokenSource();
             Refresh();
             timer.Start();
             try {
                 var executor = new ComputerUseExecutor(Session, new WindowInteropHelper(this).Handle, targetId, OutputFile);
-                Execution = executor.RunAsync();
+                Execution = agent == null ? executor.RunAsync() : agent.RunAsync(Session, executor, goal, running.Token);
                 await Execution;
             } catch (Exception) {
                 Session.Finish(false);
             } finally {
+                running.Dispose();
+                running = null;
                 Refresh();
             }
         }
 
-        private void Stop() { Session.Stop(); Refresh(); }
+        private void CancelRequest() { if (running != null) running.Cancel(); }
+
+        private void Stop() { Session.Stop(); CancelRequest(); Refresh(); }
 
         private void Refresh() {
             var state = Session.State;
-            AllowButton.IsEnabled = state == ComputerUseState.Pending;
+            AllowButton.IsEnabled = state == ComputerUseState.Pending && (TaskInput == null || ComputerUseAgent.ValidGoal(TaskInput.Text.Trim()));
+            if (TaskInput != null) TaskInput.IsReadOnly = state != ComputerUseState.Pending;
             StopButton.IsEnabled = state == ComputerUseState.Pending || state == ComputerUseState.Active;
             remaining.Text = state == ComputerUseState.Active ? "Доступ ещё " + Session.SecondsRemaining + " с" : "";
             remaining.Visibility = state == ComputerUseState.Active ? Visibility.Visible : Visibility.Collapsed;
-            if (state != ComputerUseState.Active) timer.Stop();
+            if (state != ComputerUseState.Active) {
+                timer.Stop();
+                if (state == ComputerUseState.Expired) CancelRequest();
+            }
             switch (state) {
                 case ComputerUseState.Active: status.Text = "Выполняю пробу в тестовом редакторе."; break;
                 case ComputerUseState.Stopped: status.Text = "Остановлено."; break;
                 case ComputerUseState.Expired: status.Text = "Срок разрешения истёк."; break;
                 case ComputerUseState.Verified: status.Text = "Образец сохранён и проверен.\n" + OutputFile; break;
+                case ComputerUseState.Completed: status.Text = "Модель закончила работу. Файл не создан."; break;
                 case ComputerUseState.Failed: status.Text = "Не удалось подтвердить сохранение образца."; break;
             }
         }
