@@ -1116,6 +1116,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         # Product-mode run ownership.  Runs are transient server objects, so
         # retain their owner only for the same lifetime as _run_statuses.
         self._run_owners: Dict[str, tuple[str, str]] = {}
+        self._computer_dry_run_enabled = extra.get("product_computer_dry_run_enabled") is True
+        self._computer_dry_run = None
         # Active approval session key for each run_id.  The approval core
         # resolves requests by session key, while API clients address the
         # in-flight run by run_id.
@@ -2071,6 +2073,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
 
     def _forget_account_runs(self, user_id: str) -> None:
         """Remove transient outputs and approvals owned by a deleted account."""
+        if self._computer_dry_run is not None:
+            self._computer_dry_run.purge_account(user_id)
         run_ids = [
             run_id
             for run_id, owner in list(self._run_owners.items())
@@ -2153,6 +2157,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
 
     async def _revoke_device_activity(self, user_id: str, device_id: str) -> None:
         """Close live channels and stop transient work for one revoked device."""
+        if self._computer_dry_run is not None:
+            self._computer_dry_run.revoke_device(user_id, device_id)
         from troika_product.device_delivery import device_deliveries
         device_deliveries.purge_owner(user_id, device_id)
         from troika_product.development_checks import development_checks
@@ -5839,6 +5845,10 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         current.setdefault("created_at", fields.pop("created_at", now))
         current.update(fields)
         self._run_statuses[run_id] = current
+        if status in {"stopping", "cancelled", "completed", "failed"}:
+            control = self._computer_dry_run
+            if control is not None:
+                control.stop_run(run_id)
         return current
 
     def _make_run_event_callback(
@@ -6669,6 +6679,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                         and not self._active_run_tasks[run_id].done()):
                     continue
                 logger.debug("[api_server] sweeping orphaned run %s", run_id)
+                if self._computer_dry_run is not None:
+                    self._computer_dry_run.stop_run(run_id)
                 try:
                     from tools.approval import unregister_gateway_notify
 
@@ -6911,6 +6923,10 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             self._app.router.add_get("/v1/runs/{run_id}/events", self._handle_run_events)
             self._app.router.add_post("/v1/runs/{run_id}/approval", self._handle_run_approval)
             self._app.router.add_post("/v1/runs/{run_id}/stop", self._handle_stop_run)
+            if self._computer_dry_run_enabled:
+                from troika_product.computer_api import register_computer_dry_run_routes
+
+                register_computer_dry_run_routes(self._app, self)
             if self._access_registry is not None:
                 from troika_product.development_api import register_development_routes
                 register_development_routes(self._app, self)
