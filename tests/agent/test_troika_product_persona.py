@@ -107,8 +107,9 @@ def test_backend_metadata_is_operator_only(monkeypatch, product_mode, provider):
 @pytest.mark.parametrize("compact,previous_marker", [
     (False, "[TROIKA_PERSONA_VERSION:5]"),
     (True, "[TROIKA_PERSONA_VERSION:6]"),
+    (True, "[TROIKA_PERSONA_VERSION:8]"),
 ])
-def test_pre_identity_fix_sessions_refresh_once_without_rewriting_history(monkeypatch, compact, previous_marker):
+def test_previous_persona_sessions_refresh_once_without_rewriting_history(monkeypatch, compact, previous_marker):
     """Both deployed persona modes migrate once and preserve user conversation bytes."""
     from copy import deepcopy
     from agent.conversation_loop import _restore_or_build_system_prompt

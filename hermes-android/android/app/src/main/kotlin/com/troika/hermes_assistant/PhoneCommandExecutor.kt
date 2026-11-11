@@ -22,11 +22,7 @@ object PhoneCommandExecutor {
     private const val TAG = "PhoneExec"
 
     fun execute(ctx: Context, action: String, params: JSONObject): JSONObject {
-        if (action == "screen_snapshot") {
-            Log.i(TAG, "exec action=screen_snapshot params=<redacted>")
-        } else {
-            Log.i(TAG, "exec action=$action params=$params")
-        }
+        Log.i(TAG, "Command execution started")
         return when (action) {
             "open_app" -> openApp(ctx, params.optString("app"))
             "call" -> dial(ctx, params.optString("number"))
@@ -136,7 +132,7 @@ object PhoneCommandExecutor {
                 params.optBoolean("speak", true),
                 if (params.has("title") && !params.isNull("title")) params.optString("title") else "Тройка",
             )
-            else -> err("unknown action: $action")
+            else -> err("unknown_action")
         }
     }
 
@@ -146,14 +142,14 @@ object PhoneCommandExecutor {
         if (name.isBlank()) return err("missing app")
         // Сначала проверяем алиасы из PhoneCommands.APP_ALIASES (через прямой матч имени)
         val pkg = findPackage(ctx, name)
-        if (pkg == null) return err("app not found: $name")
+        if (pkg == null) return err("app_not_found")
         val intent = ctx.packageManager.getLaunchIntentForPackage(pkg)
         return if (intent != null) {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             ctx.startActivity(intent)
-            ok(mapOf("package" to pkg, "message" to "opened $name"))
+            ok(mapOf("package" to pkg, "message" to "app opened"))
         } else {
-            err("no launch intent for $pkg")
+            err("no_launch_intent")
         }
     }
 
@@ -183,7 +179,7 @@ object PhoneCommandExecutor {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         ctx.startActivity(intent)
-        return ok(mapOf("message" to "dialer opened with $number"))
+        return ok(mapOf("message" to "dialer opened"))
     }
 
     private fun sendSms(ctx: Context, number: String, text: String): JSONObject {
@@ -227,7 +223,7 @@ object PhoneCommandExecutor {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         ctx.startActivity(intent)
-        return ok(mapOf("message" to "navigation to $destination"))
+        return ok(mapOf("message" to "navigation opened"))
     }
 
     private fun webSearch(ctx: Context, query: String): JSONObject {
@@ -237,7 +233,7 @@ object PhoneCommandExecutor {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         ctx.startActivity(intent)
-        return ok(mapOf("message" to "search opened: $query"))
+        return ok(mapOf("message" to "search opened"))
     }
 
     private fun openUrl(ctx: Context, url: String): JSONObject {
@@ -250,9 +246,9 @@ object PhoneCommandExecutor {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             ctx.startActivity(intent)
-            ok(mapOf("message" to "opened: $normalized"))
+            ok(mapOf("message" to "URL opened"))
         } catch (e: Exception) {
-            err("invalid_url: ${e.message}")
+            err("invalid_url")
         }
     }
 
@@ -268,7 +264,7 @@ object PhoneCommandExecutor {
                 "up" -> (cur + max / 5).coerceAtMost(max)
                 "down" -> (cur - max / 5).coerceAtLeast(0)
                 else -> level.toIntOrNull()?.let { (max * it / 100).coerceIn(0, max) }
-                    ?: return err("bad level: $level")
+                    ?: return err("bad_level")
             }
             else -> return err("missing level")
         }
@@ -295,7 +291,7 @@ object PhoneCommandExecutor {
                 "up" -> (cur + 50).coerceAtMost(255)
                 "down" -> (cur - 50).coerceAtLeast(0)
                 else -> level.toIntOrNull()?.let { (255 * it / 100).coerceIn(0, 255) }
-                    ?: return err("bad level: $level")
+                    ?: return err("bad_level")
             }
             else -> return err("missing level")
         }
@@ -347,7 +343,7 @@ object PhoneCommandExecutor {
                 ctx.startActivity(intent)
                 return ok(mapOf("message" to "opened generic all-files settings — find Тройка in the list"))
             } catch (e2: Exception) {
-                return err("cannot_open_settings: ${e2.message}")
+                return err("cannot_open_settings")
             }
         }
     }
@@ -398,7 +394,7 @@ object PhoneCommandExecutor {
             val notifId = NOTIFY_ID_BASE + (System.currentTimeMillis() % 1000).toInt()
             nm.notify(notifId, notif)
         } catch (e: Exception) {
-            Log.e(TAG, "notify post failed: ${e.message}", e)
+            Log.e(TAG, "Notification delivery failed")
         }
 
         // 2. Озвучка через EdgeTTS — в фоне, не блокируем WS-ответ
@@ -417,7 +413,7 @@ object PhoneCommandExecutor {
                         val player = EdgeTtsPlayer(ctx.applicationContext, url, key, voice, rate, pitch, vol)
                         player.speak(text) { player.stop() }
                     } catch (e: Exception) {
-                        Log.e(TAG, "notify TTS failed: ${e.message}", e)
+                        Log.e(TAG, "Notification speech failed")
                     }
                 }.apply { name = "NotifyUserTTS" }.start()
             } else {
@@ -436,7 +432,7 @@ object PhoneCommandExecutor {
         return try {
             block(svc)
         } catch (e: Exception) {
-            err("a11y_error: ${e.message}")
+            err("a11y_error")
         }
     }
 

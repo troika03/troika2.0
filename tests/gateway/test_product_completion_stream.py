@@ -1,4 +1,4 @@
-"""Product text/voice consumers receive only the checked final answer."""
+"""Unverified completion claims never reach product text/voice consumers."""
 
 import asyncio
 import json
@@ -23,18 +23,15 @@ async def test_product_stream_withholds_unverified_model_text(tmp_path, monkeypa
     registry = adapter._access_registry
     owner = registry.create_user("stream@example.com")
     token = registry.issue_device_token(registry.create_device(owner, name="Test", platform="android"))
-    callbacks = []
 
     def create_agent(**kwargs):
-        callback = kwargs.get("stream_delta_callback")
-        callbacks.append(callback)
+        callback = kwargs["stream_delta_callback"]
         agent = MagicMock()
         agent.session_id = "test_stream"
         agent.session_prompt_tokens = agent.session_completion_tokens = agent.session_total_tokens = 0
 
         def conversation(**_):
-            if callback:
-                callback("Готово, я всё сделала!")
+            callback("Готово, я всё сделала!")
             return {"final_response": "Не удалось подтвердить выполнение просьбы.", "messages": []}
 
         agent.run_conversation.side_effect = conversation
@@ -66,4 +63,3 @@ async def test_product_stream_withholds_unverified_model_text(tmp_path, monkeypa
         )
         assert visible == "Не удалось подтвердить выполнение просьбы."
         assert "Готово, я всё сделала!" not in json.dumps(events, ensure_ascii=False)
-        assert callbacks == [None]

@@ -1758,6 +1758,8 @@ DEFAULT_CONFIG = {
                 "product_resource_services": {},
                 "product_speech": {"backend": "edge", "voice": ""},
                 "product_resource_task_tokens": 250000,
+                "product_agent_timeout_seconds": 1800,
+                "product_tool_loop_guardrails_enabled": True,
                 "product_resource_approval_tokens": 100000,
                 "product_resource_subsidy_tokens": 33333333,
                 "product_billing_enabled": False,

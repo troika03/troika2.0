@@ -164,7 +164,7 @@ def _identity_source() -> str:
     from troika_product.context_guidance import CORE_PERSONA
     from troika_product.persona import original_persona
 
-    return CORE_PERSONA + "\n" + original_persona()
+    return CORE_PERSONA + "\n\n" + original_persona()
 
 
 def _instruction_overlap(text: str, system_prompt: str) -> bool:
@@ -175,6 +175,29 @@ def _instruction_overlap(text: str, system_prompt: str) -> bool:
         return False
     source = " ".join(re.findall(r"\w+", (system_prompt + "\n" + _identity_source()).casefold()))
     return any(" ".join(words[i:i + 10]) in source for i in range(len(words) - 9))
+
+
+@lru_cache(maxsize=1)
+def _instruction_paragraphs() -> tuple[str, ...]:
+    return tuple(dict.fromkeys(
+        " ".join(re.findall(r"\w+", paragraph.casefold()))
+        for paragraph in re.split(r"\n\s*\n", _identity_source())
+        if paragraph.strip() and not paragraph.lstrip().startswith("#")
+    ))
+
+
+def pending_instruction_prefix(text: str) -> bool:
+    """Hold a possible source excerpt until enough text distinguishes it.
+
+    A short ordinary sentence is not a disclosure on its own. Keeping a
+    matching paragraph opening buffered lets the existing substantial-overlap
+    check see the following words before that sentence is spoken.
+    """
+    words = re.findall(r"\w+", text.casefold())
+    if len(words) < 3:
+        return False
+    candidate = " ".join(words)
+    return any(source.startswith(candidate + " ") for source in _instruction_paragraphs())
 
 
 def public_reply(text: str, user_message="", system_prompt: str = "") -> str:

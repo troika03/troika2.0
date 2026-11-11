@@ -40,6 +40,8 @@ class ResourceRuntime(LLMMeter):
             run_token_limit=ceiling,
         )
         self._heartbeat_stop = threading.Event()
+        from troika_product.agent_policy import AgentDeadline
+        self._agent_deadline = AgentDeadline(config.get("product_agent_timeout_seconds", 1800))
         from troika_product.working_context import WorkingContext
         self.context = WorkingContext(
             self, enabled=config.get("product_compact_context_enabled", False)
@@ -56,6 +58,7 @@ class ResourceRuntime(LLMMeter):
             raise ValueError("invalid expensive-task approval threshold")
 
     def approve_resource_cost(self, upper_tokens, *, premium=False):
+        self.check_deadline()
         from troika_product.subscription_policy import plan_policy
         from tools.approval import request_gateway_approval
 
@@ -93,6 +96,7 @@ class ResourceRuntime(LLMMeter):
                 ),
                 choices=("once", "deny"),
             )
+            self.check_deadline()
             if not consent.get("approved") or not consent.get("user_consent"):
                 self.stopped = True
                 raise ProviderCallBlocked(
@@ -124,6 +128,7 @@ class ResourceRuntime(LLMMeter):
         ).start()
 
     def finish(self):
+        self._agent_deadline.close()
         self.stopped = True
         self.context.clear()
         try:
@@ -154,7 +159,21 @@ class ResourceRuntime(LLMMeter):
             # lease expires; dispatched money holds remain for reconciliation.
             pass
 
+    def bind_agent_deadline(self, agent):
+        def stop():
+            self.block_pending_calls()
+            agent.interrupt()
+        self._agent_deadline.bind(stop)
+
+    def check_deadline(self):
+        self._agent_deadline.check()
+
+    def block_pending_calls(self):
+        self._agent_deadline.close()
+        super().block_pending_calls()
+
     def begin_call(self, *args, **kwargs):
+        self.check_deadline()
         if self.stopped:
             raise ProviderCallBlocked("resource_run_stopped", "Задача остановлена.")
         try:
@@ -167,11 +186,13 @@ class ResourceRuntime(LLMMeter):
         return super().begin_call(*args, **kwargs)
 
     def prepare_payload(self, payload, *, client):
+        self.check_deadline()
         if self.stopped:
             raise ProviderCallBlocked("resource_run_stopped", "Задача остановлена.")
         return self.context.prepare(payload, client=client)
 
     def begin_tool(self, name, arguments):
+        self.check_deadline()
         if self.stopped:
             raise ProviderCallBlocked("resource_run_stopped", "Задача остановлена.")
         self.ledger.heartbeat_run(self.principal, self.run_key)

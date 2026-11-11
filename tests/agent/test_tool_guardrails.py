@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from agent.tool_guardrails import (
     ToolCallGuardrailConfig,
     ToolCallGuardrailController,
@@ -9,6 +11,26 @@ from agent.tool_guardrails import (
     canonical_tool_args,
     classify_tool_failure,
 )
+
+
+def test_trusted_gateway_resolver_is_used_before_and_after_execution():
+    controller = ToolCallGuardrailController(
+        ToolCallGuardrailConfig(hard_stop_enabled=True, no_progress_block_after=2),
+        call_resolver=lambda name, args: (args["tool"], args["arguments"]),
+    )
+    call = {"tool": "web_search", "arguments": {"query": "fixture"}}
+    controller.after_call("gateway", call, '{"data":[]}', failed=False)
+    controller.after_call("gateway", call, '{"data":[]}', failed=False)
+    blocked = controller.before_call("gateway", call)
+    assert blocked.code == "idempotent_no_progress_block"
+    assert blocked.tool_name == "web_search"
+    assert controller.before_call("gateway", {"tool": "web_extract", "arguments": {"url": "fixture"}}).allows_execution
+
+
+def test_invalid_trusted_gateway_identity_does_not_silently_disable_guardrails():
+    controller = ToolCallGuardrailController(call_resolver=lambda name, args: ("", []))
+    with pytest.raises(ValueError, match="guardrail identity"):
+        controller.before_call("gateway", {})
 
 
 def test_tool_call_signature_hashes_canonical_nested_unicode_args_without_exposing_raw_args():

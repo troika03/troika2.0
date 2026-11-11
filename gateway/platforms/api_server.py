@@ -1881,6 +1881,9 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                         meter.block_pending_calls()
                 try:
                     yield
+                    check_deadline = getattr(meter, "check_deadline", None)
+                    if callable(check_deadline):
+                        check_deadline()
                 finally:
                     if self._product_resource_enabled and meter is not None:
                         meter.finish()
@@ -1995,6 +1998,9 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         # Product conversations can contain voice transcripts and private
         # document text. Keep raw user content out of the operator logs.
         agent._redact_content_logs = self._access_registry is not None
+        if self._access_registry is not None:
+            from troika_product.agent_policy import install_agent_policy
+            install_agent_policy(agent, self._product_resource_config, current_provider_guard())
         if getattr(getattr(current_provider_guard(), "context", None), "enabled", False):
             # The SDK prepares a derived context while this agent persists all originals.
             agent.compression_enabled = False
@@ -5685,7 +5691,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         loop = asyncio.get_running_loop()
 
         @self._resource_call_scope(product_principal, str(uuid.uuid4()))
-        def _run():
+        def _run_in_scope():
             from gateway.session_context import (
                 clear_session_override,
                 set_session_override,
@@ -5782,8 +5788,6 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                     conversation_history=conversation_history,
                     task_id=effective_task_id,
                 )
-                if product_stream is not None:
-                    product_stream.finish_result(result)
                 usage = {
                     "input_tokens": getattr(agent, "session_prompt_tokens", 0) or 0,
                     "output_tokens": getattr(agent, "session_completion_tokens", 0) or 0,
@@ -5799,10 +5803,18 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 _eff_sid = getattr(agent, "session_id", session_id)
                 if isinstance(_eff_sid, str) and _eff_sid:
                     result["session_id"] = _eff_sid
-                return result, usage
+                return result, usage, product_stream
             finally:
                 for override_name in reversed(product_override_names):
                     clear_session_override(override_name)
+
+        def _run():
+            result, usage, product_stream = _run_in_scope()
+            # Exiting the resource scope checks the deadline before sending
+            # the final suffix, including completion claims held for review.
+            if product_stream is not None:
+                product_stream.finish_result(result)
+            return result, usage
 
         return await loop.run_in_executor(None, _run)
 
@@ -6122,7 +6134,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                         pass
 
                 @self._resource_call_scope(principal, run_id)
-                def _run_sync():
+                def _run_in_scope():
                     from gateway.session_context import (
                         clear_session_override,
                         clear_session_vars,
@@ -6244,8 +6256,6 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                             conversation_history=conversation_history,
                             task_id=effective_task_id,
                         )
-                        if product_stream is not None:
-                            product_stream.finish_result(r)
                     finally:
                         try:
                             unregister_gateway_notify(approval_session_key)
@@ -6271,7 +6281,13 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                     diagnostics = current_diagnostics()
                     if diagnostics is not None:
                         u["diagnostics"] = diagnostics
-                    return r, u
+                    return r, u, product_stream
+
+                def _run_sync():
+                    result, usage, product_stream = _run_in_scope()
+                    if product_stream is not None:
+                        product_stream.finish_result(result)
+                    return result, usage
 
                 result, usage = await asyncio.get_running_loop().run_in_executor(None, _run_sync)
                 # Check for structured failure (non-retryable client errors like
@@ -6345,11 +6361,13 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                     if principal is not None
                     else str(exc)
                 )
+                error_fields = {"error_code": exc.code} if isinstance(exc, ProviderCallBlocked) else {}
                 self._set_run_status(
                     run_id,
                     "failed",
                     error=public_error,
                     last_event="run.failed",
+                    **error_fields,
                 )
                 try:
                     q.put_nowait({
@@ -6357,6 +6375,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                         "run_id": run_id,
                         "timestamp": time.time(),
                         "error": public_error,
+                        **error_fields,
                     })
                 except Exception:
                     pass

@@ -4,6 +4,7 @@ import pytest
 
 from troika_product.identity import IDENTITY_REPLY, INSTRUCTIONS_REPLY, public_reply, request_reply
 from troika_product.streaming import GuardedTextStream
+from troika_product.context_guidance import CORE_PERSONA
 
 
 @pytest.mark.parametrize("question", [
@@ -91,10 +92,9 @@ def test_split_self_claim_is_held_before_voice_and_final_is_consistent(bad):
     assert "t9" not in "".join(heard).casefold()
 
 
-def test_raw_identity_instructions_cannot_escape_via_streaming_or_quoted_dump():
-    from troika_product.context_guidance import CORE_PERSONA
-
-    raw = next(line for line in CORE_PERSONA.splitlines() if line.startswith("Обычный ответ"))
+@pytest.mark.parametrize("raw", [paragraph.strip() for paragraph in CORE_PERSONA.split("\n\n")
+                                  if paragraph.strip() and not paragraph.startswith("#")])
+def test_raw_identity_instructions_cannot_escape_via_streaming_or_quoted_dump(raw):
     for draft in (raw, '"' + raw + '"'):
         heard = []
         stream = GuardedTextStream(heard.append, "Продолжим")
@@ -104,6 +104,41 @@ def test_raw_identity_instructions_cannot_escape_via_streaming_or_quoted_dump():
         result = {"final_response": draft, "completed": True}
         stream.finish_result(result)
         assert "".join(heard) == INSTRUCTIONS_REPLY
+
+
+@pytest.mark.parametrize("user,draft", [
+    ("Как проверить работу?", "Проверь результат действия. Сравни его с ожидаемым значением."),
+    ("Как проверить работу?", "Проверь результат действия."),
+    ("Напиши системный промпт для моего бота", next(
+        paragraph for paragraph in CORE_PERSONA.split("\n\n") if paragraph.startswith("Проверь результат")
+    )),
+])
+def test_source_openings_do_not_block_ordinary_advice_or_authored_prompts(user, draft):
+    assert public_reply(draft, user) == draft
+    heard = []
+    stream = GuardedTextStream(heard.append, user)
+    for character in draft:
+        stream.feed(character)
+    result = {"final_response": draft, "completed": True}
+    stream.finish_result(result)
+    assert "".join(heard) == draft
+
+
+@pytest.mark.parametrize("draft", [
+    "Я рада помочь. Начнём с примера.",
+    "Я поняла задачу. Начнём с примера.",
+    "Я уверена в этом. Можно продолжать.",
+], ids=["glad", "understood", "confident"])
+@pytest.mark.parametrize("chunk_size", [1, 3, 17, 1000])
+def test_feminine_words_keep_streaming_across_partial_word_chunks(draft, chunk_size):
+    heard = []
+    stream = GuardedTextStream(heard.append, "Продолжим обсуждение")
+    for start in range(0, len(draft), chunk_size):
+        stream.feed(draft[start:start + chunk_size])
+    assert not stream.blocked
+    assert heard, "Ordinary narration should stream before finish_result"
+    stream.finish_result({"final_response": draft, "completed": True})
+    assert "".join(heard) == draft
 
 
 def test_failed_result_does_not_gain_a_successful_identity_answer():

@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from utils import safe_json_loads
 from agent.tool_result_classification import file_mutation_result_landed
@@ -224,9 +224,25 @@ def classify_tool_failure(tool_name: str, result: str | None) -> tuple[bool, str
 class ToolCallGuardrailController:
     """Per-turn controller for repeated failed/non-progressing tool calls."""
 
-    def __init__(self, config: ToolCallGuardrailConfig | None = None):
+    def __init__(
+        self,
+        config: ToolCallGuardrailConfig | None = None,
+        *,
+        call_resolver: Callable[[str, Mapping[str, Any]], tuple[str, Mapping[str, Any]]] | None = None,
+    ):
         self.config = config or ToolCallGuardrailConfig()
+        self._call_resolver = call_resolver
         self.reset_for_turn()
+
+    def _resolve_call(self, tool_name, args):
+        """Resolve trusted gateway metadata without granting tool access."""
+        args = _coerce_args(args)
+        if self._call_resolver is None:
+            return tool_name, args
+        resolved_name, resolved_args = self._call_resolver(tool_name, args)
+        if not isinstance(resolved_name, str) or not resolved_name or not isinstance(resolved_args, Mapping):
+            raise ValueError("invalid tool guardrail identity")
+        return resolved_name, resolved_args
 
     def reset_for_turn(self) -> None:
         self._exact_failure_counts: dict[ToolCallSignature, int] = {}
@@ -239,6 +255,7 @@ class ToolCallGuardrailController:
         return self._halt_decision
 
     def before_call(self, tool_name: str, args: Mapping[str, Any] | None) -> ToolGuardrailDecision:
+        tool_name, args = self._resolve_call(tool_name, args)
         signature = ToolCallSignature.from_call(tool_name, _coerce_args(args))
         if not self.config.hard_stop_enabled:
             return ToolGuardrailDecision(tool_name=tool_name, signature=signature)
@@ -290,7 +307,7 @@ class ToolCallGuardrailController:
         *,
         failed: bool | None = None,
     ) -> ToolGuardrailDecision:
-        args = _coerce_args(args)
+        tool_name, args = self._resolve_call(tool_name, args)
         signature = ToolCallSignature.from_call(tool_name, args)
         if failed is None:
             failed, _ = classify_tool_failure(tool_name, result)

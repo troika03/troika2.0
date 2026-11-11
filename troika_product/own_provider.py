@@ -76,6 +76,7 @@ class OwnProviderRuntime(ResourceRuntime):
         return own
 
     def begin_call(self, payload, *, provider, base_url):
+        self.check_deadline()
         if self.stopped or base_url.rstrip("/") != ENDPOINTS[self.credentials.provider]:
             raise ProviderCallBlocked("resource_byok_scope_invalid", "Маршрут личного API остановлен.")
         self.ledger.heartbeat_run(self.principal, self.run_key)

@@ -50,7 +50,7 @@ class PhoneBridgeClient(
         if (!isRunning.get()) return
 
         val wsUrl = serverUrl.replaceFirst("http", "ws").trimEnd('/') + "/v1/phone/commands"
-        Log.i(tag, "Connecting to $wsUrl")
+        Log.i(tag, "WS connecting")
 
         val req = Request.Builder()
             .url(wsUrl)
@@ -70,26 +70,22 @@ class PhoneBridgeClient(
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                if (text.contains("screen_snapshot")) {
-                    Log.d(tag, "Received screen snapshot command (details redacted)")
-                } else {
-                    Log.d(tag, "Received: ${text.take(200)}")
-                }
+                Log.d(tag, "WS command received")
                 handleCommand(text)
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                Log.i(tag, "WS closing: $code $reason")
+                Log.i(tag, "WS closing code=$code")
                 webSocket.close(1000, null)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                Log.i(tag, "WS closed: $code $reason")
+                Log.i(tag, "WS closed code=$code")
                 scheduleReconnect()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.w(tag, "WS failure: ${t.message}")
+                Log.w(tag, "WS transport failed")
                 scheduleReconnect()
             }
         })
@@ -117,10 +113,10 @@ class PhoneBridgeClient(
                 val result = try {
                     PhoneCommandExecutor.execute(ctx, action, params)
                 } catch (e: Exception) {
-                    Log.e(tag, "Executor error for $action: ${e.message}", e)
+                    Log.e(tag, "Command execution failed")
                     JSONObject().apply {
                         put("ok", false)
-                        put("error", e.message ?: "executor_failed")
+                        put("error", "executor_failed")
                     }
                 }
                 val response = JSONObject().apply {
@@ -130,7 +126,7 @@ class PhoneBridgeClient(
                 ws?.send(response.toString())
             }.start()
         } catch (e: Exception) {
-            Log.e(tag, "Bad command JSON: ${e.message}")
+            Log.e(tag, "Command JSON invalid")
         }
     }
 }

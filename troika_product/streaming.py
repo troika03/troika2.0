@@ -3,7 +3,7 @@
 import re
 
 from troika_product.completion import CompletionEvidence, _CLAIMS, _DONE
-from troika_product.identity import public_reply, request_reply
+from troika_product.identity import pending_instruction_prefix, public_reply, request_reply
 
 
 class GuardedTextStream:
@@ -40,6 +40,18 @@ class GuardedTextStream:
             phrase = self.pending[:match.end()]
             if not phrase.strip():
                 break
+            if pending_instruction_prefix(phrase):
+                completed_end = list(self._boundary.finditer(self.pending))[-1].end()
+                completed = self.pending[:completed_end]
+                if public_reply(completed, self.user_message) != completed:
+                    self.blocked = True
+                    self.pending = ""
+                    return
+                if pending_instruction_prefix(completed):
+                    if len(self.pending) > 4096:
+                        self.blocked = True
+                        self.pending = ""
+                    return
             if (public_reply(phrase, self.user_message) != phrase
                     or "```" in phrase or _DONE.search(phrase)
                     or any(pattern.search(phrase) for pattern in _CLAIMS.values())

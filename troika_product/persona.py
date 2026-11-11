@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
-TROIKA_PERSONA_MARKER = "[TROIKA_PERSONA_VERSION:8]"
+TROIKA_PERSONA_MARKER = "[TROIKA_PERSONA_VERSION:9]"
 
 
 def current_persona_marker() -> str:

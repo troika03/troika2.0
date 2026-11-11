@@ -63,15 +63,15 @@ class HermesAccessibilityService : AccessibilityService() {
         val y = if (params.has("y") && !params.isNull("y")) params.optInt("y") else -1
 
         if (x >= 0 && y >= 0) {
-            return if (clickAt(x.toFloat(), y.toFloat())) ok("tap at ($x,$y)")
-            else err("gesture_failed at ($x,$y)")
+            return if (clickAt(x.toFloat(), y.toFloat())) ok("tap_dispatched")
+            else err("gesture_failed")
         }
 
         val root = rootInActiveWindow ?: return err("no_active_window")
         val node = findClickableByText(root, text) ?: findClickableByDesc(root, desc)
             ?: return err("element_not_found")
-        return if (clickNode(node)) ok("tapped: ${nodeLabel(node)}")
-        else err("click_failed: ${nodeLabel(node)}")
+        return if (clickNode(node)) ok("element_clicked")
+        else err("click_failed")
     }
 
     fun typeText(text: String): JSONObject {
@@ -82,7 +82,7 @@ class HermesAccessibilityService : AccessibilityService() {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         }
         val performed = focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-        return if (performed) ok("typed: $text") else err("set_text_failed")
+        return if (performed) ok("text_set") else err("set_text_failed")
     }
 
     fun swipe(direction: String): JSONObject {
@@ -94,7 +94,7 @@ class HermesAccessibilityService : AccessibilityService() {
             "down" -> Quad(cx, h * 0.3f, cx, h * 0.7f)
             "left" -> Quad(w * 0.7f, cy, w * 0.3f, cy)
             "right" -> Quad(w * 0.3f, cy, w * 0.7f, cy)
-            else -> return err("bad direction: $direction")
+            else -> return err("bad_direction")
         }
         val path = Path().apply {
             moveTo(sx, sy)
@@ -103,7 +103,7 @@ class HermesAccessibilityService : AccessibilityService() {
         val stroke = GestureDescription.StrokeDescription(path, 0, 250)
         val gesture = GestureDescription.Builder().addStroke(stroke).build()
         val dispatched = dispatchGesture(gesture, null, null)
-        return if (dispatched) ok("swipe $direction") else err("dispatch_failed")
+        return if (dispatched) ok("swipe_dispatched") else err("dispatch_failed")
     }
 
     fun pressBack(): JSONObject {
@@ -167,7 +167,7 @@ class HermesAccessibilityService : AccessibilityService() {
                                 put("image", android.util.Base64.encodeToString(data, android.util.Base64.NO_WRAP))
                             }
                         } catch (e: Exception) {
-                            resultRef[0] = err("screenshot_encode_failed: ${e.message}")
+                            resultRef[0] = err("screenshot_encode_failed")
                         } finally {
                             latch.countDown()
                         }
@@ -181,7 +181,7 @@ class HermesAccessibilityService : AccessibilityService() {
             latch.await(10, java.util.concurrent.TimeUnit.SECONDS)
             return resultRef[0] ?: err("screenshot_timeout")
         } catch (e: Exception) {
-            return err("screenshot_error: ${e.message}")
+            return err("screenshot_error")
         }
     }
 
