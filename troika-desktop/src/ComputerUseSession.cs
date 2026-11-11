@@ -8,10 +8,15 @@ namespace Troika.Desktop {
 
     internal sealed class ComputerUsePermit {
         internal readonly ComputerUseStep Step;
+        internal readonly string Text;
+        internal readonly Func<bool> ObservationIsFresh;
         internal readonly TaskCompletionSource<bool> Result = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         internal bool Consumed;
+        internal bool ObservationExpired;
 
-        internal ComputerUsePermit(ComputerUseStep step) { Step = step; }
+        internal ComputerUsePermit(ComputerUseStep step, string text, Func<bool> observationIsFresh) {
+            Step = step; Text = text; ObservationIsFresh = observationIsFresh;
+        }
     }
 
     internal sealed class ComputerUseSession {
@@ -50,11 +55,11 @@ namespace Troika.Desktop {
             }
         }
 
-        internal ComputerUsePermit Arm(ComputerUseStep step) {
+        internal ComputerUsePermit Arm(ComputerUseStep step, string text, Func<bool> observationIsFresh = null) {
             lock (gate) {
                 Expire();
                 if (state != ComputerUseState.Active || permit != null || completedSteps != (int)step) return null;
-                permit = new ComputerUsePermit(step);
+                permit = new ComputerUsePermit(step, text, observationIsFresh);
                 return permit;
             }
         }
@@ -63,6 +68,12 @@ namespace Troika.Desktop {
             lock (gate) {
                 Expire();
                 if (state != ComputerUseState.Active || permit == null || permit.Consumed || permit.Step != step) return null;
+                if (permit.ObservationIsFresh != null && !permit.ObservationIsFresh()) {
+                    permit.ObservationExpired = true;
+                    permit.Result.TrySetResult(false);
+                    permit = null;
+                    return null;
+                }
                 permit.Consumed = true;
                 return permit;
             }

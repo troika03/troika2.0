@@ -62,8 +62,9 @@ namespace Troika.Desktop {
             AutomationProperties.SetAutomationId(editor, targetId + "-editor");
             body.Children.Add(editor);
             var fixture = new WrapPanel();
-            fixture.Children.Add(FixtureButton("Запись образца", "write", ComputerUseStep.Write, () => {
-                editor.Text = ComputerUseExecutor.Sample;
+            fixture.Children.Add(FixtureButton("Запись образца", "write", ComputerUseStep.Write, value => {
+                if (editor.Text.Length != 0) return false;
+                editor.Text = value;
                 return true;
             }));
             fixture.Children.Add(FixtureButton("Сохранение файла", "save", ComputerUseStep.Save, Save));
@@ -89,12 +90,12 @@ namespace Troika.Desktop {
             return button;
         }
 
-        private Button FixtureButton(string label, string suffix, ComputerUseStep step, Func<bool> action) {
+        private Button FixtureButton(string label, string suffix, ComputerUseStep step, Func<string, bool> action) {
             var button = ButtonFor(label, () => {
                 var permit = Session.Consume(step);
                 if (permit == null) return;
                 bool applied = false;
-                try { applied = action(); }
+                try { applied = action(permit.Text); }
                 catch (IOException) { }
                 catch (UnauthorizedAccessException) { }
                 finally { Session.Report(permit, applied); }
@@ -106,8 +107,8 @@ namespace Troika.Desktop {
             return button;
         }
 
-        private bool Save() {
-            if (editor.Text != ComputerUseExecutor.Sample) return false;
+        private bool Save(string expected) {
+            if (string.IsNullOrEmpty(expected) || editor.Text != expected) return false;
             Directory.CreateDirectory(Path.GetDirectoryName(OutputFile));
             byte[] data = Encoding.UTF8.GetBytes(editor.Text);
             using (var output = new FileStream(OutputFile, FileMode.CreateNew, FileAccess.Write, FileShare.None)) {

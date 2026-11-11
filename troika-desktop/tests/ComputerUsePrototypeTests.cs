@@ -21,28 +21,33 @@ static class ComputerUsePrototypeTests {
         declined.Stop();
         Assert(!declined.Allow(), "Stopping before consent did not close the request.");
         var session = new ComputerUseSession(() => now);
-        Assert(session.Arm(ComputerUseStep.Write) == null, "A write was accepted before consent.");
+        Assert(session.Arm(ComputerUseStep.Write, "sample") == null, "A write was accepted before consent.");
         Assert(session.Allow() && !session.Allow(), "Consent must start a single session.");
-        Assert(session.Arm(ComputerUseStep.Save) == null, "A save was accepted before a write.");
-        var permit = session.Arm(ComputerUseStep.Write);
+        Assert(session.Arm(ComputerUseStep.Save, "sample") == null, "A save was accepted before a write.");
+        var stale = session.Arm(ComputerUseStep.Write, "sample", () => now < TimeSpan.FromSeconds(15));
+        now = TimeSpan.FromSeconds(15);
+        Assert(session.Consume(ComputerUseStep.Write) == null && stale.ObservationExpired && !stale.Result.Task.Result,
+            "An observation that expired while queued was allowed to mutate the editor.");
+        var permit = session.Arm(ComputerUseStep.Write, "sample");
         Assert(permit != null && session.Consume(ComputerUseStep.Write) == permit, "A permitted write could not start.");
         Assert(session.Consume(ComputerUseStep.Write) == null, "A repeated write callback got permission.");
         now = TimeSpan.FromSeconds(ComputerUseSession.ConsentSeconds);
         Assert(session.State == ComputerUseState.Expired && permit.Result.Task.IsCompleted && !permit.Result.Task.Result,
             "Expiry must close the grant and release a waiting executor.");
         session.Report(permit, true);
-        Assert(session.Arm(ComputerUseStep.Save) == null && session.Finish(true) == ComputerUseState.Expired,
+        Assert(session.Arm(ComputerUseStep.Save, "sample") == null && session.Finish(true) == ComputerUseState.Expired,
             "A late receipt revived an expired grant.");
         Console.WriteLine("PASS consent, action order, replay rejection and exact expiry");
     }
 
-    private static ComputerUsePrototypeWindow Open() {
+    private static async Task<ComputerUsePrototypeWindow> Open() {
         var window = new ComputerUsePrototypeWindow {
             ShowActivated = false, ShowInTaskbar = false,
             WindowStartupLocation = WindowStartupLocation.Manual, Left = -10000, Top = -10000,
         };
         window.Show();
         window.UpdateLayout();
+        await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
         return window;
     }
 
@@ -59,7 +64,7 @@ static class ComputerUsePrototypeTests {
     }
 
     private static async Task CheckNativeSave() {
-        var window = Open();
+        var window = await Open();
         try {
             Assert(window.AllowButton.IsVisible && window.StopButton.IsVisible, "Consent and Stop must be visible in the prototype window.");
             Assert(!File.Exists(window.OutputFile), "Opening the window created a file without consent.");
@@ -82,16 +87,16 @@ static class ComputerUsePrototypeTests {
     }
 
     private static async Task CheckLateSaveAfterStop() {
-        var window = Open();
+        var window = await Open();
         try {
             var handle = new WindowInteropHelper(window).Handle;
             string id = AutomationProperties.GetAutomationId(window);
             Assert(window.Session.Allow(), "Consent could not be set for the fixture.");
-            var write = window.Session.Arm(ComputerUseStep.Write);
+            var write = window.Session.Arm(ComputerUseStep.Write, ComputerUseExecutor.Sample);
             await Task.Run(() => InvokeFixture(handle, id + "-write"));
             Assert(await Bounded(write.Result.Task), "The fixture did not receive the native write.");
 
-            var save = window.Session.Arm(ComputerUseStep.Save);
+            var save = window.Session.Arm(ComputerUseStep.Save, ComputerUseExecutor.Sample);
             Assert(save != null, "Save was not pending before Stop.");
             Click(window.StopButton);
             await Task.Run(() => InvokeFixture(handle, id + "-save"));
@@ -106,7 +111,7 @@ static class ComputerUsePrototypeTests {
     }
 
     private static async Task CheckNoOverwrite() {
-        var window = Open();
+        var window = await Open();
         try {
             Directory.CreateDirectory(Path.GetDirectoryName(window.OutputFile));
             File.WriteAllText(window.OutputFile, "Existing test fixture");
@@ -118,7 +123,7 @@ static class ComputerUsePrototypeTests {
     }
 
     private static async Task CheckWindowIdentity() {
-        var window = Open();
+        var window = await Open();
         try {
             Assert(window.Session.Allow(), "Could not start the fixture grant.");
             var wrongWindow = new ComputerUseExecutor(window.Session, new WindowInteropHelper(window).Handle,
@@ -126,6 +131,37 @@ static class ComputerUsePrototypeTests {
             Assert(await Bounded(wrongWindow.RunAsync()) == ComputerUseState.Failed, "An unapproved window was accepted.");
             Assert(!File.Exists(window.OutputFile), "The wrong window produced a file.");
             Console.WriteLine("PASS native window identity check");
+        } finally { Cleanup(window); }
+    }
+
+    private static async Task CheckDistinctCommands() {
+        var window = await Open();
+        try {
+            var now = TimeSpan.Zero;
+            var executor = new ComputerUseExecutor(window.Session, new WindowInteropHelper(window).Handle,
+                AutomationProperties.GetAutomationId(window), window.OutputFile, () => now);
+            Assert(await Bounded(executor.InspectAsync()) == null, "Inspect ran before consent.");
+            Assert(window.Session.Allow(), "The command session could not start.");
+            var expired = await Bounded(executor.InspectAsync());
+            Assert(expired != null && expired.CanWrite && !expired.CanSave, "The empty editor exposed the wrong actions.");
+            now = TimeSpan.FromSeconds(ComputerUseExecutor.ObservationSeconds);
+            const string text = "Текст задан отдельной командой.";
+            Assert(await Bounded(executor.WriteAsync(expired.Id, text)) == ComputerUseCommandResult.StaleObservation,
+                "An expired observation authorized a native write.");
+            var current = await Bounded(executor.InspectAsync());
+            Assert(await Bounded(executor.WriteAsync(current.Id, "unsafe\0text")) == ComputerUseCommandResult.InvalidText,
+                "A control character was accepted as text.");
+            Assert(await Bounded(executor.WriteAsync(current.Id, text)) == ComputerUseCommandResult.Applied,
+                "The command text was not applied.");
+            Assert(!File.Exists(window.OutputFile), "Write saved without an explicit save command.");
+            Assert(await Bounded(executor.SaveAsync(current.Id)) == ComputerUseCommandResult.StaleObservation,
+                "An observation from before the write was accepted by save.");
+            var written = await Bounded(executor.InspectAsync());
+            Assert(written != null && !written.CanWrite && written.CanSave, "The written editor exposed the wrong actions.");
+            Assert(await Bounded(executor.SaveAsync(written.Id)) == ComputerUseCommandResult.Verified,
+                "The separate save command was not verified.");
+            Assert(File.ReadAllText(window.OutputFile) == text, "The file did not contain the command text.");
+            Console.WriteLine("PASS independent inspect, arbitrary bounded text, stale rejection and verified save");
         } finally { Cleanup(window); }
     }
 
@@ -138,6 +174,7 @@ static class ComputerUsePrototypeTests {
                 await CheckLateSaveAfterStop();
                 await CheckNoOverwrite();
                 await CheckWindowIdentity();
+                await CheckDistinctCommands();
                 app.Shutdown(0);
             } catch (Exception error) {
                 Console.Error.WriteLine(error.Message);
