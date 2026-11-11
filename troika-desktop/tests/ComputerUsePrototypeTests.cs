@@ -241,12 +241,116 @@ static class ComputerUsePrototypeTests {
         }
     }
 
+    private sealed class ConsentFixture : HttpMessageHandler {
+        internal static readonly string DeviceToken = "trk_live_" + new string('A', 43);
+        private static readonly string GrantId = new string('c', 32);
+        private static readonly string RunId = "run_" + new string('d', 32);
+        internal readonly TaskCompletionSource<bool> ConsentSent = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal readonly TaskCompletionSource<bool> ReleaseConsent = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal int Requests;
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellation) {
+            Interlocked.Increment(ref Requests);
+            Assert(request.Headers.Authorization.Parameter == DeviceToken, "The request used the wrong device token.");
+            var path = request.RequestUri.AbsolutePath;
+            object response;
+            if (request.Method == HttpMethod.Get) {
+                Assert(path == "/v1/computer-dry-run/requests", "Unexpected request listing route.");
+                response = new { version = 1, requests = new[] {
+                    new { run_id = RunId, grant_id = GrantId, mode = "dry_run", status = "pending", platform = "windows" },
+                }};
+            } else {
+                var body = Json.Parse(await request.Content.ReadAsStringAsync().ConfigureAwait(false));
+                Assert(Json.Text(body, "grant_id") == GrantId && Json.Number(body, "version") == 1, "Consent targeted the wrong grant.");
+                var prefix = "/v1/runs/" + RunId + "/computer-dry-run/";
+                bool isConsent = path == prefix + "consent";
+                Assert(isConsent || path == prefix + "stop", "Unexpected consent operation.");
+                if (isConsent) {
+                    Assert(Json.Flag(body, "allow"), "The allow button did not grant consent.");
+                    ConsentSent.TrySetResult(true);
+                    await ReleaseConsent.Task.ConfigureAwait(false);
+                }
+                response = new { version = 1, mode = "dry_run", grant_id = GrantId, status = isConsent ? "active" : "stopped" };
+            }
+            return new HttpResponseMessage(HttpStatusCode.OK) {
+                Content = new StringContent(Json.Encode(response), Encoding.UTF8, "application/json"),
+            };
+        }
+    }
+
+    private static async Task<ComputerUseConsentWindow> OpenConsent(ApiClient client) {
+        var window = new ComputerUseConsentWindow(client) {
+            ShowActivated = false, ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.Manual, Left = -10000, Top = -10000,
+        };
+        window.Show();
+        await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+        await WaitForOperation(window.Operation);
+        return window;
+    }
+
+    private static async Task WaitForOperation(Task task) {
+        Assert(task != null && await Task.WhenAny(task, Task.Delay(6000)) == task, "Consent operation timed out.");
+        await task;
+    }
+
+    private static async Task CheckRemoteConsent(bool close) {
+        var server = new ConsentFixture();
+        using (var client = ComputerUseConsentWindow.Connect("http://127.0.0.1:8765", ConsentFixture.DeviceToken, server)) {
+            var window = await OpenConsent(client);
+            try {
+                Assert(window.AllowButton.IsEnabled && window.DenyButton.IsEnabled && !window.StopButton.IsEnabled
+                    && server.Requests == 1, "Opening the window must only fetch pending requests.");
+                Click(window.AllowButton);
+                var pending = window.Operation;
+                Assert(await Bounded(server.ConsentSent.Task), "Allow did not send consent to the paired server.");
+                Assert(window.StopButton.IsEnabled && !window.AllowButton.IsEnabled, "Stop is required while approval is in flight.");
+                if (close) {
+                    var closed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    window.Closed += (sender, args) => closed.TrySetResult(true);
+                    window.Close();
+                    Assert(await Bounded(closed.Task), "Closing did not wait for the revocation request.");
+                } else {
+                    Click(window.StopButton);
+                    await WaitForOperation(window.Operation);
+                }
+                server.ReleaseConsent.TrySetResult(true);
+                await WaitForOperation(pending);
+                Assert(server.Requests == 3 && window.Requests.Items.Count == 0 && !window.StopButton.IsEnabled,
+                    "A late consent response reactivated a stopped grant.");
+                Assert(window.RefreshButton.IsEnabled != close, "The consent window did not return to the expected state.");
+                Console.WriteLine("PASS Windows consent rejects a late reply after " + (close ? "close" : "Stop"));
+            } finally { server.ReleaseConsent.TrySetResult(true); if (window.IsVisible) window.Close(); }
+        }
+    }
+
+    private static async Task CheckConsentEndpoint(string address) {
+        using (var client = ComputerUseConsentWindow.Connect(address, Environment.GetEnvironmentVariable("TROIKA_COMPUTER_TEST_DEVICE_TOKEN"))) {
+            var window = await OpenConsent(client);
+            try {
+                Assert(window.AllowButton.IsEnabled, "The test server did not deliver its pending Windows grant.");
+                Click(window.AllowButton);
+                await WaitForOperation(window.Operation);
+                Assert(window.StopButton.IsEnabled && window.Requests.Items.Count == 0, "The server did not confirm consent.");
+                Click(window.StopButton);
+                await WaitForOperation(window.Operation);
+                Assert(!window.StopButton.IsEnabled && window.RefreshButton.IsEnabled, "The server did not confirm Stop.");
+                Console.WriteLine("PASS Windows consent window completed authenticated allow and Stop over HTTP");
+            } finally { window.Close(); }
+        }
+    }
+
     [STAThread] public static int Main(string[] args) {
         if (args.Length != 0 && args[0] == ComputerUseNativeDriver.WorkerArgument)
             return ComputerUseNativeDriver.WorkerMain(args);
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         app.Dispatcher.BeginInvoke(new Action(async () => {
             try {
+                if (args.Length == 2 && args[0] == "--consent-endpoint") {
+                    await CheckConsentEndpoint(args[1]);
+                    app.Shutdown(0);
+                    return;
+                }
                 if (args.Length == 2 && args[0] == "--lab-endpoint") {
                     using (var agent = new ComputerUseAgent(args[1], Environment.GetEnvironmentVariable("TROIKA_COMPUTER_LAB_TOKEN")))
                         await CheckModelPlan(agent);
@@ -263,6 +367,8 @@ static class ComputerUsePrototypeTests {
                 using (var agent = new ComputerUseAgent("http://127.0.0.1:8765", LabToken, planner))
                     await CheckModelPlan(agent, planner);
                 await CheckStopCancelsPlanner();
+                await CheckRemoteConsent(false);
+                await CheckRemoteConsent(true);
                 app.Shutdown(0);
             } catch (Exception error) {
                 Console.Error.WriteLine(error.Message);

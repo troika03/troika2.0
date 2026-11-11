@@ -17,11 +17,7 @@ namespace Troika.Desktop {
         private readonly string token;
 
         internal ComputerUseAgent(string address, string token, HttpMessageHandler handler = null) {
-            Uri origin;
-            if (!Uri.TryCreate(address, UriKind.Absolute, out origin) || origin.Scheme != "http" || origin.Host != "127.0.0.1"
-                || origin.Port < 1024 || origin.AbsolutePath != "/" || origin.UserInfo.Length != 0
-                || origin.Query.Length != 0 || origin.Fragment.Length != 0)
-                throw new ArgumentException("Нужен адрес тестового сервера на 127.0.0.1.");
+            var origin = LoopbackOrigin(address);
             if (token == null || !Regex.IsMatch(token, @"\A[A-Za-z0-9_-]{32,128}\z"))
                 throw new ArgumentException("Нужен ключ доступа к тестовому серверу.");
             endpoint = new Uri(origin, "/v1/computer-lab/next");
@@ -29,6 +25,15 @@ namespace Troika.Desktop {
             http = new HttpClient(handler ?? new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false }) {
                 Timeout = Timeout.InfiniteTimeSpan,
             };
+        }
+
+        internal static Uri LoopbackOrigin(string address) {
+            Uri origin;
+            if (!Uri.TryCreate(address, UriKind.Absolute, out origin) || origin.Scheme != "http" || origin.Host != "127.0.0.1"
+                || origin.Port < 1024 || origin.AbsolutePath != "/" || origin.UserInfo.Length != 0
+                || origin.Query.Length != 0 || origin.Fragment.Length != 0)
+                throw new ArgumentException("Нужен адрес тестового сервера на 127.0.0.1.");
+            return origin;
         }
 
         internal static bool ValidGoal(string goal) {
