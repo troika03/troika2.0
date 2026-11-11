@@ -594,6 +594,8 @@ namespace Troika.Desktop {
         [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
         public static readonly uint ActivationMessage = RegisterWindowMessage("TroikaDesktop.Activate.v1");
         [STAThread] public static int Main(string[] args) {
+            if (args.Length != 0 && args[0] == ComputerUseNativeDriver.WorkerArgument)
+                return ComputerUseNativeDriver.WorkerMain(args);
             if (args.Contains("--computer-use-agent")) {
                 if (args.Length != 2 || args[0] != "--computer-use-agent") return 2;
                 try {

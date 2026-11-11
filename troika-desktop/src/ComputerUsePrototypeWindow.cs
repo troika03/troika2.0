@@ -139,7 +139,8 @@ namespace Troika.Desktop {
             Refresh();
             timer.Start();
             try {
-                var executor = new ComputerUseExecutor(Session, new WindowInteropHelper(this).Handle, targetId, OutputFile);
+                var executor = new ComputerUseExecutor(Session, new WindowInteropHelper(this).Handle, targetId, OutputFile,
+                    isolated: agent != null);
                 Execution = agent == null ? executor.RunAsync() : agent.RunAsync(Session, executor, goal, running.Token);
                 await Execution;
             } catch (Exception) {

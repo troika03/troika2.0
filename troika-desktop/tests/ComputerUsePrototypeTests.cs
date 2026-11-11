@@ -90,31 +90,29 @@ static class ComputerUsePrototypeTests {
         return control;
     }
 
-    private static void InvokeFixture(IntPtr handle, string id) {
-        ((InvokePattern)FindFixture(handle, id).GetCurrentPattern(InvokePattern.Pattern)).Invoke();
-    }
-
     private static async Task CheckLateSaveAfterStop() {
         var window = await Open();
         try {
             var handle = new WindowInteropHelper(window).Handle;
             string id = AutomationProperties.GetAutomationId(window);
+            var driver = new ComputerUseNativeDriver(handle, id, true);
+            await Task.Run(() => driver.Invoke("write"));
+            Assert(await Task.Run(() => driver.ReadEditor()) == "", "A child process wrote without permission.");
             Assert(window.Session.Allow(), "Consent could not be set for the fixture.");
             var write = window.Session.Arm(ComputerUseStep.Write, ComputerUseExecutor.Sample);
-            await Task.Run(() => InvokeFixture(handle, id + "-write"));
+            await Task.Run(() => driver.Invoke("write"));
             Assert(await Bounded(write.Result.Task), "The fixture did not receive the native write.");
 
             var save = window.Session.Arm(ComputerUseStep.Save, ComputerUseExecutor.Sample);
             Assert(save != null, "Save was not pending before Stop.");
             Click(window.StopButton);
-            await Task.Run(() => InvokeFixture(handle, id + "-save"));
+            await Task.Run(() => driver.Invoke("save"));
             await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             Assert(window.Session.State == ComputerUseState.Stopped && !await Bounded(save.Result.Task), "Local Stop did not revoke the pending save.");
             Assert(!File.Exists(window.OutputFile), "A native callback saved a file after Stop.");
-            var text = await Task.Run(() => ((ValuePattern)FindFixture(handle, id + "-editor")
-                .GetCurrentPattern(ValuePattern.Pattern)).Current.Value);
+            var text = await Task.Run(() => driver.ReadEditor());
             Assert(text == ComputerUseExecutor.Sample, "Stop should preserve the completed write.");
-            Console.WriteLine("PASS Stop blocks a late native callback without network");
+            Console.WriteLine("PASS cross-process UI Automation obeys local consent and Stop");
         } finally { Cleanup(window); }
     }
 
@@ -135,10 +133,10 @@ static class ComputerUsePrototypeTests {
         try {
             Assert(window.Session.Allow(), "Could not start the fixture grant.");
             var wrongWindow = new ComputerUseExecutor(window.Session, new WindowInteropHelper(window).Handle,
-                "different-window-identity", window.OutputFile);
+                "troika-scratchpad-" + Guid.NewGuid().ToString("N"), window.OutputFile, isolated: true);
             Assert(await Bounded(wrongWindow.RunAsync()) == ComputerUseState.Failed, "An unapproved window was accepted.");
             Assert(!File.Exists(window.OutputFile), "The wrong window produced a file.");
-            Console.WriteLine("PASS native window identity check");
+            Console.WriteLine("PASS cross-process worker rejects a wrong window identity");
         } finally { Cleanup(window); }
     }
 
@@ -218,7 +216,7 @@ static class ComputerUsePrototypeTests {
             Assert(await Bounded(window.Execution) == ComputerUseState.Verified, "The selected model commands did not finish.");
             Assert(File.ReadAllText(window.OutputFile) == ModelText, "The file does not contain the planner's chosen text.");
             Assert(fixture == null || fixture.Calls == 4, "The planner was not asked to select each of the four commands.");
-            Console.WriteLine("PASS model-selected inspect, write, fresh inspect and verified save");
+            Console.WriteLine("PASS model-selected cross-process inspect, write and verified save");
         } finally { Cleanup(window); }
     }
 
@@ -244,6 +242,8 @@ static class ComputerUsePrototypeTests {
     }
 
     [STAThread] public static int Main(string[] args) {
+        if (args.Length != 0 && args[0] == ComputerUseNativeDriver.WorkerArgument)
+            return ComputerUseNativeDriver.WorkerMain(args);
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         app.Dispatcher.BeginInvoke(new Action(async () => {
             try {

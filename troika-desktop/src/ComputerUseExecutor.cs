@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -24,22 +25,19 @@ namespace Troika.Desktop {
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
         private readonly object commandGate = new object();
         private readonly ComputerUseSession session;
-        private readonly IntPtr handle;
-        private readonly string windowId;
+        private readonly ComputerUseNativeDriver driver;
         private readonly string output;
-        private readonly int processId;
         private readonly Func<TimeSpan> clock;
         private ComputerUseObservation observation;
         private TimeSpan observationExpiry;
         private string writtenText;
 
-        internal ComputerUseExecutor(ComputerUseSession session, IntPtr handle, string windowId, string output, Func<TimeSpan> clock = null) {
+        internal ComputerUseExecutor(ComputerUseSession session, IntPtr handle, string windowId, string output,
+                Func<TimeSpan> clock = null, bool isolated = false) {
             this.session = session;
-            this.handle = handle;
-            this.windowId = windowId;
+            driver = new ComputerUseNativeDriver(handle, windowId, isolated);
             this.output = output;
             this.clock = clock ?? (() => ObservationClock.Elapsed);
-            using (var process = Process.GetCurrentProcess()) processId = process.Id;
         }
         private static readonly Stopwatch ObservationClock = Stopwatch.StartNew();
 
@@ -102,8 +100,11 @@ namespace Troika.Desktop {
                     catch (ElementNotEnabledException) { }
                     catch (InvalidOperationException) { }
                     catch (COMException) { }
+                    catch (Win32Exception) { }
                     catch (IOException) { }
                     catch (UnauthorizedAccessException) { }
+                    catch (ArgumentException) { }
+                    catch (FormatException) { }
                     Fail();
                     return failure;
                 }
@@ -127,31 +128,18 @@ namespace Troika.Desktop {
             catch (EncoderFallbackException) { return false; }
         }
 
-        private AutomationElement Find(string suffix, ControlType type) {
-            if (handle == IntPtr.Zero || session.State != ComputerUseState.Active) throw new InvalidOperationException();
-            var root = AutomationElement.FromHandle(handle);
-            if (root.Current.ProcessId != processId || root.Current.AutomationId != windowId) throw new InvalidOperationException();
-            var element = root.FindFirst(TreeScope.Descendants, new AndCondition(
-                new PropertyCondition(AutomationElement.AutomationIdProperty, windowId + "-" + suffix),
-                new PropertyCondition(AutomationElement.ControlTypeProperty, type)));
-            if (element == null || element.Current.ProcessId != processId) throw new InvalidOperationException();
-            return element;
-        }
-
         private string ReadEditor() {
-            var editor = Find("editor", ControlType.Edit);
-            return ((ValuePattern)editor.GetCurrentPattern(ValuePattern.Pattern)).Current.Value;
+            if (session.State != ComputerUseState.Active) throw new InvalidOperationException();
+            return driver.ReadEditor();
         }
 
         private ComputerUseCommandResult Invoke(ComputerUseStep step, string suffix, string text, Guid observationId) {
-            var button = Find(suffix, ControlType.Button);
-            var pattern = (InvokePattern)button.GetCurrentPattern(InvokePattern.Pattern);
             if (!IsCurrent(observationId)) return ComputerUseCommandResult.StaleObservation;
             observation = null;
             var expiresAt = observationExpiry;
             var permit = session.Arm(step, text, () => clock() < expiresAt);
             if (permit == null) return session.State == ComputerUseState.Active ? Fail() : ComputerUseCommandResult.NotActive;
-            pattern.Invoke();
+            driver.Invoke(suffix);
             if (!permit.Result.Task.Wait(TimeSpan.FromSeconds(2))) return Fail();
             if (permit.Result.Task.Result) return ComputerUseCommandResult.Applied;
             return permit.ObservationExpired ? ComputerUseCommandResult.StaleObservation : Fail();
