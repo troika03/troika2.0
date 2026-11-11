@@ -16,7 +16,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = "com.troika.hermes_assistant"
-SOURCE = ROOT / "hermes-android/android/app/src/main/kotlin/com/troika/hermes_assistant"
+ANDROID_SOURCES = ROOT / "hermes-android/android/app/src"
+PACKAGE_PATH = Path(*PACKAGE.split("."))
+SOURCE = ANDROID_SOURCES / "main/kotlin" / PACKAGE_PATH
 
 
 def _cached_jar(group, artifact, version):
@@ -420,10 +422,8 @@ def _run(command, cwd, timeout=90):
     return result.stdout
 
 
-def test_android_command_callers_do_not_log_or_echo_private_payloads(tmp_path):
-    java, javac = _jdk()
-    android = _android_jar()
-    compiler = [
+def _kotlin_compiler():
+    return [
         _cached_jar("org.jetbrains.kotlin", "kotlin-compiler-embeddable", "2.2.20"),
         _cached_jar("org.jetbrains.kotlin", "kotlin-stdlib", "2.2.20"),
         _cached_jar("org.jetbrains.kotlin", "kotlin-script-runtime", "2.2.20"),
@@ -431,6 +431,18 @@ def test_android_command_callers_do_not_log_or_echo_private_payloads(tmp_path):
         _cached_jar("org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm", "1.9.0"),
         _cached_jar("org.jetbrains", "annotations", "13.0"),
     ]
+
+
+def _compile_kotlin(java, compiler, classpath, sources, destination, cwd):
+    _run([java, "-cp", os.pathsep.join(map(str, compiler)), "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
+          "-no-stdlib", "-no-reflect", "-classpath", os.pathsep.join(map(str, classpath)),
+          "-d", destination, *sources], cwd)
+
+
+def test_android_command_callers_do_not_log_or_echo_private_payloads(tmp_path):
+    java, javac = _jdk()
+    android = _android_jar()
+    compiler = _kotlin_compiler()
     json_jar = _cached_jar("org.json", "json", "20180813")
     stubs, production, tests = [tmp_path / name for name in ("stubs", "production", "tests")]
     for directory in (stubs, production, tests):
@@ -444,14 +456,39 @@ def test_android_command_callers_do_not_log_or_echo_private_payloads(tmp_path):
     _run([javac, "-encoding", "UTF-8", "-classpath", android, "-d", stubs, *java_sources], tmp_path)
     app_fixtures = tmp_path / "AppFixtures.kt"
     app_fixtures.write_text(KOTLIN_FIXTURES, encoding="utf-8")
-    classpath = os.pathsep.join(map(str, [android, stubs, json_jar, compiler[1], compiler[-1]]))
+    classpath = [android, stubs, json_jar, compiler[1], compiler[-1]]
     sources = [SOURCE / name for name in ("PhoneBridgeClient.kt", "PhoneCommandExecutor.kt", "HermesAccessibilityService.kt")]
-    _run([java, "-cp", os.pathsep.join(map(str, compiler)), "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
-          "-no-stdlib", "-no-reflect", "-classpath", classpath, "-d", production,
-          *sources, app_fixtures], tmp_path)
+    _compile_kotlin(java, compiler, classpath, [*sources, app_fixtures], production, tmp_path)
     harness = tmp_path / "AndroidCommandPrivacyHarness.java"
     harness.write_text(HARNESS, encoding="utf-8")
     runtime = os.pathsep.join(map(str, [tests, production, stubs, json_jar, compiler[1], android]))
     _run([javac, "-encoding", "UTF-8", "-classpath", runtime, "-d", tests, harness], tmp_path)
     output = _run([java, "-cp", runtime, "com.troika.hermes_assistant.AndroidCommandPrivacyHarness"], tmp_path, timeout=15)
     assert "ANDROID_COMMAND_PRIVACY checks=" in output
+
+
+def test_debug_computer_use_compiles_against_sdk_and_checks_session(tmp_path):
+    java, _ = _jdk()
+    android = _android_jar()
+    compiler = _kotlin_compiler()
+    junit = _cached_jar("junit", "junit", "4.12")
+    hamcrest = _cached_jar("org.hamcrest", "hamcrest-core", "1.3")
+    generated_ids = tmp_path / "R.kt"
+    generated_ids.write_text(
+        f"package {PACKAGE}\nobject R {{ object id {{ const val troika_computer_lab_editor = 1 }} }}\n",
+        encoding="utf-8",
+    )
+    debug = ANDROID_SOURCES / "debug/kotlin" / PACKAGE_PATH
+    tests = ANDROID_SOURCES / "testDebug/kotlin" / PACKAGE_PATH
+    sources = [
+        SOURCE / "HermesAccessibilityService.kt",
+        debug / "AndroidComputerUseSession.kt",
+        debug / "ComputerUseLabActivity.kt",
+        tests / "AndroidComputerUseSessionTest.kt",
+        generated_ids,
+    ]
+    classes = tmp_path / "classes"
+    _compile_kotlin(java, compiler, [android, compiler[1], compiler[-1], junit], sources, classes, tmp_path)
+    runtime = os.pathsep.join(map(str, [classes, compiler[1], junit, hamcrest]))
+    _run([java, "-cp", runtime, "org.junit.runner.JUnitCore", f"{PACKAGE}.AndroidComputerUseSessionTest"],
+         tmp_path, timeout=15)
