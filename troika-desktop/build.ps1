@@ -68,8 +68,13 @@ if ($Test) {
     & (Join-Path $output 'ComputerUsePrototypeTests.exe')
     if ($LASTEXITCODE -ne 0) { throw 'Computer Use prototype tests failed.' }
     $externalEditor = Join-Path $output 'TroikaComputerUseEditor.exe'
-    $externalEditorSource = Join-Path $root 'tests\ComputerUseExternalEditor.cs'
-    & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + $externalEditor) $references $computerUseSources $externalEditorSource
+    $externalEditorSources = @('ComputerUseExternalEditor.cs','ComputerUseVisualPreview.cs') | ForEach-Object { Join-Path $root ('tests\' + $_) }
+    $windowsMetadata = Join-Path $env:WINDIR 'System32\WinMetadata'
+    $ocrReferences = @('Foundation','Globalization','Graphics','Media','Storage') | ForEach-Object {
+        '/reference:' + (Join-Path $windowsMetadata "Windows.$_.winmd")
+    }
+    $ocrReferences += '/reference:' + (Join-Path $framework 'System.Runtime.dll')
+    & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + $externalEditor) $references $ocrReferences $computerUseSources $externalEditorSources
     if ($LASTEXITCODE -ne 0) { throw 'External Computer Use editor build failed.' }
     & $externalEditor --verify
     if ($LASTEXITCODE -ne 0) { throw 'External Computer Use editor checks failed.' }

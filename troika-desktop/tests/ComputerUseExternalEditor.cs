@@ -8,16 +8,19 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Troika.Desktop;
 
 static class ComputerUseExternalEditor {
     [STAThread] public static int Main(string[] args) {
         if (args.Length == 1 && args[0] == "--verify") return Verify(null, ComputerUseExecutor.Sample);
+        if (args.Length == 1 && args[0] == "--preview") return new Application().Run(new ComputerUseVisualPreview());
         bool interactive = args.Length == 4 && args[0] == "--run";
         bool verifyRun = args.Length == 5 && args[0] == "--verify-run";
         if (!interactive && !verifyRun) {
-            Console.Error.WriteLine("Usage: TroikaComputerUseEditor.exe --run <loopback-api> <run-id> <grant-id>");
+            Console.Error.WriteLine("Usage: TroikaComputerUseEditor.exe --preview | --run <loopback-api> <run-id> <grant-id>");
             return 2;
         }
         try {
@@ -45,6 +48,8 @@ static class ComputerUseExternalEditor {
                 if (run == null) {
                     await CheckValueGateAndStop();
                     await CheckPasswordField();
+                    await CheckVisualPreview();
+                    await CheckLateRecognition();
                 }
                 app.Shutdown(0);
             } catch (Exception error) {
@@ -133,6 +138,104 @@ static class ComputerUseExternalEditor {
         } finally { Cleanup(window); }
     }
 
+    private static async Task CheckVisualPreview() {
+        var time = TimeSpan.Zero;
+        var window = new ComputerUseVisualPreview(() => time) {
+            ShowActivated = false,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            Left = -10000,
+            Top = -10000,
+            Width = 960
+        };
+        try {
+            window.Show();
+            await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            await Bounded(window.CaptureAsync());
+            Require(window.Preview.Source == null, "The editor captured a frame before consent.");
+            Click(window.AllowButton);
+            await Bounded(window.CaptureAsync());
+            var frame = window.Preview.Source as BitmapSource;
+            Require(frame != null && frame.PixelWidth == 640 && frame.PixelHeight <= 240,
+                "The preview did not respect the frame bounds.");
+            if (ComputerUseVisualPreview.RussianOcrAvailable) {
+                Require(window.Recognized.Text.Contains("Пробная запись Тройки"), "Windows OCR did not read the sample pixels.");
+                Console.WriteLine("PASS Windows OCR recognized the Russian sample from the editor pixels");
+            } else {
+                Require(window.Recognized.Text.Contains("недоступно"), "The preview did not report the missing OCR language.");
+                Console.WriteLine("SKIP Windows OCR recognition because the Russian language pack is absent");
+            }
+
+            var outsideColor = Color.FromRgb(245, 31, 151);
+            var sibling = new Border { Background = new SolidColorBrush(outsideColor), Height = 30 };
+            ((StackPanel)window.Content).Children.Insert(0, sibling);
+            window.UpdateLayout();
+            await Bounded(window.CaptureAsync());
+            byte[] withSibling = FramePixels((BitmapSource)window.Preview.Source);
+            Require(sibling.ActualWidth > 0 && sibling.ActualHeight > 0 && !ContainsColor(withSibling, outsideColor),
+                "The frame included pixels from the visible sibling of the editor field.");
+            window.Editor.Text = "";
+            window.UpdateLayout();
+            await Bounded(window.CaptureAsync());
+            Require(!withSibling.SequenceEqual(FramePixels((BitmapSource)window.Preview.Source)),
+                "The frame did not render the text field.");
+            Require(!window.Recognized.Text.Contains("Пробная запись Тройки"), "OCR retained text from the previous frame.");
+
+            time = TimeSpan.FromSeconds(15);
+            await Task.Delay(250);
+            Require(window.Preview.Source == null && window.Recognized.Text == "", "The preview retained an expired observation.");
+            await Bounded(window.CaptureAsync());
+            Require(window.Preview.Source != null, "A fresh frame was unavailable after expiry.");
+            window.Hide();
+            Require(window.Preview.Source == null && window.Recognized.Text == "", "Hiding the preview retained its observation.");
+            window.Show();
+            await Bounded(window.CaptureAsync());
+            Require(window.Preview.Source != null, "The preview could not recapture after showing the window.");
+            Click(window.StopButton);
+            await Bounded(window.CaptureAsync());
+            Require(window.Preview.Source == null && window.Recognized.Text == "", "The preview retained an observation after Stop.");
+            Console.WriteLine("PASS visual preview captures only the bounded consented field and drops expired frames");
+        } finally { window.Close(); }
+    }
+
+    private static async Task CheckLateRecognition() {
+        var completion = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var window = new ComputerUseVisualPreview(recognize: frame => completion.Task) {
+            ShowActivated = false,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            Left = -10000,
+            Top = -10000
+        };
+        try {
+            window.Show();
+            await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            Click(window.AllowButton);
+            var pending = window.CaptureAsync();
+            Require(window.Preview.Source != null && !pending.IsCompleted, "No OCR request was pending before Stop.");
+            Click(window.StopButton);
+            completion.SetResult("Late OCR result");
+            await Bounded(pending);
+            Require(window.Preview.Source == null && window.Recognized.Text == "", "A late OCR result appeared after Stop.");
+            Console.WriteLine("PASS local Stop discards an in-flight Windows OCR result");
+        } finally { window.Close(); }
+    }
+
+    private static byte[] FramePixels(BitmapSource frame) {
+        Require(frame != null, "The preview frame was missing.");
+        int stride = frame.PixelWidth * 4;
+        var bytes = new byte[stride * frame.PixelHeight];
+        frame.CopyPixels(bytes, stride, 0);
+        return bytes;
+    }
+
+    private static bool ContainsColor(byte[] pixels, Color color) {
+        for (int index = 0; index < pixels.Length; index += 4)
+            if (pixels[index] == color.B && pixels[index + 1] == color.G && pixels[index + 2] == color.R
+                    && pixels[index + 3] == color.A) return true;
+        return false;
+    }
+
     private static async Task RejectNative(Action action, string message) {
         try { await Task.Run(action); }
         catch (IOException) { return; }
@@ -140,8 +243,13 @@ static class ComputerUseExternalEditor {
     }
 
     private static async Task<T> Bounded<T>(Task<T> task) {
-        Require(task != null && await Task.WhenAny(task, Task.Delay(25000)) == task, "The external editor timed out.");
+        await Bounded((Task)task);
         return await task;
+    }
+
+    private static async Task Bounded(Task task) {
+        Require(task != null && await Task.WhenAny(task, Task.Delay(25000)) == task, "The external editor timed out.");
+        await task;
     }
 
     private static void Require(bool condition, string message) {
