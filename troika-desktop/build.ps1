@@ -1,6 +1,6 @@
-param([switch]$Test, [string]$OutputDirectory, [switch]$TestWindowCapture)
+param([switch]$Test, [string]$OutputDirectory, [switch]$TestWindowCapture, [switch]$TestNotepad)
 $ErrorActionPreference = 'Stop'
-$Test = $Test -or $TestWindowCapture
+$Test = $Test -or $TestWindowCapture -or $TestNotepad
 $root = $PSScriptRoot
 $framework = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319'
 $compiler = Join-Path $framework 'csc.exe'
@@ -69,7 +69,7 @@ if ($Test) {
     & (Join-Path $output 'ComputerUsePrototypeTests.exe')
     if ($LASTEXITCODE -ne 0) { throw 'Computer Use prototype tests failed.' }
     $externalEditor = Join-Path $output 'TroikaComputerUseEditor.exe'
-    $externalEditorSources = @('ComputerUseExternalEditor.cs','ComputerUseVisualPreview.cs','ComputerUseWindowCapture.cs','ComputerUseVisionLab.cs') | ForEach-Object { Join-Path $root ('tests\' + $_) }
+    $externalEditorSources = @('ComputerUseExternalEditor.cs','ComputerUseVisualPreview.cs','ComputerUseWindowCapture.cs','ComputerUseVisionLab.cs','ComputerUseNotepad.cs') | ForEach-Object { Join-Path $root ('tests\' + $_) }
     $windowsMetadata = Join-Path $env:WINDIR 'System32\WinMetadata'
     $ocrReferences = @('Foundation','Globalization','Graphics','Media','Storage') | ForEach-Object {
         '/reference:' + (Join-Path $windowsMetadata "Windows.$_.winmd")
@@ -79,6 +79,10 @@ if ($Test) {
     if ($LASTEXITCODE -ne 0) { throw 'External Computer Use editor build failed.' }
     & $externalEditor --verify
     if ($LASTEXITCODE -ne 0) { throw 'External Computer Use editor checks failed.' }
+    if ($TestNotepad) {
+        & $externalEditor --verify-notepad
+        if ($LASTEXITCODE -ne 0) { throw 'Isolated Notepad checks failed.' }
+    }
     if ($TestWindowCapture) {
         & (Join-Path $root 'tests\build-window-capture.ps1') -OutputDirectory $output
         & $externalEditor --verify-window-capture

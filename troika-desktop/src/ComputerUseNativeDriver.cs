@@ -8,7 +8,7 @@ using System.Text;
 using System.Windows.Automation;
 
 namespace Troika.Desktop {
-    internal sealed class ComputerUseNativeDriver {
+    internal sealed class ComputerUseNativeDriver : IComputerUseEditor {
         internal const string WorkerArgument = "--computer-use-native-worker";
         internal const string ScratchpadWindowPrefix = "troika-scratchpad-";
         internal const string ExternalWindowPrefix = "troika-test-editor-";
@@ -40,11 +40,17 @@ namespace Troika.Desktop {
             this.processId = processId;
         }
 
-        internal string ReadEditor() {
+        public string ReadEditor() {
             if (workerImage == null) return ReadNative();
             var encoded = RunWorker("editor");
             if (encoded.Length > MaxEncodedEditorLength) throw new InvalidDataException();
             return StrictUtf8.GetString(Convert.FromBase64String(encoded));
+        }
+
+        public void Apply(ComputerUseStep step, string text) {
+            if (step == ComputerUseStep.Write && windowId.StartsWith(ExternalWindowPrefix, StringComparison.Ordinal))
+                SetEditorValue(text);
+            else Invoke(step == ComputerUseStep.Write ? "write" : "save");
         }
 
         internal void Invoke(string action) {

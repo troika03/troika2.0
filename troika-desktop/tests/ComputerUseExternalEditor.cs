@@ -18,6 +18,8 @@ using Troika.Desktop;
 static class ComputerUseExternalEditor {
     [STAThread] public static int Main(string[] args) {
         if (args.Length == 1 && args[0] == "--verify") return Verify(null, ComputerUseExecutor.Sample);
+        if (args.Length == 1 && args[0] == "--notepad-preview") return new Application().Run(NewNotepadPreview());
+        if (args.Length == 1 && args[0] == "--verify-notepad") return VerifyNotepad();
         if (args.Length == 1 && args[0] == "--preview") return new Application().Run(new ComputerUseVisualPreview());
         if ((args.Length == 2 || (args.Length == 3 && args[2] == "protected")) && args[0] == "--window-target")
             return ComputerUseWindowCapture.RunTarget(args[1], args.Length == 3);
@@ -32,7 +34,7 @@ static class ComputerUseExternalEditor {
         bool interactive = args.Length == 4 && args[0] == "--run";
         bool verifyRun = args.Length == 5 && args[0] == "--verify-run";
         if (!interactive && !verifyRun) {
-            Console.Error.WriteLine("Usage: TroikaComputerUseEditor.exe --preview | --window-preview | --vision-lab <loopback-api> | --run[-vision|-assisted] <loopback-api> <run-id> <grant-id>");
+            Console.Error.WriteLine("Usage: TroikaComputerUseEditor.exe --preview | --notepad-preview | --window-preview | --vision-lab <loopback-api> | --run[-vision|-assisted] <loopback-api> <run-id> <grant-id>");
             return 2;
         }
         try {
@@ -46,6 +48,84 @@ static class ComputerUseExternalEditor {
             Console.Error.WriteLine(error.Message);
             return 2;
         }
+    }
+
+    private static ComputerUsePrototypeWindow NewNotepadPreview() {
+        return new ComputerUsePrototypeWindow(new ComputerUseSession(),
+            openNotepad: (session, output) => new ComputerUseNotepad(session, output));
+    }
+
+    private static int VerifyNotepad() {
+        var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        app.Startup += (sender, args) => app.Dispatcher.BeginInvoke(new Action(async () => {
+            try {
+                await CheckNotepad("ask");
+                await CheckNotepad("window");
+                await CheckNotepad("view");
+                await CheckNotepad("deny-write");
+                await CheckNotepad("deny-save");
+                await CheckNotepad("stop-before-save");
+                app.Shutdown(0);
+            } catch (Exception error) {
+                Console.Error.WriteLine(error.Message);
+                app.Shutdown(1);
+            }
+        }));
+        return app.Run();
+    }
+
+    private static async Task CheckNotepad(string scenario) {
+        var preview = NewNotepadPreview();
+        preview.ShowActivated = false;
+        preview.ShowInTaskbar = false;
+        preview.WindowStartupLocation = WindowStartupLocation.Manual;
+        preview.Left = -10000;
+        preview.Top = -10000;
+        preview.Show();
+        Exception failure = null;
+        try {
+            var preamble = ComputerUseNotepad.FileEncoding.GetPreamble();
+            Require(preview.Execution == null && !File.Exists(preview.OutputFile), "Notepad ran before consent.");
+            Require(preview.PermissionMode.SelectedIndex == 0, "Notepad must default to asking.");
+            if (scenario == "window") preview.PermissionMode.SelectedIndex = 1;
+            if (scenario == "view") preview.PermissionMode.SelectedIndex = 2;
+            Click(preview.AllowButton);
+            if (preview.PermissionMode.SelectedIndex == 0) {
+                await WaitUntil(() => preview.ApproveActionButton.IsVisible || preview.Execution.IsCompleted);
+                Require(preview.ApproveActionButton.IsVisible && File.ReadAllBytes(preview.OutputFile).SequenceEqual(preamble),
+                    "Notepad did not reach the write approval with a blank file.");
+                if (scenario == "deny-write") Click(preview.DenyActionButton);
+                else {
+                    Click(preview.ApproveActionButton);
+                    await WaitUntil(() => (preview.ApproveActionButton.IsVisible
+                        && (string)preview.ApproveActionButton.Content == "Разрешить сохранение") || preview.Execution.IsCompleted);
+                    Require(preview.ApproveActionButton.IsVisible && File.ReadAllBytes(preview.OutputFile).SequenceEqual(preamble),
+                        "Notepad did not wait for a separate save approval.");
+                    if (scenario == "deny-save") Click(preview.DenyActionButton);
+                    else if (scenario == "stop-before-save") {
+                        Click(preview.StopButton);
+                        Click(preview.ApproveActionButton);
+                    } else Click(preview.ApproveActionButton);
+                }
+            }
+            var state = await Bounded(preview.Execution);
+            var saved = File.ReadAllBytes(preview.OutputFile);
+            if (scenario == "ask" || scenario == "window") {
+                var expected = preamble.Concat(ComputerUseNotepad.FileEncoding.GetBytes(ComputerUseExecutor.Sample));
+                Require(state == ComputerUseState.Verified && saved.SequenceEqual(expected), "Notepad did not save the expected bytes.");
+            } else {
+                var expected = scenario == "stop-before-save" ? ComputerUseState.Stopped : ComputerUseState.Completed;
+                Require(state == expected, "Notepad " + scenario + " ended with " + state + " instead of " + expected + ".");
+                Require(saved.SequenceEqual(preamble), "Notepad " + scenario + " changed the file without approval.");
+            }
+            Require(!File.Exists(Path.ChangeExtension(preview.OutputFile, ".exe")),
+                "The isolated Notepad copy was left behind.");
+            Console.WriteLine("PASS Notepad " + scenario);
+        } catch (Exception error) { failure = error; }
+        preview.Stop();
+        if (preview.Execution != null) await Bounded(preview.Execution);
+        Cleanup(preview);
+        if (failure != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
     private static int RunAssisted(string[] args) {
