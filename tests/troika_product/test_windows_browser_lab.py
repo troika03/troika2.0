@@ -9,7 +9,7 @@ from scripts.troika_windows_browser_lab import BrowserLab, ORIGIN, _fixture_rout
 from scripts.troika_static_preview import StaticProjectPreview
 from scripts.troika_browser_run import BrowserRunClient
 from troika_product.computer_control import ComputerControlError
-from troika_product.computer_windows_browser import _matches_action
+from troika_product.computer_windows_browser import _matches_action, device_command
 
 
 @pytest.mark.parametrize(("url", "method", "allowed"), [
@@ -161,3 +161,11 @@ def test_closing_before_browser_consent_revokes_the_pending_grant():
     finally:
         client.close()
     assert [entry.args for entry in client._send.call_args_list] == [("review",), ("stop",)]
+
+
+def test_shared_computer_tool_respects_the_approved_application_scope():
+    with pytest.raises(ComputerControlError, match="app_not_approved"):
+        device_command({"app": "notepad", "action": "open"}, ("overview",), ("browser",))
+    assert device_command({"app": "notepad", "action": "write", "text": "Тройка"}, (), ("notepad",)) == (
+        "notepad", "write", {"text": "Тройка"},
+    )

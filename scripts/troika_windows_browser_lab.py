@@ -4,6 +4,7 @@ import argparse
 from contextlib import ExitStack
 import json
 import os
+import sys
 import time
 
 import httpx
@@ -47,13 +48,19 @@ def _wait_for_page(page, expression, failure, arg=None):
 
 
 class BrowserLab:
-    def __init__(self, browser, project=None, viewport=(920, 500)):
+    def __init__(self, browser, project=None, viewport=(920, 500), bridge=None, apps=("browser",)):
         self.browser = browser
         self.targets = project.pages if project is not None else {name: ORIGIN + name for name in PAGES}
         self.route = project.route if project is not None else _fixture_route
         self.viewport = viewport
         self.pages = {}
         self.active = None
+        self.bridge, self.apps = bridge, apps
+
+    def notepad(self, command, expires):
+        if self.bridge is None or "notepad" not in self.apps:
+            raise ComputerControlError("app_not_approved")
+        return self.bridge.execute_notepad(command, expires)
 
     def inspect(self):
         if self.active is None:
@@ -234,6 +241,54 @@ def _confirm(label):
         return False
 
 
+class DesktopDeviceBridge:
+    @staticmethod
+    def receive():
+        data = sys.stdin.buffer.readline(4097)
+        if not data or len(data) > 4096:
+            return None
+        try:
+            return json.loads(data)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def emit(message):
+        print(json.dumps(message), flush=True)
+
+    def initialize(self, args):
+        # The desktop assigns this process to a Windows job before sending Start.
+        value = self.receive()
+        fields = {"start", "apps", "project", "entry", "second_entry", "mobile", "share_headings"}
+        if (not isinstance(value, dict) or set(value) != fields or value["start"] is not True
+                or any(value[key] is not None and (not isinstance(value[key], str) or len(value[key]) > 512)
+                       for key in ("project", "entry", "second_entry"))
+                or any(type(value[key]) is not bool for key in ("mobile", "share_headings"))
+                or value["apps"] not in (["browser"], ["notepad"], ["browser", "notepad"])):
+            return False
+        for key in fields - {"start"}:
+            setattr(args, key, value[key])
+        return True
+
+    def approve(self, command, expires):
+        remaining = int((expires - time.monotonic()) * 1000)
+        if remaining <= 0:
+            return False
+        self.emit({"kind": "approval", **command, "remaining_ms": remaining})
+        value = self.receive()
+        return isinstance(value, dict) and set(value) == {"allow"} and value["allow"] is True
+
+    def execute_notepad(self, command, expires):
+        remaining = int((expires - time.monotonic()) * 1000)
+        if remaining <= 0:
+            raise ComputerControlError("command_expired")
+        self.emit({"kind": "execute", "app": "notepad", **command, "remaining_ms": remaining})
+        value = self.receive()
+        if (not isinstance(value, dict) or set(value) != {"view"} or not isinstance(value["view"], dict)):
+            raise ComputerControlError("notepad_action_unverified")
+        return {"action": command["action"], "view": value["view"]}
+
+
 def main():
     parser = argparse.ArgumentParser(description="Проба управления отдельным браузером Windows")
     parser.add_argument("--channel", choices=("chrome", "msedge"), default="chrome")
@@ -249,9 +304,14 @@ def main():
     parser.add_argument("--share-headings", action="store_true", help="разрешить передачу видимых заголовков в OpenRouter")
     parser.add_argument("--permission", choices=PERMISSIONS,
                         help="спрашивать перед действием, разрешить выбранные окна, только просмотр")
+    parser.add_argument("--desktop-bridge", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if os.name != "nt":
         parser.error("требуется Windows")
+    bridge = DesktopDeviceBridge() if args.desktop_bridge else None
+    if bridge is not None and (not args.run or not bridge.initialize(args)):
+        return 2
+    apps = args.apps if bridge is not None else ("browser",)
     if args.task is not None and (not args.model or not args.task.strip() or len(args.task) > 512):
         parser.error("для задачи до 512 символов укажите модель OpenRouter")
     if not args.project and (args.entry or args.second_entry or args.share_headings):
@@ -308,23 +368,26 @@ def main():
                 cleanup.callback(run.close)
                 if run.review() != "pending":
                     raise ComputerControlError("browser_run_rejected")
-                if permission == "ask" and not _confirm("Разрешить Тройке открыть выбранные страницы в этом запуске"):
+                if permission == "ask" and bridge is None and not _confirm("Разрешить Тройке открыть выбранные страницы в этом запуске"):
                     run.deny(permission, project.pages if project is not None else PAGES, share_headings)
                     print("Доступ к браузеру отклонён.")
                     return 1
-            engine = cleanup.enter_context(sync_playwright())
+            engine = cleanup.enter_context(sync_playwright()) if "browser" in apps else None
             browser_environment = {name: value for name, value in os.environ.items() if name.lower() in {
                 "systemroot", "windir", "systemdrive", "localappdata", "appdata", "programdata", "userprofile",
                 "programfiles", "programfiles(x86)", "temp", "tmp", "path", "comspec",
             }}
             browser = engine.chromium.launch(channel=args.channel, headless=not args.show,
-                                             chromium_sandbox=True, timeout=10000, env=browser_environment)
+                                             chromium_sandbox=True, timeout=10000, env=browser_environment) if engine else None
             try:
-                lab = BrowserLab(browser, project, viewport=(390, 844) if args.mobile else (920, 500))
+                lab = BrowserLab(browser, project, viewport=(390, 844) if args.mobile else (920, 500),
+                                 bridge=bridge, apps=apps)
                 if permission == "view" and run is None:
                     lab.step({"action": "open", "page": "overview"}, lambda _: time.monotonic() < deadline)
                 if run is not None:
-                    receipts = run.run(lab, approve, permission, share_headings, deadline)
+                    decide = bridge.approve if bridge is not None and permission == "ask" else lambda command, _: approve(command)
+                    receipts = run.run(lab, decide, permission, share_headings, deadline,
+                                       progress=bridge.emit if bridge is not None else None)
                 elif provider is not None:
                     task = args.task or ("Осмотри видимый раздел выбранной страницы." if permission == "view" else default_task)
                     receipts = _run_model(lab, provider, task, approve, deadline, pages=lab.targets)
@@ -341,15 +404,25 @@ def main():
                 if run is None and args.task is None and permission != "view":
                     result["verified"] = _verified(receipts, final, heading="Доставка" if project is None else None,
                                                    second="details" in lab.targets)
-                print(json.dumps(result, ensure_ascii=False))
+                if bridge is not None:
+                    bridge.emit({"kind": "finished"})
+                else:
+                    print(json.dumps(result, ensure_ascii=False))
                 return int(result.get("verified") is False or any(r.get("error") == "denied" for r in receipts))
             finally:
-                browser.close()
+                if browser is not None:
+                    browser.close()
     except KeyboardInterrupt:
-        print("Проба остановлена.")
+        if bridge is not None:
+            bridge.emit({"kind": "failed"})
+        else:
+            print("Проба остановлена.")
         return 130
     except (ComputerControlError, Error, httpx.HTTPError) as error:
-        print("Проба завершилась ошибкой " + (error.code if isinstance(error, ComputerControlError) else "browser_unavailable"))
+        if bridge is not None:
+            bridge.emit({"kind": "failed"})
+        else:
+            print("Проба завершилась ошибкой " + (error.code if isinstance(error, ComputerControlError) else "browser_unavailable"))
         return 1
 
 

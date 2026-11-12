@@ -62,14 +62,21 @@ if ($Test) {
     if ($LASTEXITCODE -ne 0) { throw 'Voice identity UI tests failed.' }
 }
 if ($Test) {
-    $computerUseSources = @('Json.cs','ApiClient.cs','LocalStore.cs','OwnApi.cs','BrandAssets.cs','ComputerUseSession.cs','ComputerUseNativeDriver.cs','ComputerUseExecutor.cs','ComputerUseEditorField.cs','ComputerUseAgent.cs','ComputerUsePrototypeWindow.cs','ComputerUseConsentWindow.cs','ComputerUseWindowsRun.cs') | ForEach-Object { Join-Path $root ('src\' + $_) }
+    $computerUseSources = @('Json.cs','ApiClient.cs','LocalStore.cs','OwnApi.cs','BrandAssets.cs','ComputerUseSession.cs','ComputerUseNativeDriver.cs','ComputerUseExecutor.cs','ComputerUseEditorField.cs','ComputerUseAgent.cs','ComputerUsePrototypeWindow.cs','ComputerUseConsentWindow.cs','ComputerUseWindowsRun.cs','ComputerUseNotepad.cs') | ForEach-Object { Join-Path $root ('src\' + $_) }
     $prototypeTests = Join-Path $root 'tests\ComputerUsePrototypeTests.cs'
     & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'ComputerUsePrototypeTests.exe')) $references $computerUseSources $prototypeTests
     if ($LASTEXITCODE -ne 0) { throw 'Computer Use prototype test build failed.' }
     & (Join-Path $output 'ComputerUsePrototypeTests.exe')
     if ($LASTEXITCODE -ne 0) { throw 'Computer Use prototype tests failed.' }
+
+    $deviceSources = @('Development.cs','ComputerUseDeviceRun.cs','ComputerUseDeviceWindow.cs','ComputerUseNotepadControl.cs') | ForEach-Object { Join-Path $root ('src\' + $_) }
+    $deviceTests = Join-Path $output 'ComputerUseDeviceUiTests.exe'
+    & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + $deviceTests) $references $computerUseSources $deviceSources (Join-Path $root 'tests\ComputerUseDeviceUiTests.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Computer Use device UI test build failed.' }
+    & $deviceTests --layout
+    if ($LASTEXITCODE -ne 0) { throw 'Computer Use device UI tests failed.' }
     $externalEditor = Join-Path $output 'TroikaComputerUseEditor.exe'
-    $externalEditorSources = @('ComputerUseExternalEditor.cs','ComputerUseVisualPreview.cs','ComputerUseWindowCapture.cs','ComputerUseVisionLab.cs','ComputerUseNotepad.cs') | ForEach-Object { Join-Path $root ('tests\' + $_) }
+    $externalEditorSources = @('ComputerUseExternalEditor.cs','ComputerUseVisualPreview.cs','ComputerUseWindowCapture.cs','ComputerUseVisionLab.cs') | ForEach-Object { Join-Path $root ('tests\' + $_) }
     $windowsMetadata = Join-Path $env:WINDIR 'System32\WinMetadata'
     $ocrReferences = @('Foundation','Globalization','Graphics','Media','Storage') | ForEach-Object {
         '/reference:' + (Join-Path $windowsMetadata "Windows.$_.winmd")

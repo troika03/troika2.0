@@ -42,14 +42,14 @@ def register_windows_browser_routes(app, adapter):
         return
     from hermes_cli.config import get_env_value
     from troika_product.computer_openrouter_vision import OpenRouterVision
-    from troika_product.computer_windows_browser import MODE, WindowsBrowserLab
+    from troika_product.computer_windows_browser import MODE, WindowsComputerUseLab
 
     try:
         openrouter = OpenRouterVision(adapter._computer_windows_browser_model, get_env_value("OPENROUTER_API_KEY"))
     except ValueError:
         return
     _register_routes(app, adapter, "_computer_windows_browser", "computer-windows-browser",
-                     partial(WindowsBrowserLab, openrouter=openrouter),
+                     partial(WindowsComputerUseLab, openrouter=openrouter),
                      _GRANT_OPERATIONS | {"take", "report"}, mode=MODE)
 
 

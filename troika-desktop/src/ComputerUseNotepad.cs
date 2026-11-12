@@ -6,7 +6,7 @@ using System.Text;
 using System.Threading;
 using Troika.Desktop;
 
-// The lab starts its own classic Notepad. The system launch path may redirect
+// Start an isolated classic Notepad. The system launch path may redirect
 // to the packaged app and restore the owner's existing tabs.
 internal sealed class ComputerUseNotepad : IComputerUseEditor, IDisposable {
     internal static readonly UTF8Encoding FileEncoding = new UTF8Encoding(true, true);

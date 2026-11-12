@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from troika_product.computer_control import ComputerControlError, MAX_ACTIONS, MAX_GRANT_SECONDS, VERSION
-from troika_product.computer_windows_browser import COMMAND_SECONDS, MODE, browser_command
+from troika_product.computer_windows_browser import COMMAND_SECONDS, MODE, device_command
 
 
 _ID = re.compile(r"[0-9a-f]{32}\Z")
@@ -91,27 +91,33 @@ class BrowserRunClient:
         self._send("consent", allow=False, permission=permission, pages=list(pages), share_headings=share_headings)
         self._needs_stop = False
 
-    def run(self, lab, approve, permission, share_headings, deadline):
+    def run(self, lab, approve, permission, share_headings, deadline, *, progress=None):
         pages = list(lab.targets)
+        apps = list(getattr(lab, "apps", ("browser",)))
         self._needs_stop = True
         try:
             began = time.monotonic()
-            consent = self._send("consent", allow=True, permission=permission, pages=pages, share_headings=share_headings)
+            scope = {"apps": apps} if apps != ["browser"] else {}
+            consent = self._send("consent", allow=True, permission=permission, pages=pages,
+                                 share_headings=share_headings, **scope)
             seconds = consent.get("expires_in_seconds")
             if (consent.get("grant_id") != self.grant_id or consent.get("status") != "active"
                     or consent.get("permission") != permission or consent.get("pages") != pages
+                    or consent.get("apps", ["browser"]) != apps
                     or consent.get("share_headings") is not share_headings
                     or type(seconds) not in (int, float) or not 0 < seconds <= MAX_GRANT_SECONDS):
                 raise ComputerControlError("invalid_browser_run_response")
             deadline = min(deadline, began + seconds)
-            if permission == "view" and time.monotonic() < deadline:
+            if progress is not None:
+                progress({"kind": "ready"})
+            if permission == "view" and "browser" in apps and time.monotonic() < deadline:
                 lab.step({"action": "open", "page": "overview"}, lambda _: time.monotonic() < deadline)
-            return self._poll(lab, approve, permission, share_headings, deadline)
+            return self._poll(lab, apps, approve, permission, share_headings, deadline, progress)
         finally:
             self._stop()
 
-    def _poll(self, lab, approve, permission, share_headings, deadline):
-        previous_id, previous_view = None, None
+    def _poll(self, lab, apps, approve, permission, share_headings, deadline, progress):
+        previous = {}
         sequence = 0
         receipts = []
         while time.monotonic() < deadline:
@@ -129,24 +135,27 @@ class BrowserRunClient:
                 time.sleep(0.15)
                 continue
             sequence += 1
-            args, expires = self._command(command, sequence, lab.targets, requested, deadline)
-            status, result = self._perform(lab, command, args, approve, permission, expires, previous_id, previous_view)
+            app, args, expires = self._command(command, sequence, lab.targets, apps, requested, deadline)
+            previous_id, previous_view = previous.get(app, (None, None))
+            status, result = self._perform(lab, app, command, args, approve, permission, expires, previous_id, previous_view)
             body = {"command_id": command["id"], "status": status}
             if status in ("verified", "observed"):
-                previous_id, previous_view = command["id"], result["view"]
-                body["view"] = _view_for_report(previous_view, share_headings)
-                receipts.append(result)
+                previous[app] = (command["id"], result["view"])
+                body["view"] = _view_for_report(result["view"], share_headings) if app == "browser" else result["view"]
+                receipts.append({"app": app, **result})
             else:
-                previous_id, previous_view = None, None
-                receipts.append({"action": args["action"], "error": status})
+                previous.pop(app, None)
+                receipts.append({"app": app, "action": args["action"], "error": status})
             if time.monotonic() >= expires:
                 raise ComputerControlError("command_expired")
             if self._send("report", **body).get("accepted") is not True:
                 raise ComputerControlError("invalid_browser_run_response")
+            if progress is not None:
+                progress({"kind": "action", "app": app, "action": args["action"], "status": status})
         raise ComputerControlError("grant_expired")
 
     @staticmethod
-    def _command(command, sequence, pages, requested, deadline):
+    def _command(command, sequence, pages, apps, requested, deadline):
         if not isinstance(command, dict):
             raise ComputerControlError("invalid_browser_command")
         action = command.get("action")
@@ -158,24 +167,25 @@ class BrowserRunClient:
                 or type(command["expires_in_ms"]) is not int or not 1 <= command["expires_in_ms"] <= COMMAND_SECONDS * 1000
                 or not isinstance(command["arguments"], dict) or "action" in command["arguments"]):
             raise ComputerControlError("invalid_browser_command")
-        args = {"action": action, **command["arguments"]}
-        browser_command(args, pages)
-        return args, min(deadline, requested + command["expires_in_ms"] / 1000)
+        app, _, arguments = device_command({"action": action, **command["arguments"]}, pages, apps)
+        return app, {"action": action, **arguments}, min(deadline, requested + command["expires_in_ms"] / 1000)
 
-    def _perform(self, lab, command, args, approve, permission, expires, previous_id, previous_view):
+    def _perform(self, lab, app, command, args, approve, permission, expires, previous_id, previous_view):
         writing = args["action"] != "inspect"
         if time.monotonic() >= expires:
             return "stale_state", None
         if writing:
             if permission == "view":
                 return "denied", None
-            if previous_id is None or command["inspect_action_id"] != previous_id or lab.inspect() != previous_view:
+            inspect = lab.inspect if app == "browser" else lambda: lab.notepad({"action": "inspect"}, expires)["view"]
+            if previous_id is None or command["inspect_action_id"] != previous_id or inspect() != previous_view:
                 return "stale_state", None
-            if not approve(args):
+            if not approve({"app": app, **args}, expires):
                 return "denied", None
-            if time.monotonic() >= expires or self.review() != "active" or lab.inspect() != previous_view:
+            if time.monotonic() >= expires or self.review() != "active" or inspect() != previous_view:
                 return "stale_state", None
-        result = lab.step(args, lambda _: time.monotonic() < expires)
+        result = (lab.step(args, lambda _: time.monotonic() < expires) if app == "browser"
+                  else lab.notepad(args, expires))
         if "error" in result or result.get("at_boundary"):
             return "stale_state", None
         return ("verified" if writing else "observed"), result

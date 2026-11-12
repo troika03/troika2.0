@@ -5980,7 +5980,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         if isinstance(workflow_body, dict) and workflow_body.get("workflow") == "development":
             if any(workflow_body.get(key) is True for key in
                    ("computer_dry_run", "computer_windows_lab", "computer_windows_vision", "computer_windows_assisted",
-                    "computer_windows_browser")):
+                    "computer_windows_browser", "computer_use")):
                 return web.json_response(_openai_error("Computer Use requires a conversation Run"), status=400)
             from troika_product.development_runtime import start_development_run
             return await start_development_run(self, request, workflow_body)
@@ -6013,12 +6013,12 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
 
         if not isinstance(body, dict) or any(type(body.get(key, False)) is not bool
                                              for key in ("computer_dry_run", "computer_windows_lab", "computer_windows_vision",
-                                                         "computer_windows_assisted", "computer_windows_browser")):
+                                                         "computer_windows_assisted", "computer_windows_browser", "computer_use")):
             return web.json_response(_openai_error("Invalid Run options"), status=400)
         windows_lab = body.get("computer_windows_lab", False)
         windows_vision = body.get("computer_windows_vision", False)
         windows_assisted = body.get("computer_windows_assisted", False)
-        windows_browser = body.get("computer_windows_browser", False)
+        windows_browser = body.get("computer_windows_browser", False) or body.get("computer_use", False)
         windows_model_lab = windows_vision or windows_assisted or windows_browser
         dry_run = body.get("computer_dry_run", False)
         if sum((windows_lab, windows_vision, windows_assisted, windows_browser, dry_run)) > 1:
@@ -6108,9 +6108,9 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         computer_run = None
         if computer_control is not None:
             from troika_product.computer_agent import (
-                ComputerAgentRun, WindowsAssistedAgentRun, WindowsBrowserAgentRun, WindowsEditorAgentRun, WindowsVisionAgentRun,
+                ComputerAgentRun, WindowsAssistedAgentRun, WindowsComputerUseAgentRun, WindowsEditorAgentRun, WindowsVisionAgentRun,
             )
-            run_class = (WindowsBrowserAgentRun if windows_browser else
+            run_class = (WindowsComputerUseAgentRun if windows_browser else
                          WindowsAssistedAgentRun if windows_assisted else WindowsVisionAgentRun if windows_vision
                          else WindowsEditorAgentRun if windows_lab else ComputerAgentRun)
             computer_run = run_class(computer_control, principal, run_id)

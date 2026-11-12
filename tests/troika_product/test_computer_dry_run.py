@@ -451,7 +451,7 @@ async def test_assisted_windows_run_applies_the_selected_permission(hosted, monk
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("hosted", [True], indirect=True)
-@pytest.mark.parametrize("scenario", ["run", "view", "deny", "stop"])
+@pytest.mark.parametrize("scenario", ["run", "mixed", "view", "deny", "stop"])
 async def test_browser_run_uses_only_the_approved_device(hosted, monkeypatch, scenario):
     from copy import deepcopy
     from scripts.troika_browser_run import BrowserRunClient
@@ -462,7 +462,14 @@ async def test_browser_run_uses_only_the_approved_device(hosted, monkeypatch, sc
     monkeypatch.setattr(hosted.adapter, "_create_agent", APIServerAdapter._create_agent.__get__(hosted.adapter))
     goal = "Открой обзор, прокрути, открой сведения и вернись в обзор."
     commands = [{"action": "inspect"}]
-    if scenario == "view":
+    if scenario == "mixed":
+        commands = [{"app": "notepad", "action": action} for action in ("inspect", "open", "write", "save")]
+        commands[2]["text"] = "Пробный текст"
+        commands.extend([
+            {"app": "browser", "action": "inspect"}, {"app": "browser", "action": "open", "page": "overview"},
+            {"app": "browser", "action": "scroll", "direction": "down"},
+        ])
+    elif scenario == "view":
         commands.append({"action": "scroll", "direction": "down"})
     else:
         commands.extend([
@@ -500,6 +507,22 @@ async def test_browser_run_uses_only_the_approved_device(hosted, monkeypatch, sc
             self.active = None
             self.positions = {}
             self.actions = []
+            self.apps = ["browser", "notepad"] if scenario == "mixed" else ["browser"]
+            self.editor = {"open": False, "can_write": False, "can_save": False, "saved": False}
+
+        def notepad(self, command, expires):
+            action = command["action"]
+            if action == "open":
+                self.editor.update(open=True, can_write=True)
+            elif action == "write":
+                assert command["text"] == "Пробный текст" and self.editor["can_write"]
+                self.editor.update(can_write=False, can_save=True)
+            elif action == "save":
+                assert self.editor["can_save"]
+                self.editor.update(can_save=False, saved=True)
+            if action != "inspect":
+                self.actions.append("notepad " + action)
+            return {"action": action, "view": deepcopy(self.editor)}
 
         def inspect(self):
             view = {"page": self.active, "open_pages": list(self.positions)}
@@ -522,8 +545,9 @@ async def test_browser_run_uses_only_the_approved_device(hosted, monkeypatch, sc
             self.actions.append(action)
             return {"action": action, "view": self.inspect()}
 
+    option = "computer_use" if scenario == "mixed" else "computer_windows_browser"
     start = await hosted.client.post("/v1/runs", headers=hosted.phone.headers,
-                                     json={"input": goal, "computer_windows_browser": True})
+                                     json={"input": goal, option: True})
     assert start.status == 202, await start.text()
     run = SimpleNamespace(**{**vars(hosted), "run_id": (await start.json())["run_id"]})
     route = "computer-windows-browser"
@@ -536,7 +560,7 @@ async def test_browser_run_uses_only_the_approved_device(hosted, monkeypatch, sc
     browser = Browser()
     asking, release = threading.Event(), threading.Event()
 
-    def approve(_):
+    def approve(_, _deadline):
         if scenario == "stop":
             asking.set()
             assert release.wait(25)
@@ -548,7 +572,7 @@ async def test_browser_run_uses_only_the_approved_device(hosted, monkeypatch, sc
         device = BrowserRunClient(str(run.client.make_url("/")), run.run_id, grant_id, run.pc.token)
         try:
             assert device.review() == "pending"
-            permission = "view" if scenario == "view" else "run" if scenario == "run" else "ask"
+            permission = "view" if scenario == "view" else "run" if scenario in ("run", "mixed") else "ask"
             return device.run(browser, approve, permission, False, time.monotonic() + 90)
         finally:
             device.close()
@@ -573,6 +597,10 @@ async def test_browser_run_uses_only_the_approved_device(hosted, monkeypatch, sc
             if scenario == "run":
                 assert browser.actions == ["inspect", "open", "scroll", "open", "switch"]
                 assert browser.inspect()["y"] == 640 and "переключение окна" in event["output"]
+            elif scenario == "mixed":
+                assert browser.actions == ["notepad open", "notepad write", "notepad save", "inspect", "open", "scroll"]
+                assert browser.editor["saved"] and browser.inspect()["y"] == 640
+                assert "Блокнот сохранил" in event["output"] and "прокрутку" in event["output"]
             elif scenario == "view":
                 assert browser.actions == ["open", "inspect"] and observed[-1]["error"] == "action_denied"
             else:
