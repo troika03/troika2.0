@@ -58,6 +58,12 @@ def register_windows_computer_vision_routes(app, adapter):
             return
     _register_routes(app, adapter, "_computer_windows_vision", "computer-windows-vision",
                      partial(WindowsVisionLab, openrouter=openrouter), _GRANT_OPERATIONS | {"frame"}, mode=MODE)
+    if openrouter is not None and adapter._computer_windows_lab_enabled:
+        from troika_product.computer_windows_assisted import MODE as ASSISTED_MODE, WindowsAssistedLab
+
+        _register_routes(app, adapter, "_computer_windows_assisted", "computer-windows-assisted",
+                         partial(WindowsAssistedLab, openrouter=openrouter),
+                         _GRANT_OPERATIONS | {"approve_frame", "frame", "take", "report"}, mode=ASSISTED_MODE)
 
 
 async def _receive_frame(request, control, principal):
@@ -97,7 +103,7 @@ def _register_routes(app, adapter, attribute, path, factory, operations, *, mode
         # must belong to a Run that opted into that same native mode.
         if mode is not None and status.get("mode") != mode:
             return None
-        if mode is None and status.get("mode") in {"windows_lab", "windows_vision_lab"}:
+        if mode is None and status.get("mode") in {"windows_lab", "windows_vision_lab", "windows_assisted_lab"}:
             return None
         if (task is not None and not task.done() and "workflow" not in status
                 and status.get("status") in {"queued", "running", "waiting_for_approval"}):

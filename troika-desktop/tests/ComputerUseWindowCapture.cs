@@ -18,12 +18,20 @@ internal sealed class ComputerUseWindowCapture : IDisposable {
     internal static readonly Color TargetColor = Color.FromRgb(27, 67, 112);
     private readonly Process process;
     private readonly string title;
+    private readonly bool ownsChild;
     internal readonly IntPtr Handle;
 
-    private ComputerUseWindowCapture(Process process, string title, IntPtr handle) {
+    private ComputerUseWindowCapture(Process process, string title, IntPtr handle, bool ownsChild = true) {
         this.process = process;
         this.title = title;
         Handle = handle;
+        this.ownsChild = ownsChild;
+    }
+
+    internal static ComputerUseWindowCapture ForEditor(ComputerUsePrototypeWindow editor) {
+        if (!editor.IsVisible) throw new InvalidOperationException("The test editor must be visible.");
+        return new ComputerUseWindowCapture(Process.GetCurrentProcess(), editor.Title,
+            new WindowInteropHelper(editor).Handle, ownsChild: false);
     }
 
     internal bool Visible {
@@ -74,7 +82,10 @@ internal sealed class ComputerUseWindowCapture : IDisposable {
         });
     }
 
-    public void Dispose() { CloseChild(process); }
+    public void Dispose() {
+        if (ownsChild) CloseChild(process);
+        else process.Dispose();
+    }
 
     private static void CloseChild(Process child) {
         using (child) {

@@ -13,14 +13,19 @@ namespace Troika.Desktop {
         private readonly string prefix;
         private readonly string grantId;
         private readonly Func<TimeSpan> clock;
+        private readonly string mode;
         internal readonly string RunLabel;
+        internal readonly bool Assisted;
+        internal volatile bool ConsentConfirmed;
 
         internal ComputerUseWindowsRun(string address, string token, string runId, string grantId,
-                HttpMessageHandler handler = null, Func<TimeSpan> clock = null) {
+                HttpMessageHandler handler = null, Func<TimeSpan> clock = null, bool assisted = false) {
             if (runId == null || !Regex.IsMatch(runId, @"\Arun_[a-f0-9]{32}\z") || !ValidId(grantId))
                 throw new ArgumentException("Нужны идентификаторы пробного запуска и разрешения.");
             client = ComputerUseConsentWindow.Connect(address, token, handler);
-            prefix = "/v1/runs/" + runId + "/computer-windows-lab/";
+            Assisted = assisted;
+            mode = assisted ? "windows_assisted_lab" : "windows_lab";
+            prefix = "/v1/runs/" + runId + (assisted ? "/computer-windows-assisted/" : "/computer-windows-lab/");
             RunLabel = runId.Substring(4, 8);
             this.grantId = grantId;
             this.clock = clock ?? (() => Clock.Elapsed);
@@ -29,7 +34,8 @@ namespace Troika.Desktop {
         private static readonly Stopwatch Clock = Stopwatch.StartNew();
 
         internal async Task<ComputerUseState> RunAsync(ComputerUseSession session, ComputerUseExecutor executor,
-                CancellationToken cancellation) {
+                CancellationToken cancellation, string permissionMode = null,
+                Func<string, string, TimeSpan, Task<bool>> approveMutation = null) {
             if (session.State != ComputerUseState.Active) return session.State;
             var grant = new { version = 1, grant_id = grantId };
             ComputerUseObservation observation = null;
@@ -38,13 +44,18 @@ namespace Troika.Desktop {
             bool confirmed = false;
             try {
                 var requestedConsentAt = clock();
-                var consent = await Send("consent", new { version = 1, grant_id = grantId, allow = true, text_input = true }, cancellation)
+                object consentBody = Assisted
+                    ? (object)new { version = 1, grant_id = grantId, allow = true, text_input = true, permission_mode = permissionMode }
+                    : new { version = 1, grant_id = grantId, allow = true, text_input = true };
+                var consent = await Send("consent", consentBody, cancellation)
                     .ConfigureAwait(false);
                 double seconds = Json.Number(consent, "expires_in_seconds");
                 if (Json.Text(consent, "grant_id") != grantId || Json.Text(consent, "status") != "active"
-                        || !Json.Flag(consent, "text_input") || !(seconds > 0 && seconds <= ComputerUseSession.ConsentSeconds))
+                        || !Json.Flag(consent, "text_input") || !(seconds > 0 && seconds <= ComputerUseSession.ConsentSeconds)
+                        || (Assisted && Json.Text(consent, "permission_mode") != permissionMode))
                     throw new InvalidDataException();
                 session.Shorten(TimeSpan.FromSeconds(seconds) - (clock() - requestedConsentAt));
+                ConsentConfirmed = session.State == ComputerUseState.Active;
 
                 while (session.State == ComputerUseState.Active) {
                     cancellation.ThrowIfCancellationRequested();
@@ -61,7 +72,7 @@ namespace Troika.Desktop {
                     var action = Json.Text(command, "action");
                     var milliseconds = Json.Get(command, "expires_in_ms");
                     if (!ValidId(id) || sequence >= 8 || !object.Equals(Json.Get(command, "sequence"), ++sequence)
-                            || !(milliseconds is int) || (int)milliseconds < 1 || (int)milliseconds > 10000)
+                            || !(milliseconds is int) || (int)milliseconds < 1 || (int)milliseconds > (Assisted ? 30000 : 10000))
                         throw new InvalidDataException();
                     var expires = requestedAt.Add(TimeSpan.FromMilliseconds((int)milliseconds));
                     Func<bool> fresh = () => !cancellation.IsCancellationRequested && clock() < expires;
@@ -74,7 +85,8 @@ namespace Troika.Desktop {
                         report = observation == null
                             ? (object)new { version = 1, grant_id = grantId, command_id = id, status = "failed" }
                             : new { version = 1, grant_id = grantId, command_id = id, status = "observed",
-                                    can_write = observation.CanWrite, can_save = observation.CanSave };
+                                    can_write = permissionMode != "view" && observation.CanWrite,
+                                    can_save = permissionMode != "view" && observation.CanSave };
                     } else if (action == "write" || action == "save") {
                         bool writing = action == "write";
                         string text = Json.Get(command, "text") as string;
@@ -82,14 +94,19 @@ namespace Troika.Desktop {
                                 || (!writing && command.ContainsKey("text")))
                             throw new InvalidDataException();
                         var result = ComputerUseCommandResult.StaleObservation;
+                        bool denied = false;
                         if (observation != null && Json.Text(command, "inspect_action_id") == inspectId) {
-                            result = writing
-                                ? await executor.WriteAsync(observation.Id, text, fresh).ConfigureAwait(false)
-                                : await executor.SaveAsync(observation.Id, fresh).ConfigureAwait(false);
+                            denied = permissionMode == "view" || (approveMutation != null
+                                && !await approveMutation(action, text, expires - clock()).ConfigureAwait(false));
+                            if (!denied) {
+                                result = writing
+                                    ? await executor.WriteAsync(observation.Id, text, fresh).ConfigureAwait(false)
+                                    : await executor.SaveAsync(observation.Id, fresh).ConfigureAwait(false);
+                            }
                         }
                         observation = null;
                         inspectId = null;
-                        string status = result == ComputerUseCommandResult.Applied ? "applied"
+                        string status = denied ? "denied" : result == ComputerUseCommandResult.Applied ? "applied"
                             : result == ComputerUseCommandResult.Verified ? "verified"
                             : result == ComputerUseCommandResult.StaleObservation ? "stale_state" : "failed";
                         report = new { version = 1, grant_id = grantId, command_id = id, status = status };
@@ -110,6 +127,7 @@ namespace Troika.Desktop {
             catch (ArgumentException) { }
             catch (InvalidOperationException) { }
             finally {
+                ConsentConfirmed = false;
                 if (!confirmed) session.Finish(false);
             }
             if (!confirmed) await Revoke().ConfigureAwait(false);
@@ -131,7 +149,7 @@ namespace Troika.Desktop {
             using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation)) {
                 deadline.CancelAfter(TimeSpan.FromSeconds(3));
                 var reply = await client.ComputerUseLab("POST", prefix + operation, body, deadline.Token).ConfigureAwait(false);
-                if (!object.Equals(Json.Get(reply, "version"), 1) || Json.Text(reply, "mode") != "windows_lab")
+                if (!object.Equals(Json.Get(reply, "version"), 1) || Json.Text(reply, "mode") != mode)
                     throw new InvalidDataException();
                 return reply;
             }

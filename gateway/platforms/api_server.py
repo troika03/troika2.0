@@ -1126,6 +1126,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         self._computer_windows_vision_model = extra.get("product_computer_windows_vision_model")
         self._computer_windows_vision_config_error = False
         self._computer_windows_vision = None
+        self._computer_windows_assisted = None
         # Active approval session key for each run_id.  The approval core
         # resolves requests by session key, while API clients address the
         # in-flight run by run_id.
@@ -1933,10 +1934,11 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         from run_agent import AIAgent
         from gateway.run import _resolve_runtime_agent_kwargs, _resolve_gateway_model, _load_gateway_config, GatewayRunner
         from hermes_cli.tools_config import _get_platform_tools
-        from troika_product.computer_agent import current_vision_run
+        from troika_product.computer_agent import WindowsVisionAgentRun, current_windows_model_run
 
-        vision_run = current_vision_run()
-        if vision_run is not None:
+        windows_model_run = current_windows_model_run()
+        vision_only = isinstance(windows_model_run, WindowsVisionAgentRun)
+        if windows_model_run is not None:
             runtime_kwargs = {"api_key": "fixture-key", "base_url": "http://127.0.0.1:9/v1",
                               "provider": "custom", "api_mode": "chat_completions",
                               "config_override": {"model": {"context_length": 65536},
@@ -1958,7 +1960,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             from troika_product.computer_agent import available as computer_run_bound
 
             computer_lab = computer_run_bound()
-            enabled_toolsets = [] if vision_run is not None else [ROUTER_TOOLSET]
+            enabled_toolsets = [] if vision_only else [ROUTER_TOOLSET]
             tool_progress_callback = wrap_progress(tool_progress_callback)
             from troika_product.conversation_sessions import CONVERSATION_RULE, conversation_only
             ephemeral_system_prompt = (ephemeral_system_prompt or "") + "\n\n" + CONVERSATION_RULE
@@ -1972,7 +1974,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         max_iterations = int(os.getenv("HERMES_MAX_ITERATIONS", "90"))
         if computer_lab:
             max_iterations = min(max_iterations, 12)
-        if vision_run is not None:
+        if vision_only:
             max_iterations = 1
 
         # Load fallback provider chain so the API server platform has the
@@ -1987,7 +1989,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             context.archive_messages = ConversationSessions(
                 self._access_registry, self._ensure_session_db()
             ).archive(current_provider_guard().principal, session_id)
-        if own is not None and vision_run is None:
+        if own is not None and windows_model_run is None:
             from troika_product.own_provider import ENDPOINTS
             model = own.model
             runtime_kwargs.update(api_key=own.key, provider=own.provider,
@@ -2028,11 +2030,11 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         if computer_lab:
             agent._session_json_enabled = False
             agent._write_api_request_debug = False
-        if vision_run is not None:
+        if windows_model_run is not None:
             agent.compression_enabled = False
             agent._model_supports_vision = lambda: True
-            agent._interruptible_api_call = vision_run.model_reply
-            agent._interruptible_streaming_api_call = vision_run.model_reply
+            agent._interruptible_api_call = windows_model_run.model_reply
+            agent._interruptible_streaming_api_call = windows_model_run.model_reply
         if self._access_registry is not None:
             from troika_product.agent_policy import install_agent_policy
             install_agent_policy(agent, self._product_resource_config, current_provider_guard())
@@ -2105,7 +2107,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         self._access_registry.finalize_account_deletion(user_id)
 
     def _computer_controls(self):
-        return (control for control in (self._computer_dry_run, self._computer_windows_lab, self._computer_windows_vision)
+        return (control for control in (self._computer_dry_run, self._computer_windows_lab,
+                                        self._computer_windows_vision, self._computer_windows_assisted)
                 if control is not None)
 
     def _forget_account_runs(self, user_id: str) -> None:
@@ -5972,7 +5975,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             workflow_body = {}
         if isinstance(workflow_body, dict) and workflow_body.get("workflow") == "development":
             if any(workflow_body.get(key) is True for key in
-                   ("computer_dry_run", "computer_windows_lab", "computer_windows_vision")):
+                   ("computer_dry_run", "computer_windows_lab", "computer_windows_vision", "computer_windows_assisted")):
                 return web.json_response(_openai_error("Computer Use requires a conversation Run"), status=400)
             from troika_product.development_runtime import start_development_run
             return await start_development_run(self, request, workflow_body)
@@ -6004,12 +6007,15 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             return web.json_response(_openai_error("Invalid JSON"), status=400)
 
         if not isinstance(body, dict) or any(type(body.get(key, False)) is not bool
-                                             for key in ("computer_dry_run", "computer_windows_lab", "computer_windows_vision")):
+                                             for key in ("computer_dry_run", "computer_windows_lab", "computer_windows_vision",
+                                                         "computer_windows_assisted")):
             return web.json_response(_openai_error("Invalid Run options"), status=400)
         windows_lab = body.get("computer_windows_lab", False)
         windows_vision = body.get("computer_windows_vision", False)
+        windows_assisted = body.get("computer_windows_assisted", False)
+        windows_model_lab = windows_vision or windows_assisted
         dry_run = body.get("computer_dry_run", False)
-        if sum((windows_lab, windows_vision, dry_run)) > 1:
+        if sum((windows_lab, windows_vision, windows_assisted, dry_run)) > 1:
             return web.json_response(_openai_error("Choose one Computer Use mode"), status=400)
         principal = self._product_principal(request)
         computer_control = self._computer_dry_run if dry_run else None
@@ -6017,9 +6023,10 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             return web.json_response(
                 _openai_error("Computer dry run unavailable", code="computer_dry_run_unavailable"), status=404,
             )
-        if windows_lab or windows_vision:
-            computer_control = self._computer_windows_vision if windows_vision else self._computer_windows_lab
-            if (windows_vision and self._computer_windows_vision_config_error
+        if windows_lab or windows_model_lab:
+            computer_control = (self._computer_windows_assisted if windows_assisted else
+                                self._computer_windows_vision if windows_vision else self._computer_windows_lab)
+            if (windows_model_lab and self._computer_windows_vision_config_error
                     and principal is not None and request.remote == "127.0.0.1"):
                 return web.json_response(
                     _openai_error("Для осмотра Windows настройте ключ и модель OpenRouter.",
@@ -6036,7 +6043,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         raw_input = body.get("input")
         if not raw_input:
             return web.json_response(_openai_error("Missing 'input' field"), status=400)
-        if windows_vision and (not isinstance(raw_input, str) or len(raw_input) > 512 or not raw_input.strip()):
+        if windows_model_lab and (not isinstance(raw_input, str) or len(raw_input) > 512 or not raw_input.strip()):
             return web.json_response(_openai_error("Invalid vision lab input"), status=400)
 
         user_message = raw_input if isinstance(raw_input, str) else (raw_input[-1].get("content", "") if isinstance(raw_input, list) else "")
@@ -6093,8 +6100,11 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         run_id = f"run_{uuid.uuid4().hex}"
         computer_run = None
         if computer_control is not None:
-            from troika_product.computer_agent import ComputerAgentRun, WindowsEditorAgentRun, WindowsVisionAgentRun
-            run_class = WindowsVisionAgentRun if windows_vision else WindowsEditorAgentRun if windows_lab else ComputerAgentRun
+            from troika_product.computer_agent import (
+                ComputerAgentRun, WindowsAssistedAgentRun, WindowsEditorAgentRun, WindowsVisionAgentRun,
+            )
+            run_class = (WindowsAssistedAgentRun if windows_assisted else WindowsVisionAgentRun if windows_vision
+                         else WindowsEditorAgentRun if windows_lab else ComputerAgentRun)
             computer_run = run_class(computer_control, principal, run_id)
         session_id = body.get("session_id") or stored_session_id or run_id
         if computer_run is not None:
@@ -6157,12 +6167,14 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 else ""
             ) + product_ux_rule
         loop = asyncio.get_running_loop()
-        vision_agent = None
-        if windows_vision:
+        windows_agent = None
+        if windows_model_lab:
+            from troika_product.capabilities import catalogue_context
+
             # Start the isolated fixture before the device can approve a frame.
             # Cold imports and agent setup must not consume its preview lifetime.
-            with computer_run.bind():
-                vision_agent = await asyncio.to_thread(
+            with catalogue_context(self, principal), computer_run.bind():
+                windows_agent = await asyncio.to_thread(
                     self._create_agent, ephemeral_system_prompt=ephemeral_system_prompt,
                     session_id=session_id, current_user_message=user_message,
                 )
@@ -6358,7 +6370,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                                 product_stream = GuardedTextStream(_text_cb, user_message)
                                 stream_callback = product_stream.feed
                         with computer_run.bind() if computer_run is not None else nullcontext():
-                            agent = vision_agent if windows_vision else self._create_agent(
+                            agent = windows_agent if windows_model_lab else self._create_agent(
                                 ephemeral_system_prompt=ephemeral_system_prompt,
                                 session_id=session_id,
                                 current_user_message=user_message,
@@ -6368,12 +6380,12 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                             )
                             self._active_run_agents[run_id] = agent
                             register_gateway_notify(approval_session_key, _approval_notify)
-                            vision_input = (
+                            model_input = (
                                 {"user_message": computer_run.model_input(user_message), "persist_user_message": user_message}
-                                if windows_vision else {"user_message": user_message}
+                                if windows_model_lab else {"user_message": user_message}
                             )
                             r = agent.run_conversation(
-                                **vision_input,
+                                **model_input,
                                 conversation_history=conversation_history,
                                 task_id=effective_task_id,
                             )
@@ -6404,7 +6416,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                         u["diagnostics"] = diagnostics
                     return r, u, product_stream
 
-                invoke = _run_in_scope if windows_vision else self._resource_call_scope(principal, run_id)(_run_in_scope)
+                invoke = _run_in_scope if windows_model_lab else self._resource_call_scope(principal, run_id)(_run_in_scope)
 
                 def _run_sync():
                     result, usage, product_stream = invoke()
@@ -6518,7 +6530,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 except Exception:
                     pass
             finally:
-                if windows_vision:
+                if windows_model_lab:
                     computer_control.stop_run(run_id)
                 # If the asyncio wrapper is cancelled (for example via
                 # /stop), the executor thread can still be blocked waiting

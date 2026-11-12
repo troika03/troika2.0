@@ -69,7 +69,7 @@ class WindowsVisionLab(ComputerGrantControl):
         grant.frame = body["frame"]
         grant.frame_expires_at = expires_at
         grant.submitted = True
-        return {"version": VERSION, "mode": MODE, "accepted": True}
+        return {"version": VERSION, "mode": grant.mode, "accepted": True}
 
     def release_upload(self, principal, run_id, grant_id):
         with self._lock:

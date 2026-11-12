@@ -29,16 +29,19 @@ namespace Troika.Desktop {
         private readonly string output;
         private readonly Func<TimeSpan> clock;
         private readonly bool externalEditor;
+        private readonly int observationSeconds;
         private ComputerUseObservation observation;
         private TimeSpan observationExpiry;
         private string writtenText;
 
         internal ComputerUseExecutor(ComputerUseSession session, IntPtr handle, string windowId, string output,
-                Func<TimeSpan> clock = null, bool isolated = false, bool externalEditor = false) {
+                Func<TimeSpan> clock = null, bool isolated = false, bool externalEditor = false,
+                int observationSeconds = ObservationSeconds) {
             this.session = session;
             driver = new ComputerUseNativeDriver(handle, windowId, isolated, externalEditor);
             this.output = output;
             this.externalEditor = externalEditor;
+            this.observationSeconds = observationSeconds;
             this.clock = clock ?? (() => ObservationClock.Elapsed);
         }
         private static readonly Stopwatch ObservationClock = Stopwatch.StartNew();
@@ -53,7 +56,7 @@ namespace Troika.Desktop {
                 if (session.State != ComputerUseState.Active) return null;
                 observation = new ComputerUseObservation(writtenText == null && text.Length == 0,
                     writtenText != null && text == writtenText);
-                observationExpiry = clock().Add(TimeSpan.FromSeconds(ObservationSeconds));
+                observationExpiry = clock().Add(TimeSpan.FromSeconds(observationSeconds));
                 return observation;
             }, (ComputerUseObservation)null);
         }

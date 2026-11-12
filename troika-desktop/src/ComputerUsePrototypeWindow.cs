@@ -24,10 +24,17 @@ namespace Troika.Desktop {
         private readonly bool externalEditor;
         private bool closing, allowClose;
         private CancellationTokenSource running;
+        private TaskCompletionSource<bool> approval;
+        private readonly StackPanel approvalPanel;
+        private readonly TextBlock approvalText;
         internal readonly TextBox TaskInput;
         internal readonly ComputerUseSession Session;
         internal readonly Button AllowButton;
         internal readonly Button StopButton;
+        internal readonly ComboBox PermissionMode;
+        internal readonly Button ApproveActionButton;
+        internal readonly Button DenyActionButton;
+        internal event Action Stopped;
         internal readonly string OutputFile;
         internal Task<ComputerUseState> Execution { get; private set; }
 
@@ -73,8 +80,19 @@ namespace Troika.Desktop {
                 AutomationProperties.SetName(TaskInput, "Задача для тестового редактора");
                 body.Children.Add(TaskInput);
             }
+            bool assisted = windowsRun != null && windowsRun.Assisted;
+            if (assisted) {
+                body.Children.Add(Text("Доступ к этому редактору"));
+                PermissionMode = new ComboBox { MinHeight = 32, Margin = new Thickness(0, 0, 0, 12) };
+                PermissionMode.Items.Add("Всегда спрашивать перед изменением");
+                PermissionMode.Items.Add("Разрешить действия в этом окне до конца запуска");
+                PermissionMode.Items.Add("Только просмотр");
+                PermissionMode.SelectedIndex = 0;
+                AutomationProperties.SetName(PermissionMode, "Режим разрешений");
+                body.Children.Add(PermissionMode);
+            }
             var actions = new WrapPanel();
-            AllowButton = ButtonFor("Разрешить и запустить", Start);
+            AllowButton = ButtonFor(assisted ? "Подтвердить режим" : "Разрешить и запустить", Start);
             StopButton = ButtonFor("Остановить (Esc)", Stop);
             actions.Children.Add(AllowButton);
             actions.Children.Add(StopButton);
@@ -83,6 +101,18 @@ namespace Troika.Desktop {
             body.Children.Add(remaining);
             status = Text("Ожидаю разрешения.");
             body.Children.Add(status);
+            if (assisted) {
+                approvalPanel = new StackPanel { Visibility = Visibility.Collapsed };
+                approvalText = Text("");
+                approvalPanel.Children.Add(approvalText);
+                var approvalButtons = new WrapPanel();
+                ApproveActionButton = ButtonFor("Разрешить действие", () => ResolveApproval(true));
+                DenyActionButton = ButtonFor("Отклонить", () => ResolveApproval(false));
+                approvalButtons.Children.Add(ApproveActionButton);
+                approvalButtons.Children.Add(DenyActionButton);
+                approvalPanel.Children.Add(approvalButtons);
+                body.Children.Add(approvalPanel);
+            }
 
             body.Children.Add(Text("Тестовый редактор"));
             editor = externalEditor ? new ComputerUseEditorField(Session) : new TextBox();
@@ -110,7 +140,7 @@ namespace Troika.Desktop {
             PreviewKeyDown += (sender, args) => {
                 if (args.Key == Key.Escape) { args.Handled = true; Stop(); }
             };
-            Closed += (sender, args) => { Session.Stop(); CancelRequest(); timer.Stop(); };
+            Closed += (sender, args) => { Stop(); timer.Stop(); };
             if (TaskInput != null) TaskInput.TextChanged += (sender, args) => Refresh();
             Refresh();
         }
@@ -161,8 +191,11 @@ namespace Troika.Desktop {
             timer.Start();
             try {
                 var executor = new ComputerUseExecutor(Session, new WindowInteropHelper(this).Handle, targetId, OutputFile,
-                    isolated: agent != null || windowsRun != null, externalEditor: externalEditor);
-                if (windowsRun != null) Execution = windowsRun.RunAsync(Session, executor, running.Token);
+                    isolated: agent != null || windowsRun != null, externalEditor: externalEditor,
+                    observationSeconds: PermissionMode == null ? ComputerUseExecutor.ObservationSeconds : 30);
+                string policy = PermissionMode == null ? null : new[] { "ask", "window", "view" }[PermissionMode.SelectedIndex];
+                if (windowsRun != null) Execution = windowsRun.RunAsync(Session, executor, running.Token, policy,
+                    policy == "ask" ? (Func<string, string, TimeSpan, Task<bool>>)ApproveMutation : null);
                 else Execution = agent == null ? executor.RunAsync() : agent.RunAsync(Session, executor, goal, running.Token);
                 await Execution;
             } catch (Exception) {
@@ -176,7 +209,39 @@ namespace Troika.Desktop {
 
         private void CancelRequest() { if (running != null) running.Cancel(); }
 
-        private void Stop() { Session.Stop(); CancelRequest(); Refresh(); }
+        internal void Stop() {
+            bool notify = Session.State == ComputerUseState.Pending || Session.State == ComputerUseState.Active;
+            Session.Stop();
+            ResolveApproval(false);
+            CancelRequest();
+            Refresh();
+            var stopped = Stopped;
+            if (notify && stopped != null) stopped();
+        }
+
+        private Task<bool> ApproveMutation(string action, string text, TimeSpan timeLeft) {
+            return Dispatcher.InvokeAsync(() => ShowApprovalAsync(action, text, timeLeft)).Task.Unwrap();
+        }
+
+        private async Task<bool> ShowApprovalAsync(string action, string text, TimeSpan timeLeft) {
+            if (Session.State != ComputerUseState.Active || timeLeft <= TimeSpan.Zero) return false;
+            approval = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            approvalText.Text = action == "write" ? "Разрешить ввести текст?\n" + text
+                : "Разрешить сохранить и проверить временный файл?\n" + OutputFile;
+            approvalPanel.Visibility = Visibility.Visible;
+            try {
+                var decision = approval.Task;
+                return await Task.WhenAny(decision, Task.Delay(timeLeft)) == decision && await decision;
+            } finally {
+                approval = null;
+                approvalText.Text = "";
+                approvalPanel.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void ResolveApproval(bool allowed) {
+            if (approval != null) approval.TrySetResult(allowed);
+        }
 
         private async void CloseWindowsRun(object sender, CancelEventArgs args) {
             if (allowClose || running == null) return;
@@ -195,10 +260,12 @@ namespace Troika.Desktop {
             var state = Session.State;
             AllowButton.IsEnabled = state == ComputerUseState.Pending && (TaskInput == null || ComputerUseAgent.ValidGoal(TaskInput.Text.Trim()));
             if (TaskInput != null) TaskInput.IsReadOnly = state != ComputerUseState.Pending;
+            if (PermissionMode != null) PermissionMode.IsEnabled = state == ComputerUseState.Pending;
             StopButton.IsEnabled = state == ComputerUseState.Pending || state == ComputerUseState.Active;
             remaining.Text = state == ComputerUseState.Active ? "Доступ ещё " + Session.SecondsRemaining + " с" : "";
             remaining.Visibility = state == ComputerUseState.Active ? Visibility.Visible : Visibility.Collapsed;
             if (state != ComputerUseState.Active) {
+                ResolveApproval(false);
                 timer.Stop();
                 if (state == ComputerUseState.Expired) CancelRequest();
             }

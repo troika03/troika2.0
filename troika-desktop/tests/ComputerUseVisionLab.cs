@@ -18,17 +18,23 @@ internal sealed class ComputerUseVisionLab : IDisposable {
     private readonly string token;
     private readonly Uri runEndpoint;
     private readonly string grantId;
+    private readonly string mode;
+    private readonly bool assisted;
     private int sent;
     internal readonly string RunLabel;
     internal string Provider { get; private set; }
 
-    internal ComputerUseVisionLab(string address, string token, string runId = null, string grantId = null) {
+    internal ComputerUseVisionLab(string address, string token, string runId = null, string grantId = null,
+            bool assisted = false) {
         var origin = ComputerUseAgent.LoopbackOrigin(address);
+        this.assisted = assisted;
+        mode = assisted ? "windows_assisted_lab" : "windows_vision_lab";
         if (runId != null || grantId != null) {
             if (runId == null || !Regex.IsMatch(runId, @"\Arun_[a-f0-9]{32}\z")
                     || grantId == null || !Regex.IsMatch(grantId, @"\A[a-f0-9]{32}\z"))
                 throw new ArgumentException("Нужны идентификаторы пробного запуска и разрешения.");
-            runEndpoint = new Uri(origin, "/v1/runs/" + runId + "/computer-windows-vision/");
+            runEndpoint = new Uri(origin, "/v1/runs/" + runId
+                + (assisted ? "/computer-windows-assisted/" : "/computer-windows-vision/"));
             this.grantId = grantId;
             RunLabel = runId.Substring(4, 8);
         }
@@ -57,7 +63,7 @@ internal sealed class ComputerUseVisionLab : IDisposable {
         var review = await GrantAsync("review", new { version = 1, grant_id = grantId }, CancellationToken.None)
             .ConfigureAwait(false);
         var provider = Json.Text(review, "vision_provider");
-        if (Json.Text(review, "status") != "pending" || (provider != "openrouter" && provider != "fixture"))
+        if (Json.Text(review, "status") != "pending" || (provider != "openrouter" && (assisted || provider != "fixture")))
             throw new InvalidOperationException("Разрешение на отправку кадра недоступно.");
         Provider = provider;
     }
@@ -70,8 +76,10 @@ internal sealed class ComputerUseVisionLab : IDisposable {
         var started = Stopwatch.StartNew();
         if (runEndpoint != null) {
             if (Provider == null) throw new InvalidOperationException();
-            var consent = await GrantAsync("consent",
-                new { version = 1, grant_id = grantId, allow = true, vision_provider = Provider }, cancellation);
+            var consent = assisted
+                ? await GrantAsync("approve_frame", new { version = 1, grant_id = grantId, vision_provider = Provider }, cancellation)
+                : await GrantAsync("consent",
+                    new { version = 1, grant_id = grantId, allow = true, vision_provider = Provider }, cancellation);
             if (Json.Text(consent, "status") != "active" || Json.Text(consent, "vision_provider") != Provider)
                 throw new InvalidDataException();
             remainingMs = Math.Min(remainingMs - (int)started.ElapsedMilliseconds,
@@ -108,8 +116,8 @@ internal sealed class ComputerUseVisionLab : IDisposable {
         return request;
     }
 
-    private static bool ValidGrantReply(System.Collections.Generic.Dictionary<string, object> reply) {
-        return object.Equals(Json.Get(reply, "version"), 1) && Json.Text(reply, "mode") == "windows_vision_lab";
+    private bool ValidGrantReply(System.Collections.Generic.Dictionary<string, object> reply) {
+        return object.Equals(Json.Get(reply, "version"), 1) && Json.Text(reply, "mode") == mode;
     }
 
     private async Task<System.Collections.Generic.Dictionary<string, object>> GrantAsync(string operation, object data,

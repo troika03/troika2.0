@@ -78,6 +78,9 @@ class WindowsComputerLab(ComputerGrantControl):
     grant_type = _WindowsGrant
     platforms = frozenset({"windows"})
     allow_regrant = False
+    command_seconds = _COMMAND_SECONDS
+    observation_seconds = MAX_OBSERVATION_SECONDS
+    allow_denial = False
 
     @staticmethod
     def _consent(principal, grant, body, now):
@@ -110,7 +113,7 @@ class WindowsComputerLab(ComputerGrantControl):
                     raise ComputerControlError("invalid_text", 400)
                 if not grant.text_input and text is not None:
                     raise ComputerControlError("text_input_unavailable")
-            expires = min(grant.expires_at, now + _COMMAND_SECONDS)
+            expires = min(grant.expires_at, now + self.command_seconds)
             if action != "inspect":
                 view = grant.view
                 if view is None or not _id(inspect_id) or view.inspect_id != inspect_id or now >= view.expires_at:
@@ -148,7 +151,7 @@ class WindowsComputerLab(ComputerGrantControl):
 
     @staticmethod
     def _take(grant, now):
-        payload = {"version": VERSION, "mode": MODE, "command": None}
+        payload = {"version": VERSION, "mode": grant.mode, "command": None}
         command = grant.command
         if command is None or command.taken or command.expires_at <= now:
             return payload
@@ -165,8 +168,7 @@ class WindowsComputerLab(ComputerGrantControl):
             command.text = None
         return payload
 
-    @staticmethod
-    def _report(grant, body, now):
+    def _report(self, grant, body, now):
         command = grant.command
         if (command is None or not command.taken or command.result is not None
                 or command.id != body.get("command_id") or command.expires_at <= now):
@@ -179,18 +181,19 @@ class WindowsComputerLab(ComputerGrantControl):
             if (type(can_write) is not bool or type(can_save) is not bool
                     or (can_write and grant.wrote) or (can_save and not grant.wrote)):
                 raise ComputerControlError("invalid_report", 400)
-            grant.view = _EditorView(command.id, min(grant.expires_at, now + MAX_OBSERVATION_SECONDS),
+            grant.view = _EditorView(command.id, min(grant.expires_at, now + self.observation_seconds),
                                      can_write, can_save)
         else:
             _fields(body, *fields)
             expected = {"inspect": "observed", "write": "applied", "save": "verified"}[command.action]
-            if status not in (expected, "stale_state", "failed"):
+            denied = self.allow_denial and status == "denied" and command.action in {"write", "save"}
+            if status not in (expected, "stale_state", "failed") and not denied:
                 raise ComputerControlError("invalid_report", 400)
             if status == "applied":
                 grant.wrote = True
             if status == "verified":
                 grant.saved = True
-        receipt = {"version": VERSION, "mode": MODE, "action_id": command.id, "sequence": command.sequence,
+        receipt = {"version": VERSION, "mode": grant.mode, "action_id": command.id, "sequence": command.sequence,
                    "action": command.action, "status": status, "verified": status == "verified"}
         command.result = {"ok": status in ("observed", "applied", "verified"), "receipt": receipt}
         if status == "observed":
@@ -199,4 +202,4 @@ class WindowsComputerLab(ComputerGrantControl):
         if not command.result["ok"]:
             command.result["error"] = status
         command.done.set()
-        return {"version": VERSION, "mode": MODE, "accepted": True}
+        return {"version": VERSION, "mode": grant.mode, "accepted": True}

@@ -327,6 +327,112 @@ async def test_vision_run_rejects_frames_after_its_permission_ends(hosted, monke
     assert expected in await asyncio.wait_for(stream.text(), 5)
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("hosted", [True], indirect=True)
+@pytest.mark.parametrize("permission", ["ask", "window", "view", "deny", "stop"])
+async def test_assisted_windows_run_applies_the_selected_permission(hosted, monkeypatch, permission):
+    from model_tools import get_tool_definitions
+    from troika_product.computer_agent import TOOLSET, WINDOWS_TOOL
+    from troika_product.computer_openrouter_vision import OpenRouterVision
+
+    test_exe = os.environ.get("TROIKA_WINDOWS_LAB_TEST_EXE")
+    if os.name != "nt" or not test_exe:
+        pytest.skip("requires Windows Graphics Capture test build")
+    executable = Path(test_exe).with_name("TroikaComputerUseEditor.exe")
+    if not executable.is_file() or not executable.with_name("TroikaWindowCapture.dll").is_file():
+        pytest.skip("requires Windows Graphics Capture test build")
+    monkeypatch.setattr(hosted.adapter, "_create_agent", APIServerAdapter._create_agent.__get__(hosted.adapter))
+    text = "Тройка проверяет итог."
+    goal = "Введи строку и сохрани: " + text
+    frame_count = 0
+    requested = []
+    observed = []
+
+    def respond(request):
+        nonlocal frame_count
+        assert request.url == "https://openrouter.ai/api/v1/chat/completions"
+        payload = json.loads(request.content)
+        assert payload["model"] == "fixture/vision:free"
+        if not payload.get("tools"):
+            frame_count += 1
+            parts = payload["messages"][1]["content"]
+            encoded = parts[1]["image_url"]["url"].split(",", 1)[1]
+            with Image.open(io.BytesIO(base64.b64decode(encoded, validate=True))) as image:
+                assert image.width >= 380 and image.height >= 100
+            return httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {
+                "content": "В тестовом редакторе видно пустое поле ввода и кнопку сохранения. " * 12,
+            }}]})
+        assert frame_count == 1 and b"data:image/png" not in request.content
+        assert [item["function"]["name"] for item in payload["tools"]] == [WINDOWS_TOOL]
+        user = [m["content"] for m in payload["messages"] if m["role"] == "user"]
+        assert user[0][0]["text"] == goal
+        description = json.loads(user[0][1]["text"])["описание_кадра"]
+        assert len(description) <= 600 and description.endswith("…")
+        receipts = [m for m in payload["messages"] if m["role"] == "tool"]
+        action = {"action": "inspect"}
+        if receipts:
+            result = json.loads(receipts[-1]["content"])
+            observed.append(result)
+            receipt = result.get("receipt", {})
+            if result.get("can_write"):
+                action = {"action": "write", "inspect_action_id": receipt["action_id"], "text": text}
+            elif result.get("can_save"):
+                action = {"action": "save", "inspect_action_id": receipt["action_id"]}
+            elif receipt.get("status") != "applied":
+                action = None
+        if action is None:
+            return httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {"content": "Готово."}}]})
+        requested.append(action["action"])
+        return httpx.Response(200, json={"choices": [{"finish_reason": "tool_calls", "message": {"tool_calls": [{
+            "id": f"call_assisted_{len(requested)}", "type": "function",
+            "function": {"name": WINDOWS_TOOL, "arguments": json.dumps(action)},
+        }]}}]})
+
+    monkeypatch.setattr(OpenRouterVision, "_client", staticmethod(
+        lambda timeout: httpx.Client(timeout=timeout, transport=httpx.MockTransport(respond))
+    ))
+    started = await hosted.client.post("/v1/runs", headers=hosted.phone.headers,
+                                       json={"input": goal, "computer_windows_assisted": True})
+    assert started.status == 202, await started.text()
+    assert WINDOWS_TOOL not in [item["function"]["name"] for item in get_tool_definitions(
+        enabled_toolsets=[TOOLSET], quiet_mode=True,
+    )]
+    run = SimpleNamespace(**{**vars(hosted), "run_id": (await started.json())["run_id"]})
+    route = "computer-windows-assisted"
+    grant = await operation(run, run.phone, "request", 201, route=route, target_device_id=run.pc.id, ttl_seconds=90)
+    assert grant["mode"] == "windows_assisted_lab" and grant["permission_mode"] == "ask"
+    grant_id = grant["grant_id"]
+    early = await operation(run, run.pc, "approve_frame", 409, route=route, grant_id=grant_id, vision_provider="openrouter")
+    assert early["error"]["code"] == "grant_pending" and not requested and frame_count == 0
+    child = await asyncio.create_subprocess_exec(
+        str(executable), "--verify-assisted", str(run.client.make_url("/")), run.run_id, grant_id, text, permission,
+        env={**os.environ, "TROIKA_COMPUTER_TEST_DEVICE_TOKEN": run.pc.token},
+        creationflags=subprocess.CREATE_NO_WINDOW,
+    )
+    try:
+        response = await run.client.get(f"/v1/runs/{run.run_id}/events", headers=run.phone.headers)
+        stream = await asyncio.wait_for(response.text(), 40)
+        assert await asyncio.wait_for(child.wait(), 10) == 0
+        assert frame_count == 1 and "data:image/png" not in stream
+        event = [json.loads(line[6:]) for line in stream.splitlines() if line.startswith("data: ")][-1]
+        if permission in {"ask", "window"}:
+            assert requested == ["inspect", "write", "inspect", "save"]
+            assert event["event"] == "run.completed" and "проверил его содержимое" in event["output"]
+        elif permission == "view":
+            assert requested == [] and event["event"] == "run.completed"
+            assert "пустое поле ввода" in event["output"] and len(event["output"]) <= 600
+        else:
+            assert requested == ["inspect", "write"] and "проверил его содержимое" not in stream
+            if permission == "deny":
+                assert observed[-1]["receipt"]["status"] == "denied"
+            else:
+                assert event["event"] == "run.failed" and event["error_code"] == "grant_stopped"
+    finally:
+        if child.returncode is None:
+            child.kill()
+            await child.wait()
+
+
 async def request_grant(hosted, target, ttl=60):
     return await operation(hosted, hosted.phone, "request", 201, target_device_id=target.id, ttl_seconds=ttl)
 

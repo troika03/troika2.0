@@ -29,6 +29,7 @@ internal sealed class ComputerUseVisualPreview : Window {
     private readonly ComputerUseSession session;
     private readonly ComputerUseWindowCapture target;
     private readonly ComputerUseVisionLab vision;
+    private readonly Func<bool> editorReady;
     private readonly DispatcherTimer timer;
     private readonly TextBlock status;
     private CancellationTokenSource capture;
@@ -43,14 +44,16 @@ internal sealed class ComputerUseVisualPreview : Window {
     internal readonly TextBlock Recognized;
     internal readonly Button SendButton;
     internal readonly TextBlock VisionAnswer;
+    internal event Action Stopped;
 
     internal ComputerUseVisualPreview(Func<TimeSpan> now = null, Func<BitmapSource, Task<string>> recognize = null,
-            ComputerUseWindowCapture target = null, ComputerUseVisionLab vision = null) {
+            ComputerUseWindowCapture target = null, ComputerUseVisionLab vision = null, Func<bool> editorReady = null) {
         if (vision != null && target == null) throw new ArgumentException("The vision lab requires the separate test window.");
         this.now = now ?? (() => Clock.Elapsed);
         this.recognize = recognize ?? ReadTextAsync;
         this.target = target;
         this.vision = vision;
+        this.editorReady = editorReady;
         session = new ComputerUseSession(this.now);
         Title = "Тройка — визуальный осмотр";
         Width = 540;
@@ -64,7 +67,9 @@ internal sealed class ComputerUseVisualPreview : Window {
 
         var body = new StackPanel { Margin = new Thickness(24) };
         body.Children.Add(new TextBlock {
-            Text = vision != null && vision.Provider == "openrouter"
+            Text = editorReady != null
+                ? "Подтвердите режим в редакторе. Здесь проверьте снимок перед отправкой в OpenRouter."
+                : vision != null && vision.Provider == "openrouter"
                 ? "Запуск " + vision.RunLabel + ". Проверьте снимок. При подтверждении кадр и текст запроса отправятся в OpenRouter."
                 : vision != null && vision.RunLabel != null
                 ? "Тестовый запуск " + vision.RunLabel + ". Проверьте снимок пробного окна перед отправкой."
@@ -129,6 +134,7 @@ internal sealed class ComputerUseVisualPreview : Window {
             Stop();
         };
         Closed += (sender, args) => Stop();
+        if (editorReady != null) timer.Start();
         Refresh();
     }
 
@@ -268,19 +274,23 @@ internal sealed class ComputerUseVisualPreview : Window {
         }
     }
 
-    private async void Stop() {
+    internal async void Stop() {
+        if (session.State != ComputerUseState.Pending && session.State != ComputerUseState.Active) return;
         session.Stop();
         Refresh();
+        var stopped = Stopped;
+        if (stopped != null) stopped();
         if (vision != null) await vision.StopAsync();
     }
 
     private void Refresh() {
         var state = session.State;
         bool active = state == ComputerUseState.Active;
-        AllowButton.IsEnabled = state == ComputerUseState.Pending;
-        bool canPreview = active && SourceVisible;
+        bool ready = editorReady == null || editorReady();
+        AllowButton.IsEnabled = state == ComputerUseState.Pending && ready;
+        bool canPreview = active && ready && SourceVisible;
         captureButton.IsEnabled = canPreview && capture == null;
-        StopButton.IsEnabled = AllowButton.IsEnabled || active;
+        StopButton.IsEnabled = state == ComputerUseState.Pending || active;
         if (!canPreview || now() >= frameExpires) {
             if (capture != null) capture.Cancel();
             Preview.Source = null;
@@ -291,9 +301,9 @@ internal sealed class ComputerUseVisualPreview : Window {
             SendButton.IsEnabled = canPreview && capture == null && !frameSent && Preview.Source != null;
         Preview.Visibility = Preview.Source == null ? Visibility.Collapsed : Visibility.Visible;
         Recognized.Visibility = Recognized.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
-        if (!active) timer.Stop();
+        if (!active && (editorReady == null || state != ComputerUseState.Pending)) timer.Stop();
         switch (state) {
-            case ComputerUseState.Pending: status.Text = "Ожидаю разрешения."; break;
+            case ComputerUseState.Pending: status.Text = ready ? "Ожидаю разрешения." : "Выберите режим в редакторе."; break;
             case ComputerUseState.Active:
                 status.Text = Preview.Source != null ? "Снимок готов."
                     : !canPreview ? "Пробное окно недоступно."

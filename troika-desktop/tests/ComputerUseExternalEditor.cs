@@ -27,10 +27,12 @@ static class ComputerUseExternalEditor {
             return RunWindowPreview(args);
         if ((args.Length == 2 && args[0] == "--verify-vision") || (args.Length == 4 && args[0] == "--verify-run-vision"))
             return Verify(null, null, visionArgs: args);
+        if ((args.Length == 4 && args[0] == "--run-assisted") || (args.Length == 6 && args[0] == "--verify-assisted"))
+            return RunAssisted(args);
         bool interactive = args.Length == 4 && args[0] == "--run";
         bool verifyRun = args.Length == 5 && args[0] == "--verify-run";
         if (!interactive && !verifyRun) {
-            Console.Error.WriteLine("Usage: TroikaComputerUseEditor.exe --preview | --window-preview | --vision-lab <loopback-api> | --run[-vision] <loopback-api> <run-id> <grant-id>");
+            Console.Error.WriteLine("Usage: TroikaComputerUseEditor.exe --preview | --window-preview | --vision-lab <loopback-api> | --run[-vision|-assisted] <loopback-api> <run-id> <grant-id>");
             return 2;
         }
         try {
@@ -44,6 +46,119 @@ static class ComputerUseExternalEditor {
             Console.Error.WriteLine(error.Message);
             return 2;
         }
+    }
+
+    private static int RunAssisted(string[] args) {
+        if (!File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "TroikaWindowCapture.dll"))) {
+            Console.Error.WriteLine("Build with -TestWindowCapture to enable Windows Graphics Capture.");
+            return 2;
+        }
+        bool verify = args[0] == "--verify-assisted";
+        string token = Environment.GetEnvironmentVariable("TROIKA_COMPUTER_TEST_DEVICE_TOKEN");
+        try {
+            using (var run = new ComputerUseWindowsRun(args[1], token, args[2], args[3], assisted: true))
+            using (var vision = new ComputerUseVisionLab(args[1], token, args[2], args[3], assisted: true)) {
+                vision.PrepareAsync().GetAwaiter().GetResult();
+                var app = new Application { ShutdownMode = verify ? ShutdownMode.OnExplicitShutdown : ShutdownMode.OnMainWindowClose };
+                var editor = NewEditor(run);
+                editor.Title += " " + run.RunLabel;
+                editor.ShowActivated = !verify;
+                var area = SystemParameters.WorkArea;
+                bool sideBySide = area.Width >= 1100;
+                if (!verify) {
+                    editor.WindowStartupLocation = WindowStartupLocation.Manual;
+                    editor.Left = area.Left + Math.Max(0, (area.Width - (sideBySide ? 1100 : editor.Width)) / 2);
+                    editor.Top = area.Top + 24;
+                }
+                app.MainWindow = editor;
+                editor.Show();
+                using (var target = ComputerUseWindowCapture.ForEditor(editor)) {
+                    var preview = new ComputerUseVisualPreview(target: target, vision: vision,
+                        editorReady: () => run.ConsentConfirmed && editor.Session.State == ComputerUseState.Active);
+                    editor.Stopped += preview.Stop;
+                    preview.Stopped += editor.Stop;
+                    preview.ShowActivated = false;
+                    preview.WindowStartupLocation = WindowStartupLocation.Manual;
+                    preview.Left = verify ? -10000 : editor.Left + (sideBySide ? editor.Width + 16 : 0);
+                    preview.Top = verify ? -10000 : sideBySide ? editor.Top
+                        : Math.Max(area.Top, Math.Min(area.Bottom - 245, editor.Top + editor.ActualHeight + 8));
+                    preview.Show();
+                    if (verify)
+                        app.Dispatcher.BeginInvoke(new Action(async () => {
+                            try {
+                                await VerifyAssisted(editor, preview, args[4], args[5]);
+                                app.Shutdown(0);
+                            } catch (Exception error) {
+                                Console.Error.WriteLine(error.Message);
+                                app.Shutdown(1);
+                            }
+                        }));
+                    try { return app.Run(); }
+                    finally { vision.StopAsync().GetAwaiter().GetResult(); }
+                }
+            }
+        } catch (ArgumentException error) {
+            Console.Error.WriteLine(error.Message);
+            return 2;
+        } catch (InvalidOperationException error) {
+            Console.Error.WriteLine(error.Message);
+            return 2;
+        } catch (HttpRequestException) {
+            Console.Error.WriteLine("Не удалось получить разрешение на пробный запуск.");
+            return 2;
+        } catch (OperationCanceledException) {
+            Console.Error.WriteLine("Тестовый сервер не ответил.");
+            return 2;
+        } catch (IOException) {
+            Console.Error.WriteLine("Тестовый сервер вернул неверный ответ.");
+            return 2;
+        }
+    }
+
+    private static async Task VerifyAssisted(ComputerUsePrototypeWindow editor, ComputerUseVisualPreview preview,
+            string expected, string permission) {
+        try {
+            Require(editor.PermissionMode.SelectedIndex == 0, "The default permission must ask.");
+            Require(!preview.AllowButton.IsEnabled, "The preview opened before local control consent.");
+            editor.PermissionMode.SelectedIndex = permission == "window" ? 1 : permission == "view" ? 2 : 0;
+            Click(editor.AllowButton);
+            await WaitUntil(() => preview.AllowButton.IsEnabled);
+            Click(preview.AllowButton);
+            await Bounded(preview.CaptureAsync());
+            Require(preview.SendButton.IsEnabled, "The approved editor capture was not available.");
+            await Bounded(preview.SendFrameAsync());
+            Require(preview.VisionAnswer.Text == "Кадр принят тестовым запуском.", "The server did not accept the reviewed frame.");
+            if (permission == "ask" || permission == "deny" || permission == "stop") {
+                await WaitUntil(() => editor.ApproveActionButton.IsVisible);
+                Require(!File.Exists(editor.OutputFile), "A file appeared before the action was approved.");
+                if (permission == "ask") {
+                    Click(editor.ApproveActionButton);
+                    await WaitUntil(() => !editor.ApproveActionButton.IsVisible);
+                    await WaitUntil(() => editor.ApproveActionButton.IsVisible);
+                    Require(!File.Exists(editor.OutputFile), "Save was not separately approved.");
+                    Click(editor.ApproveActionButton);
+                } else if (permission == "stop") {
+                    Click(preview.StopButton);
+                } else {
+                    Click(editor.DenyActionButton);
+                }
+            }
+            var state = await Bounded(editor.Execution);
+            if (permission == "ask" || permission == "window") {
+                Require(state == ComputerUseState.Verified && File.ReadAllBytes(editor.OutputFile).SequenceEqual(Encoding.UTF8.GetBytes(expected)),
+                    "The assisted run did not save and verify the exact file.");
+            } else {
+                Require(state != ComputerUseState.Verified && !File.Exists(editor.OutputFile),
+                    "The assisted run mutated the editor after permission was withheld.");
+            }
+            Console.WriteLine("PASS assisted editor permission " + permission);
+        } finally { Cleanup(editor); }
+    }
+
+    private static async Task WaitUntil(Func<bool> ready) {
+        var deadline = System.Diagnostics.Stopwatch.StartNew();
+        while (!ready() && deadline.Elapsed < TimeSpan.FromSeconds(20)) await Task.Delay(25);
+        Require(ready(), "The assisted editor did not reach the expected state.");
     }
 
     private static int RunWindowPreview(string[] visionArgs = null) {
