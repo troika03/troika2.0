@@ -300,8 +300,34 @@ def visual_review(team, task, design, render, paths):
         else "passed",
         image_sha256=hashlib.sha256(data).hexdigest(),
         panels=image.get("panels", []),
+        browser_scroll=_browser_scroll(render.get("metrics")),
         pages_checked=render.get("pages_checked"),
         next_page=render.get("next_page"),
         total_pages=render.get("total_pages"),
     )
     return value
+
+
+def _browser_scroll(metrics):
+    if not isinstance(metrics, list):
+        return []
+    result = []
+    for metric in metrics[:2]:
+        if not isinstance(metric, dict):
+            continue
+        width, samples = metric.get("width"), metric.get("scroll_samples")
+        if type(width) is not int or not 1 <= width <= 2000 or not isinstance(samples, list) or not 1 <= len(samples) <= 3:
+            continue
+        if any(not isinstance(item, dict) or set(item) != {"requested", "observed"}
+               or type(item["requested"]) is not int or not 0 <= item["requested"] <= 12000
+               or type(item["observed"]) is not int or abs(item["observed"]) > 100_000_000 for item in samples):
+            continue
+        positions = [item["requested"] for item in samples]
+        if positions[0] != 0 or positions != sorted(set(positions)):
+            continue
+        if any(abs(item["requested"] - item["observed"]) > 1 for item in samples):
+            status = "unconfirmed"
+        else:
+            status = "verified" if positions[-1] > 0 else "fits_viewport"
+        result.append({"width": width, "status": status, "samples": samples})
+    return result

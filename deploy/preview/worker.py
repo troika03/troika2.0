@@ -258,21 +258,29 @@ def preview_web(files, entry):
                 page.on("pageerror", lambda error: errors.append(str(error)[:300]))
                 page.goto(origin + entry, wait_until="domcontentloaded", timeout=12000)
                 page.wait_for_timeout(600)
-                dimensions = page.evaluate("""() => ({width: innerWidth,
-                    content_width: document.documentElement.scrollWidth,
-                    height: Math.min(document.documentElement.scrollHeight, 12000)})""")
-                metrics.append({**dimensions, "javascript_errors": errors[:8]})
-                for position in sorted({
-                    0,
-                    max(0, (dimensions["height"] - height) // 2),
-                    max(0, dimensions["height"] - height),
-                }):
-                    page.evaluate("(y) => scrollTo(0,y)", position)
+                session = context.new_cdp_session(page)
+                layout = session.send("Page.getLayoutMetrics")
+                dimensions = {
+                    "width": width,
+                    "content_width": round(layout["cssContentSize"]["width"]),
+                    "height": min(round(layout["cssContentSize"]["height"]), 12000),
+                }
+                travel = max(0, dimensions["height"] - layout["cssLayoutViewport"]["clientHeight"])
+                scroll_samples = []
+                for position in sorted({0, travel // 2, travel}):
+                    page.evaluate("(y) => scrollTo({top: y, behavior: 'instant'})", position)
                     page.wait_for_timeout(150)
+                    observed = round(session.send("Page.getLayoutMetrics")["cssLayoutViewport"]["pageY"])
+                    scroll_samples.append({"requested": position, "observed": observed})
+                    label = f"{width}px, y={observed}"
+                    if observed != position:
+                        label += f" (target {position})"
                     images.append((
-                        f"{width}px, y={position}",
+                        label,
                         page.screenshot(type="jpeg", quality=82),
                     ))
+                metrics.append({**dimensions, "javascript_errors": errors[:8], "scroll_samples": scroll_samples})
+                session.detach()
                 page.close()
         finally:
             browser.close()

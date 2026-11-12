@@ -757,6 +757,20 @@ class DevelopmentAgent:
             if execution == "not_run"
             else "Среда автоматического запуска этих тестов не поддерживается."
         )
+        visual_details = report.get("visual_details")
+        scroll = visual_details.get("browser_scroll", []) if isinstance(visual_details, dict) else []
+        scroll_text = "".join(
+            f"- Ширина {row['width']} px. "
+            + {
+                "verified": "Прокрутка подтверждена браузером. ",
+                "fits_viewport": "Страница помещается по высоте. ",
+                "unconfirmed": "Позиция прокрутки не подтверждена. ",
+            }[row["status"]]
+            + "Позиции в пикселях (запрошено → получено) "
+            + ", ".join(f"{item['requested']} → {item['observed']}" for item in row["samples"])
+            + ".\n"
+            for row in scroll
+        )
         return (
             "# Проверка проекта\n\n"
             "Метод: API-модель читает исходники. "
@@ -765,6 +779,7 @@ class DevelopmentAgent:
             + "Визуальная проверка: "
             + report.get("visual_review", "not_checked")
             + ".\n\n"
+            + ("Прокрутка в браузере\n\n" + scroll_text + "\n" if scroll_text else "")
             + (
                 "Блокирующих замечаний нет."
                 if report["status"] == "passed"

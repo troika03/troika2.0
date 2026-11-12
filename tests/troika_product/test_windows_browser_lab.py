@@ -1,10 +1,12 @@
 import json
+import os
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
 from scripts.troika_windows_browser_lab import BrowserLab, ORIGIN, _fixture_route, _run_model, _verified
+from scripts.troika_static_preview import StaticProjectPreview
 from troika_product.computer_control import ComputerControlError
 
 
@@ -32,6 +34,52 @@ def test_browser_rejects_external_or_unapproved_navigation_before_opening_window
     assert lab.step({"action": "open", "page": "overview"}, approve) == {"error": "denied"}
     browser.new_context.assert_not_called()
     assert lab.step({"action": "inspect"}, approve)["view"] == {"page": None, "open_pages": []}
+
+
+def project_request(url, *, navigation=False):
+    return Mock(request=SimpleNamespace(url=url, method="GET", is_navigation_request=lambda: navigation))
+
+
+def test_project_preview_serves_only_selected_html_and_bounded_static_assets(tmp_path):
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "index.html").write_bytes(b"<h1>Local project</h1>")
+    (site / "other.html").write_bytes(b"<h1>Another page</h1>")
+    css = site / "page.css"
+    css.write_bytes(b"body{color:red}")
+    (site / "page.js").write_bytes(b"alert(1)")
+    (tmp_path / "outside.css").write_bytes(b"private")
+    preview = StaticProjectPreview(site, "index.html")
+    index = project_request(ORIGIN + "index.html", navigation=True)
+    preview.route(index)
+    assert index.fulfill.call_args.kwargs["body"] == b"<h1>Local project</h1>"
+    style = project_request(ORIGIN + "page.css?v=1")
+    preview.route(style)
+    css.write_bytes(b"body{color:blue}")
+    preview.route(style)
+    assert style.fulfill.call_args.kwargs["body"] == b"body{color:red}"
+    for name, navigation in (("other.html", True), ("page.js", False), ("%2e%2e/outside.css", False),
+                             ("page.css%3Astream", False), ("page.css", True)):
+        blocked = project_request(ORIGIN + name, navigation=navigation)
+        preview.route(blocked)
+        blocked.abort.assert_called_once()
+        blocked.fulfill.assert_not_called()
+
+
+def test_project_preview_rejects_hardlinked_assets(tmp_path):
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "index.html").write_bytes(b"<h1>Local project</h1>")
+    external = tmp_path / "outside.css"
+    external.write_bytes(b"private")
+    try:
+        os.link(external, site / "asset.css")
+    except OSError:
+        pytest.skip("test volume has no hardlink support")
+    blocked = project_request(ORIGIN + "asset.css")
+    StaticProjectPreview(site, "index.html").route(blocked)
+    blocked.abort.assert_called_once()
+    blocked.fulfill.assert_not_called()
 
 
 @pytest.mark.parametrize(("url", "closed"), [(ORIGIN + "details", False), (ORIGIN + "overview", True)])

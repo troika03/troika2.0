@@ -206,7 +206,7 @@ def test_visual_reviewer_receives_actual_image_and_returns_concrete_repairs():
     def model(messages, *args):
         content = messages[1]["content"]
         assert content[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
-        assert "390px" in content[0]["text"]
+        assert "390px" in content[0]["text"] and '"observed": 0' in content[0]["text"]
         return reply({
             "summary": "Mobile content is clipped.",
             "issues": [
@@ -231,11 +231,22 @@ def test_visual_reviewer_receives_actual_image_and_returns_concrete_repairs():
                     "data": base64.b64encode(b"\xff\xd8fixture").decode(),
                     "panels": ["390px"],
                 },
+                "metrics": [
+                    {"width": 1440, "scroll_samples": [{"requested": 0, "observed": 0},
+                                                       {"requested": 120, "observed": 120}]},
+                    {"width": 390, "scroll_samples": [{"requested": 0, "observed": 0},
+                                                      {"requested": 640, "observed": 0}]},
+                ],
             },
             ["index.html"],
         )
         assert result["status"] == "needs_changes" and len(result["image_sha256"]) == 64
         assert "data" not in result
+        assert [item["status"] for item in result["browser_scroll"]] == ["verified", "unconfirmed"]
+        report = DevelopmentAgent.report_text({"visual_details": result, "status": "needs_changes",
+                                              "summary": "", "issues": [], "reviewed_files": [], "repairs": 0})
+        assert "120 → 120" in report and "640 → 0" in report
+        assert "Позиция прокрутки не подтверждена" in report
         with pytest.raises(ValueError, match="Invalid rendered preview"):
             visual_review(
                 team,
