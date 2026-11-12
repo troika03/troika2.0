@@ -28,6 +28,7 @@ namespace Troika.Desktop {
         private readonly ComputerUseNativeDriver driver;
         private readonly string output;
         private readonly Func<TimeSpan> clock;
+        private readonly bool externalEditor;
         private ComputerUseObservation observation;
         private TimeSpan observationExpiry;
         private string writtenText;
@@ -37,6 +38,7 @@ namespace Troika.Desktop {
             this.session = session;
             driver = new ComputerUseNativeDriver(handle, windowId, isolated, externalEditor);
             this.output = output;
+            this.externalEditor = externalEditor;
             this.clock = clock ?? (() => ObservationClock.Elapsed);
         }
         private static readonly Stopwatch ObservationClock = Stopwatch.StartNew();
@@ -121,7 +123,7 @@ namespace Troika.Desktop {
             return observation != null && observation.Id == id && clock() < observationExpiry;
         }
 
-        private static bool ValidText(string text) {
+        internal static bool ValidText(string text) {
             if (string.IsNullOrEmpty(text) || text.Length > MaxTextLength) return false;
             foreach (char character in text)
                 if (char.IsControl(character) || character == '\u2028' || character == '\u2029') return false;
@@ -142,7 +144,15 @@ namespace Troika.Desktop {
             var expiresAt = observationExpiry;
             var permit = session.Arm(step, text, () => clock() < expiresAt && (commandIsFresh == null || commandIsFresh()));
             if (permit == null) return session.State == ComputerUseState.Active ? Fail() : ComputerUseCommandResult.NotActive;
-            driver.Invoke(suffix);
+            try {
+                if (externalEditor && step == ComputerUseStep.Write) driver.SetEditorValue(text);
+                else driver.Invoke(suffix);
+            } catch (IOException) {
+                if (permit.Result.Task.IsCompleted && permit.ObservationExpired)
+                    return ComputerUseCommandResult.StaleObservation;
+                if (session.State != ComputerUseState.Active) return ComputerUseCommandResult.NotActive;
+                throw;
+            }
             if (!permit.Result.Task.Wait(TimeSpan.FromSeconds(2))) return Fail();
             if (permit.Result.Task.Result) return ComputerUseCommandResult.Applied;
             return permit.ObservationExpired ? ComputerUseCommandResult.StaleObservation : Fail();

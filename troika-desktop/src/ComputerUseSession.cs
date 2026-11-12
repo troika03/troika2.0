@@ -73,10 +73,11 @@ namespace Troika.Desktop {
             }
         }
 
-        internal ComputerUsePermit Consume(ComputerUseStep step) {
+        internal ComputerUsePermit Consume(ComputerUseStep step, string matchingText = null) {
             lock (gate) {
                 Expire();
                 if (state != ComputerUseState.Active || permit == null || permit.Consumed || permit.Step != step) return null;
+                if (matchingText != null && permit.Text != matchingText) return null;
                 if (permit.ObservationIsFresh != null && !permit.ObservationIsFresh()) {
                     permit.ObservationExpired = true;
                     permit.Result.TrySetResult(false);

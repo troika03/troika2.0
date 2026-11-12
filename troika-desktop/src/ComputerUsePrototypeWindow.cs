@@ -85,16 +85,22 @@ namespace Troika.Desktop {
             body.Children.Add(status);
 
             body.Children.Add(Text("Тестовый редактор"));
-            editor = new TextBox { IsReadOnly = true, MinHeight = 64, TextWrapping = TextWrapping.Wrap, Padding = new Thickness(8) };
+            editor = externalEditor ? new ComputerUseEditorField(Session) : new TextBox();
+            editor.IsReadOnly = true;
+            editor.MinHeight = 64;
+            editor.TextWrapping = TextWrapping.Wrap;
+            editor.Padding = new Thickness(8);
             AutomationProperties.SetName(editor, "Тестовый текст");
             AutomationProperties.SetAutomationId(editor, targetId + "-editor");
             body.Children.Add(editor);
             var fixture = new WrapPanel();
-            fixture.Children.Add(FixtureButton("Запись образца", "write", ComputerUseStep.Write, value => {
-                if (editor.Text.Length != 0) return false;
-                editor.Text = value;
-                return true;
-            }));
+            if (!externalEditor) {
+                fixture.Children.Add(FixtureButton("Запись образца", "write", ComputerUseStep.Write, value => {
+                    if (editor.Text.Length != 0) return false;
+                    editor.Text = value;
+                    return true;
+                }));
+            }
             fixture.Children.Add(FixtureButton("Сохранение файла", "save", ComputerUseStep.Save, Save));
             body.Children.Add(fixture);
             Content = body;

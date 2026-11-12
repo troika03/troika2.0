@@ -52,12 +52,20 @@ namespace Troika.Desktop {
             else if (RunWorker(action) != "") throw new InvalidDataException();
         }
 
-        private string RunWorker(string action) {
-            // The worker gets only a fixture identity and operation, never the goal or provider key.
+        internal void SetEditorValue(string text) {
+            if (workerImage == null || !windowId.StartsWith(ExternalWindowPrefix, StringComparison.Ordinal)
+                    || !ComputerUseExecutor.ValidText(text))
+                throw new InvalidOperationException();
+            if (RunWorker("set-value", text) != "") throw new InvalidDataException();
+        }
+
+        private string RunWorker(string action, string text = null) {
+            // Only fixture identity and operation travel as arguments. A write value uses the private input pipe.
             var start = new ProcessStartInfo(workerImage, string.Format(CultureInfo.InvariantCulture,
                 "{0} {1} {2} {3} {4}", WorkerArgument, processId, handle.ToInt64(), windowId, action)) {
                 CreateNoWindow = true,
                 UseShellExecute = false,
+                RedirectStandardInput = text != null,
                 RedirectStandardOutput = true,
                 StandardOutputEncoding = Encoding.ASCII,
             };
@@ -65,6 +73,10 @@ namespace Troika.Desktop {
             start.EnvironmentVariables["SystemRoot"] = Environment.GetEnvironmentVariable("SystemRoot");
             using (var worker = Process.Start(start)) {
                 if (worker == null) throw new InvalidOperationException();
+                if (text != null) {
+                    using (var input = worker.StandardInput)
+                        input.Write(Convert.ToBase64String(StrictUtf8.GetBytes(text)));
+                }
                 if (!worker.WaitForExit(TimeoutMilliseconds)) {
                     try { worker.Kill(); } catch (InvalidOperationException) { }
                     throw new IOException("The native UI worker timed out.");
@@ -90,9 +102,26 @@ namespace Troika.Desktop {
             return element;
         }
 
-        private string ReadNative() {
+        private ValuePattern EditorValuePattern() {
             var editor = Find("editor", ControlType.Edit);
-            return ((ValuePattern)editor.GetCurrentPattern(ValuePattern.Pattern)).Current.Value;
+            if (editor.Current.IsPassword) throw new InvalidOperationException();
+            return (ValuePattern)editor.GetCurrentPattern(ValuePattern.Pattern);
+        }
+
+        private string ReadNative() {
+            return EditorValuePattern().Current.Value;
+        }
+
+        private static string ReadWorkerText() {
+            if (!Console.IsInputRedirected) throw new InvalidOperationException();
+            using (var input = new StreamReader(Console.OpenStandardInput(), Encoding.ASCII, true, 256)) {
+                var buffer = new char[MaxEncodedEditorLength + 1];
+                int length = input.ReadBlock(buffer, 0, buffer.Length);
+                if (length == 0 || length > MaxEncodedEditorLength) throw new InvalidDataException();
+                string text = StrictUtf8.GetString(Convert.FromBase64CharArray(buffer, 0, length));
+                if (!ComputerUseExecutor.ValidText(text)) throw new InvalidDataException();
+                return text;
+            }
         }
 
         private void InvokeNative(string action) {
@@ -131,7 +160,10 @@ namespace Troika.Desktop {
                         var encoded = Convert.ToBase64String(StrictUtf8.GetBytes(driver.ReadNative()));
                         if (encoded.Length > MaxEncodedEditorLength) return 2;
                         Console.Write(encoded);
+                    } else if (args[4] == "set-value" && externalEditor) {
+                        driver.EditorValuePattern().SetValue(ReadWorkerText());
                     } else {
+                        if (externalEditor && args[4] != "save") return 2;
                         driver.InvokeNative(args[4]);
                     }
                     return 0;
@@ -143,6 +175,7 @@ namespace Troika.Desktop {
             catch (Win32Exception) { }
             catch (IOException) { }
             catch (ArgumentException) { }
+            catch (FormatException) { }
             return 2;
         }
     }

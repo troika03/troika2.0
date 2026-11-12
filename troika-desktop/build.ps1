@@ -9,7 +9,7 @@ New-Item -ItemType Directory -Path $output -Force | Out-Null
 & python (Join-Path (Split-Path $root) 'scripts\provision_windows_voice_id.py')
 if ($LASTEXITCODE -ne 0) { throw 'Offline voice identity asset provisioning failed.' }
 Copy-Item -LiteralPath (Join-Path $root 'assets') -Destination $output -Recurse -Force
-$references = @('System.dll','System.Core.dll','System.Windows.Forms.dll','System.Drawing.dll','System.Net.Http.dll','System.Web.Extensions.dll','System.Security.dll','System.IO.Compression.dll','System.IO.Compression.FileSystem.dll','WPF\WindowsBase.dll','WPF\PresentationCore.dll','WPF\PresentationFramework.dll','WPF\UIAutomationClient.dll','WPF\UIAutomationTypes.dll','System.Xaml.dll') | ForEach-Object { '/reference:' + (Join-Path $framework $_) }
+$references = @('System.dll','System.Core.dll','System.Windows.Forms.dll','System.Drawing.dll','System.Net.Http.dll','System.Web.Extensions.dll','System.Security.dll','System.IO.Compression.dll','System.IO.Compression.FileSystem.dll','WPF\WindowsBase.dll','WPF\PresentationCore.dll','WPF\PresentationFramework.dll','WPF\UIAutomationClient.dll','WPF\UIAutomationProvider.dll','WPF\UIAutomationTypes.dll','System.Xaml.dll') | ForEach-Object { '/reference:' + (Join-Path $framework $_) }
 $sources = Get-ChildItem -LiteralPath (Join-Path $root 'src') -Filter '*.cs' | ForEach-Object { $_.FullName }
 & $compiler /nologo /target:winexe /platform:x64 /optimize+ /utf8output ('/win32manifest:' + (Join-Path $root 'app.manifest')) ('/out:' + (Join-Path $output 'TroikaDesktop.exe')) $references $sources
 if ($LASTEXITCODE -ne 0) { throw 'Desktop build failed.' }
@@ -61,7 +61,7 @@ if ($Test) {
     if ($LASTEXITCODE -ne 0) { throw 'Voice identity UI tests failed.' }
 }
 if ($Test) {
-    $computerUseSources = @('Json.cs','ApiClient.cs','LocalStore.cs','OwnApi.cs','BrandAssets.cs','ComputerUseSession.cs','ComputerUseNativeDriver.cs','ComputerUseExecutor.cs','ComputerUseAgent.cs','ComputerUsePrototypeWindow.cs','ComputerUseConsentWindow.cs','ComputerUseWindowsRun.cs') | ForEach-Object { Join-Path $root ('src\' + $_) }
+    $computerUseSources = @('Json.cs','ApiClient.cs','LocalStore.cs','OwnApi.cs','BrandAssets.cs','ComputerUseSession.cs','ComputerUseNativeDriver.cs','ComputerUseExecutor.cs','ComputerUseEditorField.cs','ComputerUseAgent.cs','ComputerUsePrototypeWindow.cs','ComputerUseConsentWindow.cs','ComputerUseWindowsRun.cs') | ForEach-Object { Join-Path $root ('src\' + $_) }
     $prototypeTests = Join-Path $root 'tests\ComputerUsePrototypeTests.cs'
     & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'ComputerUsePrototypeTests.exe')) $references $computerUseSources $prototypeTests
     if ($LASTEXITCODE -ne 0) { throw 'Computer Use prototype test build failed.' }
