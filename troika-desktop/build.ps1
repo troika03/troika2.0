@@ -87,6 +87,10 @@ if ($Test) {
         & (Join-Path $root 'tests\build-window-capture.ps1') -OutputDirectory $output
         & $externalEditor --verify-window-capture
         if ($LASTEXITCODE -ne 0) { throw 'Windows Graphics Capture checks failed.' }
+        if ($TestNotepad) {
+            & $externalEditor --verify-notepad-capture
+            if ($LASTEXITCODE -ne 0) { throw 'Notepad capture checks failed.' }
+        }
     }
     & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'DesignReferenceTests.exe')) ('/reference:' + (Join-Path $output 'TroikaDesktop.exe')) $references (Join-Path $root 'tests\DesignReferenceTests.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Design reference test build failed.' }

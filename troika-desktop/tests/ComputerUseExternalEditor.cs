@@ -19,7 +19,8 @@ static class ComputerUseExternalEditor {
     [STAThread] public static int Main(string[] args) {
         if (args.Length == 1 && args[0] == "--verify") return Verify(null, ComputerUseExecutor.Sample);
         if (args.Length == 1 && args[0] == "--notepad-preview") return new Application().Run(NewNotepadPreview());
-        if (args.Length == 1 && args[0] == "--verify-notepad") return VerifyNotepad();
+        if (args.Length == 1 && (args[0] == "--verify-notepad" || args[0] == "--verify-notepad-capture"))
+            return VerifyNotepad(args[0] == "--verify-notepad-capture");
         if (args.Length == 1 && args[0] == "--preview") return new Application().Run(new ComputerUseVisualPreview());
         if ((args.Length == 2 || (args.Length == 3 && args[2] == "protected")) && args[0] == "--window-target")
             return ComputerUseWindowCapture.RunTarget(args[1], args.Length == 3);
@@ -29,12 +30,13 @@ static class ComputerUseExternalEditor {
             return RunWindowPreview(args);
         if ((args.Length == 2 && args[0] == "--verify-vision") || (args.Length == 4 && args[0] == "--verify-run-vision"))
             return Verify(null, null, visionArgs: args);
-        if ((args.Length == 4 && args[0] == "--run-assisted") || (args.Length == 6 && args[0] == "--verify-assisted"))
+        if ((args.Length == 4 && (args[0] == "--run-assisted" || args[0] == "--run-notepad-assisted"))
+                || (args.Length == 6 && (args[0] == "--verify-assisted" || args[0] == "--verify-notepad-assisted")))
             return RunAssisted(args);
         bool interactive = args.Length == 4 && args[0] == "--run";
         bool verifyRun = args.Length == 5 && args[0] == "--verify-run";
         if (!interactive && !verifyRun) {
-            Console.Error.WriteLine("Usage: TroikaComputerUseEditor.exe --preview | --notepad-preview | --window-preview | --vision-lab <loopback-api> | --run[-vision|-assisted] <loopback-api> <run-id> <grant-id>");
+            Console.Error.WriteLine("Usage: TroikaComputerUseEditor.exe --preview | --notepad-preview | --window-preview | --vision-lab <loopback-api> | --run[-vision|-assisted|-notepad-assisted] <loopback-api> <run-id> <grant-id>");
             return 2;
         }
         try {
@@ -55,16 +57,19 @@ static class ComputerUseExternalEditor {
             openNotepad: (session, output) => new ComputerUseNotepad(session, output));
     }
 
-    private static int VerifyNotepad() {
+    private static int VerifyNotepad(bool capture) {
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         app.Startup += (sender, args) => app.Dispatcher.BeginInvoke(new Action(async () => {
             try {
-                await CheckNotepad("ask");
-                await CheckNotepad("window");
-                await CheckNotepad("view");
-                await CheckNotepad("deny-write");
-                await CheckNotepad("deny-save");
-                await CheckNotepad("stop-before-save");
+                if (capture) await CheckNotepadCapture();
+                else {
+                    await CheckNotepad("ask");
+                    await CheckNotepad("window");
+                    await CheckNotepad("view");
+                    await CheckNotepad("deny-write");
+                    await CheckNotepad("deny-save");
+                    await CheckNotepad("stop-before-save");
+                }
                 app.Shutdown(0);
             } catch (Exception error) {
                 Console.Error.WriteLine(error.Message);
@@ -72,6 +77,36 @@ static class ComputerUseExternalEditor {
             }
         }));
         return app.Run();
+    }
+
+    private static async Task CheckNotepadCapture() {
+        string id = "troika-notepad-" + Guid.NewGuid().ToString("N");
+        string directory = Path.Combine(Path.GetTempPath(), id);
+        string output = Path.Combine(directory, id + ".txt");
+        var session = new ComputerUseSession();
+        session.Allow();
+        try {
+            using (var document = new ComputerUseNotepad(session, output, showForCapture: true))
+            using (var target = ComputerUseWindowCapture.ForNotepad(document)) {
+                await WaitUntil(() => target.Visible);
+                Require(await Bounded(target.CaptureAsync(CancellationToken.None)) != null,
+                    "Could not capture the owned blank Notepad window.");
+                var executor = new ComputerUseExecutor(session, document, output, ComputerUseNotepad.FileEncoding, 30);
+                var observation = await Bounded(executor.InspectAsync());
+                Require(observation != null && await Bounded(executor.WriteAsync(observation.Id, ComputerUseExecutor.Sample))
+                    == ComputerUseCommandResult.Applied, "Could not populate the Notepad capture test.");
+                Require(await Bounded(target.CaptureAsync(CancellationToken.None)) == null,
+                    "A nonblank Notepad frame was captured.");
+                session.Stop();
+                Require(!target.Visible && await Bounded(target.CaptureAsync(CancellationToken.None)) == null,
+                    "A Notepad frame was captured after Stop.");
+                Console.WriteLine("PASS captures only the owned blank Notepad document before Stop");
+            }
+        } finally {
+            session.Stop();
+            if (File.Exists(output)) File.Delete(output);
+            if (Directory.Exists(directory)) Directory.Delete(directory, false);
+        }
     }
 
     private static async Task CheckNotepad(string scenario) {
@@ -133,14 +168,21 @@ static class ComputerUseExternalEditor {
             Console.Error.WriteLine("Build with -TestWindowCapture to enable Windows Graphics Capture.");
             return 2;
         }
-        bool verify = args[0] == "--verify-assisted";
+        bool verify = args.Length == 6;
+        bool notepad = args[0] == "--run-notepad-assisted" || args[0] == "--verify-notepad-assisted";
         string token = Environment.GetEnvironmentVariable("TROIKA_COMPUTER_TEST_DEVICE_TOKEN");
         try {
             using (var run = new ComputerUseWindowsRun(args[1], token, args[2], args[3], assisted: true))
             using (var vision = new ComputerUseVisionLab(args[1], token, args[2], args[3], assisted: true)) {
                 vision.PrepareAsync().GetAwaiter().GetResult();
                 var app = new Application { ShutdownMode = verify ? ShutdownMode.OnExplicitShutdown : ShutdownMode.OnMainWindowClose };
-                var editor = NewEditor(run);
+                ComputerUseWindowCapture notepadTarget = null;
+                var editor = notepad ? new ComputerUsePrototypeWindow(new ComputerUseSession(), windowsRun: run,
+                    openNotepad: (session, output) => {
+                        var document = new ComputerUseNotepad(session, output, showForCapture: true);
+                        Volatile.Write(ref notepadTarget, ComputerUseWindowCapture.ForNotepad(document));
+                        return document;
+                    }) : NewEditor(run);
                 editor.Title += " " + run.RunLabel;
                 editor.ShowActivated = !verify;
                 var area = SystemParameters.WorkArea;
@@ -152,9 +194,10 @@ static class ComputerUseExternalEditor {
                 }
                 app.MainWindow = editor;
                 editor.Show();
-                using (var target = ComputerUseWindowCapture.ForEditor(editor)) {
+                using (var target = notepad ? ComputerUseWindowCapture.Deferred(() => Volatile.Read(ref notepadTarget))
+                        : ComputerUseWindowCapture.ForEditor(editor)) {
                     var preview = new ComputerUseVisualPreview(target: target, vision: vision,
-                        editorReady: () => run.ConsentConfirmed && editor.Session.State == ComputerUseState.Active);
+                        editorReady: () => run.ConsentConfirmed && editor.Session.State == ComputerUseState.Active && target.Visible);
                     editor.Stopped += preview.Stop;
                     preview.Stopped += editor.Stop;
                     preview.ShowActivated = false;
@@ -166,7 +209,7 @@ static class ComputerUseExternalEditor {
                     if (verify)
                         app.Dispatcher.BeginInvoke(new Action(async () => {
                             try {
-                                await VerifyAssisted(editor, preview, args[4], args[5]);
+                                await VerifyAssisted(editor, preview, args[4], args[5], notepad);
                                 app.Shutdown(0);
                             } catch (Exception error) {
                                 Console.Error.WriteLine(error.Message);
@@ -196,10 +239,15 @@ static class ComputerUseExternalEditor {
     }
 
     private static async Task VerifyAssisted(ComputerUsePrototypeWindow editor, ComputerUseVisualPreview preview,
-            string expected, string permission) {
+            string expected, string permission, bool notepad) {
+        byte[] preamble = notepad ? ComputerUseNotepad.FileEncoding.GetPreamble() : new byte[0];
+        Func<bool> unchanged = () => notepad ? File.Exists(editor.OutputFile)
+            && File.ReadAllBytes(editor.OutputFile).SequenceEqual(preamble) : !File.Exists(editor.OutputFile);
+        Exception failure = null;
         try {
             Require(editor.PermissionMode.SelectedIndex == 0, "The default permission must ask.");
             Require(!preview.AllowButton.IsEnabled, "The preview opened before local control consent.");
+            Require(!File.Exists(editor.OutputFile), "The assisted editor started before local consent.");
             editor.PermissionMode.SelectedIndex = permission == "window" ? 1 : permission == "view" ? 2 : 0;
             Click(editor.AllowButton);
             await WaitUntil(() => preview.AllowButton.IsEnabled);
@@ -207,16 +255,21 @@ static class ComputerUseExternalEditor {
             await Bounded(preview.CaptureAsync());
             Require(preview.SendButton.IsEnabled, "The approved editor capture was not available.");
             await Bounded(preview.SendFrameAsync());
-            Require(preview.VisionAnswer.Text == "Кадр принят тестовым запуском.", "The server did not accept the reviewed frame.");
-            if (permission == "ask" || permission == "deny" || permission == "stop") {
-                await WaitUntil(() => editor.ApproveActionButton.IsVisible);
-                Require(!File.Exists(editor.OutputFile), "A file appeared before the action was approved.");
-                if (permission == "ask") {
+            Require(preview.FrameAccepted, "The server did not accept the reviewed frame.");
+            if (editor.PermissionMode.SelectedIndex == 0) {
+                await WaitUntil(() => editor.ApproveActionButton.IsVisible || editor.Execution.IsCompleted);
+                Require(editor.ApproveActionButton.IsVisible && unchanged(), "The editor did not wait for write approval.");
+                if (permission == "ask" || permission == "deny-save" || permission == "stop-before-save") {
                     Click(editor.ApproveActionButton);
-                    await WaitUntil(() => !editor.ApproveActionButton.IsVisible);
-                    await WaitUntil(() => editor.ApproveActionButton.IsVisible);
-                    Require(!File.Exists(editor.OutputFile), "Save was not separately approved.");
-                    Click(editor.ApproveActionButton);
+                    await WaitUntil(() => (editor.ApproveActionButton.IsVisible
+                        && (string)editor.ApproveActionButton.Content == "Разрешить сохранение") || editor.Execution.IsCompleted);
+                    Require(editor.ApproveActionButton.IsVisible && unchanged(), "Save was not separately approved.");
+                    if (permission == "ask") Click(editor.ApproveActionButton);
+                    else if (permission == "deny-save") Click(editor.DenyActionButton);
+                    else {
+                        Click(preview.StopButton);
+                        Click(editor.ApproveActionButton);
+                    }
                 } else if (permission == "stop") {
                     Click(preview.StopButton);
                 } else {
@@ -225,14 +278,21 @@ static class ComputerUseExternalEditor {
             }
             var state = await Bounded(editor.Execution);
             if (permission == "ask" || permission == "window") {
-                Require(state == ComputerUseState.Verified && File.ReadAllBytes(editor.OutputFile).SequenceEqual(Encoding.UTF8.GetBytes(expected)),
+                Require(state == ComputerUseState.Verified
+                    && File.ReadAllBytes(editor.OutputFile).SequenceEqual(preamble.Concat(Encoding.UTF8.GetBytes(expected))),
                     "The assisted run did not save and verify the exact file.");
             } else {
-                Require(state != ComputerUseState.Verified && !File.Exists(editor.OutputFile),
+                Require(state != ComputerUseState.Verified && unchanged(),
                     "The assisted run mutated the editor after permission was withheld.");
             }
-            Console.WriteLine("PASS assisted editor permission " + permission);
-        } finally { Cleanup(editor); }
+            if (notepad) Require(!File.Exists(Path.ChangeExtension(editor.OutputFile, ".exe")),
+                "The assisted Notepad copy was left behind.");
+            Console.WriteLine("PASS assisted " + (notepad ? "Notepad" : "editor") + " permission " + permission);
+        } catch (Exception error) { failure = error; }
+        editor.Stop();
+        if (editor.Execution != null) await Bounded(editor.Execution);
+        Cleanup(editor);
+        if (failure != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
     private static async Task WaitUntil(Func<bool> ready) {

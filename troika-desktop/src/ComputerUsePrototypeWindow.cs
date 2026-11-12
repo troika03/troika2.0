@@ -74,7 +74,9 @@ namespace Troika.Desktop {
             heading.FontWeight = FontWeights.SemiBold;
             body.Children.Add(heading);
             if (openNotepad != null) {
-                body.Children.Add(Text("Тройка откроет отдельный классический Блокнот с пустым пробным файлом. Выберите, можно ли ввести и сохранить образец."));
+                body.Children.Add(Text(windowsRun == null
+                    ? "Тройка откроет отдельный классический Блокнот с пустым пробным файлом. Выберите, можно ли ввести и сохранить образец."
+                    : "Запуск " + windowsRun.RunLabel + ". Тройка откроет отдельный Блокнот с пустым файлом. Выберите доступ для этого окна."));
                 Closing += CloseActiveRun;
             } else if (windowsRun != null) {
                 body.Children.Add(Text("Запрос " + windowsRun.RunLabel + ". Тройка сможет осмотреть этот редактор, ввести текст задачи и сохранить временный файл."));
@@ -202,7 +204,7 @@ namespace Troika.Desktop {
             try {
                 string policy = PermissionMode == null ? null : new[] { "ask", "window", "view" }[PermissionMode.SelectedIndex];
                 var approve = policy == "ask" ? (Func<string, string, TimeSpan, Task<bool>>)ApproveMutation : null;
-                if (openNotepad != null) Execution = RunNotepadAsync(policy, approve);
+                if (openNotepad != null) Execution = RunNotepadAsync(policy, approve, running.Token);
                 else {
                     var executor = new ComputerUseExecutor(Session, new WindowInteropHelper(this).Handle, targetId, OutputFile,
                         isolated: agent != null || windowsRun != null, externalEditor: externalEditor,
@@ -221,12 +223,14 @@ namespace Troika.Desktop {
         }
 
         private async Task<ComputerUseState> RunNotepadAsync(string policy,
-                Func<string, string, TimeSpan, Task<bool>> approve) {
+                Func<string, string, TimeSpan, Task<bool>> approve, CancellationToken cancellation) {
             try {
                 var target = await Task.Run(() => openNotepad(Session, OutputFile)).ConfigureAwait(false);
                 using (target as IDisposable) {
                     var executor = new ComputerUseExecutor(Session, target, OutputFile, new UTF8Encoding(true, true), 30);
-                    return await executor.RunAsync(policy, approve).ConfigureAwait(false);
+                    return windowsRun == null
+                        ? await executor.RunAsync(policy, approve).ConfigureAwait(false)
+                        : await windowsRun.RunAsync(Session, executor, cancellation, policy, approve).ConfigureAwait(false);
                 }
             } catch (IOException) { }
             catch (Win32Exception) { }
@@ -302,7 +306,7 @@ namespace Troika.Desktop {
                 case ComputerUseState.Active: status.Text = openNotepad == null ? "Выполняю пробу в тестовом редакторе." : "Выполняю пробу Блокнота."; break;
                 case ComputerUseState.Stopped: status.Text = "Остановлено."; break;
                 case ComputerUseState.Expired: status.Text = "Срок разрешения истёк."; break;
-                case ComputerUseState.Verified: status.Text = "Образец сохранён и проверен.\n" + OutputFile; break;
+                case ComputerUseState.Verified: status.Text = "Файл сохранён и проверен.\n" + OutputFile; break;
                 case ComputerUseState.Completed: status.Text = openNotepad == null ? "Модель закончила работу. Файл не создан."
                     : "Проба завершена. Пробный файл остался пустым."; break;
                 case ComputerUseState.Failed: status.Text = openNotepad == null ? "Не удалось подтвердить сохранение образца."

@@ -329,8 +329,11 @@ async def test_vision_run_rejects_frames_after_its_permission_ends(hosted, monke
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("hosted", [True], indirect=True)
-@pytest.mark.parametrize("permission", ["ask", "window", "view", "deny", "stop"])
-async def test_assisted_windows_run_applies_the_selected_permission(hosted, monkeypatch, permission):
+@pytest.mark.parametrize(("target_editor", "permission"), [
+    ("editor", "ask"), ("editor", "window"), ("editor", "view"), ("editor", "deny"), ("editor", "stop"),
+    ("notepad", "ask"), ("notepad", "window"), ("notepad", "view"), ("notepad", "deny-save"), ("notepad", "stop-before-save"),
+])
+async def test_assisted_windows_run_applies_the_selected_permission(hosted, monkeypatch, target_editor, permission):
     from model_tools import get_tool_definitions
     from troika_product.computer_agent import TOOLSET, WINDOWS_TOOL
     from troika_product.computer_openrouter_vision import OpenRouterVision
@@ -404,8 +407,9 @@ async def test_assisted_windows_run_applies_the_selected_permission(hosted, monk
     grant_id = grant["grant_id"]
     early = await operation(run, run.pc, "approve_frame", 409, route=route, grant_id=grant_id, vision_provider="openrouter")
     assert early["error"]["code"] == "grant_pending" and not requested and frame_count == 0
+    verify_mode = "--verify-notepad-assisted" if target_editor == "notepad" else "--verify-assisted"
     child = await asyncio.create_subprocess_exec(
-        str(executable), "--verify-assisted", str(run.client.make_url("/")), run.run_id, grant_id, text, permission,
+        str(executable), verify_mode, str(run.client.make_url("/")), run.run_id, grant_id, text, permission,
         env={**os.environ, "TROIKA_COMPUTER_TEST_DEVICE_TOKEN": run.pc.token},
         creationflags=subprocess.CREATE_NO_WINDOW,
     )
@@ -422,8 +426,11 @@ async def test_assisted_windows_run_applies_the_selected_permission(hosted, monk
             assert requested == [] and event["event"] == "run.completed"
             assert "пустое поле ввода" in event["output"] and len(event["output"]) <= 600
         else:
-            assert requested == ["inspect", "write"] and "проверил его содержимое" not in stream
-            if permission == "deny":
+            expected_actions = ["inspect", "write"]
+            if permission in {"deny-save", "stop-before-save"}:
+                expected_actions += ["inspect", "save"]
+            assert requested == expected_actions and "проверил его содержимое" not in stream
+            if permission in {"deny", "deny-save"}:
                 assert observed[-1]["receipt"]["status"] == "denied"
             else:
                 assert event["event"] == "run.failed" and event["error_code"] == "grant_stopped"

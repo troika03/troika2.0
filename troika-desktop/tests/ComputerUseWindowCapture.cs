@@ -19,13 +19,35 @@ internal sealed class ComputerUseWindowCapture : IDisposable {
     private readonly Process process;
     private readonly string title;
     private readonly bool ownsChild;
+    private readonly int processId;
+    private readonly Func<bool> targetMatches;
+    private readonly Func<bool> readyToCapture;
+    private readonly Func<ComputerUseWindowCapture> resolve;
     internal readonly IntPtr Handle;
 
     private ComputerUseWindowCapture(Process process, string title, IntPtr handle, bool ownsChild = true) {
         this.process = process;
+        processId = process.Id;
         this.title = title;
         Handle = handle;
         this.ownsChild = ownsChild;
+    }
+
+    private ComputerUseWindowCapture(IntPtr handle, int processId, Func<bool> targetMatches, Func<bool> readyToCapture) {
+        Handle = handle;
+        this.processId = processId;
+        this.targetMatches = targetMatches;
+        this.readyToCapture = readyToCapture;
+    }
+
+    private ComputerUseWindowCapture(Func<ComputerUseWindowCapture> resolve) { this.resolve = resolve; }
+
+    internal static ComputerUseWindowCapture ForNotepad(ComputerUseNotepad editor) {
+        return new ComputerUseWindowCapture(editor.WindowHandle, editor.ProcessId, editor.IsTargetAvailable, editor.IsBlank);
+    }
+
+    internal static ComputerUseWindowCapture Deferred(Func<ComputerUseWindowCapture> resolve) {
+        return new ComputerUseWindowCapture(resolve);
     }
 
     internal static ComputerUseWindowCapture ForEditor(ComputerUsePrototypeWindow editor) {
@@ -35,7 +57,14 @@ internal sealed class ComputerUseWindowCapture : IDisposable {
     }
 
     internal bool Visible {
-        get { return !process.HasExited && FindWindow(null, title) == Handle && IsWindowVisible(Handle) && !IsIconic(Handle); }
+        get {
+            if (resolve != null) {
+                var target = resolve();
+                return target != null && target.Visible;
+            }
+            if (!IsWindowVisible(Handle) || IsIconic(Handle)) return false;
+            return targetMatches == null ? !process.HasExited && FindWindow(null, title) == Handle : targetMatches();
+        }
     }
 
     internal static async Task<ComputerUseWindowCapture> OpenAsync(bool protectedWindow = false) {
@@ -65,14 +94,18 @@ internal sealed class ComputerUseWindowCapture : IDisposable {
     }
 
     internal Task<BitmapSource> CaptureAsync(CancellationToken cancellation) {
+        if (resolve != null) {
+            var target = resolve();
+            return target == null ? Task.FromResult<BitmapSource>(null) : target.CaptureAsync(cancellation);
+        }
         return Task.Run(() => {
-            if (!Visible || cancellation.IsCancellationRequested) return null;
+            if (cancellation.IsCancellationRequested || !CanCapture()) return null;
             var pixels = new byte[MaxWidth * MaxHeight * 4];
             int width, height;
             using (var cancel = new ManualResetEvent(false))
             using (cancellation.Register(() => cancel.Set())) {
-                int result = CaptureWindowFrame(Handle, process.Id, cancel.SafeWaitHandle, pixels, pixels.Length, out width, out height);
-                if (result != 0 || cancellation.IsCancellationRequested || !Visible
+                int result = CaptureWindowFrame(Handle, processId, cancel.SafeWaitHandle, pixels, pixels.Length, out width, out height);
+                if (result != 0 || cancellation.IsCancellationRequested || !CanCapture()
                         || width <= 0 || width > MaxWidth || height <= 0 || height > MaxHeight)
                     return null;
             }
@@ -82,9 +115,11 @@ internal sealed class ComputerUseWindowCapture : IDisposable {
         });
     }
 
+    private bool CanCapture() { return Visible && (readyToCapture == null || readyToCapture()); }
+
     public void Dispose() {
         if (ownsChild) CloseChild(process);
-        else process.Dispose();
+        else if (process != null) process.Dispose();
     }
 
     private static void CloseChild(Process child) {

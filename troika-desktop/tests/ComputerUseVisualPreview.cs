@@ -44,6 +44,7 @@ internal sealed class ComputerUseVisualPreview : Window {
     internal readonly TextBlock Recognized;
     internal readonly Button SendButton;
     internal readonly TextBlock VisionAnswer;
+    internal bool FrameAccepted { get; private set; }
     internal event Action Stopped;
 
     internal ComputerUseVisualPreview(Func<TimeSpan> now = null, Func<BitmapSource, Task<string>> recognize = null,
@@ -201,6 +202,7 @@ internal sealed class ComputerUseVisualPreview : Window {
             frameSent = true;
             VisionAnswer.Text = "Передаю кадр.";
             var answer = await vision.SendAsync(encoded, (int)(frameExpires - now()).TotalMilliseconds, capture.Token);
+            FrameAccepted = true;
             Refresh();
             if (!capture.IsCancellationRequested)
                 VisionAnswer.Text = vision.RunLabel == null ? "Тестовый ответ: " + answer : answer;

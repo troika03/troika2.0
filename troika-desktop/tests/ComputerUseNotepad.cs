@@ -17,6 +17,8 @@ internal sealed class ComputerUseNotepad : IComputerUseEditor, IDisposable {
     private const uint MessageFlags = 0x0023; // SMTO_BLOCK | SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT
     private const uint MenuByPosition = 0x0400;
     private const uint MessageTimeoutMs = 1500;
+    private const int ShowWithoutActivation = 4;
+    private const uint NoZOrderOrActivation = 0x0014;
 
     private readonly ComputerUseSession session;
     private readonly Process process;
@@ -26,7 +28,10 @@ internal sealed class ComputerUseNotepad : IComputerUseEditor, IDisposable {
     private readonly IntPtr window;
     private readonly IntPtr editor;
 
-    internal ComputerUseNotepad(ComputerUseSession session, string output) {
+    internal IntPtr WindowHandle { get { return window; } }
+    internal int ProcessId { get { return process.Id; } }
+
+    internal ComputerUseNotepad(ComputerUseSession session, string output, bool showForCapture = false) {
         this.session = session;
         string directory = Path.GetDirectoryName(output);
         string system = Environment.SystemDirectory;
@@ -48,6 +53,9 @@ internal sealed class ComputerUseNotepad : IComputerUseEditor, IDisposable {
             if (process == null) throw new InvalidOperationException("Could not start the lab Notepad.");
             window = WaitForWindow(out editor);
             CheckTarget();
+            if (showForCapture && (!ShowWindowAsync(window, ShowWithoutActivation)
+                    || !SetWindowPos(window, IntPtr.Zero, 36, 120, 700, 360, NoZOrderOrActivation)))
+                throw new IOException("Could not show the lab Notepad window for capture.");
         } catch {
             Dispose();
             throw;
@@ -79,6 +87,11 @@ internal sealed class ComputerUseNotepad : IComputerUseEditor, IDisposable {
         return text.ToString();
     }
 
+    internal bool IsBlank() {
+        try { return ReadEditor().Length == 0; }
+        catch (IOException) { return false; }
+    }
+
     public void Apply(ComputerUseStep step, string text) {
         CheckTarget();
         bool writing = step == ComputerUseStep.Write;
@@ -108,15 +121,20 @@ internal sealed class ComputerUseNotepad : IComputerUseEditor, IDisposable {
     }
 
     private void CheckTarget() {
-        if (session.State != ComputerUseState.Active || process.HasExited || !Owned(window) || !Owned(editor)
-                || !String.Equals(process.MainModule.FileName, image, StringComparison.OrdinalIgnoreCase)
-                || GetParent(editor) != window || !IsWindowEnabled(window) || !IsWindowEnabled(editor))
-            throw new IOException("The lab Notepad window is no longer available.");
-        var text = new StringBuilder(128);
-        if (GetClassName(editor, text, text.Capacity) == 0 || text.ToString() != "Edit"
-                || GetClassName(window, text, text.Capacity) == 0 || text.ToString() != "Notepad"
-                || GetWindowText(window, text, text.Capacity) == 0 || (text.ToString() != title && text.ToString() != "*" + title))
-            throw new IOException("The lab Notepad document changed.");
+        if (!IsTargetAvailable()) throw new IOException("The lab Notepad window or document changed.");
+    }
+
+    internal bool IsTargetAvailable() {
+        try {
+            if (session.State != ComputerUseState.Active || process.HasExited || !Owned(window) || !Owned(editor)
+                    || !String.Equals(process.MainModule.FileName, image, StringComparison.OrdinalIgnoreCase)
+                    || GetParent(editor) != window || !IsWindowEnabled(window) || !IsWindowEnabled(editor)) return false;
+            var text = new StringBuilder(128);
+            return GetClassName(editor, text, text.Capacity) > 0 && text.ToString() == "Edit"
+                && GetClassName(window, text, text.Capacity) > 0 && text.ToString() == "Notepad"
+                && GetWindowText(window, text, text.Capacity) > 0 && (text.ToString() == title || text.ToString() == "*" + title);
+        } catch (InvalidOperationException) { return false; }
+        catch (System.ComponentModel.Win32Exception) { return false; }
     }
 
     private bool Owned(IntPtr handle) {
@@ -153,6 +171,10 @@ internal sealed class ComputerUseNotepad : IComputerUseEditor, IDisposable {
     private static extern IntPtr GetParent(IntPtr target);
     [DllImport("user32.dll")]
     private static extern bool IsWindowEnabled(IntPtr target);
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindowAsync(IntPtr target, int command);
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr target, IntPtr after, int x, int y, int width, int height, uint flags);
     [DllImport("user32.dll")]
     private static extern IntPtr GetMenu(IntPtr target);
     [DllImport("user32.dll")]
