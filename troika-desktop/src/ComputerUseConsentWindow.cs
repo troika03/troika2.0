@@ -196,7 +196,7 @@ namespace Troika.Desktop {
 
         private async Task<Dictionary<string, object>> SendAsync(string method, string path, object data) {
             using (var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(4))) {
-                try { return await client.ComputerUseDryRun(method, path, data, deadline.Token); }
+                try { return await client.ComputerUseLab(method, path, data, deadline.Token); }
                 catch (ApiException) { }
                 catch (HttpRequestException) { }
                 catch (OperationCanceledException) { }

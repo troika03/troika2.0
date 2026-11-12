@@ -2,7 +2,10 @@
 
 import asyncio
 import json
+import os
+from pathlib import Path
 import sqlite3
+import subprocess
 import threading
 from types import SimpleNamespace
 from uuid import uuid4
@@ -14,7 +17,7 @@ import pytest_asyncio
 
 from gateway.config import PlatformConfig
 from gateway.platforms.api_server import APIServerAdapter
-from troika_product.computer_api import register_computer_dry_run_routes
+from troika_product.computer_api import register_computer_dry_run_routes, register_windows_computer_lab_routes
 
 
 def adapter_for(tmp_path, **extra):
@@ -34,15 +37,27 @@ async def test_routes_require_explicit_opt_in_and_product_auth(tmp_path, options
     app = web.Application()
     adapter = adapter_for(tmp_path, **options)
     register_computer_dry_run_routes(app, adapter)
+    register_windows_computer_lab_routes(app, adapter)
     async with TestClient(TestServer(app)) as client:
         response = await client.post("/v1/runs/example/computer-dry-run/request", json={"version": 1})
         assert response.status == 404
         assert (await client.get("/v1/computer-dry-run/requests")).status == 404
+        assert (await client.get("/v1/computer-windows-lab/requests")).status == 404
+
+
+@pytest.mark.asyncio
+async def test_windows_lab_requires_loopback_bind(tmp_path):
+    app = web.Application()
+    adapter = adapter_for(tmp_path, product_computer_windows_lab_enabled=True, host="0.0.0.0")
+    register_windows_computer_lab_routes(app, adapter)
+    async with TestClient(TestServer(app)) as client:
+        assert (await client.get("/v1/computer-windows-lab/requests")).status == 404
 
 
 @pytest_asyncio.fixture
 async def hosted(tmp_path, monkeypatch):
-    adapter = adapter_for(tmp_path, product_computer_dry_run_enabled=True)
+    adapter = adapter_for(tmp_path, product_computer_dry_run_enabled=True,
+                          product_computer_windows_lab_enabled=True, host="127.0.0.1")
     registry = adapter._access_registry
     owner = registry.create_user("computer-owner@example.invalid")
     outsider = registry.create_user("computer-outsider@example.invalid")
@@ -74,6 +89,7 @@ async def hosted(tmp_path, monkeypatch):
     app.router.add_post("/v1/runs/{run_id}/stop", adapter._handle_stop_run)
     app.router.add_delete("/v1/account/devices/{device_id}", adapter._handle_revoke_account_device)
     register_computer_dry_run_routes(app, adapter)
+    register_windows_computer_lab_routes(app, adapter)
     now = [100.0]
     monkeypatch.setattr(adapter._computer_dry_run, "_clock", lambda: now[0])
     async with TestClient(TestServer(app)) as client:
@@ -91,14 +107,14 @@ async def hosted(tmp_path, monkeypatch):
                 await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 5)
 
 
-async def operation(hosted, device, name, status=200, **payload):
+async def operation(hosted, device, name, http_status=200, *, route="computer-dry-run", **payload):
     response = await hosted.client.post(
-        f"/v1/runs/{hosted.run_id}/computer-dry-run/{name}",
+        f"/v1/runs/{hosted.run_id}/{route}/{name}",
         headers=device.headers, json={"version": 1, **payload},
     )
     body = await response.json()
-    assert response.status == status, body
-    if status != 401:
+    assert response.status == http_status, body
+    if http_status != 401:
         assert response.headers["Cache-Control"] == "private, no-store"
     return body
 
@@ -337,3 +353,131 @@ async def test_hermes_selects_simulated_actions_without_receiving_the_observatio
         assert get_tool_definitions(enabled_toolsets=[TOOLSET], quiet_mode=True) == []
     finally:
         release_click.set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("target_mode", ["protocol", "server_stop", "native"])
+async def test_windows_run_receives_only_device_confirmed_actions(hosted, monkeypatch, target_mode):
+    from openai.types.chat import ChatCompletion
+    from run_agent import AIAgent
+    from troika_product.computer_agent import WINDOWS_TOOL
+
+    executable = os.environ.get("TROIKA_WINDOWS_LAB_TEST_EXE", "")
+    if target_mode == "native" and (os.name != "nt" or not executable or not Path(executable).is_file()):
+        pytest.skip("requires the built Windows ComputerUsePrototypeTests.exe")
+    monkeypatch.setattr(hosted.adapter, "_create_agent", APIServerAdapter._create_agent.__get__(hosted.adapter))
+    monkeypatch.setattr("gateway.run._resolve_runtime_agent_kwargs", lambda: {
+        "api_key": "synthetic-test-key", "base_url": "https://openrouter.ai/api/v1",
+        "provider": "openrouter", "api_mode": "chat_completions",
+    })
+    monkeypatch.setattr("gateway.run._resolve_gateway_model", lambda: "fixture/test-model")
+    monkeypatch.setattr("gateway.run._load_gateway_config", lambda: {})
+    monkeypatch.setattr("gateway.run.GatewayRunner._load_reasoning_config", lambda: None)
+    monkeypatch.setattr("agent.agent_init.fetch_model_metadata", lambda: {})
+    monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
+    payloads = []
+    receipts = []
+
+    def fake_provider(agent, payload, **_):
+        assert [tool["function"]["name"] for tool in agent.tools] == [WINDOWS_TOOL]
+        payloads.append(json.dumps(payload, ensure_ascii=False))
+        step = len(payloads)
+        args = None
+        if step == 1:
+            args = {"action": "inspect"}
+        else:
+            receipt = json.loads([m for m in payload["messages"] if m["role"] == "tool"][-1]["content"])
+            receipts.append(receipt)
+            if receipt.get("can_write"):
+                args = {"action": "write", "inspect_action_id": receipt["receipt"]["action_id"]}
+            elif receipt.get("can_save"):
+                args = {"action": "save", "inspect_action_id": receipt["receipt"]["action_id"]}
+            elif receipt.get("receipt", {}).get("status") == "applied":
+                args = {"action": "inspect"}
+        message = {"role": "assistant", "content": "Заявление модели не используется для подтверждения."}
+        if args is not None:
+            message = {"role": "assistant", "content": None, "tool_calls": [
+                {"id": f"call_{step}", "type": "function",
+                 "function": {"name": WINDOWS_TOOL, "arguments": json.dumps(args)}},
+            ]}
+        return ChatCompletion.model_validate({
+            "id": f"windows_fixture_{step}", "object": "chat.completion", "created": 0, "model": "fixture/test-model",
+            "choices": [{"index": 0, "finish_reason": "tool_calls" if args else "stop", "message": message}],
+            "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
+        })
+
+    monkeypatch.setattr(AIAgent, "_interruptible_api_call", fake_provider)
+    monkeypatch.setattr(AIAgent, "_interruptible_streaming_api_call", fake_provider)
+    start = await hosted.client.post("/v1/runs", headers=hosted.phone.headers,
+                                     json={"input": "Заполни и сохрани тестовый редактор",
+                                           "computer_windows_lab": True})
+    assert start.status == 202, await start.text()
+    run = SimpleNamespace(**{**vars(hosted), "run_id": (await start.json())["run_id"]})
+
+    async def windows(device, name, http_status=200, **data):
+        return await operation(run, device, name, http_status, route="computer-windows-lab", **data)
+
+    await windows(run.phone, "request", 404, target_device_id=run.spare.id, ttl_seconds=60)
+    await operation(run, run.phone, "request", 404, target_device_id=run.pc.id, ttl_seconds=60)
+    grant = await windows(run.phone, "request", 201, target_device_id=run.pc.id, ttl_seconds=60)
+    grant_id = grant["grant_id"]
+    assert grant["mode"] == "windows_lab" and payloads == []
+    await windows(run.spare, "consent", 404, grant_id=grant_id, allow=True)
+    await windows(run.pc, "take", 409, grant_id=grant_id)
+    if target_mode == "native":
+        child = await asyncio.create_subprocess_exec(
+            executable, "--windows-run-endpoint", str(run.client.make_url("/")), run.run_id, grant_id,
+            env={**os.environ, "TROIKA_COMPUTER_TEST_DEVICE_TOKEN": run.pc.token},
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        try:
+            assert await asyncio.wait_for(child.wait(), 30) == 0
+        finally:
+            if child.returncode is None:
+                child.kill()
+                await child.wait()
+    else:
+        await windows(run.pc, "consent", grant_id=grant_id, allow=True)
+        await windows(run.spare, "take", 404, grant_id=grant_id)
+
+        async def take():
+            while True:
+                reply = await windows(run.pc, "take", grant_id=grant_id)
+                if reply["command"] is not None:
+                    return reply["command"]
+                await asyncio.sleep(0.03)
+
+        previous = None
+        steps = [("inspect", "observed", {"can_write": True, "can_save": False}),
+                 ("write", "applied", {}),
+                 ("inspect", "observed", {"can_write": False, "can_save": True}),
+                 ("save", "verified", {})]
+        for sequence, (action, status, flags) in enumerate(steps, 1):
+            delivered = await asyncio.wait_for(take(), 15)
+            assert delivered["sequence"] == sequence and delivered["action"] == action
+            assert (await windows(run.pc, "take", grant_id=grant_id))["command"] is None
+            if action == "inspect":
+                previous = delivered["id"]
+            else:
+                assert delivered["inspect_action_id"] == previous
+            result = {"grant_id": grant_id, "command_id": delivered["id"], "status": status, **flags}
+            if target_mode == "server_stop" and action == "write":
+                await windows(run.phone, "stop", grant_id=grant_id)
+                await windows(run.pc, "report", 409, **result)
+                break
+            await windows(run.pc, "report", 400, **result, path="PRIVATE_WINDOW_TEST_PATH")
+            assert (await windows(run.pc, "report", **result))["accepted"]
+
+    response = await run.client.get(f"/v1/runs/{run.run_id}/events", headers=run.phone.headers)
+    stream = await asyncio.wait_for(response.text(), 12)
+    events = [json.loads(line[6:]) for line in stream.splitlines() if line.startswith("data: ")]
+    assert events[-1]["event"] == "run.completed"
+    if target_mode == "server_stop":
+        assert receipts[-1] == {"ok": False, "error": "grant_stopped"}
+        assert "Ввод не подтверждён." in events[-1]["output"]
+    else:
+        assert receipts[-1]["receipt"]["verified"] is True
+        assert "проверил его содержимое" in events[-1]["output"]
+    assert hosted.adapter._ensure_session_db().get_messages(run.run_id) == []
+    for private in (grant_id, "PRIVATE_WINDOW_TEST_PATH", "Пробная запись Тройки."):
+        assert all(private not in text for text in [stream, *payloads])

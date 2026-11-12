@@ -61,7 +61,7 @@ if ($Test) {
     if ($LASTEXITCODE -ne 0) { throw 'Voice identity UI tests failed.' }
 }
 if ($Test) {
-    $computerUseSources = @('Json.cs','ApiClient.cs','LocalStore.cs','OwnApi.cs','BrandAssets.cs','ComputerUseSession.cs','ComputerUseNativeDriver.cs','ComputerUseExecutor.cs','ComputerUseAgent.cs','ComputerUsePrototypeWindow.cs','ComputerUseConsentWindow.cs') | ForEach-Object { Join-Path $root ('src\' + $_) }
+    $computerUseSources = @('Json.cs','ApiClient.cs','LocalStore.cs','OwnApi.cs','BrandAssets.cs','ComputerUseSession.cs','ComputerUseNativeDriver.cs','ComputerUseExecutor.cs','ComputerUseAgent.cs','ComputerUsePrototypeWindow.cs','ComputerUseConsentWindow.cs','ComputerUseWindowsRun.cs') | ForEach-Object { Join-Path $root ('src\' + $_) }
     $computerUseSources += Join-Path $root 'tests\ComputerUsePrototypeTests.cs'
     & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'ComputerUsePrototypeTests.exe')) $references $computerUseSources
     if ($LASTEXITCODE -ne 0) { throw 'Computer Use prototype test build failed.' }

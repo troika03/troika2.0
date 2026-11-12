@@ -110,7 +110,7 @@ namespace Troika.Desktop {
             }
         }
         public Task<Dictionary<string, object>> Get(string path, CancellationToken cancellation) { return Call("GET", path, null, cancellation); }
-        internal async Task<Dictionary<string, object>> ComputerUseDryRun(string method, string path, object data,
+        internal async Task<Dictionary<string, object>> ComputerUseLab(string method, string path, object data,
                 CancellationToken cancellation) {
             if (origin.Scheme != "http" || origin.Host != "127.0.0.1")
                 throw new InvalidOperationException("Для теста нужен сервер на 127.0.0.1.");

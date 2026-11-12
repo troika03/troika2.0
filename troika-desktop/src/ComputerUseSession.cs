@@ -55,6 +55,15 @@ namespace Troika.Desktop {
             }
         }
 
+        internal void Shorten(TimeSpan remaining) {
+            lock (gate) {
+                if (state != ComputerUseState.Active) return;
+                var limit = clock().Add(remaining);
+                if (limit < expires) expires = limit;
+                Expire();
+            }
+        }
+
         internal ComputerUsePermit Arm(ComputerUseStep step, string text, Func<bool> observationIsFresh = null) {
             lock (gate) {
                 Expire();

@@ -56,13 +56,13 @@ namespace Troika.Desktop {
             }, (ComputerUseObservation)null);
         }
 
-        internal Task<ComputerUseCommandResult> WriteAsync(Guid observationId, string text) {
+        internal Task<ComputerUseCommandResult> WriteAsync(Guid observationId, string text, Func<bool> commandIsFresh = null) {
             return ExecuteAsync(() => {
                 if (session.State != ComputerUseState.Active) return ComputerUseCommandResult.NotActive;
                 if (!ValidText(text)) return ComputerUseCommandResult.InvalidText;
                 if (!IsCurrent(observationId) || !observation.CanWrite || ReadEditor().Length != 0 || !IsCurrent(observationId))
                     return ComputerUseCommandResult.StaleObservation;
-                var result = Invoke(ComputerUseStep.Write, "write", text, observationId);
+                var result = Invoke(ComputerUseStep.Write, "write", text, observationId, commandIsFresh);
                 if (result != ComputerUseCommandResult.Applied) return result;
                 if (ReadEditor() != text) return Fail();
                 writtenText = text;
@@ -70,12 +70,12 @@ namespace Troika.Desktop {
             }, ComputerUseCommandResult.Failed);
         }
 
-        internal Task<ComputerUseCommandResult> SaveAsync(Guid observationId) {
+        internal Task<ComputerUseCommandResult> SaveAsync(Guid observationId, Func<bool> commandIsFresh = null) {
             return ExecuteAsync(() => {
                 if (session.State != ComputerUseState.Active) return ComputerUseCommandResult.NotActive;
                 if (!IsCurrent(observationId) || !observation.CanSave || ReadEditor() != writtenText || !IsCurrent(observationId))
                     return ComputerUseCommandResult.StaleObservation;
-                var result = Invoke(ComputerUseStep.Save, "save", writtenText, observationId);
+                var result = Invoke(ComputerUseStep.Save, "save", writtenText, observationId, commandIsFresh);
                 if (result != ComputerUseCommandResult.Applied) return result;
                 return session.Finish(VerifyFile(writtenText)) == ComputerUseState.Verified
                     ? ComputerUseCommandResult.Verified : ComputerUseCommandResult.Failed;
@@ -133,11 +133,13 @@ namespace Troika.Desktop {
             return driver.ReadEditor();
         }
 
-        private ComputerUseCommandResult Invoke(ComputerUseStep step, string suffix, string text, Guid observationId) {
-            if (!IsCurrent(observationId)) return ComputerUseCommandResult.StaleObservation;
+        private ComputerUseCommandResult Invoke(ComputerUseStep step, string suffix, string text, Guid observationId,
+                Func<bool> commandIsFresh) {
+            if (!IsCurrent(observationId) || (commandIsFresh != null && !commandIsFresh()))
+                return ComputerUseCommandResult.StaleObservation;
             observation = null;
             var expiresAt = observationExpiry;
-            var permit = session.Arm(step, text, () => clock() < expiresAt);
+            var permit = session.Arm(step, text, () => clock() < expiresAt && (commandIsFresh == null || commandIsFresh()));
             if (permit == null) return session.State == ComputerUseState.Active ? Fail() : ComputerUseCommandResult.NotActive;
             driver.Invoke(suffix);
             if (!permit.Result.Task.Wait(TimeSpan.FromSeconds(2))) return Fail();

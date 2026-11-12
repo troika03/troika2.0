@@ -48,8 +48,8 @@ static class ComputerUsePrototypeTests {
         Console.WriteLine("PASS consent, action order, replay rejection and exact expiry");
     }
 
-    private static async Task<ComputerUsePrototypeWindow> Open(ComputerUseAgent agent = null) {
-        var window = new ComputerUsePrototypeWindow(new ComputerUseSession(), agent) {
+    private static async Task<ComputerUsePrototypeWindow> Open(ComputerUseAgent agent = null, ComputerUseWindowsRun run = null) {
+        var window = new ComputerUsePrototypeWindow(new ComputerUseSession(), agent, run) {
             ShowActivated = false, ShowInTaskbar = false,
             WindowStartupLocation = WindowStartupLocation.Manual, Left = -10000, Top = -10000,
         };
@@ -66,8 +66,8 @@ static class ComputerUsePrototypeTests {
         if (Directory.Exists(folder)) Directory.Delete(folder, false);
     }
 
-    private static async Task<T> Bounded<T>(Task<T> task) {
-        Assert(task != null && await Task.WhenAny(task, Task.Delay(12000)) == task, "The prototype did not finish within 12 seconds.");
+    private static async Task<T> Bounded<T>(Task<T> task, int milliseconds = 12000) {
+        Assert(task != null && await Task.WhenAny(task, Task.Delay(milliseconds)) == task, "The prototype did not finish in time.");
         return await task;
     }
 
@@ -340,12 +340,91 @@ static class ComputerUsePrototypeTests {
         }
     }
 
+    private sealed class WindowsRunFixture : HttpMessageHandler {
+        internal static readonly string GrantId = new string('e', 32);
+        internal static readonly string RunId = "run_" + new string('f', 32);
+        internal readonly TaskCompletionSource<bool> Pulling = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal readonly TaskCompletionSource<bool> Release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int takes;
+        internal bool Stopped;
+        internal int Reports;
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellation) {
+            Assert(request.Headers.Authorization.Parameter == ConsentFixture.DeviceToken, "Windows Run used the wrong token.");
+            string operation = request.RequestUri.Segments[request.RequestUri.Segments.Length - 1];
+            object reply;
+            if (operation == "consent") {
+                reply = new { version = 1, mode = "windows_lab", grant_id = GrantId, status = "active", expires_in_seconds = 30 };
+            } else if (operation == "take" && ++takes == 1) {
+                reply = new { version = 1, mode = "windows_lab",
+                    command = new { id = new string('a', 32), sequence = 1, action = "inspect", expires_in_ms = 9000 }};
+            } else if (operation == "take") {
+                Pulling.TrySetResult(true);
+                await Release.Task.ConfigureAwait(false);
+                reply = new { version = 1, mode = "windows_lab",
+                    command = new { id = new string('b', 32), sequence = 2, action = "write", expires_in_ms = 9000,
+                        inspect_action_id = new string('a', 32) }};
+            } else {
+                Stopped |= operation == "stop";
+                if (operation == "report") Reports++;
+                reply = new { version = 1, mode = "windows_lab", accepted = true };
+            }
+            return new HttpResponseMessage(HttpStatusCode.OK) {
+                Content = new StringContent(Json.Encode(reply), Encoding.UTF8, "application/json"),
+            };
+        }
+    }
+
+    private static async Task CheckWindowsRunStopsLateCommand(bool expired) {
+        var fixture = new WindowsRunFixture();
+        long ticks = 0;
+        using (var run = new ComputerUseWindowsRun("http://127.0.0.1:8765", ConsentFixture.DeviceToken,
+                WindowsRunFixture.RunId, WindowsRunFixture.GrantId, fixture,
+                clock: () => TimeSpan.FromTicks(Interlocked.Read(ref ticks)))) {
+            var window = await Open(run: run);
+            try {
+                Click(window.AllowButton);
+                Assert(await Bounded(fixture.Pulling.Task), "The editor did not request the write after inspecting.");
+                if (expired) Interlocked.Exchange(ref ticks, TimeSpan.FromSeconds(10).Ticks);
+                else Click(window.StopButton);
+                fixture.Release.TrySetResult(true);
+                var expected = expired ? ComputerUseState.Failed : ComputerUseState.Stopped;
+                Assert(await Bounded(window.Execution) == expected, "The editor did not close the stale grant.");
+                var handle = new WindowInteropHelper(window).Handle;
+                string editor = AutomationProperties.GetAutomationId(window) + "-editor";
+                var text = await Task.Run(() => ((ValuePattern)FindFixture(handle, editor).GetCurrentPattern(ValuePattern.Pattern)).Current.Value);
+                Assert(fixture.Stopped && fixture.Reports == 1 && text.Length == 0 && !File.Exists(window.OutputFile),
+                    "A late server response reached the native editor after Stop.");
+                Console.WriteLine("PASS Windows Run rejects a delayed write after " + (expired ? "command expiry" : "local Stop"));
+            } finally { fixture.Release.TrySetResult(true); Cleanup(window); }
+        }
+    }
+
+    private static async Task CheckWindowsRunEndpoint(string address, string runId, string grantId) {
+        using (var run = new ComputerUseWindowsRun(address, Environment.GetEnvironmentVariable("TROIKA_COMPUTER_TEST_DEVICE_TOKEN"),
+                runId, grantId)) {
+            var window = await Open(run: run);
+            try {
+                Assert(window.Execution == null && !File.Exists(window.OutputFile), "The Windows editor acted before local consent.");
+                Click(window.AllowButton);
+                Assert(await Bounded(window.Execution, 25000) == ComputerUseState.Verified, "The remote Run did not verify the file.");
+                Assert(File.ReadAllText(window.OutputFile) == ComputerUseExecutor.Sample, "Windows saved the wrong bytes.");
+                Console.WriteLine("PASS native Windows Run received commands and verified exact file contents");
+            } finally { Cleanup(window); }
+        }
+    }
+
     [STAThread] public static int Main(string[] args) {
         if (args.Length != 0 && args[0] == ComputerUseNativeDriver.WorkerArgument)
             return ComputerUseNativeDriver.WorkerMain(args);
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         app.Dispatcher.BeginInvoke(new Action(async () => {
             try {
+                if (args.Length == 4 && args[0] == "--windows-run-endpoint") {
+                    await CheckWindowsRunEndpoint(args[1], args[2], args[3]);
+                    app.Shutdown(0);
+                    return;
+                }
                 if (args.Length == 2 && args[0] == "--consent-endpoint") {
                     await CheckConsentEndpoint(args[1]);
                     app.Shutdown(0);
@@ -369,6 +448,8 @@ static class ComputerUsePrototypeTests {
                 await CheckStopCancelsPlanner();
                 await CheckRemoteConsent(false);
                 await CheckRemoteConsent(true);
+                await CheckWindowsRunStopsLateCommand(false);
+                await CheckWindowsRunStopsLateCommand(true);
                 app.Shutdown(0);
             } catch (Exception error) {
                 Console.Error.WriteLine(error.Message);

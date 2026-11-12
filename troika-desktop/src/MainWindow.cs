@@ -596,6 +596,19 @@ namespace Troika.Desktop {
         [STAThread] public static int Main(string[] args) {
             if (args.Length != 0 && args[0] == ComputerUseNativeDriver.WorkerArgument)
                 return ComputerUseNativeDriver.WorkerMain(args);
+            if (args.Contains("--computer-use-windows-lab")) {
+                if (args.Length != 4 || args[0] != "--computer-use-windows-lab") return 2;
+                try {
+                    using (var run = new ComputerUseWindowsRun(args[1],
+                            Environment.GetEnvironmentVariable("TROIKA_COMPUTER_TEST_DEVICE_TOKEN"), args[2], args[3])) {
+                        var lab = new Application();
+                        return lab.Run(new ComputerUsePrototypeWindow(new ComputerUseSession(), windowsRun: run));
+                    }
+                } catch (ArgumentException error) {
+                    MessageBox.Show(error.Message, "Тройка — управление тестовым редактором");
+                    return 2;
+                }
+            }
             if (args.Contains("--computer-use-consent")) {
                 if (args.Length != 2 || args[0] != "--computer-use-consent") return 2;
                 try {

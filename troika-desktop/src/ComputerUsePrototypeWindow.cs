@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -19,6 +20,8 @@ namespace Troika.Desktop {
         private readonly TextBlock remaining;
         private readonly TextBox editor;
         private readonly ComputerUseAgent agent;
+        private readonly ComputerUseWindowsRun windowsRun;
+        private bool closing, allowClose;
         private CancellationTokenSource running;
         internal readonly TextBox TaskInput;
         internal readonly ComputerUseSession Session;
@@ -29,11 +32,14 @@ namespace Troika.Desktop {
 
         internal ComputerUsePrototypeWindow() : this(new ComputerUseSession()) { }
 
-        internal ComputerUsePrototypeWindow(ComputerUseSession session, ComputerUseAgent agent = null) {
+        internal ComputerUsePrototypeWindow(ComputerUseSession session, ComputerUseAgent agent = null,
+                ComputerUseWindowsRun windowsRun = null) {
             Session = session;
             this.agent = agent;
+            this.windowsRun = windowsRun;
             OutputFile = Path.Combine(Path.GetTempPath(), "TroikaComputerUse-" + Guid.NewGuid().ToString("N"), "preview.txt");
-            Title = agent == null ? "Тройка — проба управления Windows" : "Тройка — тест управления с моделью";
+            Title = windowsRun != null ? "Тройка — управление тестовым редактором"
+                : agent == null ? "Тройка — проба управления Windows" : "Тройка — тест управления с моделью";
             Width = 540;
             MinWidth = 380;
             SizeToContent = SizeToContent.Height;
@@ -45,11 +51,15 @@ namespace Troika.Desktop {
             AutomationProperties.SetAutomationId(this, targetId);
 
             var body = new StackPanel { Margin = new Thickness(24) };
-            var heading = Text(agent == null ? "Проба управления Windows" : "Тест управления с моделью");
+            var heading = Text(windowsRun != null ? "Тестовый редактор Windows"
+                : agent == null ? "Проба управления Windows" : "Тест управления с моделью");
             heading.FontSize = 22;
             heading.FontWeight = FontWeights.SemiBold;
             body.Children.Add(heading);
-            if (agent == null) {
+            if (windowsRun != null) {
+                body.Children.Add(Text("Запрос " + windowsRun.RunLabel + ". Тройка сможет осмотреть этот редактор, ввести пробную строку и сохранить временный файл."));
+                Closing += CloseWindowsRun;
+            } else if (agent == null) {
                 body.Children.Add(Text("Разрешить Тройке заполнить тестовый редактор и сохранить образец в отдельный временный файл."));
             } else {
                 body.Children.Add(Text("Текст задачи отправится в OpenRouter. Доступ ограничен этим редактором и отдельным временным файлом."));
@@ -140,8 +150,9 @@ namespace Troika.Desktop {
             timer.Start();
             try {
                 var executor = new ComputerUseExecutor(Session, new WindowInteropHelper(this).Handle, targetId, OutputFile,
-                    isolated: agent != null);
-                Execution = agent == null ? executor.RunAsync() : agent.RunAsync(Session, executor, goal, running.Token);
+                    isolated: agent != null || windowsRun != null);
+                if (windowsRun != null) Execution = windowsRun.RunAsync(Session, executor, running.Token);
+                else Execution = agent == null ? executor.RunAsync() : agent.RunAsync(Session, executor, goal, running.Token);
                 await Execution;
             } catch (Exception) {
                 Session.Finish(false);
@@ -155,6 +166,19 @@ namespace Troika.Desktop {
         private void CancelRequest() { if (running != null) running.Cancel(); }
 
         private void Stop() { Session.Stop(); CancelRequest(); Refresh(); }
+
+        private async void CloseWindowsRun(object sender, CancelEventArgs args) {
+            if (allowClose || running == null) return;
+            args.Cancel = true;
+            if (closing) return;
+            closing = true;
+            Stop();
+            try { await Execution; }
+            catch (Exception) { Session.Finish(false); }
+            await Dispatcher.Yield(DispatcherPriority.Background);
+            allowClose = true;
+            Close();
+        }
 
         private void Refresh() {
             var state = Session.State;

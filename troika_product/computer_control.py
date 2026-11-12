@@ -1,4 +1,4 @@
-"""Versioned Computer Use simulation with no device transport."""
+"""Versioned, owner-scoped consent for Computer Use pilots."""
 
 from dataclasses import dataclass, field
 import re
@@ -64,11 +64,14 @@ class _Grant:
     actions: dict = field(default_factory=dict)
     observation: _Observation | None = None
 
+    mode = "dry_run"
+    allowed_actions = ("inspect", "click")
+
     def summary(self, now):
-        return {"version": VERSION, "mode": "dry_run", "grant_id": self.id,
+        return {"version": VERSION, "mode": self.mode, "grant_id": self.id,
                 "status": self.status, "requesting_device_id": self.requester.device_id,
                 "target_device_id": self.target_device_id, "platform": self.platform,
-                "app": _APP, "actions": ["inspect", "click"],
+                "app": _APP, "actions": list(self.allowed_actions),
                 "action_limit": MAX_ACTIONS, "expires_in_seconds": max(0, self.expires_at - now)}
 
     def close(self, status):
@@ -86,8 +89,12 @@ def _id(value):
     return isinstance(value, str) and _ID.fullmatch(value) is not None
 
 
-class ComputerDryRun:
+class ComputerGrantControl:
     """One bounded consent and action ledger per active conversation run."""
+
+    grant_type = _Grant
+    platforms = _PLATFORMS
+    allow_regrant = True
 
     def __init__(self, registry, run_owner, *, clock=time.monotonic):
         self._registry = registry
@@ -128,9 +135,7 @@ class ComputerDryRun:
                 return grant.summary(now)
             if operation == "consent" and target:
                 return self._consent(principal, grant, body, now)
-            if operation == "action" and requester:
-                return self._action(grant, body, now)
-            raise ComputerControlError("grant_not_found", 404)
+            return self._operate(grant, operation, body, now, requester=requester, target=target)
 
     def _request(self, principal, run_id, existing, body):
         _fields(body, "target_device_id", "ttl_seconds")
@@ -146,15 +151,18 @@ class ComputerDryRun:
         except PermissionError:
             raise ComputerControlError("run_not_found", 404) from None
         device = next((item for item in devices if item.id == target and item.status == "active"), None)
-        if device is None or device.platform not in _PLATFORMS:
+        if device is None or device.platform not in self.platforms:
             raise ComputerControlError("device_not_found", 404)
         now = self._clock()
-        if existing is not None and existing.expires_at > now:
+        if existing is not None and (not self.allow_regrant or existing.expires_at > now):
             raise ComputerControlError("grant_exists")
-        self._grants = {key: value for key, value in self._grants.items() if value.expires_at > now}
+        for key, value in tuple(self._grants.items()):
+            if value.expires_at <= now and (self.allow_regrant or self._run_owner(key) is None):
+                value.close("expired")
+                del self._grants[key]
         if len(self._grants) >= _MAX_GRANTS:
             raise ComputerControlError("capacity_reached", 429)
-        grant = _Grant(uuid4().hex, principal, device.id, device.platform, now + ttl)
+        grant = self.grant_type(uuid4().hex, principal, device.id, device.platform, now + ttl)
         self._grants[run_id] = grant
         return grant.summary(now)
 
@@ -167,7 +175,9 @@ class ComputerDryRun:
                 grant.close("stopped")
         now = self._clock()
         if now >= grant.expires_at:
-            self._grants.pop(run_id, None)
+            grant.close("expired")
+            if self.allow_regrant or self._run_owner(run_id) is None:
+                self._grants.pop(run_id, None)
             raise ComputerControlError("grant_expired")
         return now
 
@@ -182,6 +192,67 @@ class ComputerDryRun:
         grant.target = principal
         grant.status = "active" if allow else "denied"
         return grant.summary(now)
+
+    def model_grant_status(self, principal, run_id):
+        with self._lock:
+            grant = self._grants.get(run_id)
+            if grant is None or grant.requester != principal:
+                return "pending"
+            if self._clock() >= grant.expires_at:
+                grant.close("expired")
+            if grant.status == "active":
+                self._check_live(run_id, grant)
+            return grant.status
+
+    def pending_for_device(self, principal):
+        with self._lock:
+            if not self._registry.principal_is_active(principal):
+                raise ComputerControlError("authentication_required", 401)
+            pending = []
+            for run_id, grant in tuple(self._grants.items()):
+                if (grant.status != "pending" or grant.requester.user_id != principal.user_id
+                        or grant.target_device_id != principal.device_id):
+                    continue
+                try:
+                    now = self._check_live(run_id, grant)
+                except ComputerControlError:
+                    continue
+                if grant.status == "pending":
+                    pending.append({"run_id": run_id, **grant.summary(now)})
+            return {"version": VERSION, "requests": pending}
+
+    def stop_run(self, run_id):
+        with self._lock:
+            grant = self._grants.get(run_id)
+            if grant is not None and grant.status in {"pending", "active"}:
+                grant.close("stopped")
+
+    def revoke_device(self, user_id, device_id):
+        with self._lock:
+            for grant in self._grants.values():
+                if grant.requester.user_id == user_id and device_id in (
+                        grant.requester.device_id, grant.target_device_id):
+                    grant.close("revoked")
+
+    def purge_account(self, user_id):
+        with self._lock:
+            for key, grant in tuple(self._grants.items()):
+                if grant.requester.user_id == user_id:
+                    grant.close("revoked")
+                    del self._grants[key]
+
+    def clear(self):
+        with self._lock:
+            for grant in self._grants.values():
+                grant.close("stopped")
+            self._grants.clear()
+
+
+class ComputerDryRun(ComputerGrantControl):
+    def _operate(self, grant, operation, body, now, *, requester, target):
+        if operation == "action" and requester:
+            return self._action(grant, body, now)
+        raise ComputerControlError("grant_not_found", 404)
 
     @staticmethod
     def _action(grant, body, now, *, model=False):
@@ -227,34 +298,6 @@ class ComputerDryRun:
             result["observation"] = grant.observation.payload()
         return result
 
-    def model_grant_status(self, principal, run_id):
-        with self._lock:
-            grant = self._grants.get(run_id)
-            if grant is None or grant.requester != principal:
-                return "pending"
-            if self._clock() >= grant.expires_at:
-                grant.close("expired")
-            if grant.status == "active":
-                self._check_live(run_id, grant)
-            return grant.status
-
-    def pending_for_device(self, principal):
-        with self._lock:
-            if not self._registry.principal_is_active(principal):
-                raise ComputerControlError("authentication_required", 401)
-            pending = []
-            for run_id, grant in tuple(self._grants.items()):
-                if (grant.status != "pending" or grant.requester.user_id != principal.user_id
-                        or grant.target_device_id != principal.device_id):
-                    continue
-                try:
-                    now = self._check_live(run_id, grant)
-                except ComputerControlError:
-                    continue
-                if grant.status == "pending":
-                    pending.append({"run_id": run_id, **grant.summary(now)})
-            return {"version": VERSION, "requests": pending}
-
     def model_action(self, principal, run_id, action, inspect_id=None):
         """Execute against the run's grant without exposing its private observation ID."""
         with self._lock:
@@ -275,24 +318,3 @@ class ComputerDryRun:
                 raise ComputerControlError("action_limit")
             result = self._action(grant, body, now, model=True)
             return result["receipt"]
-
-    def stop_run(self, run_id):
-        with self._lock:
-            grant = self._grants.get(run_id)
-            if grant is not None and grant.status in {"pending", "active"}:
-                grant.close("stopped")
-
-    def revoke_device(self, user_id, device_id):
-        with self._lock:
-            for grant in self._grants.values():
-                if grant.requester.user_id == user_id and device_id in (
-                        grant.requester.device_id, grant.target_device_id):
-                    grant.close("revoked")
-
-    def purge_account(self, user_id):
-        with self._lock:
-            self._grants = {key: grant for key, grant in self._grants.items() if grant.requester.user_id != user_id}
-
-    def clear(self):
-        with self._lock:
-            self._grants.clear()

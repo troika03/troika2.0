@@ -1,4 +1,4 @@
-"""Hermes binding for a single opt-in synthetic Computer Use Run."""
+"""Hermes bindings for opt-in Computer Use Runs."""
 
 import asyncio
 from contextlib import contextmanager
@@ -7,6 +7,7 @@ import json
 
 from troika_product.capabilities import ROUTER_TOOLSET
 from troika_product.computer_control import ComputerControlError, MAX_GRANT_SECONDS
+from troika_product.computer_windows_lab import ACTIONS as WINDOWS_ACTIONS, MODE as WINDOWS_MODE
 
 
 TOOL = "troika_computer"
@@ -28,10 +29,35 @@ SCHEMA = {
         "additionalProperties": False,
     },
 }
-_CURRENT = ContextVar("troika_computer_dry_run", default=None)
+WINDOWS_TOOL = "troika_windows_editor"
+WINDOWS_SCHEMA = {
+    "name": WINDOWS_TOOL,
+    "description": (
+        "Use the consented Windows test editor. Inspect to see which action is available. "
+        "Write inserts a fixed test sentence. Inspect again before saving. "
+        "For write and save, pass the preceding inspect receipt's action_id as inspect_action_id. "
+        "A verified save means the editor read back the temporary test file."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "enum": list(WINDOWS_ACTIONS)},
+            "inspect_action_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+        },
+        "required": ["action"],
+        "additionalProperties": False,
+    },
+}
+_CURRENT = ContextVar("troika_computer_run", default=None)
 
 
 class ComputerAgentRun:
+    mode = "computer_dry_run"
+    instruction = (
+        "Выполни просьбу в тестовом окне. Все действия моделируются. "
+        "Осмотри окно перед нажатием. Успех симуляции не подтверждает действие на устройстве."
+    )
+
     def __init__(self, control, principal, run_id):
         self.control = control
         self.principal = principal
@@ -86,6 +112,46 @@ class ComputerAgentRun:
         return "Симуляция завершилась без подтверждённого действия."
 
 
+class WindowsEditorAgentRun(ComputerAgentRun):
+    mode = WINDOWS_MODE
+    instruction = (
+        "Доступен только тестовый редактор Windows. Осмотри его, введи пробную строку, "
+        "осмотри снова и сохрани. Сохранение подтверждает только проверка файла на устройстве."
+    )
+
+    def __init__(self, control, principal, run_id):
+        super().__init__(control, principal, run_id)
+        self.wrote = False
+        self.saved = False
+
+    def act(self, args):
+        if not isinstance(args, dict):
+            raise ComputerControlError("invalid_tool_arguments", 400)
+        action = args.get("action")
+        valid_inspect = action == "inspect" and set(args) == {"action"}
+        valid_mutation = action in ("write", "save") and set(args) == {"action", "inspect_action_id"}
+        if not (valid_inspect or valid_mutation):
+            raise ComputerControlError("invalid_tool_arguments", 400)
+        result = self.control.model_action(self.principal, self.run_id, action, args.get("inspect_action_id"))
+        status = result["receipt"]["status"]
+        if status == "observed":
+            self.inspected = True
+        elif status == "applied":
+            self.wrote = True
+        elif status == "verified":
+            self.saved = True
+        return result
+
+    def final_response(self):
+        if self.saved:
+            return "Windows сохранил тестовый файл и проверил его содержимое."
+        if self.wrote:
+            return "Пробная строка введена. Сохранение файла не подтверждено."
+        if self.inspected:
+            return "Тестовый редактор осмотрен. Ввод не подтверждён."
+        return "Windows не подтвердил действие в тестовом редакторе."
+
+
 def available():
     return _CURRENT.get() is not None
 
@@ -93,9 +159,16 @@ def available():
 available._hermes_skip_availability_cache = True
 
 
-def execute(args, **_):
+def available_for(mode):
+    def check():
+        return getattr(_CURRENT.get(), "mode", None) == mode
+    check._hermes_skip_availability_cache = True
+    return check
+
+
+def execute(args, *, mode=ComputerAgentRun.mode, **_):
     scope = _CURRENT.get()
-    if scope is None:
+    if scope is None or scope.mode != mode:
         return json.dumps({"ok": False, "error": "computer_dry_run_required"})
     try:
         if isinstance(args, dict):

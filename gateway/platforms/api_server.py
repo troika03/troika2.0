@@ -1119,6 +1119,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         self._run_owners: Dict[str, tuple[str, str]] = {}
         self._computer_dry_run_enabled = extra.get("product_computer_dry_run_enabled") is True
         self._computer_dry_run = None
+        self._computer_windows_lab_enabled = extra.get("product_computer_windows_lab_enabled") is True
+        self._computer_windows_lab = None
         # Active approval session key for each run_id.  The approval core
         # resolves requests by session key, while API clients address the
         # in-flight run by run_id.
@@ -1933,7 +1935,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
 
         user_config = _load_gateway_config()
         enabled_toolsets = sorted(_get_platform_tools(user_config, "api_server"))
-        computer_dry_run = False
+        computer_lab = False
         if self._access_registry is not None:
             # Product API must never inherit a local operator's broad toolset.
             # Device/PC/server actions need a separately paired companion and
@@ -1941,7 +1943,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             from troika_product.capabilities import ROUTER_TOOLSET, wrap_progress
             from troika_product.computer_agent import available as computer_run_bound
 
-            computer_dry_run = computer_run_bound()
+            computer_lab = computer_run_bound()
             enabled_toolsets = [ROUTER_TOOLSET]
             tool_progress_callback = wrap_progress(tool_progress_callback)
             from troika_product.conversation_sessions import CONVERSATION_RULE, conversation_only
@@ -1954,16 +1956,16 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 reasoning_config = {"enabled": False}
 
         max_iterations = int(os.getenv("HERMES_MAX_ITERATIONS", "90"))
-        if computer_dry_run:
+        if computer_lab:
             max_iterations = min(max_iterations, 12)
 
         # Load fallback provider chain so the API server platform has the
         # same fallback behaviour as Telegram/Discord/Slack (fixes #4954).
-        fallback_model = None if computer_dry_run else GatewayRunner._load_fallback_model()
+        fallback_model = None if computer_lab else GatewayRunner._load_fallback_model()
         from agent.provider_metering import current_provider_guard
         own = getattr(current_provider_guard(), "credentials", None)
         context = getattr(current_provider_guard(), "context", None)
-        if self._access_registry is not None and context is not None and session_id and not computer_dry_run:
+        if self._access_registry is not None and context is not None and session_id and not computer_lab:
             from troika_product.conversation_sessions import ConversationSessions, conversation_only
             context.conversation_only = conversation_only(current_user_message)
             context.archive_messages = ConversationSessions(
@@ -1994,7 +1996,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             tool_progress_callback=tool_progress_callback,
             tool_start_callback=tool_start_callback,
             tool_complete_callback=tool_complete_callback,
-            session_db=None if computer_dry_run else self._ensure_session_db(),
+            session_db=None if computer_lab else self._ensure_session_db(),
             fallback_model=fallback_model,
             reasoning_config=reasoning_config,
             gateway_session_key=gateway_session_key,
@@ -2002,12 +2004,12 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             # Product memory must come only from tenant-owned stores until a
             # provider implements an account-deletable user scope.
             skip_memory=self._access_registry is not None,
-            skip_context_files=computer_dry_run,
+            skip_context_files=computer_lab,
         )
         # Product conversations can contain voice transcripts and private
         # document text. Keep raw user content out of the operator logs.
         agent._redact_content_logs = self._access_registry is not None
-        if computer_dry_run:
+        if computer_lab:
             agent._session_json_enabled = False
         if self._access_registry is not None:
             from troika_product.agent_policy import install_agent_policy
@@ -2080,10 +2082,13 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
 
         self._access_registry.finalize_account_deletion(user_id)
 
+    def _computer_controls(self):
+        return (control for control in (self._computer_dry_run, self._computer_windows_lab) if control is not None)
+
     def _forget_account_runs(self, user_id: str) -> None:
         """Remove transient outputs and approvals owned by a deleted account."""
-        if self._computer_dry_run is not None:
-            self._computer_dry_run.purge_account(user_id)
+        for control in self._computer_controls():
+            control.purge_account(user_id)
         run_ids = [
             run_id
             for run_id, owner in list(self._run_owners.items())
@@ -2166,8 +2171,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
 
     async def _revoke_device_activity(self, user_id: str, device_id: str) -> None:
         """Close live channels and stop transient work for one revoked device."""
-        if self._computer_dry_run is not None:
-            self._computer_dry_run.revoke_device(user_id, device_id)
+        for control in self._computer_controls():
+            control.revoke_device(user_id, device_id)
         from troika_product.device_delivery import device_deliveries
         device_deliveries.purge_owner(user_id, device_id)
         from troika_product.development_checks import development_checks
@@ -5855,8 +5860,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         current.update(fields)
         self._run_statuses[run_id] = current
         if status in {"stopping", "cancelled", "completed", "failed"}:
-            control = self._computer_dry_run
-            if control is not None:
+            for control in self._computer_controls():
                 control.stop_run(run_id)
         return current
 
@@ -5944,8 +5948,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         except Exception:
             workflow_body = {}
         if isinstance(workflow_body, dict) and workflow_body.get("workflow") == "development":
-            if workflow_body.get("computer_dry_run") is True:
-                return web.json_response(_openai_error("Computer dry run requires a conversation Run"), status=400)
+            if workflow_body.get("computer_dry_run") is True or workflow_body.get("computer_windows_lab") is True:
+                return web.json_response(_openai_error("Computer Use requires a conversation Run"), status=400)
             from troika_product.development_runtime import start_development_run
             return await start_development_run(self, request, workflow_body)
 
@@ -5975,14 +5979,25 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         except Exception:
             return web.json_response(_openai_error("Invalid JSON"), status=400)
 
-        if not isinstance(body, dict) or type(body.get("computer_dry_run", False)) is not bool:
+        if not isinstance(body, dict) or any(type(body.get(key, False)) is not bool
+                                             for key in ("computer_dry_run", "computer_windows_lab")):
             return web.json_response(_openai_error("Invalid Run options"), status=400)
+        windows_lab = body.get("computer_windows_lab", False)
+        dry_run = body.get("computer_dry_run", False)
+        if windows_lab and dry_run:
+            return web.json_response(_openai_error("Choose one Computer Use mode"), status=400)
         principal = self._product_principal(request)
-        computer_control = self._computer_dry_run if body.get("computer_dry_run") else None
-        if body.get("computer_dry_run") and (computer_control is None or principal is None):
+        computer_control = self._computer_dry_run if dry_run else None
+        if dry_run and (computer_control is None or principal is None):
             return web.json_response(
                 _openai_error("Computer dry run unavailable", code="computer_dry_run_unavailable"), status=404,
             )
+        if windows_lab:
+            computer_control = self._computer_windows_lab
+            if computer_control is None or principal is None or request.remote != "127.0.0.1":
+                return web.json_response(
+                    _openai_error("Windows lab unavailable", code="computer_windows_lab_unavailable"), status=404,
+                )
 
         delivery_mode = body.get("artifact_delivery", "server")
         if not isinstance(delivery_mode, str) or delivery_mode not in {"device", "server"}:
@@ -6045,8 +6060,9 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         run_id = f"run_{uuid.uuid4().hex}"
         computer_run = None
         if computer_control is not None:
-            from troika_product.computer_agent import ComputerAgentRun
-            computer_run = ComputerAgentRun(computer_control, principal, run_id)
+            from troika_product.computer_agent import ComputerAgentRun, WindowsEditorAgentRun
+            run_class = WindowsEditorAgentRun if windows_lab else ComputerAgentRun
+            computer_run = run_class(computer_control, principal, run_id)
         session_id = body.get("session_id") or stored_session_id or run_id
         if computer_run is not None:
             session_id = run_id
@@ -6090,10 +6106,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         )
         ephemeral_system_prompt = instructions
         if computer_run is not None:
-            ephemeral_system_prompt = (
-                "Выполни просьбу в тестовом окне. Все действия моделируются. "
-                "Осмотри окно перед нажатием. Успех симуляции не подтверждает действие на устройстве."
-            )
+            ephemeral_system_prompt = computer_run.instruction
         if private_project_context:
             ephemeral_system_prompt = (
                 (str(ephemeral_system_prompt) + "\n\n") if ephemeral_system_prompt else ""
@@ -6147,7 +6160,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         if principal is None:
             queued_fields["model"] = body.get("model", self._model_name)
         if computer_run is not None:
-            queued_fields["mode"] = "computer_dry_run"
+            queued_fields["mode"] = computer_run.mode
         self._set_run_status(run_id, "queued", **queued_fields)
 
         async def _run_and_close():
@@ -6736,8 +6749,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                         and not self._active_run_tasks[run_id].done()):
                     continue
                 logger.debug("[api_server] sweeping orphaned run %s", run_id)
-                if self._computer_dry_run is not None:
-                    self._computer_dry_run.stop_run(run_id)
+                for control in self._computer_controls():
+                    control.stop_run(run_id)
                 try:
                     from tools.approval import unregister_gateway_notify
 
@@ -6984,6 +6997,10 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 from troika_product.computer_api import register_computer_dry_run_routes
 
                 register_computer_dry_run_routes(self._app, self)
+            if self._computer_windows_lab_enabled:
+                from troika_product.computer_api import register_windows_computer_lab_routes
+
+                register_windows_computer_lab_routes(self._app, self)
             if self._access_registry is not None:
                 from troika_product.development_api import register_development_routes
                 register_development_routes(self._app, self)
