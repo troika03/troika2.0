@@ -52,6 +52,7 @@ class _Command:
     taken: bool = False
     result: dict | None = None
     done: threading.Event = field(default_factory=threading.Event)
+    arguments: dict | None = None
 
 
 @dataclass
@@ -74,10 +75,58 @@ class _WindowsGrant(_Grant):
             self.command = None
 
 
-class WindowsComputerLab(ComputerGrantControl):
-    grant_type = _WindowsGrant
+class WindowsDeviceCommands(ComputerGrantControl):
     platforms = frozenset({"windows"})
     allow_regrant = False
+
+    def _await_report(self, grant, command):
+        command.done.wait(max(0, command.expires_at - self._clock()))
+        with self._lock:
+            if command.result is not None:
+                if grant.command is command:
+                    grant.command = None
+                return command.result
+            if grant.status != "active":
+                raise ComputerControlError("grant_" + grant.status)
+            grant.close("stopped")
+            raise ComputerControlError("command_timed_out")
+
+    def _operate(self, grant, operation, body, now, *, requester, target):
+        if not target:
+            raise ComputerControlError("grant_not_found", 404)
+        if grant.status != "active":
+            raise ComputerControlError("grant_" + grant.status)
+        if operation == "take":
+            _fields(body, "grant_id")
+            return self._take(grant, now)
+        if operation == "report":
+            return self._report(grant, body, now)
+        raise ComputerControlError("grant_not_found", 404)
+
+    @staticmethod
+    def _take(grant, now):
+        payload = {"version": VERSION, "mode": grant.mode, "command": None}
+        command = grant.command
+        if command is None or command.taken or command.expires_at <= now:
+            return payload
+        duration_ms = int((command.expires_at - now) * 1000)
+        if duration_ms <= 0:
+            return payload
+        command.taken = True
+        payload["command"] = {"id": command.id, "sequence": command.sequence, "action": command.action,
+                              "expires_in_ms": duration_ms}
+        if command.inspect_id is not None:
+            payload["command"]["inspect_action_id"] = command.inspect_id
+        if command.text is not None:
+            payload["command"]["text"] = command.text
+            command.text = None
+        if command.arguments is not None:
+            payload["command"]["arguments"] = command.arguments
+        return payload
+
+
+class WindowsComputerLab(WindowsDeviceCommands):
+    grant_type = _WindowsGrant
     command_seconds = _COMMAND_SECONDS
     observation_seconds = MAX_OBSERVATION_SECONDS
     allow_denial = False
@@ -125,48 +174,7 @@ class WindowsComputerLab(ComputerGrantControl):
             grant.issued += 1
             command = _Command(uuid4().hex, grant.issued, action, expires, inspect_id, text=text)
             grant.command = command
-
-        command.done.wait(max(0, expires - self._clock()))
-        with self._lock:
-            if command.result is not None:
-                if grant.command is command:
-                    grant.command = None
-                return command.result
-            if grant.status != "active":
-                raise ComputerControlError("grant_" + grant.status)
-            grant.close("stopped")
-            raise ComputerControlError("command_timed_out")
-
-    def _operate(self, grant, operation, body, now, *, requester, target):
-        if not target:
-            raise ComputerControlError("grant_not_found", 404)
-        if grant.status != "active":
-            raise ComputerControlError("grant_" + grant.status)
-        if operation == "take":
-            _fields(body, "grant_id")
-            return self._take(grant, now)
-        if operation == "report":
-            return self._report(grant, body, now)
-        raise ComputerControlError("grant_not_found", 404)
-
-    @staticmethod
-    def _take(grant, now):
-        payload = {"version": VERSION, "mode": grant.mode, "command": None}
-        command = grant.command
-        if command is None or command.taken or command.expires_at <= now:
-            return payload
-        duration_ms = int((command.expires_at - now) * 1000)
-        if duration_ms <= 0:
-            return payload
-        command.taken = True
-        payload["command"] = {"id": command.id, "sequence": command.sequence, "action": command.action,
-                              "expires_in_ms": duration_ms}
-        if command.inspect_id is not None:
-            payload["command"]["inspect_action_id"] = command.inspect_id
-        if command.text is not None:
-            payload["command"]["text"] = command.text
-            command.text = None
-        return payload
+        return self._await_report(grant, command)
 
     def _report(self, grant, body, now):
         command = grant.command

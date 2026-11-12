@@ -22,7 +22,8 @@ import pytest_asyncio
 from gateway.config import PlatformConfig
 from gateway.platforms.api_server import APIServerAdapter
 from troika_product.computer_api import (
-    register_computer_dry_run_routes, register_windows_computer_lab_routes, register_windows_computer_vision_routes,
+    register_computer_dry_run_routes, register_windows_browser_routes,
+    register_windows_computer_lab_routes, register_windows_computer_vision_routes,
 )
 
 
@@ -45,24 +46,29 @@ async def test_routes_require_explicit_opt_in_and_product_auth(tmp_path, options
     register_computer_dry_run_routes(app, adapter)
     register_windows_computer_lab_routes(app, adapter)
     register_windows_computer_vision_routes(app, adapter)
+    register_windows_browser_routes(app, adapter)
     async with TestClient(TestServer(app)) as client:
         response = await client.post("/v1/runs/example/computer-dry-run/request", json={"version": 1})
         assert response.status == 404
         assert (await client.get("/v1/computer-dry-run/requests")).status == 404
         assert (await client.get("/v1/computer-windows-lab/requests")).status == 404
         assert (await client.get("/v1/computer-windows-vision/requests")).status == 404
+        assert (await client.get("/v1/computer-windows-browser/requests")).status == 404
 
 
 @pytest.mark.asyncio
 async def test_windows_lab_requires_loopback_bind(tmp_path):
     app = web.Application()
     adapter = adapter_for(tmp_path, product_computer_windows_lab_enabled=True,
-                          product_computer_windows_vision_enabled=True, host="0.0.0.0")
+                          product_computer_windows_vision_enabled=True,
+                          product_computer_windows_browser_enabled=True, host="0.0.0.0")
     register_windows_computer_lab_routes(app, adapter)
     register_windows_computer_vision_routes(app, adapter)
+    register_windows_browser_routes(app, adapter)
     async with TestClient(TestServer(app)) as client:
         assert (await client.get("/v1/computer-windows-lab/requests")).status == 404
         assert (await client.get("/v1/computer-windows-vision/requests")).status == 404
+        assert (await client.get("/v1/computer-windows-browser/requests")).status == 404
 
 
 @pytest.mark.asyncio
@@ -86,6 +92,8 @@ async def hosted(tmp_path, monkeypatch, request):
                           product_computer_windows_lab_enabled=True, product_computer_windows_vision_enabled=True,
                           product_computer_windows_vision_fixture=not openrouter,
                           product_computer_windows_vision_model="fixture/vision:free" if openrouter else None,
+                          product_computer_windows_browser_enabled=openrouter,
+                          product_computer_windows_browser_model="fixture/browser:free" if openrouter else None,
                           host="127.0.0.1")
     registry = adapter._access_registry
     owner = registry.create_user("computer-owner@example.invalid")
@@ -120,6 +128,7 @@ async def hosted(tmp_path, monkeypatch, request):
     register_computer_dry_run_routes(app, adapter)
     register_windows_computer_lab_routes(app, adapter)
     register_windows_computer_vision_routes(app, adapter)
+    register_windows_browser_routes(app, adapter)
     now = [100.0]
     monkeypatch.setattr(adapter._computer_dry_run, "_clock", lambda: now[0])
     async with TestClient(TestServer(app)) as client:
@@ -438,6 +447,142 @@ async def test_assisted_windows_run_applies_the_selected_permission(hosted, monk
         if child.returncode is None:
             child.kill()
             await child.wait()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("hosted", [True], indirect=True)
+@pytest.mark.parametrize("scenario", ["run", "view", "deny", "stop"])
+async def test_browser_run_uses_only_the_approved_device(hosted, monkeypatch, scenario):
+    from copy import deepcopy
+    from scripts.troika_browser_run import BrowserRunClient
+    from troika_product.computer_control import ComputerControlError
+    from troika_product.computer_openrouter_vision import OpenRouterVision
+    from troika_product.computer_windows_browser import TOOL
+
+    monkeypatch.setattr(hosted.adapter, "_create_agent", APIServerAdapter._create_agent.__get__(hosted.adapter))
+    goal = "Открой обзор, прокрути, открой сведения и вернись в обзор."
+    commands = [{"action": "inspect"}]
+    if scenario == "view":
+        commands.append({"action": "scroll", "direction": "down"})
+    else:
+        commands.extend([
+            {"action": "open", "page": "overview"}, {"action": "scroll", "direction": "down"},
+            {"action": "open", "page": "details"}, {"action": "switch", "page": "overview"},
+        ])
+    calls, observed = [], []
+
+    def respond(request):
+        assert request.url == "https://openrouter.ai/api/v1/chat/completions"
+        assert b"PRIVATE_BROWSER_HEADING" not in request.content
+        data = json.loads(request.content)
+        assert data["model"] == "fixture/browser:free"
+        assert [tool["function"]["name"] for tool in data["tools"]] == [TOOL]
+        receipts = [json.loads(msg["content"]) for msg in data["messages"] if msg["role"] == "tool"]
+        if receipts:
+            observed.append(receipts[-1])
+        if len(calls) == len(commands):
+            return httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {"content": "Готово."}}]})
+        command = commands[len(calls)]
+        calls.append(command["action"])
+        return httpx.Response(200, json={"choices": [{"finish_reason": "tool_calls", "message": {"tool_calls": [{
+            "id": f"browser_{len(calls)}", "type": "function",
+            "function": {"name": TOOL, "arguments": json.dumps(command)},
+        }]}}]})
+
+    monkeypatch.setattr(OpenRouterVision, "_client", staticmethod(
+        lambda timeout: httpx.Client(timeout=timeout, transport=httpx.MockTransport(respond))
+    ))
+
+    class Browser:
+        targets = {"overview": "fixture", "details": "fixture"}
+
+        def __init__(self):
+            self.active = None
+            self.positions = {}
+            self.actions = []
+
+        def inspect(self):
+            view = {"page": self.active, "open_pages": list(self.positions)}
+            if self.active is not None:
+                view.update(y=self.positions[self.active], max_y=640, window=123,
+                            headings=["PRIVATE_BROWSER_HEADING"])
+            return deepcopy(view)
+
+        def step(self, command, approve):
+            action = command["action"]
+            if action != "inspect" and not approve(command):
+                return {"error": "denied"}
+            if action == "open":
+                self.active = command["page"]
+                self.positions[self.active] = 0
+            elif action == "switch":
+                self.active = command["page"]
+            elif action == "scroll":
+                self.positions[self.active] = 640
+            self.actions.append(action)
+            return {"action": action, "view": self.inspect()}
+
+    start = await hosted.client.post("/v1/runs", headers=hosted.phone.headers,
+                                     json={"input": goal, "computer_windows_browser": True})
+    assert start.status == 202, await start.text()
+    run = SimpleNamespace(**{**vars(hosted), "run_id": (await start.json())["run_id"]})
+    route = "computer-windows-browser"
+    grant = await operation(run, run.phone, "request", 201, route=route, target_device_id=run.pc.id, ttl_seconds=90)
+    grant_id = grant["grant_id"]
+    assert grant["app"] == "browser" and not calls
+    await operation(run, run.other, "review", 404, route=route, grant_id=grant_id)
+    await operation(run, run.phone, "take", 404, route=route, grant_id=grant_id)
+    assert not calls
+    browser = Browser()
+    asking, release = threading.Event(), threading.Event()
+
+    def approve(_):
+        if scenario == "stop":
+            asking.set()
+            assert release.wait(25)
+        return scenario != "deny"
+
+    def device_run():
+        import time
+
+        device = BrowserRunClient(str(run.client.make_url("/")), run.run_id, grant_id, run.pc.token)
+        try:
+            assert device.review() == "pending"
+            permission = "view" if scenario == "view" else "run" if scenario == "run" else "ask"
+            return device.run(browser, approve, permission, False, time.monotonic() + 90)
+        finally:
+            device.close()
+
+    worker = asyncio.create_task(asyncio.to_thread(device_run))
+    try:
+        if scenario == "stop":
+            assert await asyncio.to_thread(asking.wait, 20)
+            await operation(run, run.phone, "stop", route=route, grant_id=grant_id)
+            release.set()
+        response = await run.client.get(f"/v1/runs/{run.run_id}/events", headers=run.phone.headers)
+        stream = await asyncio.wait_for(response.text(), 35)
+        event = [json.loads(line[6:]) for line in stream.splitlines() if line.startswith("data: ")][-1]
+        assert "PRIVATE_BROWSER_HEADING" not in stream
+        if scenario == "stop":
+            with pytest.raises(ComputerControlError, match="grant_stopped"):
+                await asyncio.wait_for(worker, 10)
+            assert browser.actions == ["inspect"] and event["event"] == "run.failed"
+        else:
+            await asyncio.wait_for(worker, 10)
+            assert event["event"] == "run.completed"
+            if scenario == "run":
+                assert browser.actions == ["inspect", "open", "scroll", "open", "switch"]
+                assert browser.inspect()["y"] == 640 and "переключение окна" in event["output"]
+            elif scenario == "view":
+                assert browser.actions == ["open", "inspect"] and observed[-1]["error"] == "action_denied"
+            else:
+                assert browser.actions == ["inspect"] and "отклонено" in event["output"]
+        assert run.adapter._ensure_session_db().get_messages(run.run_id) == []
+    finally:
+        release.set()
+        if not worker.done():
+            await operation(run, run.phone, "stop", route=route, grant_id=grant_id)
+            await asyncio.gather(worker, return_exceptions=True)
 
 
 async def request_grant(hosted, target, ttl=60):

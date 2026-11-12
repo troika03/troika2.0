@@ -1127,6 +1127,9 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         self._computer_windows_vision_config_error = False
         self._computer_windows_vision = None
         self._computer_windows_assisted = None
+        self._computer_windows_browser_enabled = extra.get("product_computer_windows_browser_enabled") is True
+        self._computer_windows_browser_model = extra.get("product_computer_windows_browser_model")
+        self._computer_windows_browser = None
         # Active approval session key for each run_id.  The approval core
         # resolves requests by session key, while API clients address the
         # in-flight run by run_id.
@@ -2108,7 +2111,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
 
     def _computer_controls(self):
         return (control for control in (self._computer_dry_run, self._computer_windows_lab,
-                                        self._computer_windows_vision, self._computer_windows_assisted)
+                                        self._computer_windows_vision, self._computer_windows_assisted,
+                                        self._computer_windows_browser)
                 if control is not None)
 
     def _forget_account_runs(self, user_id: str) -> None:
@@ -5975,7 +5979,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             workflow_body = {}
         if isinstance(workflow_body, dict) and workflow_body.get("workflow") == "development":
             if any(workflow_body.get(key) is True for key in
-                   ("computer_dry_run", "computer_windows_lab", "computer_windows_vision", "computer_windows_assisted")):
+                   ("computer_dry_run", "computer_windows_lab", "computer_windows_vision", "computer_windows_assisted",
+                    "computer_windows_browser")):
                 return web.json_response(_openai_error("Computer Use requires a conversation Run"), status=400)
             from troika_product.development_runtime import start_development_run
             return await start_development_run(self, request, workflow_body)
@@ -6008,14 +6013,15 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
 
         if not isinstance(body, dict) or any(type(body.get(key, False)) is not bool
                                              for key in ("computer_dry_run", "computer_windows_lab", "computer_windows_vision",
-                                                         "computer_windows_assisted")):
+                                                         "computer_windows_assisted", "computer_windows_browser")):
             return web.json_response(_openai_error("Invalid Run options"), status=400)
         windows_lab = body.get("computer_windows_lab", False)
         windows_vision = body.get("computer_windows_vision", False)
         windows_assisted = body.get("computer_windows_assisted", False)
-        windows_model_lab = windows_vision or windows_assisted
+        windows_browser = body.get("computer_windows_browser", False)
+        windows_model_lab = windows_vision or windows_assisted or windows_browser
         dry_run = body.get("computer_dry_run", False)
-        if sum((windows_lab, windows_vision, windows_assisted, dry_run)) > 1:
+        if sum((windows_lab, windows_vision, windows_assisted, windows_browser, dry_run)) > 1:
             return web.json_response(_openai_error("Choose one Computer Use mode"), status=400)
         principal = self._product_principal(request)
         computer_control = self._computer_dry_run if dry_run else None
@@ -6024,9 +6030,10 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 _openai_error("Computer dry run unavailable", code="computer_dry_run_unavailable"), status=404,
             )
         if windows_lab or windows_model_lab:
-            computer_control = (self._computer_windows_assisted if windows_assisted else
+            computer_control = (self._computer_windows_browser if windows_browser else
+                                self._computer_windows_assisted if windows_assisted else
                                 self._computer_windows_vision if windows_vision else self._computer_windows_lab)
-            if (windows_model_lab and self._computer_windows_vision_config_error
+            if ((windows_vision or windows_assisted) and self._computer_windows_vision_config_error
                     and principal is not None and request.remote == "127.0.0.1"):
                 return web.json_response(
                     _openai_error("Для осмотра Windows настройте ключ и модель OpenRouter.",
@@ -6044,7 +6051,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         if not raw_input:
             return web.json_response(_openai_error("Missing 'input' field"), status=400)
         if windows_model_lab and (not isinstance(raw_input, str) or len(raw_input) > 512 or not raw_input.strip()):
-            return web.json_response(_openai_error("Invalid vision lab input"), status=400)
+            return web.json_response(_openai_error("Invalid Windows lab input"), status=400)
 
         user_message = raw_input if isinstance(raw_input, str) else (raw_input[-1].get("content", "") if isinstance(raw_input, list) else "")
         if not user_message:
@@ -6101,9 +6108,10 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         computer_run = None
         if computer_control is not None:
             from troika_product.computer_agent import (
-                ComputerAgentRun, WindowsAssistedAgentRun, WindowsEditorAgentRun, WindowsVisionAgentRun,
+                ComputerAgentRun, WindowsAssistedAgentRun, WindowsBrowserAgentRun, WindowsEditorAgentRun, WindowsVisionAgentRun,
             )
-            run_class = (WindowsAssistedAgentRun if windows_assisted else WindowsVisionAgentRun if windows_vision
+            run_class = (WindowsBrowserAgentRun if windows_browser else
+                         WindowsAssistedAgentRun if windows_assisted else WindowsVisionAgentRun if windows_vision
                          else WindowsEditorAgentRun if windows_lab else ComputerAgentRun)
             computer_run = run_class(computer_control, principal, run_id)
         session_id = body.get("session_id") or stored_session_id or run_id
@@ -7077,6 +7085,10 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 from troika_product.computer_api import register_windows_computer_vision_routes
 
                 register_windows_computer_vision_routes(self._app, self)
+            if self._computer_windows_browser_enabled:
+                from troika_product.computer_api import register_windows_browser_routes
+
+                register_windows_browser_routes(self._app, self)
             if self._access_registry is not None:
                 from troika_product.development_api import register_development_routes
                 register_development_routes(self._app, self)

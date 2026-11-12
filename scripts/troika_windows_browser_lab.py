@@ -1,13 +1,18 @@
 """Run the Windows browser pilot in a fresh profile."""
 
 import argparse
+from contextlib import ExitStack
 import json
 import os
 import time
 
+import httpx
+
+from scripts.troika_browser_run import BrowserRunClient
 from scripts.troika_static_preview import ORIGIN, StaticProjectPreview
 from troika_product.computer_control import MAX_ACTIONS, MAX_GRANT_SECONDS, ComputerControlError
 from troika_product.computer_openrouter_vision import OpenRouterVision
+from troika_product.computer_windows_browser import PERMISSIONS, TOOL, browser_command, browser_schema
 
 
 PAGES = {
@@ -22,31 +27,6 @@ REQUEST = (
     "Открой обзор магазина, прокрути его вниз до раздела «Доставка», открой сведения в отдельном "
     "окне, затем вернись в обзор и проверь, что раздел всё ещё виден."
 )
-TOOL = "troika_windows_browser"
-
-
-def _tool_spec(pages):
-    return {"type": "function", "function": {
-        "name": TOOL,
-        "description": (
-            "Operate only the selected browser pages. Receipts show the selected window and its visible headings. "
-            "For open or switch, send exactly action and page. Open creates and selects a separate window. "
-            "Switch selects a page that is already open. For scroll, send exactly action and direction; "
-            "it scrolls the currently selected page. For inspect, send only action."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "action": {"enum": ["open", "inspect", "scroll", "switch"], "type": "string"},
-                "page": {"enum": list(pages), "type": "string", "description": "Only for open or switch."},
-                "direction": {"enum": ["up", "down"], "type": "string", "description": "Only for scroll."},
-            },
-            "required": ["action"],
-            "additionalProperties": False,
-        },
-    }}
-
-
 def _fixture_route(route):
     request = route.request
     name = request.url.removeprefix(ORIGIN)
@@ -144,21 +124,20 @@ class BrowserLab:
         return True
 
     def step(self, command, approve):
-        if not isinstance(command, dict):
+        try:
+            action, arguments = browser_command(command, self.targets)
+        except ComputerControlError:
             return {"error": "invalid_action"}
-        action = command.get("action")
-        name = command.get("page")
-        direction = command.get("direction")
-        if action == "inspect" and set(command) == {"action"}:
+        name = arguments.get("page")
+        if action == "inspect":
             return {"action": action, "view": self.inspect()}
-        if action in ("open", "switch") and set(command) == {"action", "page"} and isinstance(name, str) and name in self.targets:
+        if action in ("open", "switch"):
             if (name in self.pages) == (action == "open"):
                 return {"error": "page_already_open" if action == "open" else "page_not_open"}
-        elif action == "scroll" and set(command) == {"action", "direction"} and direction in ("up", "down"):
-            if self.active is None:
-                return {"error": "page_not_open"}
-        else:
-            return {"error": "invalid_action"}
+            if action == "switch" and name == self.active:
+                return {"error": "page_already_selected"}
+        elif self.active is None:
+            return {"error": "page_not_open"}
         if not approve(command):
             return {"error": "denied"}
         if action == "open":
@@ -168,13 +147,13 @@ class BrowserLab:
             self._check_page(name, page)
             self._focus(page)
             self.active = name
-        elif not self._scroll(direction):
+        elif not self._scroll(arguments["direction"]):
             return {"action": action, "at_boundary": True, "view": self.inspect()}
         return {"action": action, "view": self.inspect()}
 
 
 def _run_model(lab, provider, task, approve, deadline, *, pages=PAGES):
-    tool_spec = _tool_spec(pages)
+    tool_spec = {"type": "function", "function": browser_schema(pages)}
     messages = [
         {"role": "system", "content": (
             "Работай только с выбранными страницами. Выполни задачу через инструмент и проверь результат. "
@@ -248,18 +227,27 @@ def _check_pages(lab, approve):
     return receipts
 
 
+def _confirm(label):
+    try:
+        return input(label + "? [д/Н] ").strip().lower() in {"д", "да", "y", "yes"}
+    except EOFError:
+        return False
+
+
 def main():
     parser = argparse.ArgumentParser(description="Проба управления отдельным браузером Windows")
     parser.add_argument("--channel", choices=("chrome", "msedge"), default="chrome")
     parser.add_argument("--show", action="store_true", help="показать пробные окна")
-    parser.add_argument("--model", help="модель OpenRouter для выбора действий")
+    planning = parser.add_mutually_exclusive_group()
+    planning.add_argument("--model", help="модель OpenRouter для выбора действий")
+    planning.add_argument("--run", nargs=3, metavar=("API", "RUN", "GRANT"), help="получать действия выбранного Run")
     parser.add_argument("--task", help="задача, которую получит OpenRouter")
     parser.add_argument("--project", help="выбранная папка статического сайта")
     parser.add_argument("--entry", help="путь к HTML внутри папки, по умолчанию index.html")
     parser.add_argument("--second-entry", help="вторая HTML-страница проекта")
     parser.add_argument("--mobile", action="store_true", help="область страницы 390 × 844")
     parser.add_argument("--share-headings", action="store_true", help="разрешить передачу видимых заголовков в OpenRouter")
-    parser.add_argument("--permission", choices=("ask", "run", "view"),
+    parser.add_argument("--permission", choices=PERMISSIONS,
                         help="спрашивать перед действием, разрешить выбранные окна, только просмотр")
     args = parser.parse_args()
     if os.name != "nt":
@@ -270,7 +258,7 @@ def main():
         parser.error("параметры страниц и их передачи требуют --project")
     if args.project and args.model and not args.share_headings:
         parser.error("для OpenRouter подтвердите передачу заголовков через --share-headings")
-    permission = args.permission or ("ask" if args.model else "run")
+    permission = args.permission or ("ask" if args.model or args.run else "run")
 
     try:
         from playwright.sync_api import Error, sync_playwright
@@ -298,11 +286,7 @@ def main():
             else:
                 operation = "Открыть окно" if command["action"] == "open" else "Переключиться в окно"
                 label = operation + " «" + labels[command["page"]] + "»"
-            try:
-                accepted = input(label + "? [д/Н] ").strip().lower() in {"д", "да", "y", "yes"}
-            except EOFError:
-                accepted = False
-            if not accepted:
+            if not _confirm(label):
                 return False
         return time.monotonic() < deadline
 
@@ -313,7 +297,22 @@ def main():
             default_task = "Открой страницу overview. Если доступна прокрутка, прокрути вниз и проверь видимые заголовки."
             if args.second_entry:
                 default_task += " Затем открой details, вернись в overview и проверь положение прокрутки."
-        with sync_playwright() as engine:
+        with ExitStack() as cleanup:
+            run = None
+            share_headings = project is None or args.share_headings
+            if args.run:
+                try:
+                    run = BrowserRunClient(*args.run, os.environ.get("TROIKA_COMPUTER_TEST_DEVICE_TOKEN"))
+                except ValueError as error:
+                    parser.error(str(error))
+                cleanup.callback(run.close)
+                if run.review() != "pending":
+                    raise ComputerControlError("browser_run_rejected")
+                if permission == "ask" and not _confirm("Разрешить Тройке открыть выбранные страницы в этом запуске"):
+                    run.deny(permission, project.pages if project is not None else PAGES, share_headings)
+                    print("Доступ к браузеру отклонён.")
+                    return 1
+            engine = cleanup.enter_context(sync_playwright())
             browser_environment = {name: value for name, value in os.environ.items() if name.lower() in {
                 "systemroot", "windir", "systemdrive", "localappdata", "appdata", "programdata", "userprofile",
                 "programfiles", "programfiles(x86)", "temp", "tmp", "path", "comspec",
@@ -322,9 +321,11 @@ def main():
                                              chromium_sandbox=True, timeout=10000, env=browser_environment)
             try:
                 lab = BrowserLab(browser, project, viewport=(390, 844) if args.mobile else (920, 500))
-                if permission == "view":
+                if permission == "view" and run is None:
                     lab.step({"action": "open", "page": "overview"}, lambda _: time.monotonic() < deadline)
-                if provider is not None:
+                if run is not None:
+                    receipts = run.run(lab, approve, permission, share_headings, deadline)
+                elif provider is not None:
                     task = args.task or ("Осмотри видимый раздел выбранной страницы." if permission == "view" else default_task)
                     receipts = _run_model(lab, provider, task, approve, deadline, pages=lab.targets)
                 elif permission == "view":
@@ -333,9 +334,11 @@ def main():
                     receipts = _check_pages(lab, approve)
                 if time.monotonic() >= deadline:
                     raise ComputerControlError("grant_expired")
-                final = lab.inspect()
+                final = lab.inspect() if run is None else next(
+                    (receipt["view"] for receipt in reversed(receipts) if "view" in receipt), None,
+                )
                 result = {"actions": receipts, "final": final}
-                if args.task is None and permission != "view":
+                if run is None and args.task is None and permission != "view":
                     result["verified"] = _verified(receipts, final, heading="Доставка" if project is None else None,
                                                    second="details" in lab.targets)
                 print(json.dumps(result, ensure_ascii=False))
@@ -345,7 +348,7 @@ def main():
     except KeyboardInterrupt:
         print("Проба остановлена.")
         return 130
-    except (ComputerControlError, Error) as error:
+    except (ComputerControlError, Error, httpx.HTTPError) as error:
         print("Проба завершилась ошибкой " + (error.code if isinstance(error, ComputerControlError) else "browser_unavailable"))
         return 1
 

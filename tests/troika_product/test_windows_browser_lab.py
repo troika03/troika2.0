@@ -7,7 +7,9 @@ import pytest
 
 from scripts.troika_windows_browser_lab import BrowserLab, ORIGIN, _fixture_route, _run_model, _verified
 from scripts.troika_static_preview import StaticProjectPreview
+from scripts.troika_browser_run import BrowserRunClient
 from troika_product.computer_control import ComputerControlError
+from troika_product.computer_windows_browser import _matches_action
 
 
 @pytest.mark.parametrize(("url", "method", "allowed"), [
@@ -139,3 +141,23 @@ def test_verification_requires_observed_scroll_to_survive_window_switch():
     assert _verified([scroll, other_window, returned], delivery)
     assert not _verified([other_window, scroll, returned], delivery)
     assert not _verified([scroll, other_window, returned], {**delivery, "y": 660})
+
+
+def test_browser_run_cannot_verify_scroll_on_another_page_or_without_movement():
+    command = SimpleNamespace(action="scroll", arguments={"direction": "down"})
+    before = {"page": "overview", "open_pages": ["overview", "details"], "y": 320}
+    assert not _matches_action(command, before, before)
+    assert not _matches_action(command, before, {**before, "page": "details", "y": 640})
+    assert not _matches_action(command, before, {**before, "y": 100})
+    assert _matches_action(command, before, {**before, "y": 640})
+
+
+def test_closing_before_browser_consent_revokes_the_pending_grant():
+    grant = "b" * 32
+    client = BrowserRunClient("http://127.0.0.1:8642", "run_" + "a" * 32, grant, "fixture-token")
+    client._send = Mock(return_value={"status": "pending", "grant_id": grant})
+    try:
+        assert client.review() == "pending"
+    finally:
+        client.close()
+    assert [entry.args for entry in client._send.call_args_list] == [("review",), ("stop",)]

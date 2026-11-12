@@ -36,6 +36,23 @@ def register_windows_computer_lab_routes(app, adapter):
                      WindowsComputerLab, _GRANT_OPERATIONS | {"take", "report"}, mode=MODE)
 
 
+def register_windows_browser_routes(app, adapter):
+    if (adapter._access_registry is None or not adapter._computer_windows_browser_enabled
+            or adapter._host != "127.0.0.1"):
+        return
+    from hermes_cli.config import get_env_value
+    from troika_product.computer_openrouter_vision import OpenRouterVision
+    from troika_product.computer_windows_browser import MODE, WindowsBrowserLab
+
+    try:
+        openrouter = OpenRouterVision(adapter._computer_windows_browser_model, get_env_value("OPENROUTER_API_KEY"))
+    except ValueError:
+        return
+    _register_routes(app, adapter, "_computer_windows_browser", "computer-windows-browser",
+                     partial(WindowsBrowserLab, openrouter=openrouter),
+                     _GRANT_OPERATIONS | {"take", "report"}, mode=MODE)
+
+
 def register_windows_computer_vision_routes(app, adapter):
     if (adapter._access_registry is None or not adapter._computer_windows_vision_enabled
             or adapter._host != "127.0.0.1"):
@@ -103,7 +120,9 @@ def _register_routes(app, adapter, attribute, path, factory, operations, *, mode
         # must belong to a Run that opted into that same native mode.
         if mode is not None and status.get("mode") != mode:
             return None
-        if mode is None and status.get("mode") in {"windows_lab", "windows_vision_lab", "windows_assisted_lab"}:
+        if mode is None and status.get("mode") in {
+            "windows_lab", "windows_vision_lab", "windows_assisted_lab", "windows_browser_lab",
+        }:
             return None
         if (task is not None and not task.done() and "workflow" not in status
                 and status.get("status") in {"queued", "running", "waiting_for_approval"}):
