@@ -22,10 +22,12 @@ static class ComputerUseExternalEditor {
             return ComputerUseWindowCapture.RunTarget(args[1], args.Length == 3);
         if (args.Length == 1 && args[0] == "--verify-window-capture") return Verify(null, null, windowCapture: true);
         if (args.Length == 1 && args[0] == "--window-preview") return RunWindowPreview();
+        if (args.Length == 2 && args[0] == "--vision-lab") return RunWindowPreview(args[1]);
+        if (args.Length == 2 && args[0] == "--verify-vision") return Verify(null, null, visionAddress: args[1]);
         bool interactive = args.Length == 4 && args[0] == "--run";
         bool verifyRun = args.Length == 5 && args[0] == "--verify-run";
         if (!interactive && !verifyRun) {
-            Console.Error.WriteLine("Usage: TroikaComputerUseEditor.exe --preview | --window-preview | --run <loopback-api> <run-id> <grant-id>");
+            Console.Error.WriteLine("Usage: TroikaComputerUseEditor.exe --preview | --window-preview | --vision-lab <loopback-api> | --run <loopback-api> <run-id> <grant-id>");
             return 2;
         }
         try {
@@ -41,31 +43,40 @@ static class ComputerUseExternalEditor {
         }
     }
 
-    private static int RunWindowPreview() {
+    private static int RunWindowPreview(string visionAddress = null) {
         if (!File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "TroikaWindowCapture.dll"))) {
             Console.Error.WriteLine("Build with -TestWindowCapture to enable Windows Graphics Capture.");
             return 2;
         }
         try {
+            using (var vision = visionAddress == null ? null : OpenVision(visionAddress))
             using (var target = ComputerUseWindowCapture.OpenAsync().GetAwaiter().GetResult())
-                return new Application().Run(new ComputerUseVisualPreview(target: target));
+                return new Application().Run(new ComputerUseVisualPreview(target: target, vision: vision));
         } catch (InvalidOperationException error) {
             Console.Error.WriteLine(error.Message);
             return 2;
+        } catch (ArgumentException error) {
+            Console.Error.WriteLine(error.Message);
+            return 2;
         }
+    }
+
+    private static ComputerUseVisionLab OpenVision(string address) {
+        return new ComputerUseVisionLab(address, Environment.GetEnvironmentVariable("TROIKA_COMPUTER_LAB_TOKEN"));
     }
 
     private static ComputerUsePrototypeWindow NewEditor(ComputerUseWindowsRun run) {
         return new ComputerUsePrototypeWindow(new ComputerUseSession(), windowsRun: run, externalEditor: true);
     }
 
-    private static int Verify(ComputerUseWindowsRun run, string expected, bool windowCapture = false) {
+    private static int Verify(ComputerUseWindowsRun run, string expected, bool windowCapture = false, string visionAddress = null) {
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         app.Dispatcher.BeginInvoke(new Action(async () => {
             try {
-                if (windowCapture) await CheckWindowCapture();
+                if (visionAddress != null) await CheckVision(visionAddress);
+                else if (windowCapture) await CheckWindowCapture();
                 else await CheckSavedFile(run, expected);
-                if (run == null && !windowCapture) {
+                if (run == null && !windowCapture && visionAddress == null) {
                     await CheckValueGateAndStop();
                     await CheckPasswordField();
                     await CheckVisualPreview();
@@ -78,6 +89,42 @@ static class ComputerUseExternalEditor {
             }
         }));
         return app.Run();
+    }
+
+    private static async Task CheckVision(string address) {
+        using (var vision = OpenVision(address))
+        using (var target = await Bounded(ComputerUseWindowCapture.OpenAsync())) {
+            var time = TimeSpan.Zero;
+            var preview = new ComputerUseVisualPreview(now: () => time, target: target, vision: vision) {
+                ShowActivated = false,
+                ShowInTaskbar = false,
+                WindowStartupLocation = WindowStartupLocation.Manual,
+                Left = -10000,
+                Top = -10000
+            };
+            try {
+                preview.Show();
+                await preview.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                Require(!preview.SendButton.IsEnabled, "The frame could be sent before consent.");
+                await Bounded(preview.SendFrameAsync());
+                Click(preview.AllowButton);
+                Require(!preview.SendButton.IsEnabled, "The frame could be sent before review.");
+                await Bounded(preview.CaptureAsync());
+                Require(preview.SendButton.IsEnabled, "The preview did not offer the frame for review.");
+                time = TimeSpan.FromSeconds(15);
+                await Bounded(preview.SendFrameAsync());
+                Require(preview.Preview.Source == null && !preview.SendButton.IsEnabled, "An expired frame remained sendable.");
+                await Bounded(preview.CaptureAsync());
+                await Bounded(preview.SendFrameAsync());
+                Require(preview.VisionAnswer.Text == "Тестовый ответ: Пробный кадр получен.",
+                    "The native preview did not display the test model reply.");
+                Require(!preview.SendButton.IsEnabled, "The native preview allowed a second send.");
+                await Bounded(preview.SendFrameAsync());
+                Click(preview.StopButton);
+                Require(preview.Preview.Source == null && preview.VisionAnswer.Text == "", "Stop retained the model reply.");
+                Console.WriteLine("PASS the native preview sends only one reviewed window frame and shows the model reply");
+            } finally { preview.Close(); }
+        }
     }
 
     private static async Task<ComputerUsePrototypeWindow> OpenForTest(ComputerUseWindowsRun run) {

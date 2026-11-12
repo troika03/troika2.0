@@ -1,5 +1,7 @@
 using System;
 using System.Diagnostics;
+using System.IO;
+using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,7 +19,7 @@ using Windows.Graphics.Imaging;
 using Windows.Media.Ocr;
 using Windows.Storage.Streams;
 
-// Both test sources keep their frame and OCR result in this local window.
+// A frame stays in preview until the user explicitly sends it in the vision lab.
 internal sealed class ComputerUseVisualPreview : Window {
     private const int MaxFrameWidth = 640;
     private const int MaxFrameHeight = 240;
@@ -26,10 +28,12 @@ internal sealed class ComputerUseVisualPreview : Window {
     private readonly Func<BitmapSource, Task<string>> recognize;
     private readonly ComputerUseSession session;
     private readonly ComputerUseWindowCapture target;
+    private readonly ComputerUseVisionLab vision;
     private readonly DispatcherTimer timer;
     private readonly TextBlock status;
     private CancellationTokenSource capture;
     private bool captureFailed;
+    private bool frameSent;
     private TimeSpan frameExpires;
     internal readonly Button AllowButton;
     private readonly Button captureButton;
@@ -37,12 +41,16 @@ internal sealed class ComputerUseVisualPreview : Window {
     internal readonly TextBox Editor;
     internal readonly Image Preview;
     internal readonly TextBlock Recognized;
+    internal readonly Button SendButton;
+    internal readonly TextBlock VisionAnswer;
 
     internal ComputerUseVisualPreview(Func<TimeSpan> now = null, Func<BitmapSource, Task<string>> recognize = null,
-            ComputerUseWindowCapture target = null) {
+            ComputerUseWindowCapture target = null, ComputerUseVisionLab vision = null) {
+        if (vision != null && target == null) throw new ArgumentException("The vision lab requires the separate test window.");
         this.now = now ?? (() => Clock.Elapsed);
         this.recognize = recognize ?? ReadTextAsync;
         this.target = target;
+        this.vision = vision;
         session = new ComputerUseSession(this.now);
         Title = "Тройка — визуальный осмотр";
         Width = 540;
@@ -56,7 +64,9 @@ internal sealed class ComputerUseVisualPreview : Window {
 
         var body = new StackPanel { Margin = new Thickness(24) };
         body.Children.Add(new TextBlock {
-            Text = target == null
+            Text = vision != null
+                ? "Проверьте снимок пробного окна. Затем можно передать один кадр тестовому серверу на этом ПК."
+                : target == null
                 ? "Windows распознаёт текст только в пробном поле. Снимок и текст остаются на компьютере и исчезают через 15 секунд."
                 : "Разрешите снимок отдельного окна «Пробное окно Тройки». Снимок и текст остаются на компьютере и исчезают через 15 секунд.",
             TextWrapping = TextWrapping.Wrap,
@@ -81,6 +91,7 @@ internal sealed class ComputerUseVisualPreview : Window {
             Refresh();
         });
         captureButton = AddButton(actions, "Сделать снимок", async () => await CaptureAsync());
+        if (vision != null) SendButton = AddButton(actions, "Передать один кадр", async () => await SendFrameAsync());
         StopButton = AddButton(actions, "Остановить (Esc)", Stop);
         body.Children.Add(actions);
         status = new TextBlock { TextWrapping = TextWrapping.Wrap };
@@ -95,6 +106,10 @@ internal sealed class ComputerUseVisualPreview : Window {
         body.Children.Add(Preview);
         Recognized = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) };
         body.Children.Add(Recognized);
+        if (vision != null) {
+            VisionAnswer = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) };
+            body.Children.Add(VisionAnswer);
+        }
         Content = body;
 
         timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
@@ -129,6 +144,7 @@ internal sealed class ComputerUseVisualPreview : Window {
     internal async Task CaptureAsync() {
         Refresh();
         if (!captureButton.IsEnabled) return;
+        if (VisionAnswer != null) VisionAnswer.Text = "";
         frameExpires = now().Add(TimeSpan.FromSeconds(ComputerUseExecutor.ObservationSeconds));
         Preview.Source = null;
         Recognized.Text = "";
@@ -156,6 +172,42 @@ internal sealed class ComputerUseVisualPreview : Window {
             capture = null;
             Refresh();
         }
+    }
+
+    internal async Task SendFrameAsync() {
+        Refresh();
+        if (SendButton == null || !SendButton.IsEnabled) return;
+        var frame = (BitmapSource)Preview.Source;
+        capture = new CancellationTokenSource();
+        Refresh();
+        try {
+            var encoded = await Task.Run(() => ComputerUseVisionLab.Encode(frame));
+            Refresh();
+            if (capture.IsCancellationRequested) return;
+            frameSent = true;
+            VisionAnswer.Text = "Передаю кадр.";
+            var answer = await vision.SendAsync(encoded, capture.Token);
+            Refresh();
+            if (!capture.IsCancellationRequested) VisionAnswer.Text = "Тестовый ответ: " + answer;
+        } catch (OperationCanceledException) {
+            ReportVisionFailure();
+        } catch (HttpRequestException) {
+            ReportVisionFailure();
+        } catch (IOException) {
+            ReportVisionFailure();
+        } catch (ArgumentException) {
+            ReportVisionFailure();
+        } catch (InvalidOperationException) {
+            ReportVisionFailure();
+        } finally {
+            capture.Dispose();
+            capture = null;
+            Refresh();
+        }
+    }
+
+    private void ReportVisionFailure() {
+        if (!capture.IsCancellationRequested) VisionAnswer.Text = "Не удалось получить ответ на кадр.";
     }
 
     private void ShowCaptureError() {
@@ -223,7 +275,10 @@ internal sealed class ComputerUseVisualPreview : Window {
             if (capture != null) capture.Cancel();
             Preview.Source = null;
             Recognized.Text = "";
+            if (VisionAnswer != null) VisionAnswer.Text = "";
         }
+        if (SendButton != null)
+            SendButton.IsEnabled = canPreview && capture == null && !frameSent && Preview.Source != null;
         Preview.Visibility = Preview.Source == null ? Visibility.Collapsed : Visibility.Visible;
         Recognized.Visibility = Recognized.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         if (!active) timer.Stop();

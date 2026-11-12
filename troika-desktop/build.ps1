@@ -69,7 +69,7 @@ if ($Test) {
     & (Join-Path $output 'ComputerUsePrototypeTests.exe')
     if ($LASTEXITCODE -ne 0) { throw 'Computer Use prototype tests failed.' }
     $externalEditor = Join-Path $output 'TroikaComputerUseEditor.exe'
-    $externalEditorSources = @('ComputerUseExternalEditor.cs','ComputerUseVisualPreview.cs','ComputerUseWindowCapture.cs') | ForEach-Object { Join-Path $root ('tests\' + $_) }
+    $externalEditorSources = @('ComputerUseExternalEditor.cs','ComputerUseVisualPreview.cs','ComputerUseWindowCapture.cs','ComputerUseVisionLab.cs') | ForEach-Object { Join-Path $root ('tests\' + $_) }
     $windowsMetadata = Join-Path $env:WINDIR 'System32\WinMetadata'
     $ocrReferences = @('Foundation','Globalization','Graphics','Media','Storage') | ForEach-Object {
         '/reference:' + (Join-Path $windowsMetadata "Windows.$_.winmd")
