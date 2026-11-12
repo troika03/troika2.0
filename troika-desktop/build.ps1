@@ -62,11 +62,17 @@ if ($Test) {
 }
 if ($Test) {
     $computerUseSources = @('Json.cs','ApiClient.cs','LocalStore.cs','OwnApi.cs','BrandAssets.cs','ComputerUseSession.cs','ComputerUseNativeDriver.cs','ComputerUseExecutor.cs','ComputerUseAgent.cs','ComputerUsePrototypeWindow.cs','ComputerUseConsentWindow.cs','ComputerUseWindowsRun.cs') | ForEach-Object { Join-Path $root ('src\' + $_) }
-    $computerUseSources += Join-Path $root 'tests\ComputerUsePrototypeTests.cs'
-    & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'ComputerUsePrototypeTests.exe')) $references $computerUseSources
+    $prototypeTests = Join-Path $root 'tests\ComputerUsePrototypeTests.cs'
+    & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'ComputerUsePrototypeTests.exe')) $references $computerUseSources $prototypeTests
     if ($LASTEXITCODE -ne 0) { throw 'Computer Use prototype test build failed.' }
     & (Join-Path $output 'ComputerUsePrototypeTests.exe')
     if ($LASTEXITCODE -ne 0) { throw 'Computer Use prototype tests failed.' }
+    $externalEditor = Join-Path $output 'TroikaComputerUseEditor.exe'
+    $externalEditorSource = Join-Path $root 'tests\ComputerUseExternalEditor.cs'
+    & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + $externalEditor) $references $computerUseSources $externalEditorSource
+    if ($LASTEXITCODE -ne 0) { throw 'External Computer Use editor build failed.' }
+    & $externalEditor --verify
+    if ($LASTEXITCODE -ne 0) { throw 'External Computer Use editor checks failed.' }
     & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'DesignReferenceTests.exe')) ('/reference:' + (Join-Path $output 'TroikaDesktop.exe')) $references (Join-Path $root 'tests\DesignReferenceTests.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Design reference test build failed.' }
     & (Join-Path $output 'DesignReferenceTests.exe')

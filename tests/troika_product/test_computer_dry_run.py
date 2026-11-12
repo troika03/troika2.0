@@ -356,15 +356,20 @@ async def test_hermes_selects_simulated_actions_without_receiving_the_observatio
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("target_mode", ["protocol", "legacy", "server_stop", "native"])
+@pytest.mark.parametrize("target_mode", ["protocol", "legacy", "server_stop", "native", "external"])
 async def test_windows_run_receives_only_device_confirmed_actions(hosted, monkeypatch, target_mode):
     from openai.types.chat import ChatCompletion
     from run_agent import AIAgent
     from troika_product.computer_agent import WINDOWS_TOOL
 
     executable = os.environ.get("TROIKA_WINDOWS_LAB_TEST_EXE", "")
-    if target_mode == "native" and (os.name != "nt" or not executable or not Path(executable).is_file()):
-        pytest.skip("requires the built Windows ComputerUsePrototypeTests.exe")
+    if target_mode in ("native", "external"):
+        if os.name != "nt" or not executable:
+            pytest.skip("requires the Windows Computer Use test build")
+        if target_mode == "external":
+            executable = str(Path(executable).with_name("TroikaComputerUseEditor.exe"))
+        if not Path(executable).is_file():
+            pytest.skip("requires the Windows Computer Use test executable")
     monkeypatch.setattr(hosted.adapter, "_create_agent", APIServerAdapter._create_agent.__get__(hosted.adapter))
     monkeypatch.setattr("gateway.run._resolve_runtime_agent_kwargs", lambda: {
         "api_key": "synthetic-test-key", "base_url": "https://openrouter.ai/api/v1",
@@ -437,9 +442,10 @@ async def test_windows_run_receives_only_device_confirmed_actions(hosted, monkey
     await windows(run.spare, "consent", 404, grant_id=grant_id, allow=True)
     await windows(run.pc, "consent", 400, grant_id=grant_id, allow=True, text_input="true")
     await windows(run.pc, "take", 409, grant_id=grant_id)
-    if target_mode == "native":
+    if target_mode in ("native", "external"):
+        option = "--verify-run" if target_mode == "external" else "--windows-run-endpoint"
         child = await asyncio.create_subprocess_exec(
-            executable, "--windows-run-endpoint", str(run.client.make_url("/")), run.run_id, grant_id, expected_text,
+            executable, option, str(run.client.make_url("/")), run.run_id, grant_id, expected_text,
             env={**os.environ, "TROIKA_COMPUTER_TEST_DEVICE_TOKEN": run.pc.token},
             creationflags=subprocess.CREATE_NO_WINDOW,
         )

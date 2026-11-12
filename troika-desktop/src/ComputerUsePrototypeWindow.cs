@@ -14,13 +14,14 @@ using System.Windows.Threading;
 
 namespace Troika.Desktop {
     internal sealed class ComputerUsePrototypeWindow : Window {
-        private readonly string targetId = "troika-scratchpad-" + Guid.NewGuid().ToString("N");
+        private readonly string targetId;
         private readonly DispatcherTimer timer;
         private readonly TextBlock status;
         private readonly TextBlock remaining;
         private readonly TextBox editor;
         private readonly ComputerUseAgent agent;
         private readonly ComputerUseWindowsRun windowsRun;
+        private readonly bool externalEditor;
         private bool closing, allowClose;
         private CancellationTokenSource running;
         internal readonly TextBox TaskInput;
@@ -33,12 +34,16 @@ namespace Troika.Desktop {
         internal ComputerUsePrototypeWindow() : this(new ComputerUseSession()) { }
 
         internal ComputerUsePrototypeWindow(ComputerUseSession session, ComputerUseAgent agent = null,
-                ComputerUseWindowsRun windowsRun = null) {
+                ComputerUseWindowsRun windowsRun = null, bool externalEditor = false) {
             Session = session;
             this.agent = agent;
             this.windowsRun = windowsRun;
+            this.externalEditor = externalEditor;
+            targetId = (externalEditor ? ComputerUseNativeDriver.ExternalWindowPrefix : ComputerUseNativeDriver.ScratchpadWindowPrefix)
+                + Guid.NewGuid().ToString("N");
             OutputFile = Path.Combine(Path.GetTempPath(), "TroikaComputerUse-" + Guid.NewGuid().ToString("N"), "preview.txt");
-            Title = windowsRun != null ? "Тройка — управление тестовым редактором"
+            Title = externalEditor ? "Тестовый редактор Тройки"
+                : windowsRun != null ? "Тройка — управление тестовым редактором"
                 : agent == null ? "Тройка — проба управления Windows" : "Тройка — тест управления с моделью";
             Width = 540;
             MinWidth = 380;
@@ -150,7 +155,7 @@ namespace Troika.Desktop {
             timer.Start();
             try {
                 var executor = new ComputerUseExecutor(Session, new WindowInteropHelper(this).Handle, targetId, OutputFile,
-                    isolated: agent != null || windowsRun != null);
+                    isolated: agent != null || windowsRun != null, externalEditor: externalEditor);
                 if (windowsRun != null) Execution = windowsRun.RunAsync(Session, executor, running.Token);
                 else Execution = agent == null ? executor.RunAsync() : agent.RunAsync(Session, executor, goal, running.Token);
                 await Execution;

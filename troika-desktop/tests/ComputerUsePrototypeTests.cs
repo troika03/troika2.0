@@ -49,8 +49,9 @@ static class ComputerUsePrototypeTests {
         Console.WriteLine("PASS consent, action order, replay rejection and exact expiry");
     }
 
-    private static async Task<ComputerUsePrototypeWindow> Open(ComputerUseAgent agent = null, ComputerUseWindowsRun run = null) {
-        var window = new ComputerUsePrototypeWindow(new ComputerUseSession(), agent, run) {
+    private static async Task<ComputerUsePrototypeWindow> Open(ComputerUseAgent agent = null, ComputerUseWindowsRun run = null,
+            bool externalEditor = false) {
+        var window = new ComputerUsePrototypeWindow(new ComputerUseSession(), agent, run, externalEditor) {
             ShowActivated = false, ShowInTaskbar = false,
             WindowStartupLocation = WindowStartupLocation.Manual, Left = -10000, Top = -10000,
         };
@@ -134,10 +135,27 @@ static class ComputerUsePrototypeTests {
         try {
             Assert(window.Session.Allow(), "Could not start the fixture grant.");
             var wrongWindow = new ComputerUseExecutor(window.Session, new WindowInteropHelper(window).Handle,
-                "troika-scratchpad-" + Guid.NewGuid().ToString("N"), window.OutputFile, isolated: true);
+                ComputerUseNativeDriver.ScratchpadWindowPrefix + Guid.NewGuid().ToString("N"), window.OutputFile, isolated: true);
             Assert(await Bounded(wrongWindow.RunAsync()) == ComputerUseState.Failed, "An unapproved window was accepted.");
             Assert(!File.Exists(window.OutputFile), "The wrong window produced a file.");
             Console.WriteLine("PASS cross-process worker rejects a wrong window identity");
+        } finally { Cleanup(window); }
+    }
+
+    private static async Task CheckExternalWorkerRejectsOtherImage() {
+        var window = await Open(externalEditor: true);
+        try {
+            var handle = new WindowInteropHelper(window).Handle;
+            string id = AutomationProperties.GetAutomationId(window);
+            var text = await Task.Run(() => ((ValuePattern)FindFixture(handle, id + "-editor")
+                .GetCurrentPattern(ValuePattern.Pattern)).Current.Value);
+            Assert(text == "", "The unrelated test process did not expose its editor fixture.");
+            Assert(window.Session.Allow(), "Could not arm the unrelated test process.");
+            var executor = new ComputerUseExecutor(window.Session, handle, id, window.OutputFile,
+                isolated: true, externalEditor: true);
+            Assert(await Bounded(executor.RunAsync()) == ComputerUseState.Failed && !File.Exists(window.OutputFile),
+                "The native worker accepted the external editor ID from another executable.");
+            Console.WriteLine("PASS the external UI Automation worker rejects a matching window ID in another executable");
         } finally { Cleanup(window); }
     }
 
@@ -447,6 +465,7 @@ static class ComputerUsePrototypeTests {
                 await CheckLateSaveAfterStop();
                 await CheckNoOverwrite();
                 await CheckWindowIdentity();
+                await CheckExternalWorkerRejectsOtherImage();
                 await CheckDistinctCommands();
                 var planner = new PlannerFixture();
                 using (var agent = new ComputerUseAgent("http://127.0.0.1:8765", LabToken, planner))

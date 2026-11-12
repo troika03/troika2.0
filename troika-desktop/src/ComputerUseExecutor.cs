@@ -33,9 +33,9 @@ namespace Troika.Desktop {
         private string writtenText;
 
         internal ComputerUseExecutor(ComputerUseSession session, IntPtr handle, string windowId, string output,
-                Func<TimeSpan> clock = null, bool isolated = false) {
+                Func<TimeSpan> clock = null, bool isolated = false, bool externalEditor = false) {
             this.session = session;
-            driver = new ComputerUseNativeDriver(handle, windowId, isolated);
+            driver = new ComputerUseNativeDriver(handle, windowId, isolated, externalEditor);
             this.output = output;
             this.clock = clock ?? (() => ObservationClock.Elapsed);
         }

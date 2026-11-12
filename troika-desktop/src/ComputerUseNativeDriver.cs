@@ -10,7 +10,10 @@ using System.Windows.Automation;
 namespace Troika.Desktop {
     internal sealed class ComputerUseNativeDriver {
         internal const string WorkerArgument = "--computer-use-native-worker";
-        private const string TargetPrefix = "troika-scratchpad-";
+        internal const string ScratchpadWindowPrefix = "troika-scratchpad-";
+        internal const string ExternalWindowPrefix = "troika-test-editor-";
+        private const string DesktopExecutable = "TroikaDesktop.exe";
+        private const string ExternalEditorExecutable = "TroikaComputerUseEditor.exe";
         private const int TimeoutMilliseconds = 5000;
         private const int MaxEncodedEditorLength = 2048;
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
@@ -19,12 +22,15 @@ namespace Troika.Desktop {
         private readonly int processId;
         private readonly string workerImage;
 
-        internal ComputerUseNativeDriver(IntPtr handle, string windowId, bool isolated) {
+        internal ComputerUseNativeDriver(IntPtr handle, string windowId, bool isolated, bool externalEditor = false) {
             this.handle = handle;
             this.windowId = windowId;
             using (var process = Process.GetCurrentProcess()) {
                 processId = process.Id;
-                if (isolated) workerImage = process.MainModule.FileName;
+                if (externalEditor)
+                    workerImage = Path.Combine(Path.GetDirectoryName(process.MainModule.FileName), DesktopExecutable);
+                else if (isolated)
+                    workerImage = process.MainModule.FileName;
             }
         }
 
@@ -101,13 +107,24 @@ namespace Troika.Desktop {
             Guid id;
             if (args.Length != 5 || !int.TryParse(args[1], NumberStyles.None, CultureInfo.InvariantCulture, out pid)
                     || pid <= 0 || !long.TryParse(args[2], NumberStyles.None, CultureInfo.InvariantCulture, out rawHandle)
-                    || rawHandle == 0 || !args[3].StartsWith(TargetPrefix, StringComparison.Ordinal)
-                    || !Guid.TryParseExact(args[3].Substring(TargetPrefix.Length), "N", out id))
+                    || rawHandle == 0)
+                return 2;
+            bool externalEditor = args[3].StartsWith(ExternalWindowPrefix, StringComparison.Ordinal);
+            string prefix = externalEditor ? ExternalWindowPrefix : ScratchpadWindowPrefix;
+            if (!args[3].StartsWith(prefix, StringComparison.Ordinal)
+                    || !Guid.TryParseExact(args[3].Substring(prefix.Length), "N", out id))
                 return 2;
             try {
                 using (var self = Process.GetCurrentProcess())
                 using (var target = Process.GetProcessById(pid)) {
-                    if (self.Id == pid || !String.Equals(self.MainModule.FileName, target.MainModule.FileName, StringComparison.OrdinalIgnoreCase))
+                    string worker = self.MainModule.FileName;
+                    string expectedTarget = worker;
+                    if (externalEditor) {
+                        if (!String.Equals(Path.GetFileName(worker), DesktopExecutable, StringComparison.OrdinalIgnoreCase))
+                            return 2;
+                        expectedTarget = Path.Combine(Path.GetDirectoryName(worker), ExternalEditorExecutable);
+                    }
+                    if (self.Id == pid || !String.Equals(expectedTarget, target.MainModule.FileName, StringComparison.OrdinalIgnoreCase))
                         return 2;
                     var driver = new ComputerUseNativeDriver(new IntPtr(rawHandle), args[3], pid);
                     if (args[4] == "editor") {
