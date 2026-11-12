@@ -85,6 +85,7 @@ async def test_vision_openrouter_mode_requires_a_key(tmp_path, monkeypatch):
 
 @pytest_asyncio.fixture
 async def hosted(tmp_path, monkeypatch, request):
+    monkeypatch.setattr("agent.model_metadata.fetch_model_metadata", lambda **_: {})
     openrouter = getattr(request, "param", False)
     if openrouter:
         monkeypatch.setenv("OPENROUTER_API_KEY", "synthetic-openrouter-key")
