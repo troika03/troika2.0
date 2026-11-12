@@ -64,7 +64,9 @@ internal sealed class ComputerUseVisualPreview : Window {
 
         var body = new StackPanel { Margin = new Thickness(24) };
         body.Children.Add(new TextBlock {
-            Text = vision != null
+            Text = vision != null && vision.RunLabel != null
+                ? "Тестовый запуск " + vision.RunLabel + ". Проверьте снимок пробного окна перед отправкой."
+                : vision != null
                 ? "Проверьте снимок пробного окна. Затем можно передать один кадр тестовому серверу на этом ПК."
                 : target == null
                 ? "Windows распознаёт текст только в пробном поле. Снимок и текст остаются на компьютере и исчезают через 15 секунд."
@@ -186,9 +188,10 @@ internal sealed class ComputerUseVisualPreview : Window {
             if (capture.IsCancellationRequested) return;
             frameSent = true;
             VisionAnswer.Text = "Передаю кадр.";
-            var answer = await vision.SendAsync(encoded, capture.Token);
+            var answer = await vision.SendAsync(encoded, (int)(frameExpires - now()).TotalMilliseconds, capture.Token);
             Refresh();
-            if (!capture.IsCancellationRequested) VisionAnswer.Text = "Тестовый ответ: " + answer;
+            if (!capture.IsCancellationRequested)
+                VisionAnswer.Text = vision.RunLabel == null ? "Тестовый ответ: " + answer : answer;
         } catch (OperationCanceledException) {
             ReportVisionFailure();
         } catch (HttpRequestException) {
@@ -259,9 +262,10 @@ internal sealed class ComputerUseVisualPreview : Window {
         }
     }
 
-    private void Stop() {
+    private async void Stop() {
         session.Stop();
         Refresh();
+        if (vision != null) await vision.StopAsync();
     }
 
     private void Refresh() {

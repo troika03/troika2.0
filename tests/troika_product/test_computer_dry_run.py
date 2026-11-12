@@ -1,6 +1,8 @@
 """Exercise the dry run through authenticated Run, Stop, and device routes."""
 
 import asyncio
+import base64
+import io
 import json
 import os
 from pathlib import Path
@@ -12,12 +14,15 @@ from uuid import uuid4
 
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
+from PIL import Image
 import pytest
 import pytest_asyncio
 
 from gateway.config import PlatformConfig
 from gateway.platforms.api_server import APIServerAdapter
-from troika_product.computer_api import register_computer_dry_run_routes, register_windows_computer_lab_routes
+from troika_product.computer_api import (
+    register_computer_dry_run_routes, register_windows_computer_lab_routes, register_windows_computer_vision_routes,
+)
 
 
 def adapter_for(tmp_path, **extra):
@@ -38,26 +43,32 @@ async def test_routes_require_explicit_opt_in_and_product_auth(tmp_path, options
     adapter = adapter_for(tmp_path, **options)
     register_computer_dry_run_routes(app, adapter)
     register_windows_computer_lab_routes(app, adapter)
+    register_windows_computer_vision_routes(app, adapter)
     async with TestClient(TestServer(app)) as client:
         response = await client.post("/v1/runs/example/computer-dry-run/request", json={"version": 1})
         assert response.status == 404
         assert (await client.get("/v1/computer-dry-run/requests")).status == 404
         assert (await client.get("/v1/computer-windows-lab/requests")).status == 404
+        assert (await client.get("/v1/computer-windows-vision/requests")).status == 404
 
 
 @pytest.mark.asyncio
 async def test_windows_lab_requires_loopback_bind(tmp_path):
     app = web.Application()
-    adapter = adapter_for(tmp_path, product_computer_windows_lab_enabled=True, host="0.0.0.0")
+    adapter = adapter_for(tmp_path, product_computer_windows_lab_enabled=True,
+                          product_computer_windows_vision_enabled=True, host="0.0.0.0")
     register_windows_computer_lab_routes(app, adapter)
+    register_windows_computer_vision_routes(app, adapter)
     async with TestClient(TestServer(app)) as client:
         assert (await client.get("/v1/computer-windows-lab/requests")).status == 404
+        assert (await client.get("/v1/computer-windows-vision/requests")).status == 404
 
 
 @pytest_asyncio.fixture
 async def hosted(tmp_path, monkeypatch):
     adapter = adapter_for(tmp_path, product_computer_dry_run_enabled=True,
-                          product_computer_windows_lab_enabled=True, host="127.0.0.1")
+                          product_computer_windows_lab_enabled=True, product_computer_windows_vision_enabled=True,
+                          host="127.0.0.1")
     registry = adapter._access_registry
     owner = registry.create_user("computer-owner@example.invalid")
     outsider = registry.create_user("computer-outsider@example.invalid")
@@ -90,6 +101,7 @@ async def hosted(tmp_path, monkeypatch):
     app.router.add_delete("/v1/account/devices/{device_id}", adapter._handle_revoke_account_device)
     register_computer_dry_run_routes(app, adapter)
     register_windows_computer_lab_routes(app, adapter)
+    register_windows_computer_vision_routes(app, adapter)
     now = [100.0]
     monkeypatch.setattr(adapter._computer_dry_run, "_clock", lambda: now[0])
     async with TestClient(TestServer(app)) as client:
@@ -117,6 +129,148 @@ async def operation(hosted, device, name, http_status=200, *, route="computer-dr
     if http_status != 401:
         assert response.headers["Cache-Control"] == "private, no-store"
     return body
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("native", [False, True], ids=["protocol", "native"])
+async def test_windows_vision_run_delivers_one_frame_to_hermes(hosted, monkeypatch, native):
+    from hermes_cli.plugins import PluginManager
+    from troika_product import computer_agent
+
+    executable = os.environ.get("TROIKA_WINDOWS_LAB_TEST_EXE", "")
+    if native:
+        if os.name != "nt" or not executable:
+            pytest.skip("requires Windows Graphics Capture test build")
+        executable = Path(executable).with_name("TroikaComputerUseEditor.exe")
+        if not executable.is_file() or not executable.with_name("TroikaWindowCapture.dll").is_file():
+            pytest.skip("requires Windows Graphics Capture test build")
+
+    monkeypatch.setattr(hosted.adapter, "_create_agent", APIServerAdapter._create_agent.__get__(hosted.adapter))
+    calls = []
+    observed_hooks = []
+    fixture_reply = computer_agent._fixture_vision_completion
+    plugin_hook = PluginManager.invoke_hook
+
+    def observe_hook(manager, name, **kwargs):
+        if name == "pre_api_request" and kwargs.get("model") == "fixture/window-vision":
+            observed_hooks.append(name)
+        return plugin_hook(manager, name, **kwargs)
+
+    monkeypatch.setattr(PluginManager, "invoke_hook", observe_hook)
+
+    def reply(payload):
+        agent = hosted.adapter._active_run_agents[run.run_id]
+        assert agent._dump_api_request_debug(payload, reason="vision_lab_privacy") is None
+        content = [m["content"] for m in payload["messages"] if m["role"] == "user"][-1]
+        assert content[0] == {"type": "text", "text": "Опиши пробное окно."}
+        assert not payload.get("tools")
+        data_url = content[1]["image_url"]["url"]
+        with Image.open(io.BytesIO(base64.b64decode(data_url.split(",", 1)[1], validate=True))) as image:
+            assert image.getpixel((image.width // 4, image.height // 4)) == (27, 67, 112)
+            assert image.info == {}
+        calls.append(data_url)
+        return fixture_reply(payload)
+
+    monkeypatch.setattr(computer_agent, "_fixture_vision_completion", reply)
+    denied = await hosted.client.post("/v1/runs", headers=hosted.phone.headers,
+                                     json={"input": "Опиши пробное окно.", "computer_windows_lab": True,
+                                           "computer_windows_vision": True})
+    assert denied.status == 400
+    start = await hosted.client.post("/v1/runs", headers=hosted.phone.headers,
+                                    json={"input": "Опиши пробное окно.", "computer_windows_vision": True})
+    assert start.status == 202, await start.text()
+    run = SimpleNamespace(**{**vars(hosted), "run_id": (await start.json())["run_id"]})
+    route = "computer-windows-vision"
+    grant = await operation(run, run.phone, "request", 201, route=route, target_device_id=run.pc.id, ttl_seconds=60)
+    grant_id = grant["grant_id"]
+    assert grant["mode"] == "windows_vision_lab" and grant["actions"] == ["inspect_frame"]
+    assert grant["action_limit"] == 1
+    await operation(run, run.phone, "request", 404, route="computer-windows-lab", target_device_id=run.pc.id,
+                    ttl_seconds=60)
+    url = f"/v1/runs/{run.run_id}/{route}/frame"
+    headers = {"Content-Type": "image/png", "X-Troika-Grant-Id": grant_id, "X-Troika-Frame-Remaining-Ms": "12000"}
+    with Image.new("RGB", (40, 20), (27, 67, 112)) as image, io.BytesIO() as buf:
+        image.save(buf, "PNG")
+        frame = buf.getvalue()
+    before = await run.client.post(url, headers={**run.pc.headers, **headers}, data=frame)
+    assert before.status == 409 and (await before.json())["error"]["code"] == "grant_pending"
+    assert not calls
+
+    child = None
+    try:
+        if native:
+            child = await asyncio.create_subprocess_exec(
+                str(executable), "--verify-run-vision", str(run.client.make_url("/")), run.run_id, grant_id,
+                env={**os.environ, "TROIKA_COMPUTER_TEST_DEVICE_TOKEN": run.pc.token},
+                creationflags=subprocess.CREATE_NO_WINDOW, stdin=asyncio.subprocess.PIPE,
+            )
+        else:
+            await operation(run, run.pc, "consent", route=route, grant_id=grant_id, allow=True)
+            for wrong in (run.phone, run.spare, run.other):
+                response = await run.client.post(url, headers={**wrong.headers, **headers}, data=frame)
+                assert response.status == 404
+            invalid = await run.client.post(url, headers={**run.pc.headers, **headers}, data=frame[:-25])
+            assert invalid.status == 400
+            accepted = await run.client.post(url, headers={**run.pc.headers, **headers}, data=frame)
+            assert accepted.status == 200
+            assert await accepted.json() == {"accepted": True, "mode": "windows_vision_lab", "version": 1}
+            repeated = await run.client.post(url, headers={**run.pc.headers, **headers}, data=frame)
+            assert repeated.status == 409
+        response = await run.client.get(f"/v1/runs/{run.run_id}/events", headers=run.phone.headers)
+        stream = await asyncio.wait_for(response.text(), 20)
+        assert len(calls) == 1, stream
+        assert not observed_hooks
+        events = [json.loads(line[6:]) for line in stream.splitlines() if line.startswith("data: ")]
+        assert events[-1]["event"] == "run.completed", stream
+        assert "получила один подтверждённый кадр" in events[-1]["output"]
+        assert run.adapter._computer_windows_vision._grants[run.run_id].frame is None
+        with sqlite3.connect(run.registry.database_path) as database:
+            dump = "\n".join(database.iterdump())
+        for private in (calls[0], "data:image/png", "Пробный кадр получен."):
+            assert private not in stream and private not in dump
+        if child is not None:
+            child.stdin.write(b"\x01")
+            await child.stdin.drain()
+            assert await asyncio.wait_for(child.wait(), 10) == 0
+    finally:
+        if child is not None and child.returncode is None:
+            child.stdin.close()
+            try:
+                await asyncio.wait_for(child.wait(), 5)
+            except asyncio.TimeoutError:
+                child.kill()
+                await child.wait()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("end", ["stop", "expire"])
+async def test_vision_run_rejects_frames_after_its_permission_ends(hosted, monkeypatch, end):
+    control = hosted.adapter._computer_windows_vision
+    monkeypatch.setattr(control, "_clock", lambda: hosted.now[0])
+    start = await hosted.client.post("/v1/runs", headers=hosted.phone.headers,
+                                     json={"input": "Опиши пробное окно.", "computer_windows_vision": True})
+    assert start.status == 202
+    run = SimpleNamespace(**{**vars(hosted), "run_id": (await start.json())["run_id"]})
+    route = "computer-windows-vision"
+    grant = await operation(run, run.phone, "request", 201, route=route, target_device_id=run.pc.id, ttl_seconds=5)
+    grant_id = grant["grant_id"]
+    await operation(run, run.pc, "consent", route=route, grant_id=grant_id, allow=True)
+    if end == "stop":
+        await operation(run, run.pc, "stop", route=route, grant_id=grant_id)
+    else:
+        hosted.now[0] += 5
+    response = await run.client.post(
+        f"/v1/runs/{run.run_id}/{route}/frame",
+        headers={**run.pc.headers, "Content-Type": "image/png", "X-Troika-Grant-Id": grant_id,
+                 "X-Troika-Frame-Remaining-Ms": "12000"},
+        data=b"frame payload never admitted",
+    )
+    assert response.status == 409
+    expected = "grant_stopped" if end == "stop" else "grant_expired"
+    assert (await response.json())["error"]["code"] == expected
+    assert control._grants[run.run_id].frame is None
+    stream = await run.client.get(f"/v1/runs/{run.run_id}/events", headers=run.phone.headers)
+    assert expected in await asyncio.wait_for(stream.text(), 5)
 
 
 async def request_grant(hosted, target, ttl=60):

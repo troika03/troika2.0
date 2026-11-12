@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import struct
 
 from troika_product.computer_control import ComputerControlError, ComputerDryRun
 
@@ -34,6 +35,43 @@ def register_windows_computer_lab_routes(app, adapter):
                      WindowsComputerLab, _GRANT_OPERATIONS | {"take", "report"}, mode=MODE)
 
 
+def register_windows_computer_vision_routes(app, adapter):
+    if (adapter._access_registry is None or not adapter._computer_windows_vision_enabled
+            or adapter._host != "127.0.0.1"):
+        return
+    from troika_product.computer_windows_vision import MODE, WindowsVisionLab
+
+    _register_routes(app, adapter, "_computer_windows_vision", "computer-windows-vision",
+                     WindowsVisionLab, _GRANT_OPERATIONS | {"frame"}, mode=MODE)
+
+
+async def _receive_frame(request, control, principal):
+    from troika_product.computer_control import MAX_OBSERVATION_SECONDS
+    from troika_product.computer_frames import MAX_FRAME_BYTES, clean_png
+
+    run_id = request.match_info["run_id"]
+    header = request.headers.get("X-Troika-Frame-Remaining-Ms", "")
+    if (request.content_type != "image/png" or "Content-Encoding" in request.headers
+            or not request.content_length or request.content_length > MAX_FRAME_BYTES
+            or not 1 <= len(header) <= 5 or not header.isascii() or not header.isdecimal()):
+        raise ComputerControlError("invalid_frame", 400)
+    remaining_ms = int(header)
+    if not 1 <= remaining_ms <= MAX_OBSERVATION_SECONDS * 1000:
+        raise ComputerControlError("invalid_frame", 400)
+    body = {"version": 1, "grant_id": request.headers.get("X-Troika-Grant-Id")}
+    now = control.execute(principal, run_id, "check_frame", body)
+    try:
+        try:
+            raw = await asyncio.wait_for(request.content.readexactly(request.content_length), timeout=remaining_ms / 1000)
+            frame = await asyncio.to_thread(clean_png, raw)
+        except (OSError, ValueError, SyntaxError, struct.error, asyncio.IncompleteReadError, asyncio.TimeoutError):
+            raise ComputerControlError("invalid_frame", 400) from None
+        return control.execute(principal, run_id, "frame", {**body, "frame": frame,
+                                                            "expires_at": now + remaining_ms / 1000})
+    finally:
+        control.release_upload(principal, run_id, body["grant_id"])
+
+
 def _register_routes(app, adapter, attribute, path, factory, operations, *, mode=None):
     from aiohttp import web
 
@@ -44,7 +82,7 @@ def _register_routes(app, adapter, attribute, path, factory, operations, *, mode
         # must belong to a Run that opted into that same native mode.
         if mode is not None and status.get("mode") != mode:
             return None
-        if mode is None and status.get("mode") == "windows_lab":
+        if mode is None and status.get("mode") in {"windows_lab", "windows_vision_lab"}:
             return None
         if (task is not None and not task.done() and "workflow" not in status
                 and status.get("status") in {"queued", "running", "waiting_for_approval"}):
@@ -83,6 +121,11 @@ def _register_routes(app, adapter, attribute, path, factory, operations, *, mode
         operation = request.match_info["operation"]
         if operation not in operations:
             return response({"error": {"code": "not_found"}}, 404)
+        if operation == "frame":
+            try:
+                return response(await _receive_frame(request, control, principal))
+            except ComputerControlError as exc:
+                return response({"error": {"code": exc.code}}, exc.status)
         try:
             try:
                 await request.content.readexactly(_MAX_BODY + 1)

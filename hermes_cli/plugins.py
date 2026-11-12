@@ -34,6 +34,8 @@ so plugin-defined tools appear alongside the built-in tools.
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
+from contextvars import ContextVar
 import importlib
 import importlib.metadata
 import importlib.util
@@ -1600,11 +1602,26 @@ def discover_plugins(force: bool = False) -> None:
     get_plugin_manager().discover_and_load(force=force)
 
 
+_hooks_suppressed = ContextVar("hermes_plugin_hooks_suppressed", default=False)
+
+
+@contextmanager
+def without_plugin_hooks():
+    """Keep private inputs from lifecycle observers during this operation."""
+    token = _hooks_suppressed.set(True)
+    try:
+        yield
+    finally:
+        _hooks_suppressed.reset(token)
+
+
 def invoke_hook(hook_name: str, **kwargs: Any) -> List[Any]:
     """Invoke a lifecycle hook on all loaded plugins.
 
     Returns a list of non-``None`` return values from plugin callbacks.
     """
+    if _hooks_suppressed.get():
+        return []
     return get_plugin_manager().invoke_hook(hook_name, **kwargs)
 
 

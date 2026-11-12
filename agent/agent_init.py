@@ -202,6 +202,7 @@ def init_agent(
     checkpoint_max_total_size_mb: int = 500,
     checkpoint_max_file_size_mb: int = 10,
     pass_session_id: bool = False,
+    config_override: Optional[Dict[str, Any]] = None,
 ):
     """
     Initialize the AI Agent.
@@ -217,6 +218,7 @@ def init_agent(
         enabled_toolsets (List[str]): Only enable tools from these toolsets (optional)
         disabled_toolsets (List[str]): Disable tools from these toolsets (optional)
         save_trajectories (bool): Whether to save conversation trajectories to JSONL files (default: False)
+        config_override (dict): Explicit agent configuration for an isolated instance, if supplied.
         verbose_logging (bool): Enable verbose logging for debugging (default: False)
         quiet_mode (bool): Suppress progress output for clean CLI experience (default: False)
         ephemeral_system_prompt (str): System prompt used during agent execution but NOT saved to trajectories (optional)
@@ -1036,11 +1038,14 @@ def init_agent(
     agent._todo_store = TodoStore()
     
     # Load config once for memory, skills, and compression sections
-    try:
-        from hermes_cli.config import load_config as _load_agent_config
-        _agent_cfg = _load_agent_config()
-    except Exception:
-        _agent_cfg = {}
+    if config_override is not None:
+        _agent_cfg = config_override
+    else:
+        try:
+            from hermes_cli.config import load_config as _load_agent_config
+            _agent_cfg = _load_agent_config()
+        except Exception:
+            _agent_cfg = {}
     try:
         agent._tool_guardrails = ToolCallGuardrailController(
             ToolCallGuardrailConfig.from_mapping(

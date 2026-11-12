@@ -22,12 +22,14 @@ static class ComputerUseExternalEditor {
             return ComputerUseWindowCapture.RunTarget(args[1], args.Length == 3);
         if (args.Length == 1 && args[0] == "--verify-window-capture") return Verify(null, null, windowCapture: true);
         if (args.Length == 1 && args[0] == "--window-preview") return RunWindowPreview();
-        if (args.Length == 2 && args[0] == "--vision-lab") return RunWindowPreview(args[1]);
-        if (args.Length == 2 && args[0] == "--verify-vision") return Verify(null, null, visionAddress: args[1]);
+        if ((args.Length == 2 && args[0] == "--vision-lab") || (args.Length == 4 && args[0] == "--run-vision"))
+            return RunWindowPreview(args);
+        if ((args.Length == 2 && args[0] == "--verify-vision") || (args.Length == 4 && args[0] == "--verify-run-vision"))
+            return Verify(null, null, visionArgs: args);
         bool interactive = args.Length == 4 && args[0] == "--run";
         bool verifyRun = args.Length == 5 && args[0] == "--verify-run";
         if (!interactive && !verifyRun) {
-            Console.Error.WriteLine("Usage: TroikaComputerUseEditor.exe --preview | --window-preview | --vision-lab <loopback-api> | --run <loopback-api> <run-id> <grant-id>");
+            Console.Error.WriteLine("Usage: TroikaComputerUseEditor.exe --preview | --window-preview | --vision-lab <loopback-api> | --run[-vision] <loopback-api> <run-id> <grant-id>");
             return 2;
         }
         try {
@@ -43,15 +45,17 @@ static class ComputerUseExternalEditor {
         }
     }
 
-    private static int RunWindowPreview(string visionAddress = null) {
+    private static int RunWindowPreview(string[] visionArgs = null) {
         if (!File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "TroikaWindowCapture.dll"))) {
             Console.Error.WriteLine("Build with -TestWindowCapture to enable Windows Graphics Capture.");
             return 2;
         }
         try {
-            using (var vision = visionAddress == null ? null : OpenVision(visionAddress))
-            using (var target = ComputerUseWindowCapture.OpenAsync().GetAwaiter().GetResult())
-                return new Application().Run(new ComputerUseVisualPreview(target: target, vision: vision));
+            using (var vision = visionArgs == null ? null : OpenVision(visionArgs))
+            using (var target = ComputerUseWindowCapture.OpenAsync().GetAwaiter().GetResult()) {
+                try { return new Application().Run(new ComputerUseVisualPreview(target: target, vision: vision)); }
+                finally { if (vision != null) vision.StopAsync().GetAwaiter().GetResult(); }
+            }
         } catch (InvalidOperationException error) {
             Console.Error.WriteLine(error.Message);
             return 2;
@@ -61,22 +65,25 @@ static class ComputerUseExternalEditor {
         }
     }
 
-    private static ComputerUseVisionLab OpenVision(string address) {
-        return new ComputerUseVisionLab(address, Environment.GetEnvironmentVariable("TROIKA_COMPUTER_LAB_TOKEN"));
+    private static ComputerUseVisionLab OpenVision(string[] args) {
+        if (args.Length == 4)
+            return new ComputerUseVisionLab(args[1], Environment.GetEnvironmentVariable("TROIKA_COMPUTER_TEST_DEVICE_TOKEN"),
+                args[2], args[3]);
+        return new ComputerUseVisionLab(args[1], Environment.GetEnvironmentVariable("TROIKA_COMPUTER_LAB_TOKEN"));
     }
 
     private static ComputerUsePrototypeWindow NewEditor(ComputerUseWindowsRun run) {
         return new ComputerUsePrototypeWindow(new ComputerUseSession(), windowsRun: run, externalEditor: true);
     }
 
-    private static int Verify(ComputerUseWindowsRun run, string expected, bool windowCapture = false, string visionAddress = null) {
+    private static int Verify(ComputerUseWindowsRun run, string expected, bool windowCapture = false, string[] visionArgs = null) {
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         app.Dispatcher.BeginInvoke(new Action(async () => {
             try {
-                if (visionAddress != null) await CheckVision(visionAddress);
+                if (visionArgs != null) await CheckVision(visionArgs);
                 else if (windowCapture) await CheckWindowCapture();
                 else await CheckSavedFile(run, expected);
-                if (run == null && !windowCapture && visionAddress == null) {
+                if (run == null && !windowCapture && visionArgs == null) {
                     await CheckValueGateAndStop();
                     await CheckPasswordField();
                     await CheckVisualPreview();
@@ -91,8 +98,8 @@ static class ComputerUseExternalEditor {
         return app.Run();
     }
 
-    private static async Task CheckVision(string address) {
-        using (var vision = OpenVision(address))
+    private static async Task CheckVision(string[] args) {
+        using (var vision = OpenVision(args))
         using (var target = await Bounded(ComputerUseWindowCapture.OpenAsync())) {
             var time = TimeSpan.Zero;
             var preview = new ComputerUseVisualPreview(now: () => time, target: target, vision: vision) {
@@ -116,10 +123,14 @@ static class ComputerUseExternalEditor {
                 Require(preview.Preview.Source == null && !preview.SendButton.IsEnabled, "An expired frame remained sendable.");
                 await Bounded(preview.CaptureAsync());
                 await Bounded(preview.SendFrameAsync());
-                Require(preview.VisionAnswer.Text == "Тестовый ответ: Пробный кадр получен.",
+                string expected = vision.RunLabel == null ? "Тестовый ответ: Пробный кадр получен." : "Кадр принят тестовым запуском.";
+                Require(preview.VisionAnswer.Text == expected,
                     "The native preview did not display the test model reply.");
                 Require(!preview.SendButton.IsEnabled, "The native preview allowed a second send.");
                 await Bounded(preview.SendFrameAsync());
+                if (vision.RunLabel != null)
+                    Require(await Bounded(Task.Run(() => Console.OpenStandardInput().ReadByte())) == 1,
+                        "The Run test did not confirm completion.");
                 Click(preview.StopButton);
                 Require(preview.Preview.Source == null && preview.VisionAnswer.Text == "", "Stop retained the model reply.");
                 Console.WriteLine("PASS the native preview sends only one reviewed window frame and shows the model reply");
