@@ -266,7 +266,7 @@ class WindowsAssistedAgentRun(_ReviewedWindowsFrameRun, WindowsEditorAgentRun):
             return _vision_completion("Файл проверен устройством.")
         try:
             remaining = self.control.action_time(self.principal, self.run_id)
-            reply = self.control.openrouter.editor_step(payload, remaining, WINDOWS_TOOL)
+            reply = self.control.openrouter.tool_step(payload, remaining, WINDOWS_TOOL)
             self.control.action_time(self.principal, self.run_id)
             return reply
         except ComputerControlError as exc:

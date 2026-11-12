@@ -15,7 +15,7 @@
 | Документы | Hosted DOCX/PDF/PPTX; локальные DOCX/PPTX; workspace text/HTML artifacts. | Импорт/редактирование существующих Office-файлов, XLSX, визуальное качество и E2E открытие/сохранение. |
 | Память и аккаунт | Owner-scoped CRUD, export/delete, device revoke, access/refresh tokens. | Recovery/email verification; production object/backup lifecycle. |
 | Одноразовый экран Android | MediaProjection, TTL/nonce, owner/device guard, Stop, frame cap; прежний Samsung E2E. | Beta build и оба server flags; opt-in external vision. Это не live vision. |
-| Windows | Локальные allowlist actions, Compact/Command Center, hotkey, approved screenshot. Тестовый OpenRouter Run осматривает отдельный редактор или пустой пробный документ в классическом Блокноте, вводит текст и проверяет сохранение. | Навигация и прокрутка в отдельном браузере, installed-client E2E и отдельный Companion для расширенного управления. |
+| Windows | Локальные allowlist actions, Compact/Command Center, hotkey, approved screenshot. Тестовый OpenRouter Run проверяет сохранение в редакторе или Блокноте. Локальная проба браузера проверяет открытие, прокрутку и возврат между окнами, в том числе с выбором действий через OpenRouter. | Браузер в Run и в локальном предпросмотре проекта, installed-client E2E и отдельный Companion для расширенного управления. |
 
 ## Неподключённые возможности
 

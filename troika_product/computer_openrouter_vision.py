@@ -45,12 +45,12 @@ class OpenRouterVision:
             raise ComputerControlError("openrouter_invalid_reply") from None
         return summary if len(summary) <= 600 else summary[:599].rstrip() + "…"
 
-    def editor_step(self, payload, remaining, tool_name):
+    def tool_step(self, payload, remaining, tool_name):
         from openai.types.chat import ChatCompletion
 
         tools = payload.get("tools", [])
         if [tool.get("function", {}).get("name") for tool in tools] != [tool_name]:
-            raise ComputerControlError("editor_tool_unavailable")
+            raise ComputerControlError("computer_tool_unavailable")
         reply = self._complete({"messages": payload["messages"], "tools": tools,
                                 "tool_choice": "auto", "parallel_tool_calls": False}, remaining)
         try:
@@ -71,7 +71,7 @@ class OpenRouterVision:
                     raise ValueError
                 normalized["tool_calls"] = [{"id": call["id"], "type": "function", "function": function}]
             return ChatCompletion.model_validate({
-                "id": "windows-assisted-step", "object": "chat.completion", "created": 0, "model": self.model,
+                "id": "computer-use-step", "object": "chat.completion", "created": 0, "model": self.model,
                 "choices": [{"index": 0, "finish_reason": reason, "message": normalized}],
             })
         except (ValueError, KeyError, IndexError, TypeError, AttributeError):

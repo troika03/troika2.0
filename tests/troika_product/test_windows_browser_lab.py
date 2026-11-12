@@ -1,0 +1,93 @@
+import json
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
+
+from scripts.troika_windows_browser_lab import BrowserLab, ORIGIN, _fixture_route, _run_model, _verified
+from troika_product.computer_control import ComputerControlError
+
+
+@pytest.mark.parametrize(("url", "method", "allowed"), [
+    (ORIGIN + "overview", "GET", True),
+    (ORIGIN + "details", "POST", False),
+    (ORIGIN + "overview?other=1", "GET", False),
+    ("https://troika-browser.test/overview", "GET", False),
+    ("http://127.0.0.1/overview", "GET", False),
+])
+def test_only_fixture_pages_receive_a_response(url, method, allowed):
+    route = Mock(request=SimpleNamespace(url=url, method=method))
+    _fixture_route(route)
+    assert route.fulfill.called is allowed
+    assert route.abort.called is not allowed
+
+
+def test_browser_rejects_external_or_unapproved_navigation_before_opening_windows():
+    browser = Mock()
+    lab = BrowserLab(browser)
+    approve = Mock(return_value=False)
+    external = {"action": "open", "page": "https://example.invalid"}
+    assert lab.step(external, approve) == {"error": "invalid_action"}
+    approve.assert_not_called()
+    assert lab.step({"action": "open", "page": "overview"}, approve) == {"error": "denied"}
+    browser.new_context.assert_not_called()
+    assert lab.step({"action": "inspect"}, approve)["view"] == {"page": None, "open_pages": []}
+
+
+@pytest.mark.parametrize(("url", "closed"), [(ORIGIN + "details", False), (ORIGIN + "overview", True)])
+def test_scroll_rejects_a_closed_or_replaced_page(url, closed):
+    lab = BrowserLab(Mock())
+    page = Mock(url=url)
+    page.is_closed.return_value = closed
+    lab.pages["overview"] = (page, 1)
+    lab.active = "overview"
+    with pytest.raises(ComputerControlError, match="browser_target_lost"):
+        lab.step({"action": "scroll", "direction": "down"}, lambda _: True)
+    page.mouse.wheel.assert_not_called()
+
+
+def model_call(command):
+    call = Mock(id="tool_call_1", function=SimpleNamespace(arguments=json.dumps(command)))
+    call.model_dump.return_value = {"id": call.id}
+    return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(tool_calls=[call]))])
+
+
+def test_model_stops_on_denial():
+    provider = Mock()
+    provider.tool_step.return_value = model_call({"action": "open", "page": "overview"})
+    browser = Mock()
+    receipts = _run_model(BrowserLab(browser), provider, "Открой обзор", lambda _: False, float("inf"))
+    assert receipts == [{"error": "denied"}]
+    provider.tool_step.assert_called_once()
+    browser.new_context.assert_not_called()
+
+
+def test_replayed_model_call_does_not_dispatch_twice():
+    provider = Mock()
+    provider.tool_step.return_value = model_call({"action": "inspect"})
+    lab = Mock()
+    lab.step.return_value = {"action": "inspect"}
+    with pytest.raises(ComputerControlError, match="browser_action_replayed"):
+        _run_model(lab, provider, "Осмотри обзор", lambda _: True, float("inf"))
+    lab.step.assert_called_once()
+
+
+def test_model_reply_after_deadline_cannot_dispatch(monkeypatch):
+    clock = iter((0.0, 2.0))
+    monkeypatch.setattr("scripts.troika_windows_browser_lab.time", SimpleNamespace(monotonic=lambda: next(clock)))
+    provider = Mock()
+    provider.tool_step.return_value = model_call({"action": "open", "page": "overview"})
+    lab = Mock()
+    with pytest.raises(ComputerControlError, match="grant_expired"):
+        _run_model(lab, provider, "Открой обзор", lambda _: True, 1.0)
+    lab.step.assert_not_called()
+
+
+def test_verification_requires_observed_scroll_to_survive_window_switch():
+    delivery = {"page": "overview", "y": 640, "headings": ["Доставка"]}
+    scroll = {"action": "scroll", "view": delivery}
+    other_window = {"action": "open", "view": {"page": "details"}}
+    returned = {"action": "switch", "view": delivery}
+    assert _verified([scroll, other_window, returned], delivery)
+    assert not _verified([other_window, scroll, returned], delivery)
+    assert not _verified([scroll, other_window, returned], {**delivery, "y": 660})
