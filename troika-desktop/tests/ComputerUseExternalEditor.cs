@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,10 +18,14 @@ static class ComputerUseExternalEditor {
     [STAThread] public static int Main(string[] args) {
         if (args.Length == 1 && args[0] == "--verify") return Verify(null, ComputerUseExecutor.Sample);
         if (args.Length == 1 && args[0] == "--preview") return new Application().Run(new ComputerUseVisualPreview());
+        if ((args.Length == 2 || (args.Length == 3 && args[2] == "protected")) && args[0] == "--window-target")
+            return ComputerUseWindowCapture.RunTarget(args[1], args.Length == 3);
+        if (args.Length == 1 && args[0] == "--verify-window-capture") return Verify(null, null, windowCapture: true);
+        if (args.Length == 1 && args[0] == "--window-preview") return RunWindowPreview();
         bool interactive = args.Length == 4 && args[0] == "--run";
         bool verifyRun = args.Length == 5 && args[0] == "--verify-run";
         if (!interactive && !verifyRun) {
-            Console.Error.WriteLine("Usage: TroikaComputerUseEditor.exe --preview | --run <loopback-api> <run-id> <grant-id>");
+            Console.Error.WriteLine("Usage: TroikaComputerUseEditor.exe --preview | --window-preview | --run <loopback-api> <run-id> <grant-id>");
             return 2;
         }
         try {
@@ -36,16 +41,31 @@ static class ComputerUseExternalEditor {
         }
     }
 
+    private static int RunWindowPreview() {
+        if (!File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "TroikaWindowCapture.dll"))) {
+            Console.Error.WriteLine("Build with -TestWindowCapture to enable Windows Graphics Capture.");
+            return 2;
+        }
+        try {
+            using (var target = ComputerUseWindowCapture.OpenAsync().GetAwaiter().GetResult())
+                return new Application().Run(new ComputerUseVisualPreview(target: target));
+        } catch (InvalidOperationException error) {
+            Console.Error.WriteLine(error.Message);
+            return 2;
+        }
+    }
+
     private static ComputerUsePrototypeWindow NewEditor(ComputerUseWindowsRun run) {
         return new ComputerUsePrototypeWindow(new ComputerUseSession(), windowsRun: run, externalEditor: true);
     }
 
-    private static int Verify(ComputerUseWindowsRun run, string expected) {
+    private static int Verify(ComputerUseWindowsRun run, string expected, bool windowCapture = false) {
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         app.Dispatcher.BeginInvoke(new Action(async () => {
             try {
-                await CheckSavedFile(run, expected);
-                if (run == null) {
+                if (windowCapture) await CheckWindowCapture();
+                else await CheckSavedFile(run, expected);
+                if (run == null && !windowCapture) {
                     await CheckValueGateAndStop();
                     await CheckPasswordField();
                     await CheckVisualPreview();
@@ -220,6 +240,76 @@ static class ComputerUseExternalEditor {
             Console.WriteLine("PASS local Stop discards an in-flight Windows OCR result");
         } finally { window.Close(); }
     }
+
+    private static async Task CheckWindowCapture() {
+        using (var target = await Bounded(ComputerUseWindowCapture.OpenAsync())) {
+            var outsideColor = Color.FromRgb(245, 31, 151);
+            var overlay = ComputerUseWindowCapture.NewTestWindow("Troika synthetic occluder", outsideColor);
+            overlay.Topmost = true;
+            var preview = new ComputerUseVisualPreview(target: target) {
+                ShowActivated = false,
+                ShowInTaskbar = false,
+                WindowStartupLocation = WindowStartupLocation.Manual,
+                Left = -10000,
+                Top = -10000
+            };
+            try {
+                preview.Show();
+                overlay.Show();
+                await preview.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                Require(CoversTarget(overlay, target.Handle), "The synthetic overlay did not cover the target window.");
+                await Bounded(preview.CaptureAsync());
+                Require(preview.Preview.Source == null, "A window was captured before consent.");
+                Click(preview.AllowButton);
+                await Bounded(preview.CaptureAsync());
+                var frame = preview.Preview.Source as BitmapSource;
+                Require(frame != null && frame.PixelWidth > 200 && frame.PixelHeight > 100,
+                    "Windows Graphics Capture did not return the expected window frame.");
+                var pixels = FramePixels(frame);
+                Require(ContainsColor(pixels, ComputerUseWindowCapture.TargetColor) && !ContainsColor(pixels, outsideColor),
+                    "The frame missed the target or included the occluding window.");
+                if (ComputerUseVisualPreview.RussianOcrAvailable)
+                    Require(preview.Recognized.Text.Contains("Пробная запись Тройки"), "OCR did not read the captured external window.");
+                ShowWindow(target.Handle, 0);
+                await Bounded(preview.CaptureAsync());
+                Require(preview.Preview.Source == null && preview.Recognized.Text == "",
+                    "Hiding the selected window retained its observation.");
+                ShowWindow(target.Handle, 4);
+                var pending = preview.CaptureAsync();
+                Require(!pending.IsCompleted, "No external window capture was pending before Stop.");
+                Click(preview.StopButton);
+                await Bounded(pending);
+                Require(preview.Preview.Source == null && preview.Recognized.Text == "", "A frame or OCR result survived Stop.");
+                Console.WriteLine("PASS Windows Graphics Capture reads only the selected process window behind an overlay");
+            } finally {
+                overlay.Close();
+                preview.Close();
+            }
+        }
+        using (var protectedTarget = await Bounded(ComputerUseWindowCapture.OpenAsync(protectedWindow: true))) {
+            Require(await Bounded(protectedTarget.CaptureAsync(CancellationToken.None)) == null,
+                "A window excluded from capture returned a frame.");
+            Console.WriteLine("PASS Windows Graphics Capture refuses a window excluded by display affinity");
+        }
+    }
+
+    private static bool CoversTarget(Window overlay, IntPtr target) {
+        Bounds bounds;
+        if (!GetWindowRect(target, out bounds)) return false;
+        var center = new ScreenPoint { X = (bounds.Left + bounds.Right) / 2, Y = (bounds.Top + bounds.Bottom) / 2 };
+        return WindowFromPoint(center) == new WindowInteropHelper(overlay).Handle;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Bounds { public int Left, Top, Right, Bottom; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ScreenPoint { public int X, Y; }
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr window, out Bounds bounds);
+    [DllImport("user32.dll")]
+    private static extern IntPtr WindowFromPoint(ScreenPoint point);
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr window, int command);
 
     private static byte[] FramePixels(BitmapSource frame) {
         Require(frame != null, "The preview frame was missing.");

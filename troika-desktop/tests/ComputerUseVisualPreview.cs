@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Automation;
@@ -16,8 +17,7 @@ using Windows.Graphics.Imaging;
 using Windows.Media.Ocr;
 using Windows.Storage.Streams;
 
-// This window runs only in the standalone test editor. Its frame stays on the
-// local dispatcher and contains the field's visual tree, not desktop pixels.
+// Both test sources keep their frame and OCR result in this local window.
 internal sealed class ComputerUseVisualPreview : Window {
     private const int MaxFrameWidth = 640;
     private const int MaxFrameHeight = 240;
@@ -25,9 +25,11 @@ internal sealed class ComputerUseVisualPreview : Window {
     private readonly Func<TimeSpan> now;
     private readonly Func<BitmapSource, Task<string>> recognize;
     private readonly ComputerUseSession session;
+    private readonly ComputerUseWindowCapture target;
     private readonly DispatcherTimer timer;
     private readonly TextBlock status;
-    private bool recognizing;
+    private CancellationTokenSource capture;
+    private bool captureFailed;
     private TimeSpan frameExpires;
     internal readonly Button AllowButton;
     private readonly Button captureButton;
@@ -36,9 +38,11 @@ internal sealed class ComputerUseVisualPreview : Window {
     internal readonly Image Preview;
     internal readonly TextBlock Recognized;
 
-    internal ComputerUseVisualPreview(Func<TimeSpan> now = null, Func<BitmapSource, Task<string>> recognize = null) {
+    internal ComputerUseVisualPreview(Func<TimeSpan> now = null, Func<BitmapSource, Task<string>> recognize = null,
+            ComputerUseWindowCapture target = null) {
         this.now = now ?? (() => Clock.Elapsed);
         this.recognize = recognize ?? ReadTextAsync;
+        this.target = target;
         session = new ComputerUseSession(this.now);
         Title = "Тройка — визуальный осмотр";
         Width = 540;
@@ -52,21 +56,25 @@ internal sealed class ComputerUseVisualPreview : Window {
 
         var body = new StackPanel { Margin = new Thickness(24) };
         body.Children.Add(new TextBlock {
-            Text = "Windows распознаёт текст только в пробном поле. Снимок и текст остаются на компьютере и исчезают через 15 секунд.",
+            Text = target == null
+                ? "Windows распознаёт текст только в пробном поле. Снимок и текст остаются на компьютере и исчезают через 15 секунд."
+                : "Разрешите снимок отдельного окна «Пробное окно Тройки». Снимок и текст остаются на компьютере и исчезают через 15 секунд.",
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 12)
         });
-        Editor = new TextBox {
-            Text = ComputerUseExecutor.Sample,
-            FontSize = 18,
-            IsReadOnly = true,
-            MinHeight = 64,
-            Padding = new Thickness(8),
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 0, 12)
-        };
-        AutomationProperties.SetName(Editor, "Пробное поле");
-        body.Children.Add(Editor);
+        if (target == null) {
+            Editor = new TextBox {
+                Text = ComputerUseExecutor.Sample,
+                FontSize = 18,
+                IsReadOnly = true,
+                MinHeight = 64,
+                Padding = new Thickness(8),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            AutomationProperties.SetName(Editor, "Пробное поле");
+            body.Children.Add(Editor);
+        }
         var actions = new WrapPanel();
         AllowButton = AddButton(actions, "Разрешить осмотр", () => {
             if (session.Allow()) timer.Start();
@@ -78,12 +86,12 @@ internal sealed class ComputerUseVisualPreview : Window {
         status = new TextBlock { TextWrapping = TextWrapping.Wrap };
         body.Children.Add(status);
         Preview = new Image {
-            Height = 88,
+            Height = target == null ? 88 : 156,
             Stretch = Stretch.Uniform,
             StretchDirection = StretchDirection.DownOnly,
             HorizontalAlignment = HorizontalAlignment.Left
         };
-        AutomationProperties.SetName(Preview, "Снимок пробного поля");
+        AutomationProperties.SetName(Preview, target == null ? "Снимок пробного поля" : "Снимок пробного окна");
         body.Children.Add(Preview);
         Recognized = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) };
         body.Children.Add(Recognized);
@@ -114,15 +122,52 @@ internal sealed class ComputerUseVisualPreview : Window {
         return button;
     }
 
-    private bool FieldVisible { get { return IsVisible && WindowState != WindowState.Minimized && Editor.IsVisible; } }
+    private bool SourceVisible {
+        get { return IsVisible && WindowState != WindowState.Minimized && (target == null ? Editor.IsVisible : target.Visible); }
+    }
 
     internal async Task CaptureAsync() {
         Refresh();
         if (!captureButton.IsEnabled) return;
+        frameExpires = now().Add(TimeSpan.FromSeconds(ComputerUseExecutor.ObservationSeconds));
+        Preview.Source = null;
+        Recognized.Text = "";
+        captureFailed = false;
+        capture = new CancellationTokenSource();
+        Refresh();
+        try {
+            var frame = target == null ? RenderField() : await target.CaptureAsync(capture.Token);
+            Refresh();
+            if (capture.IsCancellationRequested) return;
+            if (frame == null) { captureFailed = true; return; }
+            Preview.Source = frame;
+            Refresh();
+            string text = await recognize(frame);
+            Refresh();
+            if (capture.IsCancellationRequested) return;
+            Recognized.Text = text == null ? "Распознавание русского текста недоступно в Windows."
+                : string.IsNullOrWhiteSpace(text) ? "Текст не распознан." : "Распознанный текст: " + text;
+        } catch (COMException) {
+            ShowCaptureError();
+        } catch (InvalidOperationException) {
+            ShowCaptureError();
+        } finally {
+            capture.Dispose();
+            capture = null;
+            Refresh();
+        }
+    }
+
+    private void ShowCaptureError() {
+        if (capture.IsCancellationRequested) return;
+        if (Preview.Source == null) captureFailed = true;
+        else Recognized.Text = "Распознавание русского текста недоступно в Windows.";
+    }
+
+    private BitmapSource RenderField() {
         double width = Editor.ActualWidth;
         double height = Editor.ActualHeight;
-        if (width < 1 || height < 1) return;
-        var takenAt = now();
+        if (width < 1 || height < 1) return null;
         double scale = Math.Min(1, Math.Min(MaxFrameWidth / width, MaxFrameHeight / height));
         int pixelWidth = (int)Math.Ceiling(width * scale);
         int pixelHeight = (int)Math.Ceiling(height * scale);
@@ -131,25 +176,7 @@ internal sealed class ComputerUseVisualPreview : Window {
             drawing.DrawRectangle(new VisualBrush(Editor), null, new Rect(0, 0, pixelWidth, pixelHeight));
         var frame = new RenderTargetBitmap(pixelWidth, pixelHeight, 96, 96, PixelFormats.Pbgra32);
         frame.Render(visual);
-
-        frameExpires = takenAt.Add(TimeSpan.FromSeconds(ComputerUseExecutor.ObservationSeconds));
-        if (session.State != ComputerUseState.Active || !FieldVisible || now() >= frameExpires) return;
-        Preview.Source = frame;
-        Recognized.Text = "";
-        recognizing = true;
-        Refresh();
-        string text = null;
-        try { text = await recognize(frame); }
-        catch (COMException) { }
-        catch (InvalidOperationException) { }
-        finally {
-            recognizing = false;
-            Refresh();
-        }
-        if (Preview.Source != frame) return;
-        Recognized.Text = text == null ? "Распознавание русского текста недоступно в Windows."
-            : string.IsNullOrWhiteSpace(text) ? "Текст не распознан." : "Распознанный текст: " + text;
-        Refresh();
+        return frame;
     }
 
     internal static bool RussianOcrAvailable {
@@ -189,10 +216,11 @@ internal sealed class ComputerUseVisualPreview : Window {
         var state = session.State;
         bool active = state == ComputerUseState.Active;
         AllowButton.IsEnabled = state == ComputerUseState.Pending;
-        bool canPreview = active && FieldVisible;
-        captureButton.IsEnabled = canPreview && !recognizing;
+        bool canPreview = active && SourceVisible;
+        captureButton.IsEnabled = canPreview && capture == null;
         StopButton.IsEnabled = AllowButton.IsEnabled || active;
         if (!canPreview || now() >= frameExpires) {
+            if (capture != null) capture.Cancel();
             Preview.Source = null;
             Recognized.Text = "";
         }
@@ -201,7 +229,11 @@ internal sealed class ComputerUseVisualPreview : Window {
         if (!active) timer.Stop();
         switch (state) {
             case ComputerUseState.Pending: status.Text = "Ожидаю разрешения."; break;
-            case ComputerUseState.Active: status.Text = Preview.Source == null ? "Осмотр разрешён." : "Снимок готов."; break;
+            case ComputerUseState.Active:
+                status.Text = Preview.Source != null ? "Снимок готов."
+                    : !canPreview ? "Пробное окно недоступно."
+                    : captureFailed ? "Не удалось получить снимок." : "Осмотр разрешён.";
+                break;
             case ComputerUseState.Expired: status.Text = "Срок разрешения истёк."; break;
             case ComputerUseState.Stopped: status.Text = "Осмотр остановлен."; break;
         }

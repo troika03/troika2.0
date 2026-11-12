@@ -1,5 +1,6 @@
-param([switch]$Test, [string]$OutputDirectory)
+param([switch]$Test, [string]$OutputDirectory, [switch]$TestWindowCapture)
 $ErrorActionPreference = 'Stop'
+$Test = $Test -or $TestWindowCapture
 $root = $PSScriptRoot
 $framework = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319'
 $compiler = Join-Path $framework 'csc.exe'
@@ -68,7 +69,7 @@ if ($Test) {
     & (Join-Path $output 'ComputerUsePrototypeTests.exe')
     if ($LASTEXITCODE -ne 0) { throw 'Computer Use prototype tests failed.' }
     $externalEditor = Join-Path $output 'TroikaComputerUseEditor.exe'
-    $externalEditorSources = @('ComputerUseExternalEditor.cs','ComputerUseVisualPreview.cs') | ForEach-Object { Join-Path $root ('tests\' + $_) }
+    $externalEditorSources = @('ComputerUseExternalEditor.cs','ComputerUseVisualPreview.cs','ComputerUseWindowCapture.cs') | ForEach-Object { Join-Path $root ('tests\' + $_) }
     $windowsMetadata = Join-Path $env:WINDIR 'System32\WinMetadata'
     $ocrReferences = @('Foundation','Globalization','Graphics','Media','Storage') | ForEach-Object {
         '/reference:' + (Join-Path $windowsMetadata "Windows.$_.winmd")
@@ -78,6 +79,11 @@ if ($Test) {
     if ($LASTEXITCODE -ne 0) { throw 'External Computer Use editor build failed.' }
     & $externalEditor --verify
     if ($LASTEXITCODE -ne 0) { throw 'External Computer Use editor checks failed.' }
+    if ($TestWindowCapture) {
+        & (Join-Path $root 'tests\build-window-capture.ps1') -OutputDirectory $output
+        & $externalEditor --verify-window-capture
+        if ($LASTEXITCODE -ne 0) { throw 'Windows Graphics Capture checks failed.' }
+    }
     & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'DesignReferenceTests.exe')) ('/reference:' + (Join-Path $output 'TroikaDesktop.exe')) $references (Join-Path $root 'tests\DesignReferenceTests.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Design reference test build failed.' }
     & (Join-Path $output 'DesignReferenceTests.exe')
