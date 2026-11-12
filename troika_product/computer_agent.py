@@ -172,6 +172,9 @@ class WindowsVisionAgentRun(ComputerAgentRun):
     def __init__(self, control, principal, run_id):
         super().__init__(control, principal, run_id)
         self.received = False
+        self.dispatched = False
+        self.provider_error = None
+        self.description = None
 
     @contextmanager
     def bind(self):
@@ -194,33 +197,56 @@ class WindowsVisionAgentRun(ComputerAgentRun):
         return vision_input(text, frame)
 
     def model_reply(self, payload, **_):
-        if self.received or not self.control.model_frame(self.principal, self.run_id, dispatched=True):
+        remaining = self.control.model_frame(self.principal, self.run_id, dispatched=True)
+        if self.dispatched or not remaining:
             raise ComputerControlError("frame_unavailable")
-        reply = _fixture_vision_completion(payload)
+        self.dispatched = True
+        if self.control.openrouter is None:
+            reply = _fixture_vision_completion(payload)
+        else:
+            content = _vision_user_content(payload)
+            try:
+                self.description = self.control.openrouter.describe(self.instruction, content, remaining)
+            except ComputerControlError as exc:
+                self.provider_error = exc.code
+                # Stop the conversation loop. The Run publishes a failure below.
+                return _vision_completion("Описание кадра не получено.")
+            reply = _vision_completion(self.description)
         self.control.model_frame(self.principal, self.run_id, dispatched=True)
         self.received = True
         return reply
 
     def final_response(self):
+        if self.provider_error:
+            raise ComputerControlError(self.provider_error)
         if self.received:
             self.control.model_frame(self.principal, self.run_id, dispatched=True)
-            return "Тестовая модель получила один подтверждённый кадр Windows."
+            return self.description or "Тестовая модель получила один подтверждённый кадр Windows."
         return "Модель не подтвердила получение кадра."
 
 
-def _fixture_vision_completion(payload):
-    from openai.types.chat import ChatCompletion
-
+def _vision_user_content(payload):
     user = [message["content"] for message in payload["messages"] if message["role"] == "user"]
     if (payload.get("tools") or len(user) != 1 or not isinstance(user[0], list)
             or [part.get("type") for part in user[0]] != ["text", "image_url"]
             or not user[0][1]["image_url"]["url"].startswith("data:image/png;base64,")):
         raise ComputerControlError("invalid_model_frame")
+    return user[0]
+
+
+def _fixture_vision_completion(payload):
+    _vision_user_content(payload)
+    return _vision_completion("Пробный кадр получен.")
+
+
+def _vision_completion(text):
+    from openai.types.chat import ChatCompletion
+
     return ChatCompletion.model_validate({
         "id": "fixture-windows-vision", "object": "chat.completion", "created": 0,
         "model": "fixture/window-vision", "choices": [{
             "index": 0, "finish_reason": "stop",
-            "message": {"role": "assistant", "content": "Пробный кадр получен."},
+            "message": {"role": "assistant", "content": text},
         }],
     })
 

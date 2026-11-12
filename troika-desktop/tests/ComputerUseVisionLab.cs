@@ -20,6 +20,7 @@ internal sealed class ComputerUseVisionLab : IDisposable {
     private readonly string grantId;
     private int sent;
     internal readonly string RunLabel;
+    internal string Provider { get; private set; }
 
     internal ComputerUseVisionLab(string address, string token, string runId = null, string grantId = null) {
         var origin = ComputerUseAgent.LoopbackOrigin(address);
@@ -51,6 +52,16 @@ internal sealed class ComputerUseVisionLab : IDisposable {
         }
     }
 
+    internal async Task PrepareAsync() {
+        if (runEndpoint == null) return;
+        var review = await GrantAsync("review", new { version = 1, grant_id = grantId }, CancellationToken.None)
+            .ConfigureAwait(false);
+        var provider = Json.Text(review, "vision_provider");
+        if (Json.Text(review, "status") != "pending" || (provider != "openrouter" && provider != "fixture"))
+            throw new InvalidOperationException("Разрешение на отправку кадра недоступно.");
+        Provider = provider;
+    }
+
     internal async Task<string> SendAsync(byte[] frame, int remainingMs, CancellationToken cancellation) {
         cancellation.ThrowIfCancellationRequested();
         if (frame.Length == 0 || frame.Length > MaxFrameBytes || remainingMs <= 0
@@ -58,8 +69,11 @@ internal sealed class ComputerUseVisionLab : IDisposable {
             throw new InvalidOperationException();
         var started = Stopwatch.StartNew();
         if (runEndpoint != null) {
-            var consent = await GrantAsync("consent", new { version = 1, grant_id = grantId, allow = true }, cancellation);
-            if (Json.Text(consent, "status") != "active") throw new InvalidDataException();
+            if (Provider == null) throw new InvalidOperationException();
+            var consent = await GrantAsync("consent",
+                new { version = 1, grant_id = grantId, allow = true, vision_provider = Provider }, cancellation);
+            if (Json.Text(consent, "status") != "active" || Json.Text(consent, "vision_provider") != Provider)
+                throw new InvalidDataException();
             remainingMs = Math.Min(remainingMs - (int)started.ElapsedMilliseconds,
                 (int)(Json.Number(consent, "expires_in_seconds") * 1000));
             if (remainingMs <= 0) throw new InvalidOperationException();

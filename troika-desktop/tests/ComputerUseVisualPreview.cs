@@ -64,7 +64,9 @@ internal sealed class ComputerUseVisualPreview : Window {
 
         var body = new StackPanel { Margin = new Thickness(24) };
         body.Children.Add(new TextBlock {
-            Text = vision != null && vision.RunLabel != null
+            Text = vision != null && vision.Provider == "openrouter"
+                ? "Запуск " + vision.RunLabel + ". Проверьте снимок. При подтверждении кадр и текст запроса отправятся в OpenRouter."
+                : vision != null && vision.RunLabel != null
                 ? "Тестовый запуск " + vision.RunLabel + ". Проверьте снимок пробного окна перед отправкой."
                 : vision != null
                 ? "Проверьте снимок пробного окна. Затем можно передать один кадр тестовому серверу на этом ПК."
@@ -93,7 +95,10 @@ internal sealed class ComputerUseVisualPreview : Window {
             Refresh();
         });
         captureButton = AddButton(actions, "Сделать снимок", async () => await CaptureAsync());
-        if (vision != null) SendButton = AddButton(actions, "Передать один кадр", async () => await SendFrameAsync());
+        if (vision != null) {
+            var sendLabel = vision.Provider == "openrouter" ? "Передать кадр в OpenRouter" : "Передать один кадр";
+            SendButton = AddButton(actions, sendLabel, async () => await SendFrameAsync());
+        }
         StopButton = AddButton(actions, "Остановить (Esc)", Stop);
         body.Children.Add(actions);
         status = new TextBlock { TextWrapping = TextWrapping.Wrap };
@@ -160,6 +165,7 @@ internal sealed class ComputerUseVisualPreview : Window {
             if (frame == null) { captureFailed = true; return; }
             Preview.Source = frame;
             Refresh();
+            if (vision != null && vision.Provider == "openrouter") return;
             string text = await recognize(frame);
             Refresh();
             if (capture.IsCancellationRequested) return;

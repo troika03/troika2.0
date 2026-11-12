@@ -1,6 +1,7 @@
 """Authenticated HTTP routes for the opt-in Computer Use pilots."""
 
 import asyncio
+from functools import partial
 import json
 import struct
 
@@ -41,8 +42,22 @@ def register_windows_computer_vision_routes(app, adapter):
         return
     from troika_product.computer_windows_vision import MODE, WindowsVisionLab
 
+    adapter._computer_windows_vision_config_error = False
+    openrouter = None
+    if adapter._computer_windows_vision_fixture and adapter._computer_windows_vision_model is not None:
+        adapter._computer_windows_vision_config_error = True
+        return
+    if not adapter._computer_windows_vision_fixture:
+        from hermes_cli.config import get_env_value
+        from troika_product.computer_openrouter_vision import OpenRouterVision
+
+        try:
+            openrouter = OpenRouterVision(adapter._computer_windows_vision_model, get_env_value("OPENROUTER_API_KEY"))
+        except ValueError:
+            adapter._computer_windows_vision_config_error = True
+            return
     _register_routes(app, adapter, "_computer_windows_vision", "computer-windows-vision",
-                     WindowsVisionLab, _GRANT_OPERATIONS | {"frame"}, mode=MODE)
+                     partial(WindowsVisionLab, openrouter=openrouter), _GRANT_OPERATIONS | {"frame"}, mode=MODE)
 
 
 async def _receive_frame(request, control, principal):

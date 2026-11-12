@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
+import httpx
 from PIL import Image
 import pytest
 import pytest_asyncio
@@ -64,10 +65,27 @@ async def test_windows_lab_requires_loopback_bind(tmp_path):
         assert (await client.get("/v1/computer-windows-vision/requests")).status == 404
 
 
+@pytest.mark.asyncio
+async def test_vision_openrouter_mode_requires_a_key(tmp_path, monkeypatch):
+    monkeypatch.setattr("hermes_cli.config.get_env_value", lambda _: None)
+    app = web.Application()
+    adapter = adapter_for(tmp_path, product_computer_windows_vision_enabled=True,
+                          product_computer_windows_vision_model="fixture/vision:free", host="127.0.0.1")
+    register_windows_computer_vision_routes(app, adapter)
+    assert adapter._computer_windows_vision_config_error
+    async with TestClient(TestServer(app)) as client:
+        assert (await client.get("/v1/computer-windows-vision/requests")).status == 404
+
+
 @pytest_asyncio.fixture
-async def hosted(tmp_path, monkeypatch):
+async def hosted(tmp_path, monkeypatch, request):
+    openrouter = getattr(request, "param", False)
+    if openrouter:
+        monkeypatch.setenv("OPENROUTER_API_KEY", "synthetic-openrouter-key")
     adapter = adapter_for(tmp_path, product_computer_dry_run_enabled=True,
                           product_computer_windows_lab_enabled=True, product_computer_windows_vision_enabled=True,
+                          product_computer_windows_vision_fixture=not openrouter,
+                          product_computer_windows_vision_model="fixture/vision:free" if openrouter else None,
                           host="127.0.0.1")
     registry = adapter._access_registry
     owner = registry.create_user("computer-owner@example.invalid")
@@ -132,11 +150,16 @@ async def operation(hosted, device, name, http_status=200, *, route="computer-dr
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("native", [False, True], ids=["protocol", "native"])
-async def test_windows_vision_run_delivers_one_frame_to_hermes(hosted, monkeypatch, native):
+@pytest.mark.parametrize(("hosted", "target"), [
+    (False, "protocol"), (False, "native"), (True, "protocol"), (True, "native"), (True, "rate_limit"),
+], ids=["fixture-protocol", "fixture-native", "openrouter-protocol", "openrouter-native", "openrouter-rate-limit"],
+    indirect=["hosted"])
+async def test_windows_vision_run_delivers_one_frame_to_hermes(hosted, monkeypatch, target):
     from hermes_cli.plugins import PluginManager
     from troika_product import computer_agent
+    from troika_product.computer_openrouter_vision import OpenRouterVision
 
+    native = target == "native"
     executable = os.environ.get("TROIKA_WINDOWS_LAB_TEST_EXE", "")
     if native:
         if os.name != "nt" or not executable:
@@ -148,6 +171,8 @@ async def test_windows_vision_run_delivers_one_frame_to_hermes(hosted, monkeypat
     monkeypatch.setattr(hosted.adapter, "_create_agent", APIServerAdapter._create_agent.__get__(hosted.adapter))
     calls = []
     observed_hooks = []
+    provider = hosted.adapter._computer_windows_vision.openrouter
+    description = "В пробном окне синяя область и белый текст."
     fixture_reply = computer_agent._fixture_vision_completion
     plugin_hook = PluginManager.invoke_hook
 
@@ -158,7 +183,7 @@ async def test_windows_vision_run_delivers_one_frame_to_hermes(hosted, monkeypat
 
     monkeypatch.setattr(PluginManager, "invoke_hook", observe_hook)
 
-    def reply(payload):
+    def observe(payload):
         agent = hosted.adapter._active_run_agents[run.run_id]
         assert agent._dump_api_request_debug(payload, reason="vision_lab_privacy") is None
         content = [m["content"] for m in payload["messages"] if m["role"] == "user"][-1]
@@ -169,9 +194,28 @@ async def test_windows_vision_run_delivers_one_frame_to_hermes(hosted, monkeypat
             assert image.getpixel((image.width // 4, image.height // 4)) == (27, 67, 112)
             assert image.info == {}
         calls.append(data_url)
+
+    def reply(payload):
+        assert provider is None
+        observe(payload)
         return fixture_reply(payload)
 
+    def openrouter_reply(request):
+        assert request.url == "https://openrouter.ai/api/v1/chat/completions"
+        assert request.headers["Authorization"] == "Bearer synthetic-openrouter-key"
+        payload = json.loads(request.content)
+        assert payload["model"] == "fixture/vision:free" and payload["stream"] is False
+        assert payload["provider"] == {"allow_fallbacks": False, "data_collection": "deny", "zdr": True}
+        assert len(payload["messages"]) == 2
+        observe(payload)
+        if target == "rate_limit":
+            return httpx.Response(429, json={"error": {"message": "private provider error sentinel"}})
+        return httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {"content": description}}]})
+
     monkeypatch.setattr(computer_agent, "_fixture_vision_completion", reply)
+    monkeypatch.setattr(OpenRouterVision, "_client", staticmethod(
+        lambda timeout: httpx.Client(timeout=timeout, transport=httpx.MockTransport(openrouter_reply))
+    ))
     denied = await hosted.client.post("/v1/runs", headers=hosted.phone.headers,
                                      json={"input": "Опиши пробное окно.", "computer_windows_lab": True,
                                            "computer_windows_vision": True})
@@ -185,6 +229,10 @@ async def test_windows_vision_run_delivers_one_frame_to_hermes(hosted, monkeypat
     grant_id = grant["grant_id"]
     assert grant["mode"] == "windows_vision_lab" and grant["actions"] == ["inspect_frame"]
     assert grant["action_limit"] == 1
+    assert grant["vision_provider"] == ("openrouter" if provider is not None else "fixture")
+    if provider is not None:
+        consent = await operation(run, run.pc, "consent", 400, route=route, grant_id=grant_id, allow=True)
+        assert consent["error"]["code"] == "vision_provider_consent_required"
     await operation(run, run.phone, "request", 404, route="computer-windows-lab", target_device_id=run.pc.id,
                     ttl_seconds=60)
     url = f"/v1/runs/{run.run_id}/{route}/frame"
@@ -205,7 +253,8 @@ async def test_windows_vision_run_delivers_one_frame_to_hermes(hosted, monkeypat
                 creationflags=subprocess.CREATE_NO_WINDOW, stdin=asyncio.subprocess.PIPE,
             )
         else:
-            await operation(run, run.pc, "consent", route=route, grant_id=grant_id, allow=True)
+            await operation(run, run.pc, "consent", route=route, grant_id=grant_id, allow=True,
+                            vision_provider=grant["vision_provider"])
             for wrong in (run.phone, run.spare, run.other):
                 response = await run.client.post(url, headers={**wrong.headers, **headers}, data=frame)
                 assert response.status == 404
@@ -221,8 +270,13 @@ async def test_windows_vision_run_delivers_one_frame_to_hermes(hosted, monkeypat
         assert len(calls) == 1, stream
         assert not observed_hooks
         events = [json.loads(line[6:]) for line in stream.splitlines() if line.startswith("data: ")]
-        assert events[-1]["event"] == "run.completed", stream
-        assert "получила один подтверждённый кадр" in events[-1]["output"]
+        if target == "rate_limit":
+            assert events[-1]["event"] == "run.failed" and events[-1]["error_code"] == "openrouter_rate_limited", stream
+            assert "private provider error sentinel" not in stream
+        else:
+            assert events[-1]["event"] == "run.completed", stream
+            expected = description if provider is not None else "Тестовая модель получила один подтверждённый кадр Windows."
+            assert events[-1]["output"] == expected
         assert run.adapter._computer_windows_vision._grants[run.run_id].frame is None
         with sqlite3.connect(run.registry.database_path) as database:
             dump = "\n".join(database.iterdump())

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -51,11 +52,22 @@ static class ComputerUseExternalEditor {
             return 2;
         }
         try {
-            using (var vision = visionArgs == null ? null : OpenVision(visionArgs))
-            using (var target = ComputerUseWindowCapture.OpenAsync().GetAwaiter().GetResult()) {
-                try { return new Application().Run(new ComputerUseVisualPreview(target: target, vision: vision)); }
-                finally { if (vision != null) vision.StopAsync().GetAwaiter().GetResult(); }
+            using (var vision = visionArgs == null ? null : OpenVision(visionArgs)) {
+                if (vision != null) vision.PrepareAsync().GetAwaiter().GetResult();
+                using (var target = ComputerUseWindowCapture.OpenAsync().GetAwaiter().GetResult()) {
+                    try { return new Application().Run(new ComputerUseVisualPreview(target: target, vision: vision)); }
+                    finally { if (vision != null) vision.StopAsync().GetAwaiter().GetResult(); }
+                }
             }
+        } catch (HttpRequestException) {
+            Console.Error.WriteLine("Не удалось получить разрешение от тестового сервера.");
+            return 2;
+        } catch (OperationCanceledException) {
+            Console.Error.WriteLine("Тестовый сервер не ответил.");
+            return 2;
+        } catch (IOException) {
+            Console.Error.WriteLine("Тестовый сервер вернул неверный ответ.");
+            return 2;
         } catch (InvalidOperationException error) {
             Console.Error.WriteLine(error.Message);
             return 2;
@@ -101,6 +113,7 @@ static class ComputerUseExternalEditor {
     private static async Task CheckVision(string[] args) {
         using (var vision = OpenVision(args))
         using (var target = await Bounded(ComputerUseWindowCapture.OpenAsync())) {
+            await Bounded(vision.PrepareAsync());
             var time = TimeSpan.Zero;
             var preview = new ComputerUseVisualPreview(now: () => time, target: target, vision: vision) {
                 ShowActivated = false,
@@ -113,11 +126,16 @@ static class ComputerUseExternalEditor {
                 preview.Show();
                 await preview.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
                 Require(!preview.SendButton.IsEnabled, "The frame could be sent before consent.");
+                if (vision.Provider == "openrouter")
+                    Require((string)preview.SendButton.Content == "Передать кадр в OpenRouter",
+                        "The preview did not name the external destination.");
                 await Bounded(preview.SendFrameAsync());
                 Click(preview.AllowButton);
                 Require(!preview.SendButton.IsEnabled, "The frame could be sent before review.");
                 await Bounded(preview.CaptureAsync());
                 Require(preview.SendButton.IsEnabled, "The preview did not offer the frame for review.");
+                if (vision.Provider == "openrouter")
+                    Require(preview.Recognized.Text == "", "The OpenRouter preview performed local recognition.");
                 time = TimeSpan.FromSeconds(15);
                 await Bounded(preview.SendFrameAsync());
                 Require(preview.Preview.Source == null && !preview.SendButton.IsEnabled, "An expired frame remained sendable.");

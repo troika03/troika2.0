@@ -1,6 +1,7 @@
 """One reviewed frame from a selected Windows device, scoped to a test Run."""
 
 from dataclasses import dataclass, field
+from functools import partial
 
 from troika_product.computer_control import (
     ComputerControlError, ComputerGrantControl, MAX_OBSERVATION_SECONDS, VERSION, _Grant, _fields,
@@ -14,13 +15,14 @@ MODE = "windows_vision_lab"
 class _VisionGrant(_Grant):
     mode = MODE
     allowed_actions = ("inspect_frame",)
+    vision_provider: str = "fixture"
     submitted: bool = False
     receiving: bool = False
     frame: bytes | None = field(default=None, repr=False)
     frame_expires_at: float = 0
 
     def summary(self, now):
-        return {**super().summary(now), "action_limit": 1}
+        return {**super().summary(now), "action_limit": 1, "vision_provider": self.vision_provider}
 
     def close(self, status):
         super().close(status)
@@ -29,9 +31,21 @@ class _VisionGrant(_Grant):
 
 
 class WindowsVisionLab(ComputerGrantControl):
-    grant_type = _VisionGrant
     platforms = frozenset({"windows"})
     allow_regrant = False
+
+    def __init__(self, registry, run_owner, *, openrouter=None):
+        super().__init__(registry, run_owner)
+        self.openrouter = openrouter
+        self.grant_type = partial(_VisionGrant, vision_provider="openrouter" if openrouter is not None else "fixture")
+
+    @staticmethod
+    def _consent(principal, grant, body, now):
+        options = dict(body)
+        provider = options.pop("vision_provider", "fixture")
+        if provider != grant.vision_provider:
+            raise ComputerControlError("vision_provider_consent_required", 400)
+        return ComputerGrantControl._consent(principal, grant, options, now)
 
     def _operate(self, grant, operation, body, now, *, requester, target):
         if not target or operation not in {"check_frame", "frame"}:
@@ -77,7 +91,7 @@ class WindowsVisionLab(ComputerGrantControl):
                 grant.close("expired")
                 raise ComputerControlError("frame_expired")
             if dispatched:
-                return True
+                return grant.frame_expires_at - now
             frame = grant.frame
             if take:
                 grant.frame = None

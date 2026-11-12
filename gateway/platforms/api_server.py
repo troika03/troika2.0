@@ -1122,6 +1122,9 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         self._computer_windows_lab_enabled = extra.get("product_computer_windows_lab_enabled") is True
         self._computer_windows_lab = None
         self._computer_windows_vision_enabled = extra.get("product_computer_windows_vision_enabled") is True
+        self._computer_windows_vision_fixture = extra.get("product_computer_windows_vision_fixture") is True
+        self._computer_windows_vision_model = extra.get("product_computer_windows_vision_model")
+        self._computer_windows_vision_config_error = False
         self._computer_windows_vision = None
         # Active approval session key for each run_id.  The approval core
         # resolves requests by session key, while API clients address the
@@ -6016,6 +6019,12 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             )
         if windows_lab or windows_vision:
             computer_control = self._computer_windows_vision if windows_vision else self._computer_windows_lab
+            if (windows_vision and self._computer_windows_vision_config_error
+                    and principal is not None and request.remote == "127.0.0.1"):
+                return web.json_response(
+                    _openai_error("Для осмотра Windows настройте ключ и модель OpenRouter.",
+                                  code="windows_vision_openrouter_not_configured"), status=503,
+                )
             if computer_control is None or principal is None or request.remote != "127.0.0.1":
                 return web.json_response(
                     _openai_error("Windows lab unavailable", code="computer_windows_lab_unavailable"), status=404,
@@ -6472,7 +6481,13 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                     pass
                 raise
             except ComputerControlError as exc:
-                error = "Пробный запуск завершён без действующего разрешения."
+                error = {
+                    "openrouter_authentication_failed": "OpenRouter отклонил ключ доступа.",
+                    "openrouter_rate_limited": "OpenRouter ограничил число запросов.",
+                    "openrouter_timeout": "OpenRouter не ответил в пределах срока кадра.",
+                    "openrouter_invalid_reply": "OpenRouter не вернул описание кадра.",
+                    "openrouter_unavailable": "OpenRouter не смог обработать кадр выбранной моделью.",
+                }.get(exc.code, "Пробный запуск завершён без действующего разрешения.")
                 self._set_run_status(run_id, "failed", error=error, error_code=exc.code, last_event="run.failed")
                 q.put_nowait({"event": "run.failed", "run_id": run_id, "timestamp": time.time(),
                              "error": error, "error_code": exc.code})
