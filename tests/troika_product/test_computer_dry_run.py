@@ -356,7 +356,7 @@ async def test_hermes_selects_simulated_actions_without_receiving_the_observatio
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("target_mode", ["protocol", "server_stop", "native"])
+@pytest.mark.parametrize("target_mode", ["protocol", "legacy", "server_stop", "native"])
 async def test_windows_run_receives_only_device_confirmed_actions(hosted, monkeypatch, target_mode):
     from openai.types.chat import ChatCompletion
     from run_agent import AIAgent
@@ -377,11 +377,17 @@ async def test_windows_run_receives_only_device_confirmed_actions(hosted, monkey
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
     payloads = []
     receipts = []
+    dumps = []
+    expected_text = '  Проверка «Тройки» — 😀 \\ $  '
+    inspect_action_id = None
 
     def fake_provider(agent, payload, **_):
+        nonlocal inspect_action_id
         assert [tool["function"]["name"] for tool in agent.tools] == [WINDOWS_TOOL]
         payloads.append(json.dumps(payload, ensure_ascii=False))
         step = len(payloads)
+        if step > 2:
+            dumps.append(agent._dump_api_request_debug(payload, reason="windows_lab_privacy"))
         args = None
         if step == 1:
             args = {"action": "inspect"}
@@ -389,7 +395,13 @@ async def test_windows_run_receives_only_device_confirmed_actions(hosted, monkey
             receipt = json.loads([m for m in payload["messages"] if m["role"] == "tool"][-1]["content"])
             receipts.append(receipt)
             if receipt.get("can_write"):
-                args = {"action": "write", "inspect_action_id": receipt["receipt"]["action_id"]}
+                assert receipt["text_input"] is (target_mode != "legacy")
+                inspect_action_id = receipt["receipt"]["action_id"]
+                args = {"action": "write", "inspect_action_id": inspect_action_id}
+                if receipt["text_input"]:
+                    args["text"] = "строка\nновая строка" if target_mode == "protocol" else expected_text
+            elif receipt.get("error") == "invalid_text" and target_mode == "protocol":
+                args = {"action": "write", "inspect_action_id": inspect_action_id, "text": expected_text}
             elif receipt.get("can_save"):
                 args = {"action": "save", "inspect_action_id": receipt["receipt"]["action_id"]}
             elif receipt.get("receipt", {}).get("status") == "applied":
@@ -423,10 +435,11 @@ async def test_windows_run_receives_only_device_confirmed_actions(hosted, monkey
     grant_id = grant["grant_id"]
     assert grant["mode"] == "windows_lab" and payloads == []
     await windows(run.spare, "consent", 404, grant_id=grant_id, allow=True)
+    await windows(run.pc, "consent", 400, grant_id=grant_id, allow=True, text_input="true")
     await windows(run.pc, "take", 409, grant_id=grant_id)
     if target_mode == "native":
         child = await asyncio.create_subprocess_exec(
-            executable, "--windows-run-endpoint", str(run.client.make_url("/")), run.run_id, grant_id,
+            executable, "--windows-run-endpoint", str(run.client.make_url("/")), run.run_id, grant_id, expected_text,
             env={**os.environ, "TROIKA_COMPUTER_TEST_DEVICE_TOKEN": run.pc.token},
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
@@ -437,7 +450,9 @@ async def test_windows_run_receives_only_device_confirmed_actions(hosted, monkey
                 child.kill()
                 await child.wait()
     else:
-        await windows(run.pc, "consent", grant_id=grant_id, allow=True)
+        options = {} if target_mode == "legacy" else {"text_input": True}
+        consent = await windows(run.pc, "consent", grant_id=grant_id, allow=True, **options)
+        assert consent["text_input"] is (target_mode != "legacy")
         await windows(run.spare, "take", 404, grant_id=grant_id)
 
         async def take():
@@ -460,6 +475,10 @@ async def test_windows_run_receives_only_device_confirmed_actions(hosted, monkey
                 previous = delivered["id"]
             else:
                 assert delivered["inspect_action_id"] == previous
+            if action == "write" and target_mode != "legacy":
+                assert delivered["text"] == expected_text
+            else:
+                assert "text" not in delivered
             result = {"grant_id": grant_id, "command_id": delivered["id"], "status": status, **flags}
             if target_mode == "server_stop" and action == "write":
                 await windows(run.phone, "stop", grant_id=grant_id)
@@ -478,6 +497,19 @@ async def test_windows_run_receives_only_device_confirmed_actions(hosted, monkey
     else:
         assert receipts[-1]["receipt"]["verified"] is True
         assert "проверил его содержимое" in events[-1]["output"]
+    if target_mode == "protocol":
+        assert {"ok": False, "error": "invalid_text"} in receipts
+    assert dumps and all(path is None for path in dumps)
     assert hosted.adapter._ensure_session_db().get_messages(run.run_id) == []
+    assert expected_text not in json.dumps(events, ensure_ascii=False)
+    assert expected_text not in json.dumps(receipts, ensure_ascii=False)
     for private in (grant_id, "PRIVATE_WINDOW_TEST_PATH", "Пробная запись Тройки."):
         assert all(private not in text for text in [stream, *payloads])
+
+
+@pytest.mark.parametrize("text", ["", None, "\0", "\u2028", "\ud800", "x" * 513, "😀" * 257])
+def test_windows_editor_rejects_text_outside_single_line_utf16_limit(text):
+    from troika_product.computer_windows_lab import _valid_editor_text
+
+    assert not _valid_editor_text(text)
+    assert _valid_editor_text("😀" * 256)

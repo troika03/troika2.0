@@ -1058,6 +1058,8 @@ def dump_api_request_debug(
     like timeout). Intended for debugging provider-side 4xx failures where
     retries are not useful.
     """
+    if not getattr(agent, "_write_api_request_debug", True):
+        return None
     try:
         body = copy.deepcopy(api_kwargs)
         body.pop("timeout", None)

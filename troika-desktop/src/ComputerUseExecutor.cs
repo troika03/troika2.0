@@ -123,7 +123,8 @@ namespace Troika.Desktop {
 
         private static bool ValidText(string text) {
             if (string.IsNullOrEmpty(text) || text.Length > MaxTextLength) return false;
-            foreach (char character in text) if (char.IsControl(character)) return false;
+            foreach (char character in text)
+                if (char.IsControl(character) || character == '\u2028' || character == '\u2029') return false;
             try { StrictUtf8.GetByteCount(text); return true; }
             catch (EncoderFallbackException) { return false; }
         }

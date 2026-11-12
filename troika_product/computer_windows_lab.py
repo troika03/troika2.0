@@ -18,6 +18,19 @@ from troika_product.computer_control import (
 MODE = "windows_lab"
 ACTIONS = ("inspect", "write", "save")
 _COMMAND_SECONDS = 10
+MAX_EDITOR_TEXT_UNITS = 512
+
+
+def _valid_editor_text(text):
+    if not isinstance(text, str) or not text or len(text) > MAX_EDITOR_TEXT_UNITS:
+        return False
+    if any(ord(character) < 32 or 127 <= ord(character) < 160
+           or character in "\u2028\u2029" for character in text):
+        return False
+    try:
+        return len(text.encode("utf-16-le")) <= MAX_EDITOR_TEXT_UNITS * 2
+    except UnicodeEncodeError:
+        return False
 
 
 @dataclass(frozen=True)
@@ -35,6 +48,7 @@ class _Command:
     action: str
     expires_at: float
     inspect_id: str | None = None
+    text: str | None = field(default=None, repr=False)
     taken: bool = False
     result: dict | None = None
     done: threading.Event = field(default_factory=threading.Event)
@@ -49,11 +63,13 @@ class _WindowsGrant(_Grant):
     issued: int = 0
     wrote: bool = False
     saved: bool = False
+    text_input: bool = False
 
     def close(self, status):
         super().close(status)
         self.view = None
         if self.command is not None:
+            self.command.text = None
             self.command.done.set()
             self.command = None
 
@@ -63,9 +79,21 @@ class WindowsComputerLab(ComputerGrantControl):
     platforms = frozenset({"windows"})
     allow_regrant = False
 
-    def model_action(self, principal, run_id, action, inspect_id=None):
+    @staticmethod
+    def _consent(principal, grant, body, now):
+        options = dict(body)
+        text_input = options.pop("text_input", False)
+        if type(text_input) is not bool:
+            raise ComputerControlError("invalid_request", 400)
+        response = ComputerGrantControl._consent(principal, grant, options, now)
+        grant.text_input = grant.status == "active" and text_input
+        return {**response, "text_input": grant.text_input}
+
+    def model_action(self, principal, run_id, action, inspect_id=None, *, text=None):
         if action not in ACTIONS:
             raise ComputerControlError("unsupported_action", 400)
+        if action != "write" and text is not None:
+            raise ComputerControlError("invalid_tool_arguments", 400)
         with self._lock:
             grant = self._grants.get(run_id)
             if grant is None or grant.requester != principal:
@@ -77,6 +105,11 @@ class WindowsComputerLab(ComputerGrantControl):
                 raise ComputerControlError("command_busy")
             if grant.issued >= MAX_ACTIONS or grant.saved:
                 raise ComputerControlError("action_limit")
+            if action == "write":
+                if grant.text_input and not _valid_editor_text(text):
+                    raise ComputerControlError("invalid_text", 400)
+                if not grant.text_input and text is not None:
+                    raise ComputerControlError("text_input_unavailable")
             expires = min(grant.expires_at, now + _COMMAND_SECONDS)
             if action != "inspect":
                 view = grant.view
@@ -87,7 +120,7 @@ class WindowsComputerLab(ComputerGrantControl):
                 expires = min(expires, view.expires_at)
             grant.view = None
             grant.issued += 1
-            command = _Command(uuid4().hex, grant.issued, action, expires, inspect_id)
+            command = _Command(uuid4().hex, grant.issued, action, expires, inspect_id, text=text)
             grant.command = command
 
         command.done.wait(max(0, expires - self._clock()))
@@ -127,6 +160,9 @@ class WindowsComputerLab(ComputerGrantControl):
                               "expires_in_ms": duration_ms}
         if command.inspect_id is not None:
             payload["command"]["inspect_action_id"] = command.inspect_id
+        if command.text is not None:
+            payload["command"]["text"] = command.text
+            command.text = None
         return payload
 
     @staticmethod
@@ -158,7 +194,8 @@ class WindowsComputerLab(ComputerGrantControl):
                    "action": command.action, "status": status, "verified": status == "verified"}
         command.result = {"ok": status in ("observed", "applied", "verified"), "receipt": receipt}
         if status == "observed":
-            command.result.update(can_write=grant.view.can_write, can_save=grant.view.can_save)
+            command.result.update(can_write=grant.view.can_write, can_save=grant.view.can_save,
+                                  text_input=grant.text_input)
         if not command.result["ok"]:
             command.result["error"] = status
         command.done.set()

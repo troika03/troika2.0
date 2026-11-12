@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -354,7 +355,10 @@ static class ComputerUsePrototypeTests {
             string operation = request.RequestUri.Segments[request.RequestUri.Segments.Length - 1];
             object reply;
             if (operation == "consent") {
-                reply = new { version = 1, mode = "windows_lab", grant_id = GrantId, status = "active", expires_in_seconds = 30 };
+                var args = Json.Parse(await request.Content.ReadAsStringAsync().ConfigureAwait(false));
+                Assert(Json.Flag(args, "text_input"), "The editor did not negotiate model text.");
+                reply = new { version = 1, mode = "windows_lab", grant_id = GrantId, status = "active",
+                    expires_in_seconds = 30, text_input = true };
             } else if (operation == "take" && ++takes == 1) {
                 reply = new { version = 1, mode = "windows_lab",
                     command = new { id = new string('a', 32), sequence = 1, action = "inspect", expires_in_ms = 9000 }};
@@ -363,7 +367,7 @@ static class ComputerUsePrototypeTests {
                 await Release.Task.ConfigureAwait(false);
                 reply = new { version = 1, mode = "windows_lab",
                     command = new { id = new string('b', 32), sequence = 2, action = "write", expires_in_ms = 9000,
-                        inspect_action_id = new string('a', 32) }};
+                        inspect_action_id = new string('a', 32), text = "Тестовый текст запоздавшей команды." }};
             } else {
                 Stopped |= operation == "stop";
                 if (operation == "report") Reports++;
@@ -400,7 +404,7 @@ static class ComputerUsePrototypeTests {
         }
     }
 
-    private static async Task CheckWindowsRunEndpoint(string address, string runId, string grantId) {
+    private static async Task CheckWindowsRunEndpoint(string address, string runId, string grantId, string expected) {
         using (var run = new ComputerUseWindowsRun(address, Environment.GetEnvironmentVariable("TROIKA_COMPUTER_TEST_DEVICE_TOKEN"),
                 runId, grantId)) {
             var window = await Open(run: run);
@@ -408,7 +412,9 @@ static class ComputerUsePrototypeTests {
                 Assert(window.Execution == null && !File.Exists(window.OutputFile), "The Windows editor acted before local consent.");
                 Click(window.AllowButton);
                 Assert(await Bounded(window.Execution, 25000) == ComputerUseState.Verified, "The remote Run did not verify the file.");
-                Assert(File.ReadAllText(window.OutputFile) == ComputerUseExecutor.Sample, "Windows saved the wrong bytes.");
+                var actual = File.ReadAllBytes(window.OutputFile);
+                var bytes = Encoding.UTF8.GetBytes(expected);
+                Assert(actual.SequenceEqual(bytes), "Windows saved the wrong bytes.");
                 Console.WriteLine("PASS native Windows Run received commands and verified exact file contents");
             } finally { Cleanup(window); }
         }
@@ -420,8 +426,8 @@ static class ComputerUsePrototypeTests {
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         app.Dispatcher.BeginInvoke(new Action(async () => {
             try {
-                if (args.Length == 4 && args[0] == "--windows-run-endpoint") {
-                    await CheckWindowsRunEndpoint(args[1], args[2], args[3]);
+                if (args.Length == 5 && args[0] == "--windows-run-endpoint") {
+                    await CheckWindowsRunEndpoint(args[1], args[2], args[3], args[4]);
                     app.Shutdown(0);
                     return;
                 }

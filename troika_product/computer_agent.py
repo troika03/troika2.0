@@ -7,7 +7,7 @@ import json
 
 from troika_product.capabilities import ROUTER_TOOLSET
 from troika_product.computer_control import ComputerControlError, MAX_GRANT_SECONDS
-from troika_product.computer_windows_lab import ACTIONS as WINDOWS_ACTIONS, MODE as WINDOWS_MODE
+from troika_product.computer_windows_lab import ACTIONS as WINDOWS_ACTIONS, MAX_EDITOR_TEXT_UNITS, MODE as WINDOWS_MODE
 
 
 TOOL = "troika_computer"
@@ -34,7 +34,8 @@ WINDOWS_SCHEMA = {
     "name": WINDOWS_TOOL,
     "description": (
         "Use the consented Windows test editor. Inspect to see which action is available. "
-        "Write inserts a fixed test sentence. Inspect again before saving. "
+        "When inspect reports text_input=true, pass the exact requested single-line text to write. "
+        "Legacy devices use the built-in test sentence. Inspect again before saving. "
         "For write and save, pass the preceding inspect receipt's action_id as inspect_action_id. "
         "A verified save means the editor read back the temporary test file."
     ),
@@ -43,6 +44,8 @@ WINDOWS_SCHEMA = {
         "properties": {
             "action": {"type": "string", "enum": list(WINDOWS_ACTIONS)},
             "inspect_action_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+            "text": {"type": "string", "minLength": 1, "maxLength": MAX_EDITOR_TEXT_UNITS,
+                     "description": "Only for write when text_input=true. Maximum 512 UTF-16 units."},
         },
         "required": ["action"],
         "additionalProperties": False,
@@ -115,8 +118,9 @@ class ComputerAgentRun:
 class WindowsEditorAgentRun(ComputerAgentRun):
     mode = WINDOWS_MODE
     instruction = (
-        "Доступен только тестовый редактор Windows. Осмотри его, введи пробную строку, "
-        "осмотри снова и сохрани. Сохранение подтверждает только проверка файла на устройстве."
+        "Доступен только тестовый редактор Windows. Осмотри его и следуй задаче пользователя. "
+        "Если text_input=true, для ввода передай точный текст задачи в text. "
+        "Сохранение требует нового осмотра и подтверждается проверкой файла на устройстве."
     )
 
     def __init__(self, control, principal, run_id):
@@ -128,11 +132,16 @@ class WindowsEditorAgentRun(ComputerAgentRun):
         if not isinstance(args, dict):
             raise ComputerControlError("invalid_tool_arguments", 400)
         action = args.get("action")
-        valid_inspect = action == "inspect" and set(args) == {"action"}
-        valid_mutation = action in ("write", "save") and set(args) == {"action", "inspect_action_id"}
-        if not (valid_inspect or valid_mutation):
+        fields = set(args)
+        mutation = {"action", "inspect_action_id"}
+        valid_inspect = action == "inspect" and fields == {"action"}
+        valid_save = action == "save" and fields == mutation
+        valid_write = action == "write" and (fields == mutation
+                                             or fields == mutation | {"text"} and isinstance(args["text"], str))
+        if not (valid_inspect or valid_save or valid_write):
             raise ComputerControlError("invalid_tool_arguments", 400)
-        result = self.control.model_action(self.principal, self.run_id, action, args.get("inspect_action_id"))
+        result = self.control.model_action(self.principal, self.run_id, action, args.get("inspect_action_id"),
+                                           text=args.get("text"))
         status = result["receipt"]["status"]
         if status == "observed":
             self.inspected = True
@@ -146,7 +155,7 @@ class WindowsEditorAgentRun(ComputerAgentRun):
         if self.saved:
             return "Windows сохранил тестовый файл и проверил его содержимое."
         if self.wrote:
-            return "Пробная строка введена. Сохранение файла не подтверждено."
+            return "Текст введён. Сохранение файла не подтверждено."
         if self.inspected:
             return "Тестовый редактор осмотрен. Ввод не подтверждён."
         return "Windows не подтвердил действие в тестовом редакторе."

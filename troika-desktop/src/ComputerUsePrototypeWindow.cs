@@ -57,7 +57,7 @@ namespace Troika.Desktop {
             heading.FontWeight = FontWeights.SemiBold;
             body.Children.Add(heading);
             if (windowsRun != null) {
-                body.Children.Add(Text("Запрос " + windowsRun.RunLabel + ". Тройка сможет осмотреть этот редактор, ввести пробную строку и сохранить временный файл."));
+                body.Children.Add(Text("Запрос " + windowsRun.RunLabel + ". Тройка сможет осмотреть этот редактор, ввести текст задачи и сохранить временный файл."));
                 Closing += CloseWindowsRun;
             } else if (agent == null) {
                 body.Children.Add(Text("Разрешить Тройке заполнить тестовый редактор и сохранить образец в отдельный временный файл."));

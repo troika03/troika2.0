@@ -38,11 +38,11 @@ namespace Troika.Desktop {
             bool confirmed = false;
             try {
                 var requestedConsentAt = clock();
-                var consent = await Send("consent", new { version = 1, grant_id = grantId, allow = true }, cancellation)
+                var consent = await Send("consent", new { version = 1, grant_id = grantId, allow = true, text_input = true }, cancellation)
                     .ConfigureAwait(false);
                 double seconds = Json.Number(consent, "expires_in_seconds");
                 if (Json.Text(consent, "grant_id") != grantId || Json.Text(consent, "status") != "active"
-                        || !(seconds > 0 && seconds <= ComputerUseSession.ConsentSeconds))
+                        || !Json.Flag(consent, "text_input") || !(seconds > 0 && seconds <= ComputerUseSession.ConsentSeconds))
                     throw new InvalidDataException();
                 session.Shorten(TimeSpan.FromSeconds(seconds) - (clock() - requestedConsentAt));
 
@@ -75,11 +75,16 @@ namespace Troika.Desktop {
                             ? (object)new { version = 1, grant_id = grantId, command_id = id, status = "failed" }
                             : new { version = 1, grant_id = grantId, command_id = id, status = "observed",
                                     can_write = observation.CanWrite, can_save = observation.CanSave };
-                    } else if ((action == "write" || action == "save") && command.Count == 5) {
+                    } else if (action == "write" || action == "save") {
+                        bool writing = action == "write";
+                        string text = Json.Get(command, "text") as string;
+                        if (command.Count != (writing ? 6 : 5) || (writing && text == null)
+                                || (!writing && command.ContainsKey("text")))
+                            throw new InvalidDataException();
                         var result = ComputerUseCommandResult.StaleObservation;
                         if (observation != null && Json.Text(command, "inspect_action_id") == inspectId) {
-                            result = action == "write"
-                                ? await executor.WriteAsync(observation.Id, ComputerUseExecutor.Sample, fresh).ConfigureAwait(false)
+                            result = writing
+                                ? await executor.WriteAsync(observation.Id, text, fresh).ConfigureAwait(false)
                                 : await executor.SaveAsync(observation.Id, fresh).ConfigureAwait(false);
                         }
                         observation = null;

@@ -2011,6 +2011,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         agent._redact_content_logs = self._access_registry is not None
         if computer_lab:
             agent._session_json_enabled = False
+            agent._write_api_request_debug = False
         if self._access_registry is not None:
             from troika_product.agent_policy import install_agent_policy
             install_agent_policy(agent, self._product_resource_config, current_provider_guard())
