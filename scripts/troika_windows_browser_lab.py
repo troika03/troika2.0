@@ -11,6 +11,7 @@ import httpx
 
 from scripts.troika_browser_run import BrowserRunClient
 from scripts.troika_static_preview import ORIGIN, StaticProjectPreview
+from scripts.troika_windows_pointer import WindowsPointer
 from troika_product.computer_control import MAX_ACTIONS, MAX_GRANT_SECONDS, ComputerControlError
 from troika_product.computer_openrouter_vision import OpenRouterVision
 from troika_product.computer_windows_browser import PERMISSIONS, TOOL, browser_command, browser_schema
@@ -127,7 +128,8 @@ _POINTER = """([x, y, action]) => {
 
 
 class BrowserLab:
-    def __init__(self, browser, project=None, viewport=(920, 500), bridge=None, apps=("browser",), visible_pointer=False):
+    def __init__(self, browser, project=None, viewport=(920, 500), bridge=None, apps=("browser",),
+                 visible_pointer=False, system_pointer=False):
         self.browser = browser
         self.targets = project.pages if project is not None else {name: ORIGIN + name for name in PAGES}
         self.route = project.route if project is not None else _fixture_route
@@ -136,8 +138,17 @@ class BrowserLab:
         self.sections = {}
         self.visible_pointer = visible_pointer
         self.pointer_positions = {}
+        self.native_windows = {}
         self.active = None
         self.bridge, self.apps = bridge, apps
+        self.system_pointer = WindowsPointer() if system_pointer else None
+        if self.system_pointer is not None:
+            session = browser.new_browser_cdp_session()
+            try:
+                self.browser_pid = next(process["id"] for process in session.send("SystemInfo.getProcessInfo")["processInfo"]
+                                        if process["type"] == "browser")
+            finally:
+                session.detach()
 
     def notepad(self, command, expires):
         if self.bridge is None or "notepad" not in self.apps:
@@ -178,12 +189,20 @@ class BrowserLab:
                 raise ComputerControlError("browser_page_unavailable")
             cdp = context.new_cdp_session(page)
             try:
-                window_id = cdp.send("Browser.getWindowForTarget")["windowId"]
+                window = cdp.send("Browser.getWindowForTarget")
+                window_id = window["windowId"]
             finally:
                 cdp.detach()
             if any(existing == window_id for _, existing in self.pages.values()):
                 raise ComputerControlError("browser_window_not_separate")
             self._focus(page)
+            if self.system_pointer is not None:
+                bounds = tuple(window["bounds"][key] for key in ("left", "top", "width", "height"))
+                with self.system_pointer as pointer:
+                    handle = pointer.bind(self.browser_pid, bounds)
+                if handle is None or handle in self.native_windows.values():
+                    raise ComputerControlError("system_pointer_interrupted")
+                self.native_windows[name] = handle
             self.pages[name] = (page, window_id)
             self.active = name
         except BaseException:
@@ -211,6 +230,43 @@ class BrowserLab:
         if self.visible_pointer and not page.is_closed():
             page.evaluate(_POINTER, [0, 0, None])
 
+    def _system_input(self, page, point, action, expires, still_allowed, direction=None):
+        self._focus(page)
+        viewport = page.evaluate("() => [innerWidth, innerHeight]")
+        pointer = self.system_pointer
+        window = self.native_windows[self.active]
+        with pointer, pointer.reveal(window, self.browser_pid):
+            target = pointer.content_point(window, self.browser_pid, viewport, point)
+            origin = pointer.position()
+            if target is None or origin is None or pointer.input_held():
+                raise ComputerControlError("system_pointer_interrupted")
+            last = origin
+            for frame in range(1, 9):
+                self._check_page(self.active, page)
+                self._check_deadline(expires)
+                if (pointer.position() != last or pointer.input_held()
+                        or pointer.content_point(window, self.browser_pid, viewport, point) != target):
+                    raise ComputerControlError("system_pointer_interrupted")
+                last = tuple(round(start + (end - start) * frame / 8) for start, end in zip(origin, target[2:]))
+                if not pointer.move(last):
+                    raise ComputerControlError("system_pointer_interrupted")
+                if frame == 8:
+                    page.evaluate(_POINTER, [*point, action])
+                page.wait_for_timeout(170 if frame == 8 else 22)
+            if not still_allowed():
+                return False
+            self._check_page(self.active, page)
+            self._check_deadline(expires)
+            if (pointer.position() != last or pointer.input_held()
+                    or not page.evaluate("() => document.hasFocus() && document.visibilityState === 'visible'")
+                    or page.evaluate("() => [innerWidth, innerHeight]") != viewport
+                    or pointer.content_point(window, self.browser_pid, viewport, point) != target
+                    or (action == "scroll" and not pointer.can_scroll(window))):
+                raise ComputerControlError("system_pointer_interrupted")
+            if not pointer.send(action, direction):
+                raise ComputerControlError("system_pointer_interrupted")
+            return True
+
     @staticmethod
     def _check_deadline(expires):
         if expires is not None and time.monotonic() >= expires:
@@ -222,12 +278,17 @@ class BrowserLab:
         if (direction == "down" and before["y"] >= before["max_y"]) or (direction == "up" and before["y"] == 0):
             return False
         try:
-            self._move_pointer(page, (self.viewport[0] / 2, self.viewport[1] / 2), "scroll", expires)
-            self._check_page(self.active, page)
-            if not still_allowed():
-                return None
-            self._check_deadline(expires)
-            page.mouse.wheel(0, 640 if direction == "down" else -640)
+            point = (self.viewport[0] / 2, self.viewport[1] / 2)
+            if self.system_pointer is not None:
+                if not self._system_input(page, point, "scroll", expires, still_allowed, direction):
+                    return None
+            else:
+                self._move_pointer(page, point, "scroll", expires)
+                self._check_page(self.active, page)
+                if not still_allowed():
+                    return None
+                self._check_deadline(expires)
+                page.mouse.wheel(0, 640 if direction == "down" else -640)
             _wait_for_page(
                 page, "([y, down]) => down ? scrollY > y : scrollY < y", "browser_scroll_unverified",
                 [before["y"], direction == "down"],
@@ -245,11 +306,18 @@ class BrowserLab:
         target = self.targets[self.active] + "#" + fragment
         point = link["point"]
         try:
-            self._move_pointer(page, point, "click", expires)
-            if not still_allowed() or link not in self.inspect()["links"]:
-                return None
-            self._check_deadline(expires)
-            page.mouse.click(*point)
+            def link_still_allowed():
+                return still_allowed() and link in self.inspect()["links"]
+
+            if self.system_pointer is not None:
+                if not self._system_input(page, point, "click", expires, link_still_allowed):
+                    return None
+            else:
+                self._move_pointer(page, point, "click", expires)
+                if not link_still_allowed():
+                    return None
+                self._check_deadline(expires)
+                page.mouse.click(*point)
             page.wait_for_url(lambda url: url == target, timeout=2000)
             self.sections[self.active] = fragment
             view = self.inspect()
@@ -407,14 +475,16 @@ class DesktopDeviceBridge:
         # The desktop assigns this process to a Windows job before sending Start.
         value = self.receive()
         fields = {"start", "apps", "project", "entry", "second_entry", "mobile", "share_headings"}
-        if (not isinstance(value, dict) or set(value) != fields or value["start"] is not True
+        if (not isinstance(value, dict) or set(value) - {"system_pointer"} != fields or value["start"] is not True
                 or any(value[key] is not None and (not isinstance(value[key], str) or len(value[key]) > 512)
                        for key in ("project", "entry", "second_entry"))
                 or any(type(value[key]) is not bool for key in ("mobile", "share_headings"))
+                or type(value.get("system_pointer", False)) is not bool
                 or value["apps"] not in (["browser"], ["notepad"], ["browser", "notepad"])):
             return False
         for key in fields - {"start"}:
             setattr(args, key, value[key])
+        args.system_pointer = value.get("system_pointer", False)
         return True
 
     def approve(self, command, expires):
@@ -530,7 +600,9 @@ def main():
                                              chromium_sandbox=True, timeout=10000, env=browser_environment) if engine else None
             try:
                 lab = BrowserLab(browser, project, viewport=(390, 844) if args.mobile else (920, 500),
-                                 bridge=bridge, apps=apps, visible_pointer=args.show)
+                                 bridge=bridge, apps=apps, visible_pointer=args.show,
+                                 system_pointer=bridge is not None and args.show and permission != "view"
+                                 and "browser" in apps and args.system_pointer)
                 if permission == "view" and run is None:
                     lab.step({"action": "open", "page": "overview"}, lambda _: time.monotonic() < deadline)
                 if run is not None:
@@ -567,9 +639,12 @@ def main():
         else:
             print("Проба остановлена.")
         return 130
-    except (ComputerControlError, Error, httpx.HTTPError) as error:
+    except (ComputerControlError, Error, httpx.HTTPError, OSError) as error:
         if bridge is not None:
-            bridge.emit({"kind": "failed"})
+            if isinstance(error, ComputerControlError) and error.code == "system_pointer_interrupted":
+                bridge.emit({"kind": "failed", "code": error.code})
+            else:
+                bridge.emit({"kind": "failed"})
         else:
             print("Проба завершилась ошибкой " + (error.code if isinstance(error, ComputerControlError) else "browser_unavailable"))
         return 1

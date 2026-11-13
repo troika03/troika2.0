@@ -105,7 +105,7 @@ namespace Troika.Desktop {
             Permission.SelectedIndex = 0;
             AutomationProperties.SetName(Permission, "Режим разрешений");
             form.Children.Add(Permission);
-            const string pointerLabel = "Двигать системный курсор в Блокноте";
+            const string pointerLabel = "Использовать системный курсор";
             SystemPointer = new CheckBox { Content = Text(pointerLabel), Margin = new Thickness(0, 0, 0, 8) };
             AutomationProperties.SetName(SystemPointer, pointerLabel);
             form.Children.Add(SystemPointer);
@@ -209,7 +209,8 @@ namespace Troika.Desktop {
             bool active = running != null;
             bool browser = Browser.IsChecked == true;
             browserScope.Visibility = browser ? Visibility.Visible : Visibility.Collapsed;
-            SystemPointer.Visibility = Notepad.IsChecked == true && Permission.SelectedIndex != 2 ? Visibility.Visible : Visibility.Collapsed;
+            SystemPointer.Visibility = (browser || Notepad.IsChecked == true) && Permission.SelectedIndex != 2
+                ? Visibility.Visible : Visibility.Collapsed;
             form.IsEnabled = !active && !closing;
             StartButton.IsEnabled = !active && !closing && ComputerUseAgent.ValidGoal(Goal.Text.Trim())
                 && (browser || Notepad.IsChecked == true)
@@ -238,7 +239,7 @@ namespace Troika.Desktop {
             } catch (ApiException) { Status.Text = "Тестовый сервер не запустил задачу или отклонил разрешение."; }
             catch (HttpRequestException) { Status.Text = "Тестовый сервер недоступен."; }
             catch (OperationCanceledException) { Status.Text = "Задача остановлена."; }
-            catch (ComputerUsePointerInterruptedException) { Status.Text = "Клик прерван. Проверьте, что поле Блокнота видно и мышь свободна."; }
+            catch (ComputerUsePointerInterruptedException) { Status.Text = "Действие мыши прервано. Проверьте, что нужное окно видно и мышь свободна."; }
             catch (IOException) { Status.Text = "Не удалось получить подтверждённый результат."; }
             catch (Win32Exception) { Status.Text = "Не удалось запустить управление ПК."; }
             catch (InvalidOperationException) { Status.Text = "Завершение задачи не подтверждено."; }
@@ -255,9 +256,10 @@ namespace Troika.Desktop {
                 if (action == "write" && SystemPointer.IsChecked == true)
                     approvalText.Text = "Нажать поле системным курсором и ввести текст?\n" + target;
             } else if (action == "click") {
-                approvalText.Text = "Нажать ссылку «" + target + "»?";
+                approvalText.Text = "Нажать ссылку «" + target + (SystemPointer.IsChecked == true ? "» системным курсором?" : "»?");
             } else {
-                approvalText.Text = action == "scroll" ? "Прокрутить страницу " + (target == "up" ? "вверх?" : "вниз?")
+                approvalText.Text = action == "scroll" ? "Прокрутить страницу " + (target == "up" ? "вверх" : "вниз")
+                    + (SystemPointer.IsChecked == true ? " системной мышью?" : "?")
                     : (action == "open" ? "Открыть «" : "Переключиться на «") + page + "»?";
             }
             decision = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);

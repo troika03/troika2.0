@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 import json
 import os
 from types import SimpleNamespace
@@ -200,6 +201,37 @@ def test_click_coordinates_stay_on_the_device():
     view = {"page": "overview", "open_pages": ["overview"], "headings": [], "y": 0, "max_y": 640,
             "fragment": None, "at_section": False, "links": [{**link, "point": [72, 160]}]}
     assert _view_for_report(view, True, True)["links"] == [link]
+
+
+@pytest.mark.parametrize("interruption", ["revoked", "foreign_window", "wheel_routed_elsewhere"])
+def test_native_pointer_checks_the_window_and_permission_before_dispatch(interruption):
+    page = Mock(url=ORIGIN + "overview")
+    page.is_closed.return_value = False
+    page.evaluate.side_effect = lambda expression, *_: True if "document.hasFocus" in expression else [920, 500]
+    lab = BrowserLab(Mock())
+    lab._focus = Mock()
+    lab.active = "overview"
+    lab.native_windows["overview"] = 10
+    lab.browser_pid = 40
+    pointer = lab.system_pointer = Mock()
+    pointer.__enter__ = Mock(return_value=pointer)
+    pointer.__exit__ = Mock(return_value=False)
+    pointer.reveal.return_value = nullcontext()
+    pointer.input_held.return_value = False
+    pointer.can_scroll.return_value = interruption != "wheel_routed_elsewhere"
+    position = [0, 0]
+    pointer.position.side_effect = lambda: tuple(position)
+    pointer.move.side_effect = lambda point: position.__setitem__(slice(None), point) or True
+    target = (10, 20, 80, 80)
+    pointer.content_point.side_effect = [target] * 9 + [None if interruption == "foreign_window" else target]
+
+    allowed = lambda: interruption != "revoked"
+    if interruption == "revoked":
+        assert not lab._system_input(page, (80, 80), "click", None, allowed)
+    else:
+        with pytest.raises(ComputerControlError, match="system_pointer_interrupted"):
+            lab._system_input(page, (80, 80), "scroll", None, allowed, "down")
+    pointer.send.assert_not_called()
 
 
 def test_closing_before_browser_consent_revokes_the_pending_grant():

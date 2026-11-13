@@ -21,7 +21,7 @@ internal static class ComputerUseDeviceUiTests {
         Console.OutputEncoding = Encoding.UTF8;
         bool layout = args.Length >= 1 && args[0] == "--layout";
         if (!(layout && args.Length <= 2) && !(args.Length == 3 && new[] { "--run", "--stop", "--click", "--stop-pointer",
-                "--system-click", "--system-stop", "--system-interrupt" }.Contains(args[0]))) return 2;
+                "--system-click", "--system-stop", "--system-interrupt", "--browser-system" }.Contains(args[0]))) return 2;
         using (var run = layout ? null : new ComputerUseDeviceRun(args[1], args[2],
                 Environment.GetEnvironmentVariable("TROIKA_COMPUTER_TEST_DEVICE_TOKEN"))) {
             var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
@@ -64,11 +64,18 @@ internal static class ComputerUseDeviceUiTests {
             return;
         }
         bool stop = mode == "--stop" || mode == "--stop-pointer";
-        bool click = mode == "--click";
+        bool systemBrowser = mode == "--browser-system";
+        bool click = mode == "--click" || systemBrowser;
+        if (systemBrowser) {
+            window.SystemPointer.IsChecked = true;
+            window.Left = SystemParameters.WorkArea.Right - window.Width;
+            window.Top = SystemParameters.WorkArea.Top;
+        }
         if (mode == "--stop-pointer") window.Browser.IsChecked = false;
         window.Goal.Text = "Сначала осмотри Блокнот, открой его, введи ровно «" + Expected +
             "» без кавычек и сохрани. Затем осмотри браузер, открой overview и "
-            + (click ? "нажми видимую ссылку «Доставка». " : "прокрути до раздела доставки. ")
+            + (systemBrowser ? "нажми ссылку «Доставка», затем прокрути вверх. "
+                : click ? "нажми видимую ссылку «Доставка». " : "прокрути до раздела доставки. ")
             + "После каждого успешного действия используй его квитанцию и сразу переходи к следующему.";
         var filesBefore = new HashSet<string>(Directory.GetDirectories(Path.GetTempPath(), "troika-notepad-*"));
         var approvals = new List<string>();
@@ -103,20 +110,26 @@ internal static class ComputerUseDeviceUiTests {
             .SelectMany(path => Directory.GetFiles(path, "*.txt")).ToArray();
         Require(files.Length == 1 && approvals.Any(text => text.Contains(Expected)),
             "The shared Windows Run did not show the text and open its own file. " + window.Status.Text);
-        if (mode == "--click" || mode == "--stop-pointer")
+        if (systemBrowser) Require(pointerLabels.Contains("Клик") && pointerLabels.Contains("Сохранение"),
+            "Notepad must use the same opt-in system pointer setting.");
+        else if (mode == "--click" || mode == "--stop-pointer")
             Require(pointerLabels.SetEquals(new[] { "Ввод", "Сохранение" }), "Both native pointer labels must be shown.");
         if (stop) {
             Require(window.Status.Text == "Остановлено." && File.ReadAllBytes(files[0]).SequenceEqual(ComputerUseNotepad.FileEncoding.GetPreamble()),
                 "Stop did not prevent Notepad from saving. " + window.Status.Text);
         } else {
             var expected = ComputerUseNotepad.FileEncoding.GetPreamble().Concat(Encoding.UTF8.GetBytes(Expected));
-            Require((!click || approvals.Contains("Нажать ссылку «Доставка»?"))
+            Require((!click || approvals.Contains(systemBrowser
+                        ? "Нажать ссылку «Доставка» системным курсором?" : "Нажать ссылку «Доставка»?"))
+                    && (!systemBrowser || approvals.Contains("Прокрутить страницу вверх системной мышью?")
+                        && window.Status.Text.Contains("прокрутку"))
                     && window.Status.Text.Contains(click ? "переход по ссылке" : "прокрутку") && window.Status.Text.Contains("Блокнот сохранил")
                     && File.ReadAllBytes(files[0]).SequenceEqual(expected), "The shared Windows Run could not verify both apps. " + window.Status.Text);
         }
         File.Delete(files[0]);
         Directory.Delete(Path.GetDirectoryName(files[0]), false);
-        Console.WriteLine(mode == "--stop-pointer" ? "PASS Stop during the native pointer preview prevented Notepad save."
+        Console.WriteLine(systemBrowser ? "PASS One opt-in system cursor clicked in Notepad and clicked and scrolled Chrome."
+            : mode == "--stop-pointer" ? "PASS Stop during the native pointer preview prevented Notepad save."
             : stop ? "PASS Stop in the common window prevented Notepad save."
             : click ? "PASS One Windows Run approved and verified Notepad save and a browser section link."
             : "PASS One Windows Run approved and verified Notepad save and browser scroll.");
@@ -163,7 +176,7 @@ internal static class ComputerUseDeviceUiTests {
         string file = Directory.GetDirectories(Path.GetTempPath(), "troika-notepad-*").Where(path => !before.Contains(path))
             .SelectMany(path => Directory.GetFiles(path, "*.txt")).Single();
         var expected = ComputerUseNotepad.FileEncoding.GetPreamble().Concat(stop || interrupt ? new byte[0] : Encoding.UTF8.GetBytes(Expected));
-        string status = stop ? "Остановлено." : interrupt ? "Клик прерван." : "Блокнот сохранил";
+        string status = stop ? "Остановлено." : interrupt ? "Действие мыши прервано." : "Блокнот сохранил";
         Require(File.ReadAllBytes(file).SequenceEqual(expected) && window.Status.Text.Contains(status),
             "Unexpected result after physical click. " + window.Status.Text);
         File.Delete(file);

@@ -111,7 +111,8 @@ namespace Troika.Desktop {
                 using (var input = new StreamWriter(process.StandardInput.BaseStream, new UTF8Encoding(false), 512, true) { AutoFlush = true }) {
                     cancellation.ThrowIfCancellationRequested();
                     await input.WriteLineAsync(Json.Encode(new { start = true, apps = options.Apps, project = options.Project, entry = options.Entry,
-                        second_entry = options.SecondEntry, mobile = options.Mobile, share_headings = options.ShareHeadings }));
+                        second_entry = options.SecondEntry, mobile = options.Mobile, share_headings = options.ShareHeadings,
+                        system_pointer = options.SystemPointer }));
                     var stopped = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                     using (cancellation.Register(() => stopped.TrySetResult(true))) {
                         var output = ReadWorker(process.StandardOutput, input, options, notepad, approve, progress,
@@ -195,6 +196,9 @@ namespace Troika.Desktop {
                     else throw new InvalidDataException();
                 } else if (kind == "finished" && ready && message.Count == 1) finished = true;
                 else if (kind == "failed" && message.Count == 1) return false;
+                else if (kind == "failed" && ready && options.SystemPointer && message.Count == 2
+                        && Json.Text(message, "code") == "system_pointer_interrupted")
+                    throw new ComputerUsePointerInterruptedException();
                 else throw new InvalidDataException();
             }
             return finished;
