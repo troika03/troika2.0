@@ -16,6 +16,10 @@ namespace Troika.Desktop {
         private const int ExStyle = -20;
         private const int TransparentToolWindow = 0x080000A0; // No activate, tool window, transparent input.
         private const uint MoveWithoutActivating = 0x0011;
+        private const int LeftButton = 0x01, RightButton = 0x02, MiddleButton = 0x04, ExtraButton1 = 0x05, ExtraButton2 = 0x06;
+        private const int Shift = 0x10, Control = 0x11, Alt = 0x12;
+        private const uint LeftDown = 0x0002, LeftUp = 0x0004, RightDown = 0x0008, RightUp = 0x0010;
+        private const int SwapButtons = 23;
         private readonly Window overlay;
         private readonly Canvas surface = new Canvas { IsHitTestVisible = false };
         private readonly Ellipse ring;
@@ -79,6 +83,56 @@ namespace Troika.Desktop {
             }
         }
 
+        internal async Task<bool> ClickEditor(ComputerUseNotepad document, Func<bool> isFresh,
+                Func<CancellationToken, Task<bool>> stillAllowed, CancellationToken cancellation) {
+            document.RaiseForAction();
+            ScreenPoint target, origin;
+            if (!document.TryGetActionPoint(ComputerUseStep.Write, out target) || !document.CanClickEditor(target)
+                    || !GetCursorPos(out origin) || InputHeld()) return false;
+            var last = origin;
+            int frames = SystemParameters.ClientAreaAnimation ? 10 : 1;
+            label.Text = "Клик";
+            try {
+                for (int frame = 1; frame <= frames; frame++) {
+                    cancellation.ThrowIfCancellationRequested();
+                    if (!isFresh() || !CanMoveFrom(last) || !document.CanClickEditor(target)) return false;
+                    var point = new ScreenPoint(origin.X + (target.X - origin.X) * frame / frames,
+                        origin.Y + (target.Y - origin.Y) * frame / frames);
+                    if (!SetCursorPos(point.X, point.Y)) return false;
+                    last = point;
+                    if (frame == frames) Move(point, true);
+                    await Task.Delay(frame == frames ? 170 : 20, cancellation);
+                }
+                if (!isFresh() || !await stillAllowed(cancellation)) return false;
+                cancellation.ThrowIfCancellationRequested();
+                if (!isFresh() || !CanMoveFrom(target) || !document.CanClickEditor(target)) return false;
+                bool swapped = GetSystemMetrics(SwapButtons) != 0;
+                var click = new[] { new Input { Mouse = new MouseInput { Flags = swapped ? RightDown : LeftDown } },
+                    new Input { Mouse = new MouseInput { Flags = swapped ? RightUp : LeftUp } } };
+                int size = Marshal.SizeOf(typeof(Input));
+                uint sent = SendInput(2, click, size);
+                if (sent == 1) SendInput(1, new[] { click[1] }, size);
+                if (sent != 2) return false;
+                for (int attempt = 0; attempt < 12 && isFresh(); attempt++) {
+                    if (!CanMoveFrom(target)) return false;
+                    if (document.EditorHasFocus()) return true;
+                    await Task.Delay(20, cancellation);
+                }
+                return false;
+            } finally { Hide(); }
+        }
+
+        private static bool CanMoveFrom(ScreenPoint previous) {
+            ScreenPoint current;
+            return GetCursorPos(out current) && current == previous && !InputHeld();
+        }
+
+        private static bool InputHeld() {
+            return GetAsyncKeyState(LeftButton) < 0 || GetAsyncKeyState(RightButton) < 0 || GetAsyncKeyState(MiddleButton) < 0
+                || GetAsyncKeyState(ExtraButton1) < 0 || GetAsyncKeyState(ExtraButton2) < 0
+                || GetAsyncKeyState(Shift) < 0 || GetAsyncKeyState(Control) < 0 || GetAsyncKeyState(Alt) < 0;
+        }
+
         private void Move(ScreenPoint point, bool arrived) {
             if (handle == IntPtr.Zero) new WindowInteropHelper(overlay).EnsureHandle();
             var source = HwndSource.FromHwnd(handle);
@@ -93,11 +147,28 @@ namespace Troika.Desktop {
 
         public void Dispose() { overlay.Close(); }
 
+        // MOUSEINPUT is the largest member of the Win32 INPUT union.
+        [StructLayout(LayoutKind.Sequential)]
+        private struct Input { internal uint Type; internal MouseInput Mouse; }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MouseInput { internal int X, Y; internal uint Data, Flags, Time; internal UIntPtr ExtraInfo; }
+
         [DllImport("user32.dll", EntryPoint = "GetWindowLongW", SetLastError = true)]
         private static extern int GetWindowLong(IntPtr window, int index);
         [DllImport("user32.dll", EntryPoint = "SetWindowLongW", SetLastError = true)]
         private static extern int SetWindowLong(IntPtr window, int index, int style);
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
+        [DllImport("user32.dll")]
+        private static extern bool GetCursorPos(out ScreenPoint point);
+        [DllImport("user32.dll")]
+        private static extern bool SetCursorPos(int x, int y);
+        [DllImport("user32.dll")]
+        private static extern short GetAsyncKeyState(int key);
+        [DllImport("user32.dll")]
+        private static extern int GetSystemMetrics(int index);
+        [DllImport("user32.dll")]
+        private static extern uint SendInput(uint count, Input[] inputs, int size);
     }
 }

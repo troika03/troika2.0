@@ -25,7 +25,7 @@ namespace Troika.Desktop {
         private bool closing, allowClose;
         internal readonly TextBox Goal;
         internal readonly ComboBox Permission;
-        internal readonly CheckBox Browser, Notepad;
+        internal readonly CheckBox Browser, Notepad, SystemPointer;
         internal readonly Button StartButton, StopButton, ApproveButton, DenyButton;
         internal readonly TextBlock Status;
         internal string PendingAction { get { return approvalText.Text; } }
@@ -105,6 +105,10 @@ namespace Troika.Desktop {
             Permission.SelectedIndex = 0;
             AutomationProperties.SetName(Permission, "Режим разрешений");
             form.Children.Add(Permission);
+            const string pointerLabel = "Двигать системный курсор в Блокноте";
+            SystemPointer = new CheckBox { Content = Text(pointerLabel), Margin = new Thickness(0, 0, 0, 8) };
+            AutomationProperties.SetName(SystemPointer, pointerLabel);
+            form.Children.Add(SystemPointer);
 
             approval = new StackPanel { Visibility = Visibility.Collapsed };
             approvalText = Text("");
@@ -140,6 +144,7 @@ namespace Troika.Desktop {
             Browser.Unchecked += (sender, args) => Refresh();
             Notepad.Checked += (sender, args) => Refresh();
             Notepad.Unchecked += (sender, args) => Refresh();
+            Permission.SelectionChanged += (sender, args) => Refresh();
             PreviewKeyDown += (sender, args) => {
                 if (args.Key == Key.Escape && running != null) { args.Handled = true; Stop(); }
             };
@@ -204,6 +209,7 @@ namespace Troika.Desktop {
             bool active = running != null;
             bool browser = Browser.IsChecked == true;
             browserScope.Visibility = browser ? Visibility.Visible : Visibility.Collapsed;
+            SystemPointer.Visibility = Notepad.IsChecked == true && Permission.SelectedIndex != 2 ? Visibility.Visible : Visibility.Collapsed;
             form.IsEnabled = !active && !closing;
             StartButton.IsEnabled = !active && !closing && ComputerUseAgent.ValidGoal(Goal.Text.Trim())
                 && (browser || Notepad.IsChecked == true)
@@ -220,6 +226,7 @@ namespace Troika.Desktop {
             var options = new ComputerUseDeviceOptions { Apps = apps, Project = browser ? project : null,
                 Entry = browser ? entry : null, SecondEntry = browser ? secondEntry : null,
                 Mobile = browser && mobile.IsChecked == true, ShareHeadings = browser && share.IsChecked == true,
+                SystemPointer = SystemPointer.Visibility == Visibility.Visible && SystemPointer.IsChecked == true,
                 Permission = new[] { "ask", "run", "view" }[Permission.SelectedIndex] };
             running = new CancellationTokenSource(TimeSpan.FromSeconds(150));
             Status.Text = "Запускаю задачу на этом ПК…";
@@ -231,6 +238,7 @@ namespace Troika.Desktop {
             } catch (ApiException) { Status.Text = "Тестовый сервер не запустил задачу или отклонил разрешение."; }
             catch (HttpRequestException) { Status.Text = "Тестовый сервер недоступен."; }
             catch (OperationCanceledException) { Status.Text = "Задача остановлена."; }
+            catch (ComputerUsePointerInterruptedException) { Status.Text = "Клик прерван. Проверьте, что поле Блокнота видно и мышь свободна."; }
             catch (IOException) { Status.Text = "Не удалось получить подтверждённый результат."; }
             catch (Win32Exception) { Status.Text = "Не удалось запустить управление ПК."; }
             catch (InvalidOperationException) { Status.Text = "Завершение задачи не подтверждено."; }
@@ -244,6 +252,8 @@ namespace Troika.Desktop {
             if (app == "notepad") {
                 approvalText.Text = action == "write" ? "Ввести в Блокнот этот текст?\n" + target
                     : action == "save" ? "Сохранить пробный файл Блокнота?" : "Открыть отдельный Блокнот?";
+                if (action == "write" && SystemPointer.IsChecked == true)
+                    approvalText.Text = "Нажать поле системным курсором и ввести текст?\n" + target;
             } else if (action == "click") {
                 approvalText.Text = "Нажать ссылку «" + target + "»?";
             } else {

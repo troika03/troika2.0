@@ -14,7 +14,7 @@ namespace Troika.Desktop {
     internal sealed class ComputerUseDeviceOptions {
         internal string Permission, Project, Entry, SecondEntry;
         internal string[] Apps;
-        internal bool Mobile, ShareHeadings;
+        internal bool Mobile, ShareHeadings, SystemPointer;
     }
 
     internal sealed class ComputerUseDeviceRun : IDisposable {
@@ -97,7 +97,7 @@ namespace Troika.Desktop {
                 if (value != null) start.EnvironmentVariables[name] = value;
             }
             start.EnvironmentVariables["TROIKA_COMPUTER_TEST_DEVICE_TOKEN"] = token;
-            using (var notepad = new ComputerUseNotepadControl())
+            using (var notepad = new ComputerUseNotepadControl(options.SystemPointer))
             using (var job = new ProcessJob())
             using (var process = new Process { StartInfo = start }) {
                 cancellation.ThrowIfCancellationRequested();

@@ -6,15 +6,19 @@ using System.Threading;
 using System.Threading.Tasks;
 
 namespace Troika.Desktop {
+    internal sealed class ComputerUsePointerInterruptedException : IOException { }
+
     internal sealed class ComputerUseNotepadControl : IDisposable {
         private readonly ComputerUseSession session = new ComputerUseSession();
         private readonly string path;
+        private readonly bool systemPointer;
         private ComputerUseNotepad document;
         private ComputerUseExecutor executor;
         private ComputerUsePointer pointer;
         internal string SavedFile { get { return session.State == ComputerUseState.Verified ? path : null; } }
 
-        internal ComputerUseNotepadControl() {
+        internal ComputerUseNotepadControl(bool systemPointer) {
+            this.systemPointer = systemPointer;
             string id = "troika-notepad-" + Guid.NewGuid().ToString("N");
             path = Path.Combine(Path.GetTempPath(), id, id + ".txt");
         }
@@ -41,8 +45,14 @@ namespace Troika.Desktop {
                     bool write = action == "write";
                     if (write ? !observation.CanWrite : !observation.CanSave) throw new InvalidOperationException();
                     try {
-                        await Preview(write ? ComputerUseStep.Write : ComputerUseStep.Save, fresh, cancellation);
-                        if (!fresh() || !await stillAllowed(cancellation) || !fresh()) throw new OperationCanceledException();
+                        if (write && systemPointer) {
+                            if (pointer == null) pointer = new ComputerUsePointer();
+                            if (!await pointer.ClickEditor(document, fresh, stillAllowed, cancellation))
+                                throw new ComputerUsePointerInterruptedException();
+                        } else {
+                            await Preview(write ? ComputerUseStep.Write : ComputerUseStep.Save, fresh, cancellation);
+                            if (!fresh() || !await stillAllowed(cancellation) || !fresh()) throw new OperationCanceledException();
+                        }
                         if (write) {
                             if (await executor.WriteAsync(observation.Id, text, fresh) != ComputerUseCommandResult.Applied)
                                 throw new InvalidOperationException();

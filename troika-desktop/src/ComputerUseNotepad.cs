@@ -57,8 +57,26 @@ internal sealed class ComputerUseNotepad : IComputerUseEditor, IDisposable {
         return GetAncestor(WindowFromPoint(point), RootWindow) == window;
     }
 
+    internal bool CanClickEditor(System.Drawing.Point point) {
+        System.Drawing.Point current;
+        return TryGetActionPoint(ComputerUseStep.Write, out current) && current == point && WindowFromPoint(point) == editor;
+    }
+
+    internal bool EditorHasFocus() {
+        var info = new GuiThreadInfo { Size = Marshal.SizeOf(typeof(GuiThreadInfo)) };
+        return IsTargetAvailable() && GetGUIThreadInfo(0, ref info) && info.Active == window && info.Focus == editor;
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     private struct Rectangle { internal int Left, Top, Right, Bottom; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct GuiThreadInfo {
+        internal int Size;
+        internal uint Flags;
+        internal IntPtr Active, Focus, Capture, MenuOwner, MoveSize, Caret;
+        internal Rectangle CaretBounds;
+    }
 
     internal ComputerUseNotepad(ComputerUseSession session, string output, bool showForCapture = false) {
         this.session = session;
@@ -212,6 +230,8 @@ internal sealed class ComputerUseNotepad : IComputerUseEditor, IDisposable {
     private static extern IntPtr WindowFromPoint(System.Drawing.Point point);
     [DllImport("user32.dll")]
     private static extern IntPtr GetAncestor(IntPtr window, uint flags);
+    [DllImport("user32.dll")]
+    private static extern bool GetGUIThreadInfo(uint thread, ref GuiThreadInfo info);
     [DllImport("user32.dll")]
     private static extern bool ShowWindowAsync(IntPtr target, int command);
     [DllImport("user32.dll")]
