@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -18,7 +20,7 @@ internal static class ComputerUseDeviceUiTests {
     [STAThread] public static int Main(string[] args) {
         Console.OutputEncoding = Encoding.UTF8;
         bool layout = args.Length >= 1 && args[0] == "--layout";
-        if (!(layout && args.Length <= 2) && !(args.Length == 3 && new[] { "--run", "--stop", "--click" }.Contains(args[0]))) return 2;
+        if (!(layout && args.Length <= 2) && !(args.Length == 3 && new[] { "--run", "--stop", "--click", "--stop-pointer" }.Contains(args[0]))) return 2;
         using (var run = layout ? null : new ComputerUseDeviceRun(args[1], args[2],
                 Environment.GetEnvironmentVariable("TROIKA_COMPUTER_TEST_DEVICE_TOKEN"))) {
             var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
@@ -37,7 +39,7 @@ internal static class ComputerUseDeviceUiTests {
                     if (layout) {
                         if (args.Length == 2) Render(window, args[1]);
                         Console.WriteLine("PASS Windows Computer Use shares one permission menu and requires an approved app.");
-                    } else await Verify(window, args[0] == "--stop", args[0] == "--click");
+                    } else await Verify(window, args[0]);
                 } catch (Exception error) {
                     Console.Error.WriteLine(error.Message);
                     exit = 1;
@@ -51,13 +53,17 @@ internal static class ComputerUseDeviceUiTests {
         }
     }
 
-    private static async Task Verify(ComputerUseDeviceWindow window, bool stop, bool click) {
+    private static async Task Verify(ComputerUseDeviceWindow window, string mode) {
+        bool stop = mode == "--stop" || mode == "--stop-pointer";
+        bool click = mode == "--click";
+        if (mode == "--stop-pointer") window.Browser.IsChecked = false;
         window.Goal.Text = "Сначала осмотри Блокнот, открой его, введи ровно «" + Expected +
             "» без кавычек и сохрани. Затем осмотри браузер, открой overview и "
             + (click ? "нажми видимую ссылку «Доставка». " : "прокрути до раздела доставки. ")
             + "После каждого успешного действия используй его квитанцию и сразу переходи к следующему.";
         var filesBefore = new HashSet<string>(Directory.GetDirectories(Path.GetTempPath(), "troika-notepad-*"));
         var approvals = new List<string>();
+        var pointerLabels = new HashSet<string>();
         Click(window.StartButton);
         var time = Stopwatch.StartNew();
         string previous = null;
@@ -67,18 +73,29 @@ internal static class ComputerUseDeviceUiTests {
                 if (text != previous) {
                     approvals.Add(text);
                     previous = text;
-                    if (stop && text.StartsWith("Сохранить", StringComparison.Ordinal)) Click(window.StopButton);
+                    if (mode == "--stop" && text.StartsWith("Сохранить", StringComparison.Ordinal)) Click(window.StopButton);
                     else Click(window.ApproveButton);
                 }
             } else previous = null;
-            await Task.Delay(25);
+            var pointer = Application.Current.Windows.Cast<Window>().FirstOrDefault(item => item.Title == "Указатель Тройки" && item.IsVisible);
+            if (pointer != null) {
+                Require(GetForegroundWindow() != new WindowInteropHelper(pointer).Handle, "The pointer stole focus.");
+                var label = (TextBlock)((Canvas)pointer.Content).Children.OfType<Border>().Single().Child;
+                if (label.IsVisible && pointerLabels.Add(label.Text) && mode == "--stop-pointer" && label.Text == "Сохранение")
+                    Click(window.StopButton);
+            }
+            await Task.Delay(20);
         }
         Require(window.Execution.IsCompleted, "The shared Windows Run timed out.");
         await window.Execution;
+        Require(Application.Current.Windows.Cast<Window>().All(item => item.Title != "Указатель Тройки" || !item.IsVisible),
+            "The pointer remained visible after the Run.");
         var files = Directory.GetDirectories(Path.GetTempPath(), "troika-notepad-*").Where(path => !filesBefore.Contains(path))
             .SelectMany(path => Directory.GetFiles(path, "*.txt")).ToArray();
         Require(files.Length == 1 && approvals.Any(text => text.Contains(Expected)),
             "The shared Windows Run did not show the text and open its own file. " + window.Status.Text);
+        if (mode == "--click" || mode == "--stop-pointer")
+            Require(pointerLabels.SetEquals(new[] { "Ввод", "Сохранение" }), "Both native pointer labels must be shown.");
         if (stop) {
             Require(window.Status.Text == "Остановлено." && File.ReadAllBytes(files[0]).SequenceEqual(ComputerUseNotepad.FileEncoding.GetPreamble()),
                 "Stop did not prevent Notepad from saving. " + window.Status.Text);
@@ -90,7 +107,8 @@ internal static class ComputerUseDeviceUiTests {
         }
         File.Delete(files[0]);
         Directory.Delete(Path.GetDirectoryName(files[0]), false);
-        Console.WriteLine(stop ? "PASS Stop in the common window prevented Notepad save."
+        Console.WriteLine(mode == "--stop-pointer" ? "PASS Stop during the native pointer preview prevented Notepad save."
+            : stop ? "PASS Stop in the common window prevented Notepad save."
             : click ? "PASS One Windows Run approved and verified Notepad save and a browser section link."
             : "PASS One Windows Run approved and verified Notepad save and browser scroll.");
     }
@@ -105,4 +123,5 @@ internal static class ComputerUseDeviceUiTests {
 
     private static void Click(Button button) { button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); }
     private static void Require(bool value, string message) { if (!value) throw new InvalidOperationException(message); }
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
 }

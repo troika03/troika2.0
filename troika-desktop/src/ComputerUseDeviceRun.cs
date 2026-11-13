@@ -114,7 +114,9 @@ namespace Troika.Desktop {
                         second_entry = options.SecondEntry, mobile = options.Mobile, share_headings = options.ShareHeadings }));
                     var stopped = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                     using (cancellation.Register(() => stopped.TrySetResult(true))) {
-                        var output = ReadWorker(process.StandardOutput, input, options, notepad, approve, progress, cancellation);
+                        var output = ReadWorker(process.StandardOutput, input, options, notepad, approve, progress,
+                            async stopToken => Json.Text(await Call("POST", "/v1/runs/" + runId + "/computer-windows-browser/review",
+                                new { version = 1, grant_id = grantId }, stopToken), "status") == "active", cancellation);
                         if (await Task.WhenAny(output, stopped.Task) != output) {
                             job.Dispose();
                             try { await output; }
@@ -132,7 +134,7 @@ namespace Troika.Desktop {
 
         private static async Task<bool> ReadWorker(StreamReader output, StreamWriter input, ComputerUseDeviceOptions options,
                 ComputerUseNotepadControl notepad, Func<string, string, string, TimeSpan, Task<bool>> approve,
-                Action<string> progress, CancellationToken cancellation) {
+                Action<string> progress, Func<CancellationToken, Task<bool>> stillAllowed, CancellationToken cancellation) {
             bool ready = false, finished = false;
             var clock = Stopwatch.StartNew();
             string approvedAction = null, approvedText = null;
@@ -176,7 +178,7 @@ namespace Troika.Desktop {
                             approvedAction = approvedText = null;
                         }
                     }
-                    var view = await notepad.Execute(action, text, remaining, cancellation);
+                    var view = await notepad.Execute(action, text, remaining, stillAllowed, cancellation);
                     cancellation.ThrowIfCancellationRequested();
                     await input.WriteLineAsync(Json.Encode(new { view = view }));
                 } else if (kind == "action" && ready && message.Count == 4 && options.Apps.Contains(app)) {

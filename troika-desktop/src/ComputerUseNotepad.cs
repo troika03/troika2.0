@@ -19,6 +19,8 @@ internal sealed class ComputerUseNotepad : IComputerUseEditor, IDisposable {
     private const uint MessageTimeoutMs = 1500;
     private const int ShowWithoutActivation = 4;
     private const uint NoZOrderOrActivation = 0x0014;
+    private const uint RaiseWithoutActivating = 0x0013;
+    private const uint RootWindow = 2;
 
     private readonly ComputerUseSession session;
     private readonly Process process;
@@ -30,6 +32,33 @@ internal sealed class ComputerUseNotepad : IComputerUseEditor, IDisposable {
 
     internal IntPtr WindowHandle { get { return window; } }
     internal int ProcessId { get { return process.Id; } }
+
+    internal bool TryGetActionPoint(ComputerUseStep step, out System.Drawing.Point point) {
+        point = System.Drawing.Point.Empty;
+        if (!IsTargetAvailable() || !IsWindowVisible(window) || IsIconic(window)) return false;
+        Rectangle area;
+        if (step == ComputerUseStep.Write) {
+            if (!GetWindowRect(editor, out area)) return false;
+            point = new System.Drawing.Point(area.Left + Math.Min(24, (area.Right - area.Left) / 2),
+                area.Top + Math.Min(14, (area.Bottom - area.Top) / 2));
+        } else {
+            if (!GetMenuItemRect(window, GetMenu(window), 0, out area)) return false;
+            point = new System.Drawing.Point((area.Left + area.Right) / 2, (area.Top + area.Bottom) / 2);
+        }
+        return IsActionPointVisible(point);
+    }
+
+    internal void RaiseForAction() {
+        if (IsTargetAvailable() && IsWindowVisible(window) && !IsIconic(window))
+            SetWindowPos(window, IntPtr.Zero, 0, 0, 0, 0, RaiseWithoutActivating);
+    }
+
+    internal bool IsActionPointVisible(System.Drawing.Point point) {
+        return GetAncestor(WindowFromPoint(point), RootWindow) == window;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Rectangle { internal int Left, Top, Right, Bottom; }
 
     internal ComputerUseNotepad(ComputerUseSession session, string output, bool showForCapture = false) {
         this.session = session;
@@ -171,6 +200,18 @@ internal sealed class ComputerUseNotepad : IComputerUseEditor, IDisposable {
     private static extern IntPtr GetParent(IntPtr target);
     [DllImport("user32.dll")]
     private static extern bool IsWindowEnabled(IntPtr target);
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr target);
+    [DllImport("user32.dll")]
+    private static extern bool IsIconic(IntPtr target);
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr target, out Rectangle rectangle);
+    [DllImport("user32.dll")]
+    private static extern bool GetMenuItemRect(IntPtr target, IntPtr menu, uint index, out Rectangle rectangle);
+    [DllImport("user32.dll")]
+    private static extern IntPtr WindowFromPoint(System.Drawing.Point point);
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetAncestor(IntPtr window, uint flags);
     [DllImport("user32.dll")]
     private static extern bool ShowWindowAsync(IntPtr target, int command);
     [DllImport("user32.dll")]

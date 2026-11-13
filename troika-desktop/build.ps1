@@ -69,7 +69,7 @@ if ($Test) {
     & (Join-Path $output 'ComputerUsePrototypeTests.exe')
     if ($LASTEXITCODE -ne 0) { throw 'Computer Use prototype tests failed.' }
 
-    $deviceSources = @('Development.cs','ComputerUseDeviceRun.cs','ComputerUseDeviceWindow.cs','ComputerUseNotepadControl.cs') | ForEach-Object { Join-Path $root ('src\' + $_) }
+    $deviceSources = @('Development.cs','ComputerUseDeviceRun.cs','ComputerUseDeviceWindow.cs','ComputerUseNotepadControl.cs','ComputerUsePointer.cs') | ForEach-Object { Join-Path $root ('src\' + $_) }
     $deviceTests = Join-Path $output 'ComputerUseDeviceUiTests.exe'
     & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + $deviceTests) $references $computerUseSources $deviceSources (Join-Path $root 'tests\ComputerUseDeviceUiTests.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Computer Use device UI test build failed.' }
