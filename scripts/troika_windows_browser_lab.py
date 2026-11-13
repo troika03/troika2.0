@@ -19,8 +19,8 @@ from troika_product.computer_windows_browser import PERMISSIONS, TOOL, browser_c
 PAGES = {
     "overview": """<!doctype html><meta charset=utf-8><title>Пробный магазин</title>
 <style>body{font:20px sans-serif;margin:32px}section{min-height:670px}</style>
-<main><section><h1>Пробный магазин</h1><p>Учебная страница.</p></section>
-<section><h2>Доставка</h2><p>Пробная доставка занимает два дня.</p></section></main>""",
+<main><section><h1>Пробный магазин</h1><p>Учебная страница.</p><a href="#delivery">Доставка</a></section>
+<section id="delivery"><h2>Доставка</h2><p>Пробная доставка занимает два дня.</p></section></main>""",
     "details": """<!doctype html><meta charset=utf-8><title>Сведения о магазине</title>
 <main><h1>Сведения о магазине</h1><p>Второе пробное окно.</p></main>""",
 }
@@ -47,6 +47,42 @@ def _wait_for_page(page, expression, failure, arg=None):
         page.wait_for_timeout(40)
 
 
+_PAGE_VIEW = """() => {
+    const visible = element => {
+        const rect = element.getBoundingClientRect();
+        return rect.height > 0 && rect.width > 0 && rect.bottom > 0 && rect.top < innerHeight &&
+            rect.right > 0 && rect.left < innerWidth && element.checkVisibility({
+                visibilityProperty: true, opacityProperty: true,
+            });
+    };
+    const label = element => element.innerText?.trim().replace(/[\\s\\u0000-\\u001f\\u007f-\\u009f]+/g, ' ');
+    const reachable = link => [...link.getClientRects()].some(rect => {
+        if (rect.right <= 0 || rect.bottom <= 0 || rect.left >= innerWidth || rect.top >= innerHeight) return false;
+        const x = (Math.max(0, rect.left) + Math.min(innerWidth, rect.right)) / 2;
+        const y = (Math.max(0, rect.top) + Math.min(innerHeight, rect.bottom)) / 2;
+        return link.contains(document.elementFromPoint(x, y));
+    });
+    const fragment = location.hash.slice(1) || null;
+    const section = fragment && document.getElementById(fragment);
+    const baseTarget = document.querySelector('base[target]')?.getAttribute('target');
+    const links = [...document.querySelectorAll('a[href]')].slice(0, 128).flatMap((link, index) => {
+        const href = link.getAttribute('href');
+        if (!/^#[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(href) || link.hasAttribute('download') ||
+            ((link.target || baseTarget) && (link.target || baseTarget).toLowerCase() !== '_self') ||
+            link.href !== location.href.split('#')[0] + href ||
+            href.slice(1) === fragment || !document.getElementById(href.slice(1)) || !visible(link) || !reachable(link)) return [];
+        const text = label(link);
+        return text ? [{id: index + 1, label: Array.from(text).slice(0, 128).join(''), fragment: href.slice(1)}] : [];
+    });
+    return {
+        y: Math.round(scrollY), max_y: Math.max(0, document.documentElement.scrollHeight - innerHeight),
+        headings: [...document.querySelectorAll('h1, h2')].filter(visible)
+            .slice(0, 8).map(element => (label(element) || '').slice(0, 160)),
+        links: links.slice(0, 4), fragment, at_section: !!section && visible(section),
+    };
+}"""
+
+
 class BrowserLab:
     def __init__(self, browser, project=None, viewport=(920, 500), bridge=None, apps=("browser",)):
         self.browser = browser
@@ -54,6 +90,7 @@ class BrowserLab:
         self.route = project.route if project is not None else _fixture_route
         self.viewport = viewport
         self.pages = {}
+        self.sections = {}
         self.active = None
         self.bridge, self.apps = bridge, apps
 
@@ -67,22 +104,13 @@ class BrowserLab:
             return {"page": None, "open_pages": []}
         page, window_id = self.pages[self.active]
         self._check_page(self.active, page)
-        view = page.evaluate("""() => ({
-            y: Math.round(scrollY),
-            max_y: Math.max(0, document.documentElement.scrollHeight - innerHeight),
-            headings: [...document.querySelectorAll('h1, h2')].filter(element => {
-                const rect = element.getBoundingClientRect();
-                return rect.height > 0 && rect.width > 0 && rect.bottom > 0 && rect.top < innerHeight &&
-                    rect.right > 0 && rect.left < innerWidth && element.checkVisibility({
-                        visibilityProperty: true, opacityProperty: true,
-                    });
-            }).slice(0, 8).map(element => element.textContent.trim().replace(/\\s+/g, ' ').slice(0, 160)),
-        })""")
+        view = page.evaluate(_PAGE_VIEW)
         self._check_page(self.active, page)
         return {"page": self.active, "open_pages": list(self.pages), "window": window_id, **view}
 
     def _check_page(self, name, page):
-        if page.is_closed() or page.url != self.targets[name]:
+        section = self.sections.get(name)
+        if page.is_closed() or page.url != self.targets[name] + ("#" + section if section else ""):
             raise ComputerControlError("browser_target_lost")
 
     @staticmethod
@@ -130,7 +158,23 @@ class BrowserLab:
         )
         return True
 
-    def step(self, command, approve):
+    def _click(self, link, expires):
+        page, _ = self.pages[self.active]
+        self._check_page(self.active, page)
+        fragment = link["fragment"]
+        target = self.targets[self.active] + "#" + fragment
+        remaining = min(2000, int((expires - time.monotonic()) * 1000)) if expires is not None else 2000
+        if remaining <= 0:
+            raise ComputerControlError("command_expired")
+        page.locator("a[href]").nth(link["id"] - 1).and_(page.locator(f'a[href="#{fragment}"]')).click(timeout=remaining)
+        page.wait_for_url(lambda url: url == target, timeout=2000)
+        self.sections[self.active] = fragment
+        view = self.inspect()
+        if not view["at_section"]:
+            raise ComputerControlError("browser_click_unverified")
+        return view
+
+    def step(self, command, approve, *, expires=None):
         try:
             action, arguments = browser_command(command, self.targets)
         except ComputerControlError:
@@ -145,7 +189,12 @@ class BrowserLab:
                 return {"error": "page_already_selected"}
         elif self.active is None:
             return {"error": "page_not_open"}
-        if not approve(command):
+        link = None
+        if action == "click":
+            link = next((link for link in self.inspect()["links"] if link["id"] == arguments["link_id"]), None)
+            if link is None:
+                return {"error": "link_not_visible"}
+        if not approve(command if link is None else {**command, "label": link["label"]}):
             return {"error": "denied"}
         if action == "open":
             self._open(name)
@@ -154,6 +203,8 @@ class BrowserLab:
             self._check_page(name, page)
             self._focus(page)
             self.active = name
+        elif link is not None:
+            return {"action": action, "view": self._click(link, expires)}
         elif not self._scroll(arguments["direction"]):
             return {"action": action, "at_boundary": True, "view": self.inspect()}
         return {"action": action, "view": self.inspect()}
@@ -189,12 +240,16 @@ def _run_model(lab, provider, task, approve, deadline, *, pages=PAGES):
             command = None
         if time.monotonic() >= deadline:
             raise ComputerControlError("grant_expired")
-        receipt = lab.step(command, approve)
+        receipt = lab.step(command, approve, expires=deadline)
         receipts.append(receipt)
         if receipt.get("error") == "denied":
             break
         messages.append({"role": "assistant", "content": None, "tool_calls": [call.model_dump(exclude_none=True)]})
-        messages.append({"role": "tool", "tool_call_id": call.id, "content": json.dumps(receipt, ensure_ascii=False)})
+        model_receipt = dict(receipt)
+        if "view" in model_receipt:
+            model_receipt["view"] = {key: value for key, value in receipt["view"].items()
+                                     if key not in ("links", "fragment", "at_section")}
+        messages.append({"role": "tool", "tool_call_id": call.id, "content": json.dumps(model_receipt, ensure_ascii=False)})
     return receipts
 
 
@@ -301,7 +356,7 @@ def main():
     parser.add_argument("--entry", help="путь к HTML внутри папки, по умолчанию index.html")
     parser.add_argument("--second-entry", help="вторая HTML-страница проекта")
     parser.add_argument("--mobile", action="store_true", help="область страницы 390 × 844")
-    parser.add_argument("--share-headings", action="store_true", help="разрешить передачу видимых заголовков в OpenRouter")
+    parser.add_argument("--share-headings", action="store_true", help="передавать видимые заголовки и подписи ссылок в OpenRouter")
     parser.add_argument("--permission", choices=PERMISSIONS,
                         help="спрашивать перед действием, разрешить выбранные окна, только просмотр")
     parser.add_argument("--desktop-bridge", action="store_true", help=argparse.SUPPRESS)
@@ -343,6 +398,8 @@ def main():
         if permission == "ask":
             if command["action"] == "scroll":
                 label = "Прокрутить страницу " + ("вниз" if command["direction"] == "down" else "вверх")
+            elif command["action"] == "click":
+                label = "Нажать ссылку «" + command["label"] + "»"
             else:
                 operation = "Открыть окно" if command["action"] == "open" else "Переключиться в окно"
                 label = operation + " «" + labels[command["page"]] + "»"

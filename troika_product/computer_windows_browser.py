@@ -1,6 +1,7 @@
 """Device-scoped browser commands for an opt-in Windows conversation Run."""
 
 from dataclasses import dataclass, field
+import re
 from uuid import uuid4
 
 from troika_product.computer_control import ComputerControlError, MAX_ACTIONS, VERSION, _Grant, _fields
@@ -13,6 +14,11 @@ PAGES = ("overview", "details")
 APPS = ("browser", "notepad")
 PERMISSIONS = ("ask", "run", "view")
 COMMAND_SECONDS = 30
+FRAGMENT = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,63}\Z")
+
+
+def valid_link_id(value):
+    return type(value) is int and 1 <= value <= 128
 
 
 def browser_schema(pages=PAGES):
@@ -41,14 +47,16 @@ def computer_schema():
     schema = browser_schema()
     schema["description"] = (
         "Use the approved Windows apps. Inspect an app before acting. For a browser, open or switch a selected page "
-        "by page ID, and scroll the current page by direction. For Notepad, open the isolated document, write "
+        "by page ID, scroll by direction, and click a visible section link by link_id from can_click. "
+        "For Notepad, open the isolated document, write "
         "the exact requested text and save. Set app to browser or notepad. Follow the Run instructions for "
         "observation IDs. A closed app can be opened when the receipt lists can_open. "
         "An empty browser view means no page is open. Successful receipts contain the current state."
     )
     schema["parameters"]["properties"].update({
-        "action": {"enum": ["inspect", "open", "scroll", "switch", "write", "save"], "type": "string"},
+        "action": {"enum": ["inspect", "open", "scroll", "switch", "click", "write", "save"], "type": "string"},
         "app": {"enum": list(APPS), "type": "string"},
+        "link_id": {"type": "integer", "minimum": 1, "maximum": 128, "description": "Only for browser click."},
         "text": {"type": "string", "minLength": 1, "maxLength": 512, "description": "Only for write."},
         "inspect_action_id": {"type": "string", "pattern": "^[a-f0-9]{32}$", "description": "Only when the Run requires it."},
     })
@@ -67,6 +75,8 @@ def browser_command(args, pages):
         return action, {"page": name}
     if action == "scroll" and set(args) == {"action", "direction"} and args["direction"] in ("up", "down"):
         return action, {"direction": args["direction"]}
+    if action == "click" and set(args) == {"action", "link_id"} and valid_link_id(args["link_id"]):
+        return action, {"link_id": args["link_id"]}
     raise ComputerControlError("invalid_tool_arguments", 400)
 
 
@@ -91,7 +101,7 @@ def device_command(args, pages, apps):
 @dataclass
 class _BrowserGrant(_Grant):
     mode = MODE
-    allowed_actions = ("inspect", "open", "scroll", "switch", "write", "save")
+    allowed_actions = ("inspect", "open", "scroll", "switch", "click", "write", "save")
     command: _Command | None = None
     issued: int = 0
     permission: str = "ask"
@@ -113,12 +123,36 @@ class _BrowserGrant(_Grant):
             self.command = None
 
 
+def _visible_text(text):
+    return (isinstance(text, str) and 1 <= len(text) <= 128
+            and not any(ord(c) < 32 or 127 <= ord(c) < 160 or 0xD800 <= ord(c) <= 0xDFFF for c in text))
+
+
+def _validate_links(value):
+    links, fragment, reached = value["links"], value["fragment"], value["at_section"]
+    if (type(reached) is not bool or (fragment is None and reached)
+            or (fragment is not None and (not isinstance(fragment, str) or not FRAGMENT.fullmatch(fragment)))
+            or not isinstance(links, list) or len(links) > 4):
+        return False
+    seen = set()
+    for link in links:
+        if (not isinstance(link, dict) or set(link) != {"id", "label", "fragment"}
+                or not valid_link_id(link["id"]) or link["id"] in seen or not _visible_text(link["label"])
+                or not isinstance(link["fragment"], str) or not FRAGMENT.fullmatch(link["fragment"])
+                or link["fragment"] == fragment):
+            return False
+        seen.add(link["id"])
+    return True
+
+
 def _validate_view(value, grant):
     if not isinstance(value, dict):
         raise ComputerControlError("invalid_browser_view", 400)
     if value == {"page": None, "open_pages": []}:
         return value
-    if set(value) != {"page", "open_pages", "y", "max_y", "headings"}:
+    base_fields = {"page", "open_pages", "y", "max_y", "headings"}
+    if set(value) != base_fields and (not grant.share_headings
+            or set(value) != base_fields | {"links", "fragment", "at_section"} or not _validate_links(value)):
         raise ComputerControlError("invalid_browser_view", 400)
     pages, headings = value["open_pages"], value["headings"]
     if (not isinstance(pages, list) or not 1 <= len(pages) <= len(grant.pages)
@@ -127,9 +161,7 @@ def _validate_view(value, grant):
             or type(value["y"]) is not int or type(value["max_y"]) is not int
             or not 0 <= value["y"] <= value["max_y"] <= 100_000_000
             or not isinstance(headings, list) or len(headings) > 4 or (headings and not grant.share_headings)
-            or any(not isinstance(text, str) or not 1 <= len(text) <= 128
-                   or any(ord(c) < 32 or 127 <= ord(c) < 160 or 0xD800 <= ord(c) <= 0xDFFF
-                          for c in text) for text in headings)):
+            or any(not _visible_text(text) for text in headings)):
         raise ComputerControlError("invalid_browser_view", 400)
     return value
 
@@ -145,6 +177,10 @@ def _matches_action(command, before, after):
         return False
     if command.action == "switch":
         return before["page"] != after["page"] == command.arguments["page"]
+    if command.action == "click":
+        return (after["page"] == before["page"] and after.get("at_section") is True
+                and any(link["id"] == command.arguments["link_id"] and link["fragment"] == after.get("fragment")
+                        for link in before.get("links", ())))
     return (before["page"] is not None and after["page"] == before["page"]
             and (after["y"] > before["y"] if command.arguments["direction"] == "down" else after["y"] < before["y"]))
 
@@ -188,7 +224,8 @@ class WindowsComputerUseLab(WindowsDeviceCommands):
         }, now)
         grant.permission, grant.pages, grant.apps, grant.share_headings = permission, tuple(pages), tuple(apps), share
         grant.explicit_apps = "apps" in body
-        return {**response, "permission": permission, "pages": pages, "apps": apps, "share_headings": share}
+        return {**response, "permission": permission, "pages": pages, "apps": apps, "share_headings": share,
+                "section_links": share and "browser" in apps}
 
     def _active_grant(self, principal, run_id):
         grant = self._grants.get(run_id)
@@ -220,7 +257,9 @@ class WindowsComputerUseLab(WindowsDeviceCommands):
                 previous = grant.views.get(app)
                 if previous is None or now >= previous[1]:
                     raise ComputerControlError("stale_state")
-                view_id, view_expires, _ = previous
+                view_id, view_expires, view = previous
+                if action == "click" and not any(link["id"] == arguments["link_id"] for link in view.get("links", ())):
+                    raise ComputerControlError("stale_state")
                 expiry = min(expiry, view_expires)
             grant.issued += 1
             command = _Command(uuid4().hex, grant.issued, action, expiry, view_id, arguments={"app": app, **arguments})
@@ -260,13 +299,16 @@ class WindowsComputerUseLab(WindowsDeviceCommands):
                 raise ComputerControlError("computer_action_unverified", 400)
             grant.views[app] = (command.id, min(grant.expires_at, now + COMMAND_SECONDS),
                                 {key: value for key, value in view.items() if key != "headings"})
+            public_view = {key: value for key, value in view.items() if key not in ("links", "fragment")}
             command.result = {"ok": True, "status": status, "action": command.action, "app": app,
-                              "view": view, "allowed_apps": list(grant.apps),
+                              "view": public_view, "allowed_apps": list(grant.apps),
                               "allowed_pages": list(grant.pages), "permission": grant.permission}
             if grant.permission != "view" and not grant.denied:
                 if app == "browser":
                     command.result["can_open"] = [page for page in grant.pages if page not in view["open_pages"]]
                     command.result["can_scroll_down"] = view.get("y", 0) < view.get("max_y", 0)
+                    if "links" in view:
+                        command.result["can_click"] = [{"id": link["id"], "label": link["label"]} for link in view["links"]]
                 else:
                     command.result["can_open"] = not view["open"]
         else:

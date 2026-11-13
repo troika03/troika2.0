@@ -15,7 +15,7 @@ _RUN = re.compile(r"run_[0-9a-f]{32}\Z")
 _ENDED = {"grant_stopped", "grant_expired", "grant_revoked", "grant_not_found"}
 
 
-def _view_for_report(view, share_headings):
+def _view_for_report(view, share_headings, share_links=False):
     if view["page"] is None:
         return {"page": None, "open_pages": []}
     result = {key: view[key] for key in ("page", "open_pages", "y", "max_y")}
@@ -26,6 +26,8 @@ def _view_for_report(view, share_headings):
                             and not 0xD800 <= ord(c) <= 0xDFFF).strip()
             if clean:
                 result["headings"].append(clean[:128])
+    if share_headings and share_links and "links" in view:
+        result.update({key: view[key] for key in ("links", "fragment", "at_section")})
     return result
 
 
@@ -112,11 +114,12 @@ class BrowserRunClient:
                 progress({"kind": "ready"})
             if permission == "view" and "browser" in apps and time.monotonic() < deadline:
                 lab.step({"action": "open", "page": "overview"}, lambda _: time.monotonic() < deadline)
-            return self._poll(lab, apps, approve, permission, share_headings, deadline, progress)
+            share_links = share_headings and consent.get("section_links") is True
+            return self._poll(lab, apps, approve, permission, share_headings, share_links, deadline, progress)
         finally:
             self._stop()
 
-    def _poll(self, lab, apps, approve, permission, share_headings, deadline, progress):
+    def _poll(self, lab, apps, approve, permission, share_headings, share_links, deadline, progress):
         previous = {}
         sequence = 0
         receipts = []
@@ -141,7 +144,8 @@ class BrowserRunClient:
             body = {"command_id": command["id"], "status": status}
             if status in ("verified", "observed"):
                 previous[app] = (command["id"], result["view"])
-                body["view"] = _view_for_report(result["view"], share_headings) if app == "browser" else result["view"]
+                body["view"] = (_view_for_report(result["view"], share_headings, share_links)
+                                if app == "browser" else result["view"])
                 receipts.append({"app": app, **result})
             else:
                 previous.pop(app, None)
@@ -180,11 +184,17 @@ class BrowserRunClient:
             inspect = lab.inspect if app == "browser" else lambda: lab.notepad({"action": "inspect"}, expires)["view"]
             if previous_id is None or command["inspect_action_id"] != previous_id or inspect() != previous_view:
                 return "stale_state", None
-            if not approve({"app": app, **args}, expires):
+            approval = {"app": app, **args}
+            if args["action"] == "click":
+                link = next((link for link in previous_view.get("links", ()) if link["id"] == args["link_id"]), None)
+                if link is None:
+                    return "stale_state", None
+                approval["label"] = link["label"]
+            if not approve(approval, expires):
                 return "denied", None
             if time.monotonic() >= expires or self.review() != "active" or inspect() != previous_view:
                 return "stale_state", None
-        result = (lab.step(args, lambda _: time.monotonic() < expires) if app == "browser"
+        result = (lab.step(args, lambda _: time.monotonic() < expires, expires=expires) if app == "browser"
                   else lab.notepad(args, expires))
         if "error" in result or result.get("at_boundary"):
             return "stale_state", None

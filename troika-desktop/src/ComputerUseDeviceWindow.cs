@@ -12,7 +12,7 @@ using System.Windows.Media;
 
 namespace Troika.Desktop {
     internal sealed class ComputerUseDeviceWindow : Window {
-        private const string Example = "Открой Блокнот, введи «Проба Тройки» и сохрани. Затем открой обзор в браузере и прокрути до доставки.";
+        private const string Example = "Открой Блокнот, введи «Проба Тройки» и сохрани. Затем открой обзор в браузере и нажми «Доставка».";
         private readonly ComputerUseDeviceRun run;
         private readonly StackPanel form, approval, browserScope;
         private readonly WrapPanel pageActions;
@@ -90,7 +90,10 @@ namespace Troika.Desktop {
             browserScope.Children.Add(pageActions);
 
             mobile = new CheckBox { Content = "Мобильный размер страницы", Margin = new Thickness(0, 0, 0, 10) };
-            share = new CheckBox { Content = "Передать видимые заголовки сайта в OpenRouter", Margin = new Thickness(0, 0, 0, 10) };
+            const string shareLabel = "Передать видимые заголовки и подписи ссылок в OpenRouter";
+            share = new CheckBox { Content = new TextBlock { Text = shareLabel, TextWrapping = TextWrapping.Wrap },
+                Margin = new Thickness(0, 0, 0, 10) };
+            AutomationProperties.SetName(share, shareLabel);
             browserScope.Children.Add(mobile);
             browserScope.Children.Add(share);
 
@@ -241,6 +244,8 @@ namespace Troika.Desktop {
             if (app == "notepad") {
                 approvalText.Text = action == "write" ? "Ввести в Блокнот этот текст?\n" + target
                     : action == "save" ? "Сохранить пробный файл Блокнота?" : "Открыть отдельный Блокнот?";
+            } else if (action == "click") {
+                approvalText.Text = "Нажать ссылку «" + target + "»?";
             } else {
                 approvalText.Text = action == "scroll" ? "Прокрутить страницу " + (target == "up" ? "вверх?" : "вниз?")
                     : (action == "open" ? "Открыть «" : "Переключиться на «") + page + "»?";

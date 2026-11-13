@@ -152,6 +152,35 @@ def test_browser_run_cannot_verify_scroll_on_another_page_or_without_movement():
     assert _matches_action(command, before, {**before, "y": 640})
 
 
+def test_browser_click_requires_the_observed_link_and_verified_section():
+    command = SimpleNamespace(action="click", arguments={"link_id": 2})
+    before = {"page": "overview", "open_pages": ["overview"],
+              "links": [{"id": 2, "label": "Delivery", "fragment": "delivery"}]}
+    after = {**before, "fragment": "delivery", "at_section": True, "links": []}
+    assert _matches_action(command, before, after)
+    assert not _matches_action(command, before, {**after, "at_section": False})
+    assert not _matches_action(command, before, {**after, "fragment": "other"})
+    assert not _matches_action(command, {**before, "links": []}, after)
+
+
+def test_device_rechecks_the_visible_link_after_approval():
+    client = BrowserRunClient("http://127.0.0.1:8642", "run_" + "a" * 32, "b" * 32, "fixture-token")
+    client.review = Mock(return_value="active")
+    link = {"id": 2, "label": "Delivery", "fragment": "delivery"}
+    original = {"links": [link]}
+    lab = Mock()
+    lab.inspect.side_effect = [original, {"links": [{**link, "fragment": "other"}]}]
+    approve = Mock(return_value=True)
+    try:
+        result = client._perform(lab, "browser", {"inspect_action_id": "previous"}, {"action": "click", "link_id": 2},
+                                 approve, "ask", float("inf"), "previous", original)
+        assert result == ("stale_state", None)
+        assert approve.call_args.args[0]["label"] == "Delivery"
+        lab.step.assert_not_called()
+    finally:
+        client.close()
+
+
 def test_closing_before_browser_consent_revokes_the_pending_grant():
     grant = "b" * 32
     client = BrowserRunClient("http://127.0.0.1:8642", "run_" + "a" * 32, grant, "fixture-token")

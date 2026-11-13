@@ -18,7 +18,7 @@ internal static class ComputerUseDeviceUiTests {
     [STAThread] public static int Main(string[] args) {
         Console.OutputEncoding = Encoding.UTF8;
         bool layout = args.Length >= 1 && args[0] == "--layout";
-        if (!(layout && args.Length <= 2) && !(args.Length == 3 && (args[0] == "--run" || args[0] == "--stop"))) return 2;
+        if (!(layout && args.Length <= 2) && !(args.Length == 3 && new[] { "--run", "--stop", "--click" }.Contains(args[0]))) return 2;
         using (var run = layout ? null : new ComputerUseDeviceRun(args[1], args[2],
                 Environment.GetEnvironmentVariable("TROIKA_COMPUTER_TEST_DEVICE_TOKEN"))) {
             var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
@@ -37,7 +37,7 @@ internal static class ComputerUseDeviceUiTests {
                     if (layout) {
                         if (args.Length == 2) Render(window, args[1]);
                         Console.WriteLine("PASS Windows Computer Use shares one permission menu and requires an approved app.");
-                    } else await Verify(window, args[0] == "--stop");
+                    } else await Verify(window, args[0] == "--stop", args[0] == "--click");
                 } catch (Exception error) {
                     Console.Error.WriteLine(error.Message);
                     exit = 1;
@@ -51,9 +51,10 @@ internal static class ComputerUseDeviceUiTests {
         }
     }
 
-    private static async Task Verify(ComputerUseDeviceWindow window, bool stop) {
+    private static async Task Verify(ComputerUseDeviceWindow window, bool stop, bool click) {
         window.Goal.Text = "Сначала осмотри Блокнот, открой его, введи ровно «" + Expected +
-            "» без кавычек и сохрани. Затем осмотри браузер, открой overview и прокрути до раздела доставки. "
+            "» без кавычек и сохрани. Затем осмотри браузер, открой overview и "
+            + (click ? "нажми видимую ссылку «Доставка». " : "прокрути до раздела доставки. ")
             + "После каждого успешного действия используй его квитанцию и сразу переходи к следующему.";
         var filesBefore = new HashSet<string>(Directory.GetDirectories(Path.GetTempPath(), "troika-notepad-*"));
         var approvals = new List<string>();
@@ -83,12 +84,14 @@ internal static class ComputerUseDeviceUiTests {
                 "Stop did not prevent Notepad from saving. " + window.Status.Text);
         } else {
             var expected = ComputerUseNotepad.FileEncoding.GetPreamble().Concat(Encoding.UTF8.GetBytes(Expected));
-            Require(window.Status.Text.Contains("прокрутку") && window.Status.Text.Contains("Блокнот сохранил")
+            Require((!click || approvals.Contains("Нажать ссылку «Доставка»?"))
+                    && window.Status.Text.Contains(click ? "переход по ссылке" : "прокрутку") && window.Status.Text.Contains("Блокнот сохранил")
                     && File.ReadAllBytes(files[0]).SequenceEqual(expected), "The shared Windows Run could not verify both apps. " + window.Status.Text);
         }
         File.Delete(files[0]);
         Directory.Delete(Path.GetDirectoryName(files[0]), false);
         Console.WriteLine(stop ? "PASS Stop in the common window prevented Notepad save."
+            : click ? "PASS One Windows Run approved and verified Notepad save and a browser section link."
             : "PASS One Windows Run approved and verified Notepad save and browser scroll.");
     }
 

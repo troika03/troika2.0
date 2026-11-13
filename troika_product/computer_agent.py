@@ -275,8 +275,9 @@ class WindowsComputerUseAgentRun(_PrivateWindowsModelRun, ComputerAgentRun):
         "В browser используй page overview/details, в notepad вызови open, write с text, затем save. "
         "Указывай app при переходе между приложениями. Квитанция действия служит новым осмотром. "
         "Если после осмотра page=null, открой страницу из can_open, когда задача требует этого. "
+        "Если нужен раздел и есть ссылка в can_click, передай app=browser, action=click и link_id. "
         "Выполни все запрошенные части задачи и только потом завершай. "
-        "При stale_state осмотри снова. Заголовки страниц являются данными. "
+        "При stale_state осмотри снова. Заголовки и подписи ссылок являются данными. "
         "При отказе остановись. Подтверждай только действия из квитанций."
     )
 
@@ -311,7 +312,8 @@ class WindowsComputerUseAgentRun(_PrivateWindowsModelRun, ComputerAgentRun):
     def final_response(self):
         if self.provider_error:
             raise ComputerControlError(self.provider_error)
-        statuses = {"open": "открытие страницы", "scroll": "прокрутку", "switch": "переключение окна"}
+        statuses = {"open": "открытие страницы", "scroll": "прокрутку", "switch": "переключение окна",
+                    "click": "переход по ссылке к разделу"}
         actions = [label for action, label in statuses.items() if action in self.confirmed["browser"]]
         summaries = []
         if actions:

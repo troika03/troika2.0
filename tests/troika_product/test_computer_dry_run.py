@@ -452,7 +452,7 @@ async def test_assisted_windows_run_applies_the_selected_permission(hosted, monk
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("hosted", [True], indirect=True)
-@pytest.mark.parametrize("scenario", ["run", "mixed", "view", "deny", "stop"])
+@pytest.mark.parametrize("scenario", ["run", "mixed", "click", "hidden", "view", "deny", "stop"])
 async def test_browser_run_uses_only_the_approved_device(hosted, monkeypatch, scenario):
     from copy import deepcopy
     from scripts.troika_browser_run import BrowserRunClient
@@ -472,6 +472,8 @@ async def test_browser_run_uses_only_the_approved_device(hosted, monkeypatch, sc
         ])
     elif scenario == "view":
         commands.append({"action": "scroll", "direction": "down"})
+    elif scenario in ("click", "hidden"):
+        commands.extend([{"action": "open", "page": "overview"}, {"action": "click", "link_id": 2}])
     else:
         commands.extend([
             {"action": "open", "page": "overview"}, {"action": "scroll", "direction": "down"},
@@ -482,6 +484,7 @@ async def test_browser_run_uses_only_the_approved_device(hosted, monkeypatch, sc
     def respond(request):
         assert request.url == "https://openrouter.ai/api/v1/chat/completions"
         assert b"PRIVATE_BROWSER_HEADING" not in request.content
+        assert b"INTERNAL_FRAGMENT" not in request.content
         data = json.loads(request.content)
         assert data["model"] == "fixture/browser:free"
         assert [tool["function"]["name"] for tool in data["tools"]] == [TOOL]
@@ -508,6 +511,7 @@ async def test_browser_run_uses_only_the_approved_device(hosted, monkeypatch, sc
             self.active = None
             self.positions = {}
             self.actions = []
+            self.fragment = None
             self.apps = ["browser", "notepad"] if scenario == "mixed" else ["browser"]
             self.editor = {"open": False, "can_write": False, "can_save": False, "saved": False}
 
@@ -529,10 +533,12 @@ async def test_browser_run_uses_only_the_approved_device(hosted, monkeypatch, sc
             view = {"page": self.active, "open_pages": list(self.positions)}
             if self.active is not None:
                 view.update(y=self.positions[self.active], max_y=640, window=123,
-                            headings=["PRIVATE_BROWSER_HEADING"])
+                            headings=["PRIVATE_BROWSER_HEADING"] if scenario != "click" else ["Overview"],
+                            fragment=self.fragment, at_section=self.fragment is not None,
+                            links=[] if self.fragment else [{"id": 2, "label": "Delivery", "fragment": "INTERNAL_FRAGMENT"}])
             return deepcopy(view)
 
-        def step(self, command, approve):
+        def step(self, command, approve, *, expires=None):
             action = command["action"]
             if action != "inspect" and not approve(command):
                 return {"error": "denied"}
@@ -542,6 +548,9 @@ async def test_browser_run_uses_only_the_approved_device(hosted, monkeypatch, sc
             elif action == "switch":
                 self.active = command["page"]
             elif action == "scroll":
+                self.positions[self.active] = 640
+            elif action == "click":
+                self.fragment = "INTERNAL_FRAGMENT"
                 self.positions[self.active] = 640
             self.actions.append(action)
             return {"action": action, "view": self.inspect()}
@@ -561,7 +570,9 @@ async def test_browser_run_uses_only_the_approved_device(hosted, monkeypatch, sc
     browser = Browser()
     asking, release = threading.Event(), threading.Event()
 
-    def approve(_, _deadline):
+    def approve(command, _deadline):
+        if command["action"] == "click":
+            assert command == {"app": "browser", "action": "click", "link_id": 2, "label": "Delivery"}
         if scenario == "stop":
             asking.set()
             assert release.wait(25)
@@ -574,7 +585,7 @@ async def test_browser_run_uses_only_the_approved_device(hosted, monkeypatch, sc
         try:
             assert device.review() == "pending"
             permission = "view" if scenario == "view" else "run" if scenario in ("run", "mixed") else "ask"
-            return device.run(browser, approve, permission, False, time.monotonic() + 90)
+            return device.run(browser, approve, permission, scenario == "click", time.monotonic() + 90)
         finally:
             device.close()
 
@@ -602,6 +613,13 @@ async def test_browser_run_uses_only_the_approved_device(hosted, monkeypatch, sc
                 assert browser.actions == ["notepad open", "notepad write", "notepad save", "inspect", "open", "scroll"]
                 assert browser.editor["saved"] and browser.inspect()["y"] == 640
                 assert "Блокнот сохранил" in event["output"] and "прокрутку" in event["output"]
+            elif scenario == "click":
+                assert browser.actions == ["inspect", "open", "click"]
+                assert observed[-2]["can_click"] == [{"id": 2, "label": "Delivery"}]
+                assert observed[-1]["view"]["at_section"] and "переход по ссылке" in event["output"]
+                assert "Delivery" not in stream
+            elif scenario == "hidden":
+                assert browser.actions == ["inspect", "open"] and observed[-1]["error"] == "stale_state"
             elif scenario == "view":
                 assert browser.actions == ["open", "inspect"] and observed[-1]["error"] == "action_denied"
             else:

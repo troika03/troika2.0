@@ -15,7 +15,7 @@
 | Документы | Hosted DOCX/PDF/PPTX; локальные DOCX/PPTX; workspace text/HTML artifacts. | Импорт/редактирование существующих Office-файлов, XLSX, визуальное качество и E2E открытие/сохранение. |
 | Память и аккаунт | Owner-scoped CRUD, export/delete, device revoke, access/refresh tokens. | Recovery/email verification; production object/backup lifecycle. |
 | Одноразовый экран Android | MediaProjection, TTL/nonce, owner/device guard, Stop, frame cap; прежний Samsung E2E. | Beta build и оба server flags; opt-in external vision. Это не live vision. |
-| Windows | Локальные allowlist actions, Compact/Command Center, hotkey, approved screenshot. Тестовая WPF-сборка запускает Блокнот и браузер через один Computer Use Run и одно меню разрешений. В исходниках режима «Разработка» отчёт содержит фактические позиции прокрутки. | Установка и проверка клиентской сборки, расширение действий и отдельный Companion для расширенного управления. |
+| Windows | Локальные allowlist actions, Compact/Command Center, hotkey, approved screenshot. В тестовой WPF-сборке один Computer Use Run управляет Блокнотом и браузером. Браузер прокручивает страницу и нажимает видимые ссылки на её разделы. В исходниках режима «Разработка» отчёт содержит фактические позиции прокрутки. | Установка и проверка клиентской сборки, расширение действий и отдельный Companion для расширенного управления. |
 
 ## Неподключённые возможности
 

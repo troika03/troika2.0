@@ -150,10 +150,7 @@ namespace Troika.Desktop {
                     TimeSpan remaining = Duration(message);
                     string target;
                     if (app == "browser") {
-                        target = Json.Text(message, action == "scroll" ? "direction" : "page");
-                        bool valid = action == "scroll" ? target == "up" || target == "down"
-                            : (action == "open" || action == "switch") && (target == "overview" || target == "details");
-                        if (message.Count != 5 || !valid) throw new InvalidDataException();
+                        target = BrowserApproval(message, action);
                     } else {
                         approvedAction = approvedText = null;
                         target = NotepadText(message, action, false);
@@ -189,6 +186,7 @@ namespace Troika.Desktop {
                     else if (status == "verified" && action == "open") progress(app == "browser" ? "Страница открыта." : "Блокнот открыт.");
                     else if (status == "verified" && action == "scroll") progress("Прокрутка подтверждена.");
                     else if (status == "verified" && action == "switch") progress("Переключение окна подтверждено.");
+                    else if (status == "verified" && action == "click") progress("Переход к разделу подтверждён.");
                     else if (status == "verified" && action == "write") progress("Текст в Блокноте проверен.");
                     else if (status == "verified" && action == "save") progress("Файл сохранён и проверен.");
                     else if (status == "stale_state") progress("Положение страницы изменилось. Нужен новый осмотр.");
@@ -198,6 +196,20 @@ namespace Troika.Desktop {
                 else throw new InvalidDataException();
             }
             return finished;
+        }
+
+        private static string BrowserApproval(Dictionary<string, object> message, string action) {
+            if (action == "click") {
+                var id = Json.Get(message, "link_id");
+                string label = Json.Text(message, "label");
+                if (message.Count == 6 && id is int && (int)id >= 1 && (int)id <= 128
+                        && !String.IsNullOrWhiteSpace(label) && label.Length <= 256 && !label.Any(Char.IsControl)) return label;
+            } else if (message.Count == 5) {
+                string target = Json.Text(message, action == "scroll" ? "direction" : "page");
+                if (action == "scroll" && (target == "up" || target == "down")) return target;
+                if ((action == "open" || action == "switch") && (target == "overview" || target == "details")) return target;
+            }
+            throw new InvalidDataException();
         }
 
         private static TimeSpan Duration(Dictionary<string, object> message) {
