@@ -56,12 +56,15 @@ _PAGE_VIEW = """() => {
             });
     };
     const label = element => element.innerText?.trim().replace(/[\\s\\u0000-\\u001f\\u007f-\\u009f]+/g, ' ');
-    const reachable = link => [...link.getClientRects()].some(rect => {
-        if (rect.right <= 0 || rect.bottom <= 0 || rect.left >= innerWidth || rect.top >= innerHeight) return false;
-        const x = (Math.max(0, rect.left) + Math.min(innerWidth, rect.right)) / 2;
-        const y = (Math.max(0, rect.top) + Math.min(innerHeight, rect.bottom)) / 2;
-        return link.contains(document.elementFromPoint(x, y));
-    });
+    const clickPoint = link => {
+        for (const rect of link.getClientRects()) {
+            if (rect.right <= 0 || rect.bottom <= 0 || rect.left >= innerWidth || rect.top >= innerHeight) continue;
+            const x = (Math.max(0, rect.left) + Math.min(innerWidth, rect.right)) / 2;
+            const y = (Math.max(0, rect.top) + Math.min(innerHeight, rect.bottom)) / 2;
+            if (link.contains(document.elementFromPoint(x, y))) return [x, y];
+        }
+        return null;
+    };
     const fragment = location.hash.slice(1) || null;
     const section = fragment && document.getElementById(fragment);
     const baseTarget = document.querySelector('base[target]')?.getAttribute('target');
@@ -70,9 +73,10 @@ _PAGE_VIEW = """() => {
         if (!/^#[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(href) || link.hasAttribute('download') ||
             ((link.target || baseTarget) && (link.target || baseTarget).toLowerCase() !== '_self') ||
             link.href !== location.href.split('#')[0] + href ||
-            href.slice(1) === fragment || !document.getElementById(href.slice(1)) || !visible(link) || !reachable(link)) return [];
+            href.slice(1) === fragment || !document.getElementById(href.slice(1)) || !visible(link)) return [];
         const text = label(link);
-        return text ? [{id: index + 1, label: Array.from(text).slice(0, 128).join(''), fragment: href.slice(1)}] : [];
+        const point = text && clickPoint(link);
+        return point ? [{id: index + 1, label: Array.from(text).slice(0, 128).join(''), fragment: href.slice(1), point}] : [];
     });
     return {
         y: Math.round(scrollY), max_y: Math.max(0, document.documentElement.scrollHeight - innerHeight),
@@ -83,14 +87,55 @@ _PAGE_VIEW = """() => {
 }"""
 
 
+_POINTER = """([x, y, action]) => {
+    const key = Symbol.for('troika.computer-use.pointer');
+    if (!action) {
+        globalThis[key]?.remove();
+        delete globalThis[key];
+        return;
+    }
+    let host = globalThis[key];
+    if (!host) {
+        host = document.createElement('div');
+        host.setAttribute('aria-hidden', 'true');
+        host.style.cssText = 'all:initial!important;position:fixed!important;inset:0 auto auto 0!important;' +
+            'width:0!important;height:0!important;z-index:2147483647!important;pointer-events:none!important';
+        const root = host.attachShadow({mode: 'open'});
+        const style = new CSSStyleSheet();
+        style.replaceSync(`
+            :host, * { pointer-events:none !important }
+            b, i, span { position:absolute; box-sizing:border-box }
+            b { width:26px; height:32px; background:white; filter:drop-shadow(0 1px 2px #0008);
+                clip-path:polygon(0 0, 100% 57%, 57% 61%, 75% 93%, 58% 100%, 39% 68%, 8% 94%) }
+            i { inset:3px 4px 4px 3px; background:#194d38; clip-path:inherit }
+            em { position:absolute; left:-16px; top:-16px; width:32px; height:32px; border:3px solid #07824b;
+                border-radius:50%; background:#45da7933; box-shadow:0 0 0 2px white; visibility:hidden }
+            span { left:23px; top:17px; width:max-content; padding:3px 8px; border-radius:6px;
+                background:#194d38; color:white; font:600 13px system-ui; line-height:19px }
+            :host([data-action=click]) em, :host([data-action=scroll]) em { visibility:visible }
+            :host([data-action=move]) span { display:none }
+        `);
+        root.adoptedStyleSheets = [style];
+        root.innerHTML = '<em></em><b><i></i></b><span></span>';
+        document.documentElement.append(host);
+        globalThis[key] = host;
+    }
+    host.style.setProperty('transform', `translate(${x}px, ${y}px)`, 'important');
+    host.dataset.action = action;
+    host.shadowRoot.querySelector('span').textContent = action === 'click' ? 'Клик' : 'Прокрутка';
+}"""
+
+
 class BrowserLab:
-    def __init__(self, browser, project=None, viewport=(920, 500), bridge=None, apps=("browser",)):
+    def __init__(self, browser, project=None, viewport=(920, 500), bridge=None, apps=("browser",), visible_pointer=False):
         self.browser = browser
         self.targets = project.pages if project is not None else {name: ORIGIN + name for name in PAGES}
         self.route = project.route if project is not None else _fixture_route
         self.viewport = viewport
         self.pages = {}
         self.sections = {}
+        self.visible_pointer = visible_pointer
+        self.pointer_positions = {}
         self.active = None
         self.bridge, self.apps = bridge, apps
 
@@ -145,36 +190,78 @@ class BrowserLab:
             context.close()
             raise
 
-    def _scroll(self, direction):
+    def _move_pointer(self, page, point, action, expires):
+        if self.visible_pointer:
+            self._focus(page)
+            start = self.pointer_positions.get(self.active, (24, 24))
+            for step in range(9):
+                fraction = step / 8
+                position = point if step == 8 else tuple(a + (b - a) * fraction for a, b in zip(start, point))
+                self._check_page(self.active, page)
+                self._check_deadline(expires)
+                page.mouse.move(*position)
+                page.evaluate(_POINTER, [*position, action if step == 8 else "move"])
+                self.pointer_positions[self.active] = position
+                page.wait_for_timeout(22 if step < 8 else 80)
+        else:
+            self._check_deadline(expires)
+            page.mouse.move(*point)
+
+    def _hide_pointer(self, page):
+        if self.visible_pointer and not page.is_closed():
+            page.evaluate(_POINTER, [0, 0, None])
+
+    @staticmethod
+    def _check_deadline(expires):
+        if expires is not None and time.monotonic() >= expires:
+            raise ComputerControlError("command_expired")
+
+    def _scroll(self, direction, expires, still_allowed):
         page, _ = self.pages[self.active]
         before = self.inspect()
         if (direction == "down" and before["y"] >= before["max_y"]) or (direction == "up" and before["y"] == 0):
             return False
-        page.mouse.move(self.viewport[0] / 2, self.viewport[1] / 2)
-        page.mouse.wheel(0, 640 if direction == "down" else -640)
-        _wait_for_page(
-            page, "([y, down]) => down ? scrollY > y : scrollY < y", "browser_scroll_unverified",
-            [before["y"], direction == "down"],
-        )
+        try:
+            self._move_pointer(page, (self.viewport[0] / 2, self.viewport[1] / 2), "scroll", expires)
+            self._check_page(self.active, page)
+            if not still_allowed():
+                return None
+            self._check_deadline(expires)
+            page.mouse.wheel(0, 640 if direction == "down" else -640)
+            _wait_for_page(
+                page, "([y, down]) => down ? scrollY > y : scrollY < y", "browser_scroll_unverified",
+                [before["y"], direction == "down"],
+            )
+            if self.visible_pointer:
+                page.wait_for_timeout(240)
+        finally:
+            self._hide_pointer(page)
         return True
 
-    def _click(self, link, expires):
+    def _click(self, link, expires, still_allowed):
         page, _ = self.pages[self.active]
         self._check_page(self.active, page)
         fragment = link["fragment"]
         target = self.targets[self.active] + "#" + fragment
-        remaining = min(2000, int((expires - time.monotonic()) * 1000)) if expires is not None else 2000
-        if remaining <= 0:
-            raise ComputerControlError("command_expired")
-        page.locator("a[href]").nth(link["id"] - 1).and_(page.locator(f'a[href="#{fragment}"]')).click(timeout=remaining)
-        page.wait_for_url(lambda url: url == target, timeout=2000)
-        self.sections[self.active] = fragment
-        view = self.inspect()
-        if not view["at_section"]:
-            raise ComputerControlError("browser_click_unverified")
-        return view
+        point = link["point"]
+        try:
+            self._move_pointer(page, point, "click", expires)
+            if not still_allowed() or link not in self.inspect()["links"]:
+                return None
+            self._check_deadline(expires)
+            page.mouse.click(*point)
+            page.wait_for_url(lambda url: url == target, timeout=2000)
+            self.sections[self.active] = fragment
+            view = self.inspect()
+            if not view["at_section"]:
+                raise ComputerControlError("browser_click_unverified")
+            if self.visible_pointer:
+                page.wait_for_timeout(240)
+            return view
+        finally:
+            self._hide_pointer(page)
 
-    def step(self, command, approve, *, expires=None):
+    def step(self, command, approve, *, expires=None, still_allowed=lambda: True):
         try:
             action, arguments = browser_command(command, self.targets)
         except ComputerControlError:
@@ -204,9 +291,14 @@ class BrowserLab:
             self._focus(page)
             self.active = name
         elif link is not None:
-            return {"action": action, "view": self._click(link, expires)}
-        elif not self._scroll(arguments["direction"]):
-            return {"action": action, "at_boundary": True, "view": self.inspect()}
+            view = self._click(link, expires, still_allowed)
+            return {"action": action, "view": view} if view is not None else {"error": "stale_state"}
+        else:
+            scrolled = self._scroll(arguments["direction"], expires, still_allowed)
+            if scrolled is None:
+                return {"error": "stale_state"}
+            if not scrolled:
+                return {"action": action, "at_boundary": True, "view": self.inspect()}
         return {"action": action, "view": self.inspect()}
 
 
@@ -438,7 +530,7 @@ def main():
                                              chromium_sandbox=True, timeout=10000, env=browser_environment) if engine else None
             try:
                 lab = BrowserLab(browser, project, viewport=(390, 844) if args.mobile else (920, 500),
-                                 bridge=bridge, apps=apps)
+                                 bridge=bridge, apps=apps, visible_pointer=args.show)
                 if permission == "view" and run is None:
                     lab.step({"action": "open", "page": "overview"}, lambda _: time.monotonic() < deadline)
                 if run is not None:

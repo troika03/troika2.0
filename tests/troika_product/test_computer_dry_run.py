@@ -538,7 +538,7 @@ async def test_browser_run_uses_only_the_approved_device(hosted, monkeypatch, sc
                             links=[] if self.fragment else [{"id": 2, "label": "Delivery", "fragment": "INTERNAL_FRAGMENT"}])
             return deepcopy(view)
 
-        def step(self, command, approve, *, expires=None):
+        def step(self, command, approve, *, expires=None, still_allowed=lambda: True):
             action = command["action"]
             if action != "inspect" and not approve(command):
                 return {"error": "denied"}

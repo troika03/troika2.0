@@ -27,7 +27,8 @@ def _view_for_report(view, share_headings, share_links=False):
             if clean:
                 result["headings"].append(clean[:128])
     if share_headings and share_links and "links" in view:
-        result.update({key: view[key] for key in ("links", "fragment", "at_section")})
+        result.update(fragment=view["fragment"], at_section=view["at_section"],
+                      links=[{key: link[key] for key in ("id", "label", "fragment")} for link in view["links"]])
     return result
 
 
@@ -194,7 +195,8 @@ class BrowserRunClient:
                 return "denied", None
             if time.monotonic() >= expires or self.review() != "active" or inspect() != previous_view:
                 return "stale_state", None
-        result = (lab.step(args, lambda _: time.monotonic() < expires, expires=expires) if app == "browser"
+        result = (lab.step(args, lambda _: time.monotonic() < expires, expires=expires,
+                           still_allowed=lambda: self.review() == "active" and lab.inspect() == previous_view) if app == "browser"
                   else lab.notepad(args, expires))
         if "error" in result or result.get("at_boundary"):
             return "stale_state", None

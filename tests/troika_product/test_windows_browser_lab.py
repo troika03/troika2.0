@@ -7,7 +7,7 @@ import pytest
 
 from scripts.troika_windows_browser_lab import BrowserLab, ORIGIN, _fixture_route, _run_model, _verified
 from scripts.troika_static_preview import StaticProjectPreview
-from scripts.troika_browser_run import BrowserRunClient
+from scripts.troika_browser_run import BrowserRunClient, _view_for_report
 from troika_product.computer_control import ComputerControlError
 from troika_product.computer_windows_browser import _matches_action, device_command
 
@@ -179,6 +179,27 @@ def test_device_rechecks_the_visible_link_after_approval():
         lab.step.assert_not_called()
     finally:
         client.close()
+
+
+def test_stop_during_pointer_movement_prevents_the_click_and_clears_the_pointer():
+    lab = BrowserLab(Mock(), visible_pointer=True)
+    page = Mock(url=ORIGIN + "overview")
+    page.is_closed.return_value = False
+    lab.pages["overview"] = (page, 1)
+    lab.active = "overview"
+    lab._focus = Mock()
+    link = {"id": 1, "label": "Delivery", "fragment": "delivery", "point": [72, 160]}
+    assert lab._click(link, None, lambda: False) is None
+    page.mouse.move.assert_called_with(72, 160)
+    page.mouse.click.assert_not_called()
+    assert page.evaluate.call_args.args[1] == [0, 0, None]
+
+
+def test_click_coordinates_stay_on_the_device():
+    link = {"id": 1, "label": "Delivery", "fragment": "delivery"}
+    view = {"page": "overview", "open_pages": ["overview"], "headings": [], "y": 0, "max_y": 640,
+            "fragment": None, "at_section": False, "links": [{**link, "point": [72, 160]}]}
+    assert _view_for_report(view, True, True)["links"] == [link]
 
 
 def test_closing_before_browser_consent_revokes_the_pending_grant():
