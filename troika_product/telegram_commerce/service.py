@@ -283,3 +283,8 @@ class Service:
                 if error.code in {401, 409}:
                     raise RuntimeError(f"{role}: credential rejected or another poller is active") from None
                 await asyncio.sleep(min(30, error.retry_after or 5))
+
+    async def deliveries(self, role):
+        while True:
+            await self.deliver(role)
+            await asyncio.sleep(0.5)

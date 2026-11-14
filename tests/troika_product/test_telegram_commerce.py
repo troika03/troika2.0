@@ -303,3 +303,24 @@ def test_support_deep_links_open_only_known_topics(system):
     with store.transaction() as c:
         assert not c.execute("SELECT 1 FROM sessions").fetchone()
     assert "Поддержка Тройки" in messages(store)[-1]["text"]
+
+
+@pytest.mark.asyncio
+async def test_worker_loops_used_by_the_runner_deliver_queued_messages(system):
+    import asyncio
+    _, store, service = system
+    sent = []
+    class Client:
+        async def call(self, method, payload):
+            sent.append(method)
+            return {"message_id": len(sent)}
+    service.clients["shop"] = Client()
+    service.process("shop", update(1, text="/start"))
+    task = asyncio.create_task(service.deliveries("shop"))
+    for _ in range(50):
+        await asyncio.sleep(0.01)
+        if sent:
+            break
+    task.cancel()
+    assert sent == ["sendMessage"] and not store.pending("shop")
+    assert callable(service.poll)
