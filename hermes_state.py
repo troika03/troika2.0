@@ -25,7 +25,7 @@ from pathlib import Path
 
 from agent.memory_manager import sanitize_context
 from hermes_constants import get_hermes_home
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -1174,6 +1174,29 @@ class SessionDB:
             current = row["id"]
         return current
 
+    def get_compression_chain(self, session_id: str) -> List[str]:
+        """Return ``session_id`` followed by its compression continuations.
+
+        Uses the same continuation criteria as :meth:`get_compression_tip`.
+        """
+        chain = [session_id]
+        for _ in range(100):
+            with self._lock:
+                row = self._conn.execute(
+                    "SELECT id FROM sessions "
+                    "WHERE parent_session_id = ? "
+                    "  AND started_at >= ("
+                    "      SELECT ended_at FROM sessions "
+                    "      WHERE id = ? AND end_reason = 'compression'"
+                    "  ) "
+                    "ORDER BY started_at DESC LIMIT 1",
+                    (chain[-1], chain[-1]),
+                ).fetchone()
+            if row is None or row["id"] in chain:
+                break
+            chain.append(row["id"])
+        return chain
+
     def list_sessions_rich(
         self,
         source: str = None,
@@ -1183,8 +1206,12 @@ class SessionDB:
         include_children: bool = False,
         project_compression_tips: bool = True,
         order_by_last_active: bool = False,
+        session_ids: Optional[Iterable[str]] = None,
     ) -> List[Dict[str, Any]]:
         """List sessions with preview (first user message) and last active timestamp.
+
+        ``session_ids`` restricts the listing to those IDs in SQL, so a
+        multi-tenant caller pages over its own rows instead of a global page.
 
         Returns dicts with keys: id, source, model, title, started_at, ended_at,
         message_count, preview (first 60 chars of first user message),
@@ -1235,6 +1262,10 @@ class SessionDB:
             placeholders = ",".join("?" for _ in exclude_sources)
             where_clauses.append(f"s.source NOT IN ({placeholders})")
             params.extend(exclude_sources)
+        if session_ids is not None:
+            # One JSON parameter avoids SQLite's bound-variable limit.
+            where_clauses.append("s.id IN (SELECT value FROM json_each(?))")
+            params.append(json.dumps(sorted({str(sid) for sid in session_ids})))
 
         where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
         if order_by_last_active:

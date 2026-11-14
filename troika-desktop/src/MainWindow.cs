@@ -202,8 +202,37 @@ namespace Troika.Desktop {
             foreach (var item in sessions.Take(30)) {
                 var id = Json.Text(item, "id"); var title = Json.Text(item, "title"); if (title.Length == 0) title = Json.Text(item, "preview"); if (title.Length == 0) title = "Разговор";
                 if (title.Length > 56) title = title.Substring(0, 56) + "…";
-                var button = Button(title, () => { var task = LoadConversation(id); }, false); button.Content = Label(title, 12, text); button.ToolTip = title; button.Margin = new Thickness(0, 0, 0, 8); button.BorderThickness = new Thickness(0); button.Background = id == api.SessionId ? tint : Brushes.Transparent; button.HorizontalContentAlignment = HorizontalAlignment.Left; history.Children.Add(button);
+                var button = Button(title, () => { var task = LoadConversation(id); }, false); button.Content = Label(title, 12, text); button.ToolTip = title; button.Margin = new Thickness(0, 0, 0, 8); button.BorderThickness = new Thickness(0); button.Background = id == api.SessionId ? tint : Brushes.Transparent; button.HorizontalContentAlignment = HorizontalAlignment.Left;
+                var shown = title; var current = Json.Text(item, "title"); var menu = new ContextMenu();
+                var rename = new MenuItem { Header = "Переименовать" }; rename.Click += (s, e) => { var task = RenameConversation(id, current); };
+                var remove = new MenuItem { Header = "Удалить" }; remove.Click += (s, e) => { var task = DeleteConversation(id, shown); };
+                menu.Items.Add(rename); menu.Items.Add(remove); button.ContextMenu = menu; history.Children.Add(button);
             }
+        }
+        private async Task ReloadHistory() { var value = await api.Get("/v1/sessions?limit=30", CancellationToken.None); sessions.Clear(); sessions.AddRange(Json.Rows(value, "sessions")); RenderHistory(); }
+        private async Task RenameConversation(string id, string current) {
+            var value = PromptText("Название разговора", current); if (value == null) return;
+            await Safe(async () => { await api.Call("PATCH", "/v1/sessions/" + Uri.EscapeDataString(id), new { title = value.Trim() }, CancellationToken.None); await ReloadHistory(); SetStatus("Название сохранено", false); });
+        }
+        private async Task DeleteConversation(string id, string title) {
+            if (busy || recorder.Recording || speaking) { SetStatus("Сначала остановите текущую задачу.", true); return; }
+            if (MessageBox.Show("«" + title + "» будет удалён на ПК и телефоне. Память ассистента не изменится. Отменить удаление нельзя.", "Удалить разговор?", MessageBoxButton.OKCancel) != MessageBoxResult.OK) return;
+            await Safe(async () => {
+                await api.Call("DELETE", "/v1/sessions/" + Uri.EscapeDataString(id), null, CancellationToken.None);
+                if (id == api.SessionId) { transcript.Children.Clear(); ShowHero(); }
+                await ReloadHistory(); SetStatus("Разговор удалён", false);
+            });
+        }
+        private string PromptText(string caption, string current) {
+            var box = new TextBox { Text = current ?? "", MaxLength = 100, Margin = new Thickness(0, 0, 0, 12) };
+            var ok = new System.Windows.Controls.Button { Content = "Сохранить", IsDefault = true, MinWidth = 90, Margin = new Thickness(0, 0, 8, 0) };
+            var cancel = new System.Windows.Controls.Button { Content = "Отмена", IsCancel = true, MinWidth = 90 };
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right }; buttons.Children.Add(ok); buttons.Children.Add(cancel);
+            var root = new StackPanel { Margin = new Thickness(16) }; root.Children.Add(box); root.Children.Add(buttons);
+            var dialog = new Window { Title = caption, Content = root, Owner = this, Width = 380, SizeToContent = SizeToContent.Height, WindowStartupLocation = WindowStartupLocation.CenterOwner, ResizeMode = ResizeMode.NoResize };
+            ok.Click += (s, e) => dialog.DialogResult = true;
+            dialog.Loaded += (s, e) => { box.Focus(); box.SelectAll(); };
+            return dialog.ShowDialog() == true ? box.Text : null;
         }
         private void SetStatus(string value, bool error) { status.Text = value; status.Foreground = error ? Color(light ? "#A84632" : "#F0A994") : muted; status.ToolTip = value; UpdateStop(); }
         private void UpdateStop() { if (stop != null) stop.Visibility = busy || recorder.Recording || speaking || localCheck != null ? Visibility.Visible : Visibility.Collapsed; }

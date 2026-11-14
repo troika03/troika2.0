@@ -29,6 +29,66 @@ class _HistoryScreenState extends State<HistoryScreen> {
     });
   }
 
+  String _shown(SessionSummary s) {
+    final title = (s.title ?? '').trim();
+    final preview = (s.preview ?? '').trim();
+    return title.isNotEmpty
+        ? title
+        : preview.isNotEmpty
+        ? preview
+        : 'Новый разговор';
+  }
+
+  Future<void> _mutate(Future<void> Function() work, String done) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await work();
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(done)));
+      _reload();
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
+  Future<void> _rename(SessionSummary s) async {
+    final title = await showDialog<String>(
+      context: context,
+      builder: (_) => _RenameDialog(initial: (s.title ?? '').trim()),
+    );
+    if (title == null) return;
+    await _mutate(
+      () => _api.renameSession(s.id, title.trim()),
+      'Название сохранено',
+    );
+  }
+
+  Future<void> _delete(SessionSummary s) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Удалить разговор?'),
+        content: Text(
+          '«${_shown(s)}» будет удалён на телефоне и ПК. '
+          'Память ассистента не изменится. Отменить удаление нельзя.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _mutate(() => _api.deleteSession(s.id), 'Разговор удалён');
+  }
+
   @override
   Widget build(BuildContext context) => TroikaPage(
         appBar: AppBar(title: const Text('Разговоры'), actions: [
@@ -97,7 +157,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                 style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w600))),
-                      _SessionTile(session: filtered[i]),
+                      _SessionTile(
+                        session: filtered[i],
+                        onRename: () => _rename(filtered[i]),
+                        onDelete: () => _delete(filtered[i]),
+                      ),
                     ],
                   ]);
             }),
@@ -131,7 +195,13 @@ String _day(double? ts) {
 
 class _SessionTile extends StatelessWidget {
   final SessionSummary session;
-  const _SessionTile({required this.session});
+  final VoidCallback onRename;
+  final VoidCallback onDelete;
+  const _SessionTile({
+    required this.session,
+    required this.onRename,
+    required this.onDelete,
+  });
   @override
   Widget build(BuildContext context) {
     final p = TroikaPalette.of(context);
@@ -181,9 +251,58 @@ class _SessionTile extends StatelessWidget {
                       Text('${session.messageCount} реплик',
                           style: TextStyle(color: p.textMuted)),
                     ])),
-                const SizedBox(width: 8),
-                Icon(Icons.chevron_right, color: p.textMuted, size: 20),
+                PopupMenuButton<String>(
+                  tooltip: 'Действия с разговором',
+                  icon: Icon(Icons.more_vert, color: p.textMuted, size: 20),
+                  onSelected: (v) => v == 'rename' ? onRename() : onDelete(),
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'rename', child: Text('Переименовать')),
+                    PopupMenuItem(value: 'delete', child: Text('Удалить')),
+                  ],
+                ),
               ])),
         ));
   }
+}
+
+class _RenameDialog extends StatefulWidget {
+  final String initial;
+  const _RenameDialog({required this.initial});
+  @override
+  State<_RenameDialog> createState() => _RenameDialogState();
+}
+
+class _RenameDialogState extends State<_RenameDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initial,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Название разговора'),
+    content: TextField(
+      controller: _controller,
+      autofocus: true,
+      maxLength: 100,
+      decoration: const InputDecoration(
+        hintText: 'Пусто — показывать начало разговора',
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Отмена'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.pop(context, _controller.text),
+        child: const Text('Сохранить'),
+      ),
+    ],
+  );
 }

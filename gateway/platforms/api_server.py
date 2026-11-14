@@ -1273,6 +1273,14 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         # Rotation needs the original-history reader. Legacy profiles with
         # compact context disabled retain their complete replay behavior.
         if not self._product_resource_enabled or not self._product_resource_config.get("product_compact_context_enabled", False):
+            db = self._ensure_session_db()
+            if db is not None:
+                # Hermes compression continues a conversation under a child ID.
+                # Keep writing there; reloading the ended parent would drop
+                # every exchange made after the compression.
+                tip = ConversationSessions(self._access_registry, db).tip(principal, session_id)
+                if tip != session_id:
+                    session_id, history = tip, db.get_messages_as_conversation(tip)
             return session_id, [] if conversation_only(message) else history
         db = self._ensure_session_db()
         if db is None:
@@ -1417,6 +1425,13 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         principal = self._product_principal(request)
         if principal is None:
             return web.json_response(_openai_error("Product authentication is required"), status=401)
+        if claim and not self._access_registry.session_belongs_to(principal, session_id):
+            # Only a brand-new ID may be claimed. An existing transcript
+            # without an owner (another gateway, a legacy compression child)
+            # must never become readable by whoever names it first.
+            db = self._ensure_session_db()
+            if db is not None and db.get_session(session_id.strip()) is not None:
+                claim = False
         permitted = (
             self._access_registry.claim_session(principal, session_id)
             if claim
@@ -2081,6 +2096,15 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         development_checks.purge(user_id)
         if self._access_registry is None:
             raise RuntimeError("product access registry is unavailable")
+        db = self._ensure_session_db()
+        if db is not None:
+            # Legacy compression continuations must be deleted with the account.
+            from troika_product.conversation_sessions import ConversationSessions
+            with self._access_registry._connect() as connection:
+                owned = [r[0] for r in connection.execute(
+                    "SELECT session_id FROM troika_sessions WHERE user_id=?", (user_id,),
+                )]
+            ConversationSessions(self._access_registry, db).adopt_continuations(user_id, owned)
         manifest = self._access_registry.account_deletion_manifest(user_id)
         from tools.location_tool import delete_location_scope
 
@@ -3392,27 +3416,35 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             return web.json_response({"error": "bad_limit_or_offset"}, status=400)
 
         source = request.query.get("source") or None
+        principal = self._product_principal(request)
+        if principal is not None:
+            # Owner filter in SQL (a global page could hide this account's
+            # rows) and one entry per conversation channel, not per segment.
+            from troika_product.conversation_sessions import ConversationSessions
+            try:
+                items = ConversationSessions(self._access_registry, db).history(
+                    principal, source=source, limit=max(limit, 0), offset=offset,
+                )
+            except PermissionError:
+                return web.json_response(_openai_error("Product authentication is required"), status=401)
+            except Exception:
+                logger.exception("Product session list failed")
+                return web.json_response({"error": "list_failed"}, status=500)
+            return web.json_response({"sessions": items, "count": len(items)},
+                                     headers={"Cache-Control": "no-store"})
         try:
-            fetch_limit = 200 if self._access_registry is not None else limit
-            fetch_offset = 0 if self._access_registry is not None else offset
             sessions = db.list_sessions_rich(
                 source=source,
-                limit=fetch_limit,
-                offset=fetch_offset,
+                limit=limit,
+                offset=offset,
                 order_by_last_active=True,
             )
         except Exception as e:
             logger.error("list_sessions failed: %s", e, exc_info=True)
             return web.json_response({"error": f"list_failed: {e}"}, status=500)
 
-        allowed_session_ids = None
-        principal = self._product_principal(request)
-        if principal is not None:
-            allowed_session_ids = self._access_registry.user_session_ids(principal)
         items: List[Dict[str, Any]] = []
         for s in sessions or []:
-            if allowed_session_ids is not None and s.get("id") not in allowed_session_ids:
-                continue
             items.append({
                 "id": s.get("id"),
                 "source": s.get("source"),
@@ -3422,9 +3454,51 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 "started_at": s.get("started_at"),
                 "last_active": s.get("last_active"),
             })
-        if allowed_session_ids is not None:
-            items = items[offset:offset + limit]
         return web.json_response({"sessions": items, "count": len(items)})
+
+    async def _handle_session_item(self, request: "web.Request") -> "web.Response":
+        """PATCH renames, DELETE removes one owned conversation (all segments)."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        principal = self._product_principal(request)
+        if principal is None:
+            return web.json_response(_openai_error("Product authentication is required"), status=401)
+        session_id = request.match_info.get("session_id", "").strip()
+        if not session_id or len(session_id) > 200 or re.search(r"[\r\n\x00]", session_id):
+            return web.json_response({"error": "bad_session_id"}, status=400)
+        db = self._ensure_session_db()
+        if db is None:
+            return web.json_response({"error": "session_db_unavailable"}, status=503)
+        from troika_product.conversation_sessions import ConversationSessions
+        sessions = ConversationSessions(self._access_registry, db)
+        try:
+            if request.method == "PATCH":
+                try:
+                    body = await request.json()
+                except Exception:
+                    body = None
+                if not isinstance(body, dict) or set(body) != {"title"}:
+                    raise ValueError("invalid session fields")
+                channel, title = sessions.rename(principal, session_id, body["title"])
+                self._record_product_audit(request, "session.renamed", session_id=channel)
+                payload = {"id": channel, "title": title}
+            else:
+                channel, removed = sessions.delete(
+                    principal, session_id, sessions_dir=self._product_sessions_dir,
+                )
+                self._record_product_audit(request, "session.deleted", session_id=channel,
+                                           details={"segments": len(removed)})
+                payload = {"id": channel, "deleted": True}
+        except PermissionError:
+            self._record_product_audit(request, "session.denied", session_id=session_id)
+            return web.json_response(_openai_error("Conversation not found"), status=404)
+        except (ValueError, TypeError):
+            return web.json_response(_openai_error("Invalid conversation title"), status=400)
+        except Exception:
+            logger.exception("Product session mutation failed")
+            return web.json_response(_openai_error("History is temporarily unavailable"), status=503)
+        return web.json_response(payload, headers={"Cache-Control": "no-store"})
 
     async def _handle_get_session_messages(self, request: "web.Request") -> "web.Response":
         """GET /v1/sessions/{session_id}/messages — транскрипт одной сессии."""
@@ -5853,6 +5927,18 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 _eff_sid = getattr(agent, "session_id", session_id)
                 if isinstance(_eff_sid, str) and _eff_sid:
                     result["session_id"] = _eff_sid
+                    if (product_principal is not None and _eff_sid != session_id
+                            and self._session_db is not None):
+                        # Bind the compression continuation to this account
+                        # before any other caller can name and claim it.
+                        from troika_product.conversation_sessions import ConversationSessions
+                        try:
+                            ConversationSessions(self._access_registry, self._session_db).adopt_continuations(
+                                product_principal.user_id, [session_id],
+                            )
+                        except Exception:
+                            # History/list reads retry the binding lazily.
+                            logger.exception("Compression continuation ownership failed")
                 return result, usage, product_stream
             finally:
                 for override_name in reversed(product_override_names):
@@ -7048,6 +7134,9 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 self._app.router.add_post("/v1/phone/notify", self._handle_phone_notify)
             self._app.router.add_get("/v1/sessions", self._handle_list_sessions)
             self._app.router.add_get("/v1/sessions/{session_id}/messages", self._handle_get_session_messages)
+            if self._access_registry is not None:
+                self._app.router.add_patch("/v1/sessions/{session_id}", self._handle_session_item)
+                self._app.router.add_delete("/v1/sessions/{session_id}", self._handle_session_item)
             self._app.router.add_post("/v1/audio/speech", self._handle_audio_speech)
             self._app.router.add_post("/v1/audio/transcriptions", self._handle_audio_transcriptions)
             self._app.router.add_post("/v1/responses", self._handle_responses)

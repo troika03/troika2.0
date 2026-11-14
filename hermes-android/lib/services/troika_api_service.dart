@@ -1503,6 +1503,60 @@ class TroikaApiService {
     }
   }
 
+  /// Переименовать разговор аккаунта; пустая строка убирает название.
+  Future<String?> renameSession(String sessionId, String title) async {
+    final response = await _sessionMutation('PATCH', sessionId, {
+      'title': title,
+    });
+    return response['title'] as String?;
+  }
+
+  /// Удалить разговор целиком (все его части) на сервере.
+  Future<void> deleteSession(String sessionId) async {
+    await _sessionMutation('DELETE', sessionId, null);
+  }
+
+  Future<Map<String, dynamic>> _sessionMutation(
+    String method,
+    String sessionId,
+    Map<String, dynamic>? body,
+  ) async {
+    final uri = Uri.parse(
+      '${TroikaConfig.serverUrl}/v1/sessions/${Uri.encodeComponent(sessionId)}',
+    );
+    final headers = {
+      ...TroikaConfig.headers,
+      if (body != null) 'Content-Type': 'application/json',
+    };
+    try {
+      final response = await (method == 'PATCH'
+              ? http.patch(uri, headers: headers, body: json.encode(body))
+              : http.delete(uri, headers: headers))
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode == 404) {
+        throw TroikaApiException('Разговор не найден.', statusCode: 404);
+      }
+      if (response.statusCode == 400) {
+        throw TroikaApiException(
+          'Название не подходит: до 100 символов.',
+          statusCode: 400,
+        );
+      }
+      if (response.statusCode != 200) {
+        throw TroikaApiException(
+          'История недоступна (${response.statusCode}).',
+          statusCode: response.statusCode,
+        );
+      }
+      return json.decode(utf8.decode(response.bodyBytes))
+          as Map<String, dynamic>;
+    } on SocketException {
+      throw TroikaApiException('Нет соединения с сервером.');
+    } on TimeoutException {
+      throw TroikaApiException('Сервер не ответил вовремя.');
+    }
+  }
+
   Future<List<SessionMessage>> getSessionMessages(String sessionId) async {
     final encoded = Uri.encodeComponent(sessionId);
     final uri = Uri.parse(
