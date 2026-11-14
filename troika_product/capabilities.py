@@ -95,7 +95,8 @@ SEARCH_SCHEMA = {
         "Load full tool schemas and a skill for a needed capability: assistant "
         "(tasks/memory/reminders), web, documents, development, files, phone, "
         "images, vision, screen; skills/mcp list the owner's connected skills "
-        "and MCP servers, tool=<id> loads one. Use catalog for enabled/configured status only. "
+        "and MCP servers, tool=<id> loads one. External services (GitHub, Notion, Jira, "
+        "Stripe...) and library docs: capability mcp. Use catalog for enabled/configured status only. "
         "Optional tool selects one exact tool. "
         "No discovery needed for ordinary conversation. Disabled/unconfigured tools are excluded."
     ),
@@ -268,6 +269,13 @@ def discover(args: dict, **_: Any) -> str:
             return _error("no_action_requested")
         preferences = CapabilityStore(registry).preferences(principal)
         capability = args.get("capability")
+        if isinstance(capability, str) and capability not in BY_ID and capability not in {"catalog", "skills", "mcp"}:
+            # Small models often name the service itself ("github",
+            # "mcp:github"); route that to MCP discovery of that server.
+            from troika_product.extensions import resolve_mcp_server
+            server = resolve_mcp_server(capability)
+            if server is not None:
+                capability, args = "mcp", {"capability": "mcp", "tool": server}
         if capability == "skills":
             from troika_product.extensions import discover_skills
             return discover_skills(registry, principal, args.get("tool"))
@@ -286,7 +294,11 @@ def discover(args: dict, **_: Any) -> str:
                 ensure_ascii=False)
         item = BY_ID.get(capability) if isinstance(capability, str) else None
         if item is None:
-            raise ValueError("unknown capability")
+            return json.dumps({"ok": False, "error": "unknown_capability", "hint": (
+                "capability must be one of: catalog, skills, mcp, " + ", ".join(BY_ID)
+                + ". External services (GitHub, Notion, Jira, Stripe...) and library docs: "
+                'capability "mcp" without tool lists connected servers; tool=<server id> loads its tools.')},
+                ensure_ascii=False)
         if not preferences[item.id]:
             return _error("capability_disabled")
         schemas = available_schemas()
@@ -332,6 +344,12 @@ def execute(args: dict, **kwargs: Any) -> str:
             from troika_product.extensions import execute_mcp, wrap_external
             envelope, _ = execute_mcp(registry, principal, tool, arguments)
             return wrap_external(envelope)
+        if isinstance(tool, str) and tool not in TOOL_CAPABILITY and tool not in FORBIDDEN_PRODUCT_TOOLS:
+            return json.dumps({"ok": False, "error": "tool_not_allowed", "hint": (
+                "Unknown tool name. Do not guess names: call troika_tool_search first. "
+                'Connected services (GitHub, Notion...): troika_tool_search {"capability": "mcp", '
+                '"tool": "<server id>"}, then call the returned name, e.g. mcp:github/<tool>.')},
+                ensure_ascii=False)
         if not isinstance(tool, str) or tool not in TOOL_CAPABILITY or tool in FORBIDDEN_PRODUCT_TOOLS:
             return _error("tool_not_allowed")
         if not isinstance(arguments, dict):

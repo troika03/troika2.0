@@ -232,3 +232,30 @@ def test_expired_connection_asks_owner_to_reconnect(adapter, owner, monkeypatch)
     assert result["error"] == "service_sign_in_required"
     listing = json.loads(cap.discover({"capability": "mcp"}))
     assert [item["id"] for item in listing["servers"]] == [TOKEN_SERVICE]
+
+
+def test_small_model_naming_mistakes_still_reach_the_connected_service(adapter, owner, monkeypatch):
+    registry, principal = owner
+    current = enable(adapter)
+    current.store.save(principal.user_id, TOKEN_SERVICE, "token", {"token": "good-personal-token"})
+    schema = {"type": "object", "properties": {"q": {"type": "string"}}}
+    many = [{"name": mcp_connector.routed_name(TOKEN_SERVICE, f"tool_{index}"), "description": "Example " * 40,
+             "parameters": schema, "read_only": True} for index in range(ext.MAX_FULL_SCHEMAS + 5)]
+    monkeypatch.setattr(mcp_connector, "list_tools", lambda entry, user_id=None: many)
+    title = ext.service_mcp(TOKEN_SERVICE)["title"]
+    # The service name used as the capability is routed to MCP discovery.
+    for capability in (TOKEN_SERVICE, title, f"mcp:{TOKEN_SERVICE}", f"{TOKEN_SERVICE}_mcp"):
+        result = json.loads(cap.discover({"capability": capability}))
+        assert result["ok"] and result["server"] == TOKEN_SERVICE, capability
+    # Many tools: compact names first, one full schema on request.
+    listing = json.loads(cap.discover({"capability": "mcp", "tool": title}))
+    assert "tools" not in listing and len(listing["tool_names"]) == len(many)
+    assert all(len(item["description"]) <= 140 for item in listing["tool_names"])
+    single = json.loads(cap.discover({"capability": "mcp", "tool": f"{TOKEN_SERVICE}/tool_3"}))
+    assert [tool["name"] for tool in single["tools"]] == [many[3]["name"]]
+    assert json.loads(cap.discover({"capability": "mcp", "tool": f"{TOKEN_SERVICE}/nope"}))["error"] == "tool_unavailable"
+    # Unknown names explain how to proceed instead of a bare refusal.
+    unknown = json.loads(cap.discover({"capability": "repositories"}))
+    assert unknown["error"] == "unknown_capability" and "mcp" in unknown["hint"]
+    guessed = json.loads(cap.execute({"tool": "github_list_repos", "arguments": {}}))
+    assert guessed["error"] == "tool_not_allowed" and "troika_tool_search" in guessed["hint"]
