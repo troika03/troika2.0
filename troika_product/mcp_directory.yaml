@@ -81,7 +81,21 @@ servers:
   #   (MCP authorization with dynamic client registration and PKCE, metadata
   #   probed 2026-11-14). connect: token — the owner pastes a personal token.
   # Tools that are not marked read-only ask the owner before every call.
-  - {id: github, title: GitHub, description: "Репозитории, задачи, pull request и код.", category: Разработка, connect: token, url: "https://api.githubcopilot.com/mcp/", token_name: "Personal access token GitHub", token_help: "https://github.com/settings/personal-access-tokens"}
+  - id: github
+    title: GitHub
+    description: "Репозитории, задачи, pull request и код."
+    category: Разработка
+    connect: token
+    url: "https://api.githubcopilot.com/mcp/"
+    token_name: "Personal access token GitHub"
+    token_help: "https://github.com/settings/personal-access-tokens"
+    # Full schemas of these arrive with the first discovery; the rest by name.
+    core_tools: [get_me, search_repositories, get_file_contents, list_issues, list_pull_requests, list_commits, search_code, issue_write]
+    usage: >-
+      Owner's repositories: call get_me, then search_repositories with
+      query "user:<login>" (add "fork:true" to include forks). Issues and pull
+      requests: list_issues / list_pull_requests with owner and repo. Do not
+      announce a call without making it.
   - {id: notion, title: Notion, description: "Страницы и базы данных Notion.", category: Продуктивность, connect: oauth, url: "https://mcp.notion.com/mcp"}
   - {id: linear, title: Linear, description: "Задачи, проекты и комментарии Linear.", category: Продуктивность, connect: oauth, url: "https://mcp.linear.app/mcp"}
   - {id: atlassian, title: Atlassian, description: "Jira и Confluence.", category: Продуктивность, connect: oauth, url: "https://mcp.atlassian.com/v1/mcp"}

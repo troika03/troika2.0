@@ -417,8 +417,9 @@ def discover_mcp(registry: AccessRegistry, principal: AccessPrincipal, server_id
         public = ExtensionStore(registry, "mcp").connected(principal)
         services = connected_services(principal.user_id)
         return json.dumps({"ok": True, "capability": "mcp", "servers": [
-            {"id": item["id"], "title": item["title"], "description": item["description"],
-             "account": item["id"] in services}
+            dict({"id": item["id"], "title": item["title"], "description": item["description"],
+                  "account": item["id"] in services},
+                 **({"usage": item["usage"]} if item.get("usage") else {}))
             for item in _directory() if item["id"] in public or item["id"] in services
         ], "hint": "Pass tool=<server id> to load its tools, then call them via troika_tool_call."},
             ensure_ascii=False)
@@ -444,16 +445,20 @@ def discover_mcp(registry: AccessRegistry, principal: AccessPrincipal, server_id
                 f"Call troika_tool_search with tool={entry['id']} to see the exact tool names.")})
         return json.dumps({"ok": True, "capability": "mcp", "server": entry["id"], "tools": selected,
                            "call_via": "troika_tool_call", "note": note}, ensure_ascii=False)
+    usage = {"usage": entry["usage"]} if entry.get("usage") else {}
     if len(tools) > MAX_FULL_SCHEMAS:
-        return json.dumps({"ok": True, "capability": "mcp", "server": entry["id"], "tool_names": [
-            {"name": tool["name"], "description": tool["description"][:140], "read_only": tool["read_only"]}
-            for tool in tools
-        ], "hint": (f"Pick the tool you need, then call troika_tool_search with "
-                    f"tool={entry['id']}/<tool name> for its full schema, and troika_tool_call with "
-                    f"the full name, e.g. {tools[0]['name'] if tools else 'mcp:' + entry['id'] + '/<tool>'}."),
-            "note": note}, ensure_ascii=False)
-    return json.dumps({"ok": True, "capability": "mcp", "server": entry["id"], "tools": tools,
-                       "call_via": "troika_tool_call", "note": note}, ensure_ascii=False)
+        core = {mcp_connector.routed_name(entry["id"], name) for name in entry.get("core_tools") or ()}
+        return json.dumps(dict({"ok": True, "capability": "mcp", "server": entry["id"],
+            # Most tasks need only these; their full schemas save a round trip.
+            "tools": [tool for tool in tools if tool["name"] in core],
+            "other_tool_names": [
+                {"name": tool["name"], "description": tool["description"][:140], "read_only": tool["read_only"]}
+                for tool in tools if tool["name"] not in core],
+            "hint": (f"Call tools from 'tools' directly via troika_tool_call. For another tool, call "
+                     f"troika_tool_search with tool={entry['id']}/<tool name> for its full schema."),
+            "note": note}, **usage), ensure_ascii=False)
+    return json.dumps(dict({"ok": True, "capability": "mcp", "server": entry["id"], "tools": tools,
+                            "call_via": "troika_tool_call", "note": note}, **usage), ensure_ascii=False)
 
 
 def wrap_external(envelope: str) -> str:

@@ -248,9 +248,14 @@ def test_small_model_naming_mistakes_still_reach_the_connected_service(adapter, 
         result = json.loads(cap.discover({"capability": capability}))
         assert result["ok"] and result["server"] == TOKEN_SERVICE, capability
     # Many tools: compact names first, one full schema on request.
+    monkeypatch.setitem(ext.service_mcp(TOKEN_SERVICE), "core_tools", ["tool_1", "tool_2"])
+    monkeypatch.setitem(ext.service_mcp(TOKEN_SERVICE), "usage", "Call tool_1 first.")
     listing = json.loads(cap.discover({"capability": "mcp", "tool": title}))
-    assert "tools" not in listing and len(listing["tool_names"]) == len(many)
-    assert all(len(item["description"]) <= 140 for item in listing["tool_names"])
+    assert [tool["name"].split("/")[1] for tool in listing["tools"]] == ["tool_1", "tool_2"]
+    assert len(listing["other_tool_names"]) == len(many) - 2 and listing["usage"] == "Call tool_1 first."
+    assert all(len(item["description"]) <= 140 for item in listing["other_tool_names"])
+    servers = json.loads(cap.discover({"capability": "mcp"}))["servers"]
+    assert servers[0]["usage"] == "Call tool_1 first."
     single = json.loads(cap.discover({"capability": "mcp", "tool": f"{TOKEN_SERVICE}/tool_3"}))
     assert [tool["name"] for tool in single["tools"]] == [many[3]["name"]]
     assert json.loads(cap.discover({"capability": "mcp", "tool": f"{TOKEN_SERVICE}/nope"}))["error"] == "tool_unavailable"
