@@ -44,7 +44,46 @@ namespace Troika.Desktop {
             try { CapabilityCatalogueService.Parse(Json.Parse("{\"object\":\"troika.capabilities\",\"capabilities\":[{\"id\":\"web\",\"title\":\"Search\",\"enabled\":\"false\",\"available\":true}]}")); }
             catch (System.IO.InvalidDataException) { malformed = true; }
             Assert(malformed, "malformed catalogue accepted");
-            Console.WriteLine("3 capability catalogue checks passed: authenticated snapshot/patch, failed save, malformed response.");
+            await Extensions();
+            Console.WriteLine("5 capability catalogue checks passed: authenticated snapshot/patch, failed save, malformed response, skill patch, old-server fallback.");
+        }
+        static string Extensions(bool connected) { return Json.Encode(new { @object = "troika.extensions",
+            skills = new[] { new { id = "creative/humanizer", title = "Живой текст", description = "Текст", connectable = true, connected, reason = "" } },
+            mcp = new[] { new { id = "linear", title = "Linear", description = "Issues", connectable = false, connected = false, reason = "Нужен вход" } },
+            tools = new[] { new { id = "web", title = "Поиск", enabled = true, available = true } } }); }
+        static async Task Extensions() {
+            bool skillPatch = false, mcpPatch = false;
+            var handler = new CatalogueHandler { Route = async request => {
+                Assert(request.RequestUri.AbsolutePath == "/v1/account/extensions", "wrong extension route");
+                if (request.Method.Method == "PATCH") {
+                    var body = Json.Parse(await request.Content.ReadAsStringAsync());
+                    if (body.ContainsKey("mcp")) {
+                        Assert(body.Count == 1 && object.Equals(Json.Get(Json.Map(Json.Get(body, "mcp")), "deepwiki"), true), "wrong MCP patch");
+                        mcpPatch = true; return CatalogueHandler.Reply(Extensions(true), 200);
+                    }
+                    var patch = Json.Map(Json.Get(body, "skills"));
+                    Assert(body.Count == 1 && object.Equals(Json.Get(patch, "creative/humanizer"), true), "wrong skill patch");
+                    skillPatch = true; return CatalogueHandler.Reply(Extensions(true), 200);
+                }
+                return CatalogueHandler.Reply(Extensions(false), 200);
+            }};
+            using (var api = new ApiClient(handler, "https://example.test") { Account = new AccountSession {
+                Token = "trk_live_test", RefreshToken = "trk_refresh_test", HomeSession = "home_test", ExpiresAt = 9999999999 } }) {
+                var service = new CapabilityCatalogueService(api);
+                var current = await service.LoadCatalogue(CancellationToken.None);
+                Assert(!current.Legacy && current.Mcp.Count == 1 && !Json.Flag(current.Skills[0], "connected"), "extension snapshot missing");
+                current = await service.SetSkillConnected("creative/humanizer", true, CancellationToken.None);
+                Assert(skillPatch && Json.Flag(current.Skills[0], "connected"), "skill patch ignored server snapshot");
+                await service.SetMcpConnected("deepwiki", true, CancellationToken.None);
+                Assert(mcpPatch, "MCP patch not sent");
+                handler.Route = request => Task.FromResult(request.RequestUri.AbsolutePath == "/v1/account/extensions"
+                    ? CatalogueHandler.Reply("{}", 404) : CatalogueHandler.Reply(Snapshot(true), 200));
+                var legacy = await service.LoadCatalogue(CancellationToken.None);
+                Assert(legacy.Legacy && legacy.Tools.Count == 1, "old server fallback missing");
+                bool refused = false;
+                try { await service.SetSkillConnected("creative/humanizer", true, CancellationToken.None); } catch (InvalidOperationException) { refused = true; }
+                Assert(refused, "old server pretended to connect a skill");
+            }
         }
         public static int Main() { try { Run().GetAwaiter().GetResult(); return 0; } catch (Exception error) { Console.Error.WriteLine(error.Message); return 1; } }
     }

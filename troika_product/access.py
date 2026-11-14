@@ -1204,6 +1204,12 @@ class AccessRegistry:
                     "troika_memory_automatic",
                     "SELECT fact_key, memory_id, suppressed FROM troika_memory_automatic WHERE user_id = ?",
                 ),
+                # Connected services: names and dates only, never the tokens.
+                "service_connections": (
+                    "troika_service_connections",
+                    "SELECT server_id, kind, updated_at FROM troika_service_connections "
+                    "WHERE user_id = ? ORDER BY server_id",
+                ),
                 "capability_preferences": (
                     "troika_capability_preferences",
                     "SELECT preferences_json, updated_at FROM troika_capability_preferences "
@@ -1397,6 +1403,7 @@ class AccessRegistry:
     def finalize_account_deletion(self, user_id: str) -> None:
         """Delete every product SQLite row for a prepared account atomically."""
         child_tables = (
+            "troika_service_connections",
             "troika_memory_automatic",
             "troika_memory_preferences",
             "troika_capability_preferences",

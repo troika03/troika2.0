@@ -39,6 +39,12 @@ if ($Test) {
     if ($LASTEXITCODE -ne 0) { throw 'Billing tests failed.' }
 }
 if ($Test) {
+    & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'CapabilityCataloguePanelTests.exe')) ('/reference:' + (Join-Path $output 'TroikaDesktop.exe')) $references (Join-Path $root 'tests\CapabilityCataloguePanelTests.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Capability panel test build failed.' }
+    & (Join-Path $output 'CapabilityCataloguePanelTests.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'Capability panel tests failed.' }
+}
+if ($Test) {
     & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'OwnApiTests.exe')) ('/reference:' + (Join-Path $output 'TroikaDesktop.exe')) $references (Join-Path $root 'tests\OwnApiTests.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Personal API test build failed.' }
     & (Join-Path $output 'OwnApiTests.exe')

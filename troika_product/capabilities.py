@@ -94,12 +94,13 @@ SEARCH_SCHEMA = {
     "description": (
         "Load full tool schemas and a skill for a needed capability: assistant "
         "(tasks/memory/reminders), web, documents, development, files, phone, "
-        "images, vision, screen. Use catalog for enabled/configured status only. "
+        "images, vision, screen; skills/mcp list the owner's connected skills "
+        "and MCP servers, tool=<id> loads one. Use catalog for enabled/configured status only. "
         "Optional tool selects one exact tool. "
         "No discovery needed for ordinary conversation. Disabled/unconfigured tools are excluded."
     ),
     "parameters": {"type": "object", "properties": {
-        "capability": {"type": "string", "enum": ["catalog", *BY_ID]},
+        "capability": {"type": "string", "enum": ["catalog", "skills", "mcp", *BY_ID]},
         "tool": {"type": "string", "description": "Optional exact tool name."},
     }, "required": ["capability"], "additionalProperties": False},
 }
@@ -128,6 +129,12 @@ troika_tool_call с точным именем и arguments из полученн
 недоступную возможность не обходи другим инструментом. Поиск схемы не
 означает выполнение действия. Не называй отсутствие полной схемы в первом
 запросе отсутствием функции: сначала проверь соответствующую возможность.
+Задачи во внешних сервисах (GitHub, Notion, Jira, Stripe и др.) и поиск по
+документации библиотек выполняй через capability mcp: без tool — список
+подключённых владельцем серверов, tool=<id сервера> — их схемы; вызывай через
+troika_tool_call с именем mcp:<сервер>/<инструмент>. Действие с
+read_only=false сервер подтвердит у владельца. Неподключённый сервис предложи
+подключить в «Возможности → MCP». Подключённые навыки — capability skills.
 """
 
 
@@ -261,13 +268,22 @@ def discover(args: dict, **_: Any) -> str:
             return _error("no_action_requested")
         preferences = CapabilityStore(registry).preferences(principal)
         capability = args.get("capability")
+        if capability == "skills":
+            from troika_product.extensions import discover_skills
+            return discover_skills(registry, principal, args.get("tool"))
+        if capability == "mcp":
+            from troika_product.extensions import discover_mcp
+            return discover_mcp(registry, principal, args.get("tool"))
         if capability == "catalog":
+            from troika_product.extensions import ExtensionStore
             schemas = available_schemas()
             return json.dumps({"ok": True, "capabilities": [
                 {"id": item.id, "title": item.title, "enabled": preferences[item.id],
                  "configured": any(tool in schemas for tool in item.tools)}
                 for item in CAPABILITIES
-            ]}, ensure_ascii=False)
+            ], "connected_skills": sorted(ExtensionStore(registry).connected(principal)),
+                "connected_mcp": sorted(ExtensionStore(registry, "mcp").connected(principal))},
+                ensure_ascii=False)
         item = BY_ID.get(capability) if isinstance(capability, str) else None
         if item is None:
             raise ValueError("unknown capability")
@@ -303,6 +319,19 @@ def execute(args: dict, **kwargs: Any) -> str:
             return _error("no_action_requested")
         preferences = CapabilityStore(registry).preferences(principal)
         tool, arguments = args.get("tool"), args.get("arguments")
+        if isinstance(tool, str) and tool.startswith("mcp:"):
+            if isinstance(arguments, str):
+                try:
+                    if len(arguments.encode("utf-8")) > 1024 * 1024:
+                        return _error("invalid_tool_arguments")
+                    arguments = json.loads(arguments)
+                except (UnicodeError, ValueError, TypeError, RecursionError):
+                    return _error("invalid_tool_arguments")
+            if not isinstance(arguments, dict):
+                return _error("invalid_tool_arguments")
+            from troika_product.extensions import execute_mcp, wrap_external
+            envelope, _ = execute_mcp(registry, principal, tool, arguments)
+            return wrap_external(envelope)
         if not isinstance(tool, str) or tool not in TOOL_CAPABILITY or tool in FORBIDDEN_PRODUCT_TOOLS:
             return _error("tool_not_allowed")
         if not isinstance(arguments, dict):

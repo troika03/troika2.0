@@ -15,6 +15,101 @@
 содержат точные ссылки. Завершённые изменения коммитить и отправлять
 `git push origin HEAD:main`; чужой WIP не включать.
 
+## Возможности: Скиллы, MCP, Инструменты — 14 ноября 2026
+
+Запрос владельца: вместо прежних вкладок «Плагины/Навыки/Инструменты» сделать
+«Скиллы», «MCP» (большой список с поиском и подключением) и «Инструменты»,
+одинаково на Android и ПК. Код готов, не закоммичен.
+
+- API: `GET/PATCH /v1/account/extensions` (`troika_product/extensions.py`,
+  `capability_api.py`), owner-scoped. Список — все `skills/` и
+  `optional-skills/` (около 180) и одобренные `optional-mcps/` (linear, n8n);
+  в ответе нет путей. PATCH: одно из `{"skills"|"mcp"|"capabilities": {id: bool}}`.
+- Подключить в облаке можно только 9 проверенных навыков-инструкций
+  (`CLOUD_SKILLS`): без CLI, скриптов, ключей и платформы. Остальные видны с
+  причиной «нужны программы или ключи». Отметки хранятся ключами `skill:<id>` в
+  `troika_capability_preferences`, поэтому входят в export/delete.
+- Модель получает подключённые навыки только через `troika_tool_search`
+  (`capability: "skills"`, `tool=<id>` — текст SKILL.md до 32 КБ). Схемы
+  gateway почти не изменились (в enum добавлен `skills`); прошлая история не меняется.
+- MCP (запрос владельца «добавь много MCP»): каталог 38 серверов —
+  `optional-mcps/` + продуктовый справочник `troika_product/mcp_directory.yaml`.
+  В облаке подключаются 9 проверенных публичных серверов без входа и только
+  чтение: DeepWiki, Context7, Microsoft Learn, AWS Knowledge, Cloudflare Docs,
+  Hugging Face, Exa, GitMCP, Astro Docs. У каждого фиксированный HTTPS URL и
+  явный список инструментов (проверены `list_tools` и живыми вызовами 14.11).
+  `troika_product/mcp_connector.py` открывает короткую сессию без ключей
+  аккаунта, ответ до 48 КБ, медиа не передаются. Модель получает схемы через
+  `troika_tool_search` (`capability: "mcp"`), вызывает `troika_tool_call` с
+  `mcp:<server>/<tool>`; аргументы проверяются по схеме, результат помечается
+  как недоверенные данные. Отметки — ключи `mcp:<id>` в той же таблице.
+  Подтверждение подключения MCP называет host, куда уйдёт текст запросов.
+- Сервисы с аккаунтом (запрос владельца «чтобы можно было с GitHub и т. д.»):
+  20 сервисов в `mcp_directory.yaml` с `connect: oauth|token`. GitHub — личный
+  токен (у GitHub нет динамической регистрации OAuth). OAuth через MCP
+  authorization (DCR + PKCE, метаданные проверены без входа 14.11): Notion,
+  Linear, Atlassian, Sentry, Vercel, Supabase, Netlify, Cloudflare, Stripe,
+  PayPal, Square, Intercom, monday, Zapier, Figma, Canva, Webflow, Wix, Jam.
+  Asana, HubSpot, Box, Slack требуют зарегистрированного приложения Тройки —
+  видны с причиной; локальные (filesystem, git, playwright и др.) — тоже.
+  `troika_product/service_connections.py`: токены Fernet-шифрованы в
+  `troika_service_connections` базы аккаунтов (удаляются с аккаунтом, в экспорт
+  идут только имена и даты). OAuth: `POST /v1/account/services/{id}/connect`
+  → URL входа; браузер возвращается на
+  `/v1/account/services/oauth/callback` (одноразовый `state`, 10 минут);
+  клиент опрашивает `/v1/account/services/flows/{flow}`; токены сохраняются
+  только после успешного входа, refresh делает MCP SDK. Отключение —
+  `DELETE /v1/account/services/{id}` или PATCH `{"mcp": {id: false}}`.
+  Включение на сервере: `TROIKA_PRODUCT_SERVICE_KEY` (ключ Fernet) и HTTPS
+  `product_public_url`/`TROIKA_PRODUCT_PUBLIC_URL`; без них сервисы видны
+  как «не включено на сервере». В production это ещё не настроено и не
+  развёрнуто — решение владельца.
+- Инструменты сервиса без пометки read-only вызываются только после
+  `request_gateway_approval("mcp.write")` на каждый вызов. Тройка знает о
+  MCP из постоянной инструкции (`context_guidance.py` Core и
+  `ROUTING_GUIDANCE`): для внешних сервисов и документации — `capability: mcp`.
+  Реальный вход в сервисы с аккаунтом владельца не проверялся (нет учётных
+  данных в сессии); проверены метаданные и логика с подменой сети.
+- Иконки: сервер отдаёт ключ `icon` (по категории навыка / типу MCP), Android и
+  WPF рисуют одинаковый символ, замок у недоступных и галочку у подключённых.
+- Клиенты: Android `capabilities_screen.dart` (TabBar, поиск, фильтры,
+  подтверждение подключения), WPF `CapabilityCataloguePanel.cs`. Старый сервер
+  без `/extensions` → клиенты показывают только инструменты и просят обновить сервер.
+- Проверки 14.11: Python `test_extensions.py` + `test_capabilities.py` 49/49;
+  `flutter analyze --no-fatal-infos` 0 errors/warnings (70 info в других файлах);
+  `flutter test` 317 passed; WPF `build.ps1 -Test` exit 0, включая новый
+  `CapabilityCataloguePanelTests` (2 темы × 780/1280). Скриншоты:
+  `_logs/capabilities-{dark,light}.png` (Android, тестовый рендер 360 px, 1.5×) и
+  `_logs/capabilities-windows/`. Установленные клиенты и production не проверялись.
+  Широкий прогон `tests/troika_product tests/gateway`: 6874 passed, 110 failed
+  вне этой задачи — gateway Feishu/email/msgraph/config-env/tts/update на Windows
+  и `test_working_context` compact_scope (403 на `/v1/chat/completions` в общем
+  незакоммиченном дереве). Полный набор `-j 6` не запускался.
+  После MCP и иконок: `test_extensions.py` 7/7 (без сети, коннектор подменён);
+  `tests/troika_product` 1055 passed, 3 failed — те же 2 compact_scope и
+  `test_android_command_privacy` (сбой компиляции Kotlin при почти полном
+  диске C:, Kotlin не менялся); Flutter `capabilities_test` + `home_screen_test`
+  24/24, analyze изменённых файлов без замечаний; WPF `build.ps1 -Test` exit 0,
+  панель с иконками в 2 темах × 780/1280. Полный `flutter test` после иконок не
+  прошёл до конца: Dart VM падал из-за места на C: (39 МБ свободно).
+  После подключения сервисов: `test_service_connections.py` +
+  `test_extensions.py` + `test_capabilities.py` + identity/persona — 189
+  passed (2 старых compact_scope падают); Flutter `capabilities_test` 10/10
+  (временные файлы на D:); WPF `build.ps1 -Test` exit 0 с проверкой входа по
+  токену и OAuth. Windows-клиент установлен в `D:\TroikaDesktop` (на C: нет
+  места; ярлык «Тройка ПК» обновлён). Release APK ARM64 (163 МБ, SHA-256
+  `6a7f5db4…6930f50`, Gradle и temp на D:) установлена `adb install -r` на
+  Samsung SM-A225F: хэш пакета совпал, firstInstallTime сохранён, холодный
+  запуск выполнен; экран вручную не осматривался.
+- Production 14.11 (решение владельца): образ `troika-production:services-20261114`
+  поверх `identity-20261105-3`, только файлы этой задачи + mcp 1.26.0 и
+  зависимости из `uv.lock`. Ключ сервисов и публичный URL добавлены в
+  `/srv/troika/data/.env`; пересоздан только `api`, healthy. Бэкап БД/.env и
+  откат: `docs/audit/SERVICES_DEPLOYMENT_2026_11_14.md`. Работа с настоящим
+  аккаунтом и вход в сервисы не проверялись. Код не закоммичен: в образе он
+  есть, в Git — нет. Следующий шаг: проверить в приложении владельца и
+  закоммитить файлы задачи.
+
 ## Память и сессии: ремонт — 14 ноября 2026
 
 Запрос владельца «память и сессии — починить». Закоммичено `cf56dea`, отправлено

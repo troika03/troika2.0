@@ -33,7 +33,7 @@ namespace Troika.Desktop {
             panelContent.Children.Clear();
             panelContent.Children.Add(Label("Скажите задачу — или выберите действие", 14, muted)); Gap();
             var cards = CapabilityCards();
-            AddCapabilityCard(cards, "Возможности", "Плагины, навыки и инструменты", "spark", () => OpenPanel("Возможности"));
+            AddCapabilityCard(cards, "Возможности", "Скиллы, MCP и инструменты", "spark", () => OpenPanel("Возможности"));
             AddCapabilityCard(cards, "Поиск и сравнение", "Информация и источники", "spark", () => Prepare("Найди через веб-поиск и сравни "));
             AddCapabilityCard(cards, "Документ DOCX", "Текст и таблицы", "files", () => Prepare("Создай DOCX: "));
             AddCapabilityCard(cards, "Документ PDF", "Готовый документ", "files", () => Prepare("Создай PDF: "));

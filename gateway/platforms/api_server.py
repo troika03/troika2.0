@@ -1053,6 +1053,15 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 database_path = Path(str(raw_database)) if raw_database else None
                 self._access_registry = AccessRegistry(database_path)
                 self._product_artifact_db = self._access_registry.database_path.resolve()
+                # Account service connections (MCP OAuth/token). Off unless an
+                # encryption key and an HTTPS public URL are configured.
+                from troika_product import service_connections
+
+                service_connections.configure(
+                    self._product_artifact_db,
+                    os.getenv("TROIKA_PRODUCT_SERVICE_KEY", ""),
+                    str(extra.get("product_public_url") or os.getenv("TROIKA_PRODUCT_PUBLIC_URL", "")),
+                )
                 from troika_product.proactive import ProactiveStore
 
                 self._proactive_store = ProactiveStore(self._product_artifact_db)
@@ -2759,6 +2768,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 "private_artifacts": self._artifact_store is not None,
                 "device_file_delivery": self._access_registry is not None,
                 "capability_preferences": self._access_registry is not None,
+                "extension_catalogue": self._access_registry is not None,
                 "deferred_product_tools": self._access_registry is not None,
                 "remote_development_checks": self._access_registry is not None,
                 "private_workspace": self._workspace_store is not None,
@@ -7029,6 +7039,24 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 )
                 self._app.router.add_patch(
                     "/v1/account/capabilities", self._handle_product_capabilities
+                )
+                self._app.router.add_get(
+                    "/v1/account/extensions", self._handle_product_extensions
+                )
+                self._app.router.add_patch(
+                    "/v1/account/extensions", self._handle_product_extensions
+                )
+                self._app.router.add_post(
+                    "/v1/account/services/{server_id}/connect", self._handle_service_connect
+                )
+                self._app.router.add_get(
+                    "/v1/account/services/flows/{flow_id}", self._handle_service_flow
+                )
+                self._app.router.add_delete(
+                    "/v1/account/services/{server_id}", self._handle_service_disconnect
+                )
+                self._app.router.add_get(
+                    "/v1/account/services/oauth/callback", self._handle_service_callback
                 )
                 self._app.router.add_post(
                     "/v1/auth/register", self._handle_product_register

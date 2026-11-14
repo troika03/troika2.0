@@ -1,0 +1,116 @@
+# Product directory of MCP servers shown in «Возможности → MCP».
+#
+# cloud: true  — reviewed for the hosted product: public HTTPS endpoint, no
+#                account sign-in or key, read-only tools. Only the tools listed
+#                under `tools` are exposed; every result is untrusted data.
+#                Endpoints and tool lists were probed with list_tools on
+#                2026-11-14. Changing an entry requires the same review.
+# connect: oauth|token — account services; see below.
+# otherwise — listed so the owner can see what exists: a local program or a
+#              Troika app registration with the service is required.
+#
+# This file is separate from optional-mcps/ (the upstream approved install
+# catalogue) and never installs or runs anything.
+version: 1
+servers:
+  - id: deepwiki
+    title: DeepWiki
+    description: Документация и ответы по публичным репозиториям GitHub.
+    category: Разработка
+    cloud: true
+    url: https://mcp.deepwiki.com/mcp
+    tools: [read_wiki_structure, read_wiki_contents, ask_wiki_question]
+  - id: context7
+    title: Context7
+    description: Свежая документация и примеры кода библиотек.
+    category: Разработка
+    cloud: true
+    url: https://mcp.context7.com/mcp
+    tools: [resolve-library-id, query-docs]
+  - id: microsoft-learn
+    title: Microsoft Learn
+    description: Официальная документация Microsoft и Azure, примеры кода.
+    category: Документация
+    cloud: true
+    url: https://learn.microsoft.com/api/mcp
+    tools: [microsoft_docs_search, microsoft_docs_fetch, microsoft_code_sample_search]
+  - id: aws-knowledge
+    title: AWS Knowledge
+    description: Документация AWS, регионы и доступность сервисов.
+    category: Документация
+    cloud: true
+    url: https://knowledge-mcp.global.api.aws
+    tools: [aws___search_documentation, aws___read_documentation, aws___list_regions, aws___get_regional_availability]
+  - id: cloudflare-docs
+    title: Cloudflare Docs
+    description: Поиск по документации Cloudflare.
+    category: Документация
+    cloud: true
+    url: https://docs.mcp.cloudflare.com/mcp
+    tools: [search_cloudflare_documentation]
+  - id: huggingface
+    title: Hugging Face
+    description: Поиск моделей, датасетов и Spaces и их описания.
+    category: Машинное обучение
+    cloud: true
+    url: https://huggingface.co/mcp
+    tools: [hub_repo_search, hub_repo_details]
+  - id: exa
+    title: Exa
+    description: Поиск в интернете и чтение страниц через Exa.
+    category: Поиск
+    cloud: true
+    url: https://mcp.exa.ai/mcp
+    tools: [web_search_exa, web_fetch_exa]
+  - id: gitmcp
+    title: GitMCP
+    description: Документация и поиск кода в репозиториях GitHub.
+    category: Разработка
+    cloud: true
+    url: https://gitmcp.io/docs
+    tools: [match_common_libs_owner_repo_mapping, fetch_generic_documentation, search_generic_documentation, search_generic_code]
+  - id: astro-docs
+    title: Astro Docs
+    description: Поиск по документации фреймворка Astro.
+    category: Документация
+    cloud: true
+    url: https://mcp.docs.astro.build/mcp
+    tools: [search_astro_docs]
+
+  # connect: oauth — the Troika server signs in with the service's own OAuth
+  #   (MCP authorization with dynamic client registration and PKCE, metadata
+  #   probed 2026-11-14). connect: token — the owner pastes a personal token.
+  # Tools that are not marked read-only ask the owner before every call.
+  - {id: github, title: GitHub, description: "Репозитории, задачи, pull request и код.", category: Разработка, connect: token, url: "https://api.githubcopilot.com/mcp/", token_name: "Personal access token GitHub", token_help: "https://github.com/settings/personal-access-tokens"}
+  - {id: notion, title: Notion, description: "Страницы и базы данных Notion.", category: Продуктивность, connect: oauth, url: "https://mcp.notion.com/mcp"}
+  - {id: linear, title: Linear, description: "Задачи, проекты и комментарии Linear.", category: Продуктивность, connect: oauth, url: "https://mcp.linear.app/mcp"}
+  - {id: atlassian, title: Atlassian, description: "Jira и Confluence.", category: Продуктивность, connect: oauth, url: "https://mcp.atlassian.com/v1/mcp"}
+  - {id: sentry, title: Sentry, description: "Ошибки и события приложений.", category: Разработка, connect: oauth, url: "https://mcp.sentry.dev/mcp"}
+  - {id: vercel, title: Vercel, description: "Проекты и развёртывания Vercel.", category: Разработка, connect: oauth, url: "https://mcp.vercel.com"}
+  - {id: supabase, title: Supabase, description: "Базы данных и проекты Supabase.", category: Разработка, connect: oauth, url: "https://mcp.supabase.com/mcp"}
+  - {id: netlify, title: Netlify, description: "Сайты и развёртывания Netlify.", category: Сайты, connect: oauth, url: "https://netlify-mcp.netlify.app/mcp"}
+  - {id: cloudflare, title: Cloudflare, description: "Workers, KV, R2 и D1 в аккаунте Cloudflare.", category: Разработка, connect: oauth, url: "https://bindings.mcp.cloudflare.com/mcp"}
+  - {id: stripe, title: Stripe, description: "Платежи, клиенты и счета Stripe.", category: Финансы, connect: oauth, url: "https://mcp.stripe.com"}
+  - {id: paypal, title: PayPal, description: "Счета и транзакции PayPal.", category: Финансы, connect: oauth, url: "https://mcp.paypal.com/mcp"}
+  - {id: square, title: Square, description: "Продажи и каталог Square.", category: Финансы, connect: oauth, url: "https://mcp.squareup.com/mcp"}
+  - {id: intercom, title: Intercom, description: "Обращения клиентов.", category: Продажи, connect: oauth, url: "https://mcp.intercom.com/mcp"}
+  - {id: monday, title: monday.com, description: "Доски и задачи monday.com.", category: Продуктивность, connect: oauth, url: "https://mcp.monday.com/mcp"}
+  - {id: zapier, title: Zapier, description: "Действия в тысячах приложений через Zapier.", category: Автоматизация, connect: oauth, url: "https://mcp.zapier.com/api/mcp/mcp"}
+  - {id: figma, title: Figma, description: "Макеты и компоненты Figma.", category: Дизайн, connect: oauth, url: "https://mcp.figma.com/mcp"}
+  - {id: canva, title: Canva, description: "Дизайны Canva.", category: Дизайн, connect: oauth, url: "https://mcp.canva.com/mcp"}
+  - {id: webflow, title: Webflow, description: "Сайты и CMS Webflow.", category: Сайты, connect: oauth, url: "https://mcp.webflow.com/mcp"}
+  - {id: wix, title: Wix, description: "Сайты и магазины Wix.", category: Сайты, connect: oauth, url: "https://mcp.wix.com/mcp"}
+  - {id: jam, title: Jam, description: "Отчёты об ошибках Jam.", category: Разработка, connect: oauth, url: "https://mcp.jam.dev/mcp"}
+  # No dynamic client registration: needs a Troika app registered with the service.
+  - {id: asana, title: Asana, description: "Задачи и проекты Asana.", category: Продуктивность, auth: app}
+  - {id: hubspot, title: HubSpot, description: "Контакты и сделки CRM.", category: Продажи, auth: app}
+  - {id: box, title: Box, description: "Файлы в Box.", category: Файлы, auth: app}
+  - {id: slack, title: Slack, description: "Каналы и сообщения Slack.", category: Общение, auth: app}
+  - {id: filesystem, title: Filesystem, description: "Файлы на компьютере.", category: Локальные, auth: local, homepage: "https://github.com/modelcontextprotocol/servers"}
+  - {id: git, title: Git, description: "Локальные репозитории Git.", category: Локальные, auth: local, homepage: "https://github.com/modelcontextprotocol/servers"}
+  - {id: fetch, title: Fetch, description: "Загрузка веб-страниц.", category: Локальные, auth: local, homepage: "https://github.com/modelcontextprotocol/servers"}
+  - {id: memory, title: Memory, description: "Граф знаний в локальном файле.", category: Локальные, auth: local, homepage: "https://github.com/modelcontextprotocol/servers"}
+  - {id: time, title: Time, description: "Время и часовые пояса.", category: Локальные, auth: local, homepage: "https://github.com/modelcontextprotocol/servers"}
+  - {id: sequential-thinking, title: Sequential Thinking, description: "Пошаговое рассуждение.", category: Локальные, auth: local, homepage: "https://github.com/modelcontextprotocol/servers"}
+  - {id: playwright, title: Playwright, description: "Управление браузером.", category: Локальные, auth: local, homepage: "https://github.com/microsoft/playwright-mcp"}
+  - {id: blender, title: Blender, description: "Сцены Blender на компьютере.", category: Локальные, auth: local}
