@@ -48,7 +48,9 @@ class CapabilityAPI:
         Only reviewed cloud skills and MCP servers can be connected.
         """
         from aiohttp import web
-        from troika_product.extensions import ExtensionStore, connected_services, extension_catalogue
+        from troika_product.extensions import (
+            ExtensionStore, connected_services, extension_catalogue, extensions_allowed,
+        )
 
         auth_error = self._check_auth(request)
         if auth_error is not None:
@@ -73,6 +75,11 @@ class CapabilityAPI:
         def read():
             store = CapabilityStore(self._access_registry)
             extensions = ExtensionStore(self._access_registry)
+            allowed = extensions_allowed(self._access_registry, principal)
+            connecting = [value for patch in (skills_patch, mcp_patch) if patch
+                          for value in patch.values()]
+            if not allowed and any(value is True for value in connecting):
+                raise ArithmeticError("pro required")
             if capability_patch is not None:
                 preferences = store.update(principal, capability_patch)
             else:
@@ -105,9 +112,11 @@ class CapabilityAPI:
             with catalogue_context(self, principal):
                 tools = catalogue(preferences, available_schemas())
             return extension_catalogue(connected, tools, connected_mcp,
-                                       connected_services(principal.user_id))
+                                       connected_services(principal.user_id), allowed)
         try:
             payload = await asyncio.to_thread(read)
+        except ArithmeticError:
+            return web.json_response({"error": {"message": "Скиллы и MCP доступны в тарифе Pro"}}, status=402)
         except LookupError:
             return web.json_response(
                 {"error": {"message": "Это нельзя подключить в облаке Тройки"}}, status=403)
@@ -148,6 +157,9 @@ class CapabilityAPI:
             await asyncio.to_thread(ExtensionStore(self._access_registry, "mcp").connected, principal)
         except PermissionError:
             return web.json_response({"error": {"message": "Active account required"}}, status=401)
+        from troika_product.extensions import extensions_allowed
+        if not await asyncio.to_thread(extensions_allowed, self._access_registry, principal):
+            return web.json_response({"error": {"message": "Скиллы и MCP доступны в тарифе Pro"}}, status=402)
         if entry["connect"] == "token":
             try:
                 body = await request.json()

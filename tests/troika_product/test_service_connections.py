@@ -19,8 +19,9 @@ TOKEN_SERVICE = next(item["id"] for item in ext._directory() if item.get("connec
 OAUTH_SERVICE = next(item["id"] for item in ext._directory() if item.get("connect") == "oauth")
 
 
-def identity(registry, email):
-    user = registry.create_user(email)
+def identity(registry, email, plan="pro"):
+    # Skills and MCP are a Pro feature.
+    user = registry.create_user(email, plan=plan)
     device = registry.create_device(user, name="Test", platform="android")
     token = registry.issue_device_token(device)
     return token, registry.authenticate(token)
@@ -264,3 +265,46 @@ def test_small_model_naming_mistakes_still_reach_the_connected_service(adapter, 
     assert unknown["error"] == "unknown_capability" and "mcp" in unknown["hint"]
     guessed = json.loads(cap.execute({"tool": "github_list_repos", "arguments": {}}))
     assert guessed["error"] == "tool_not_allowed" and "troika_tool_search" in guessed["hint"]
+
+
+@pytest.mark.parametrize("plan", ["free", "plus"])
+def test_skills_and_mcp_need_pro(adapter, monkeypatch, plan):
+    registry = adapter._access_registry
+    token, principal = identity(registry, f"{plan}@example.com", plan=plan)
+    current = enable(adapter)
+    response = run(adapter._handle_product_extensions(Request(token)))
+    payload = json.loads(response.text)
+    assert payload["extensions_allowed"] is False
+    # Everything stays visible, nothing is connectable, with the reason.
+    assert payload["skills"] and payload["mcp"]
+    assert all(not item["connectable"] for item in payload["skills"] + payload["mcp"])
+    assert any(item["reason"] == ext.PRO_REQUIRED for item in payload["mcp"])
+    # Tools keep working on every plan.
+    assert payload["tools"]
+    skill = next(iter(ext.CLOUD_SKILLS))
+    cloud = next(item["id"] for item in ext._directory() if item.get("cloud") is True)
+    for body in ({"skills": {skill: True}}, {"mcp": {cloud: True}}):
+        assert run(adapter._handle_product_extensions(Request(token, body))).status == 402
+    assert run(adapter._handle_product_extensions(Request(token, {"mcp": {cloud: False}}))).status == 200
+    connect = run(adapter._handle_service_connect(
+        Request(token, {"token": "good-personal-token"}, "POST", {"server_id": TOKEN_SERVICE})))
+    assert connect.status == 402
+    # A connection left from an earlier Pro period does not run.
+    current.store.save(principal.user_id, TOKEN_SERVICE, "token", {"token": "old"})
+    previous = get_session_overrides()
+    values = {"TROIKA_PRODUCT_MODE": "1", "TROIKA_PRODUCT_ACCESS_DB": str(registry.database_path),
+              "TROIKA_PRODUCT_USER_ID": principal.user_id, "TROIKA_PRODUCT_DEVICE_ID": principal.device_id,
+              "TROIKA_PRODUCT_TOKEN_ID": principal.token_id}
+    for key, value in values.items():
+        set_session_override(key, value)
+    try:
+        monkeypatch.setattr(mcp_connector, "call_tool", lambda *a, **k: pytest.fail("must not call"))
+        assert json.loads(cap.discover({"capability": "mcp"}))["error"] == "pro_required"
+        assert json.loads(cap.discover({"capability": "skills"}))["error"] == "pro_required"
+        assert "pro_required" in cap.execute({"tool": f"mcp:{TOKEN_SERVICE}/get_me", "arguments": {}})
+    finally:
+        for key in values:
+            if key in previous:
+                set_session_override(key, previous[key])
+            else:
+                clear_session_override(key)

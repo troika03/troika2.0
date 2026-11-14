@@ -72,6 +72,8 @@ namespace Troika.Desktop {
                 var service = new CapabilityCatalogueService(api);
                 var current = await service.LoadCatalogue(CancellationToken.None);
                 Assert(!current.Legacy && current.Mcp.Count == 1 && !Json.Flag(current.Skills[0], "connected"), "extension snapshot missing");
+                Assert(current.ExtensionsAllowed, "missing plan flag must keep old servers usable");
+                Assert(!CapabilityCatalogueService.ParseCatalogue(Json.Parse("{\"object\":\"troika.extensions\",\"extensions_allowed\":false,\"skills\":[],\"mcp\":[],\"tools\":[]}")).ExtensionsAllowed, "Pro lock ignored");
                 current = await service.SetSkillConnected("creative/humanizer", true, CancellationToken.None);
                 Assert(skillPatch && Json.Flag(current.Skills[0], "connected"), "skill patch ignored server snapshot");
                 await service.SetMcpConnected("deepwiki", true, CancellationToken.None);

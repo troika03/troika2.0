@@ -376,7 +376,16 @@ class _CapabilitiesScreenState extends State<CapabilitiesScreen>
         ],
       ),
       const SizedBox(height: 12),
-      if (tab == 1 && connectable == 0)
+      if (_catalogue?.extensionsAllowed == false)
+        const Padding(
+          padding: EdgeInsets.only(bottom: 12),
+          child: _Notice(
+            'Скиллы и MCP доступны в тарифе Pro. Здесь видно, что он '
+            'добавляет; подключить можно после перехода на Pro.',
+            inline: true,
+          ),
+        )
+      else if (tab == 1 && connectable == 0)
         const Padding(
           padding: EdgeInsets.only(bottom: 12),
           child: _Notice(

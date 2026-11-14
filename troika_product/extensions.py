@@ -77,6 +77,20 @@ MCP_ICONS = {
     "Общение": "chat", "Продажи": "chart", "Автоматизация": "plug",
     "Дизайн": "design", "Сайты": "globe", "Файлы": "files", "Локальные": "computer",
 }
+PRO_REQUIRED = "Скиллы и MCP доступны в тарифе Pro."
+PRO_ERROR = {"ok": False, "error": "pro_required", "hint": (
+    "Skills and MCP services are available on the Pro plan only. Tell the owner they can "
+    "upgrade to Pro in Настройки → Тариф; do not pretend to have called the service.")}
+
+
+def extensions_allowed(registry: AccessRegistry, principal: AccessPrincipal) -> bool:
+    """Owner decision 14.11: skills and MCP need Pro, like development."""
+    try:
+        return registry.subscription_summary(principal)["plan"] == "pro"
+    except (PermissionError, ValueError, KeyError, TypeError):
+        return False
+
+
 UNAVAILABLE_SKILL = "Нужны программы или ключи, которых нет в облаке Тройки."
 SERVICE_DISABLED = "Подключение сервисов пока не включено на сервере Тройки."
 MCP_REASONS = {
@@ -317,7 +331,7 @@ def _public(item: dict) -> dict:
 
 
 def extension_catalogue(connected: set[str], tools: dict, connected_mcp: set[str] = frozenset(),
-                        services: set[str] = frozenset()) -> dict:
+                        services: set[str] = frozenset(), allowed: bool = True) -> dict:
     skills = [dict(_public(item), connected=item["id"] in connected) for item in skill_entries()]
     mcp = []
     for item in mcp_entries():
@@ -326,9 +340,16 @@ def extension_catalogue(connected: set[str], tools: dict, connected_mcp: set[str
             entry["connectable"] = _service_available(item)
             entry["reason"] = "" if entry["connectable"] else SERVICE_DISABLED
         mcp.append(entry)
+    if not allowed:
+        # Listed so the owner sees what Pro adds; nothing connects or runs.
+        for entry in skills + mcp:
+            if entry["connectable"]:
+                entry["connectable"] = False
+                entry["reason"] = PRO_REQUIRED
     mcp.sort(key=lambda item: (not item["connected"], not item["connectable"], item["title"].lower()))
     return {
         "object": "troika.extensions",
+        "extensions_allowed": allowed,
         "skills": skills,
         "mcp": mcp,
         "tools": tools.get("capabilities", []),
@@ -349,6 +370,8 @@ def skill_instructions(skill_id: str) -> str | None:
 
 
 def discover_skills(registry: AccessRegistry, principal: AccessPrincipal, skill_id: Any) -> str:
+    if not extensions_allowed(registry, principal):
+        return json.dumps(PRO_ERROR)
     connected = ExtensionStore(registry).connected(principal)
     if skill_id is None:
         return json.dumps({"ok": True, "capability": "skills", "skills": [
@@ -405,6 +428,8 @@ def discover_mcp(registry: AccessRegistry, principal: AccessPrincipal, server_id
     small model is not flooded; the full schema comes per tool.
     """
     from troika_product import mcp_connector
+    if not extensions_allowed(registry, principal):
+        return json.dumps(PRO_ERROR)
     wanted = None
     if isinstance(server_id, str):
         raw = server_id.strip()
@@ -490,6 +515,8 @@ def _approve_write(entry: dict, tool: str, arguments: dict) -> bool:
 def execute_mcp(registry: AccessRegistry, principal: AccessPrincipal, name: str, arguments: dict) -> tuple[str, bool]:
     """Run one tool of a connected server. Returns (json, ok)."""
     from troika_product import mcp_connector
+    if not extensions_allowed(registry, principal):
+        return json.dumps(PRO_ERROR), False
     parsed = mcp_connector.split_name(name)
     if parsed:
         # Accept "mcp:GitHub/x" for "mcp:github/x".

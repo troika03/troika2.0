@@ -119,10 +119,14 @@ class ExtensionCatalogue {
   final List<CatalogueEntry>? skills;
   final List<CatalogueEntry>? mcp;
   final List<TroikaCapability> tools;
+
+  /// False on Free and Plus: skills and MCP are a Pro feature.
+  final bool extensionsAllowed;
   const ExtensionCatalogue({
     required this.skills,
     required this.mcp,
     required this.tools,
+    this.extensionsAllowed = true,
   });
 }
 
@@ -317,6 +321,7 @@ class CapabilityService {
           )
           .toList();
       return ExtensionCatalogue(
+        extensionsAllowed: body['extensions_allowed'] != false,
         skills: entries('skills'),
         mcp: entries('mcp'),
         tools: (body['tools'] as List)

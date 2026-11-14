@@ -956,6 +956,11 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             extra.get("product_resource_text_enabled", False)
         )
         self._product_resource_prices = extra.get("product_resource_prices", {})
+        # Pro runs use a stronger model for multi-step tool work (owner
+        # decision 14.11); every other plan keeps the configured default.
+        self._product_pro_model = str(
+            extra.get("product_pro_model") or os.getenv("TROIKA_PRODUCT_PRO_MODEL", "")
+        ).strip()
         self._product_resource_enabled = _coerce_config_bool(extra.get("product_resource_enabled", False))
         self._product_resource_config = extra
         self._billing_notifications = asyncio.Semaphore(4)
@@ -1932,6 +1937,14 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
 
         return scope()
 
+    def _principal_is_pro(self, principal: Any) -> bool:
+        if principal is None or self._access_registry is None:
+            return False
+        try:
+            return self._access_registry.subscription_summary(principal)["plan"] == "pro"
+        except (PermissionError, ValueError, KeyError, TypeError):
+            return False
+
     def _create_agent(
         self,
         ephemeral_system_prompt: Optional[str] = None,
@@ -2022,6 +2035,14 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
             runtime_kwargs.update(api_key=own.key, provider=own.provider,
                                   base_url=ENDPOINTS[own.provider], api_mode="chat_completions")
             fallback_model = None
+
+        if (self._access_registry is not None and own is None and windows_model_run is None
+                and self._product_pro_model and self._principal_is_pro(
+                    getattr(current_provider_guard(), "principal", None))):
+            # A failed paid request (for example an empty provider balance)
+            # falls back to the ordinary model instead of failing the turn.
+            fallback_model = [{"provider": runtime_kwargs.get("provider") or "openrouter", "model": model}]
+            model = self._product_pro_model
 
         if self._access_registry is not None and own is None and reasoning_config is None:
             # Keep explicit operator settings; make ordinary hosted chat responsive.

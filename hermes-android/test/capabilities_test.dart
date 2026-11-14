@@ -477,6 +477,26 @@ void main() {
     expect(service.connected, containsAll(['github', 'notion']));
   });
 
+  testWidgets('free and plus see skills and MCP as a Pro feature', (
+    tester,
+  ) async {
+    final service = _ProLockedService();
+    addTearDown(service.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildTroikaTheme(),
+        home: CapabilitiesScreen(service: service),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('после перехода на Pro'), findsOneWidget);
+    expect(find.text('Подключить'), findsNothing);
+    await tester.tap(find.text('MCP'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('после перехода на Pro'), findsOneWidget);
+    expect(find.text('Ввести токен'), findsNothing);
+  });
+
   testWidgets('tool switch saves and reflects disabled tools', (tester) async {
     final service = StubService();
     addTearDown(service.dispose);
@@ -583,4 +603,33 @@ void main() {
       await capture('capabilities-mcp');
     });
   }
+}
+
+class _ProLockedService extends StubService {
+  @override
+  Future<ExtensionCatalogue> loadCatalogue() async => ExtensionCatalogue(
+    extensionsAllowed: false,
+    skills: const [
+      CatalogueEntry(
+        id: 'creative/humanizer',
+        title: 'Живой текст',
+        description: 'Убирает шаблонные обороты.',
+        connectable: false,
+        connected: false,
+        reason: 'Скиллы и MCP доступны в тарифе Pro.',
+      ),
+    ],
+    mcp: const [
+      CatalogueEntry(
+        id: 'github',
+        title: 'GitHub',
+        description: 'Репозитории.',
+        connectable: false,
+        connected: false,
+        connect: 'token',
+        reason: 'Скиллы и MCP доступны в тарифе Pro.',
+      ),
+    ],
+    tools: items,
+  );
 }

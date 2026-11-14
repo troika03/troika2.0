@@ -76,7 +76,9 @@ namespace Troika.Desktop {
                         filters.Children.Add(filter);
                     }
                     panelContent.Children.Add(filters);
-                    if (catalogueTab == 1 && connectable == 0)
+                    if (!catalogue.ExtensionsAllowed)
+                        panelContent.Children.Add(Label("Скиллы и MCP доступны в тарифе Pro. Здесь видно, что он добавляет; подключить можно после перехода на Pro.", 12, muted));
+                    else if (catalogueTab == 1 && connectable == 0)
                         panelContent.Children.Add(Label("Серверы MCP пока нельзя подключить к облаку: им нужны запуск программ или вход в сервис. Причина указана у каждого сервера.", 12, muted));
                     else if (catalogueTab == 1)
                         panelContent.Children.Add(Label("Публичные серверы работают без входа и только читают. Сервисы с аккаунтом подключаются входом или токеном; изменения в них Тройка делает только после вашего подтверждения.", 12, muted));

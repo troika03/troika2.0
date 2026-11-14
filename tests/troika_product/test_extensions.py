@@ -13,8 +13,9 @@ from troika_product import extensions as ext
 from troika_product.access import AccessRegistry
 
 
-def identity(registry, email):
-    user = registry.create_user(email)
+def identity(registry, email, plan="pro"):
+    # Skills and MCP are a Pro feature.
+    user = registry.create_user(email, plan=plan)
     device = registry.create_device(user, name="Test", platform="windows")
     token = registry.issue_device_token(device)
     return token, registry.authenticate(token)

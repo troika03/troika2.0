@@ -13,6 +13,8 @@ namespace Troika.Desktop {
         public List<Dictionary<string, object>> Mcp;
         public List<Dictionary<string, object>> Tools;
         public bool Legacy { get { return Skills == null; } }
+        // False on Free and Plus: skills and MCP are a Pro feature.
+        public bool ExtensionsAllowed = true;
     }
 
     public sealed class CapabilityCatalogueService {
@@ -45,7 +47,13 @@ namespace Troika.Desktop {
         public async Task<Dictionary<string, object>> ConnectService(string id, string token, CancellationToken cancellation) {
             if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Выберите сервис.");
             object body = token == null ? (object)new Dictionary<string, object>() : new { token };
-            var result = await api.Call("POST", "/v1/account/services/" + Uri.EscapeDataString(id) + "/connect", body, cancellation);
+            Dictionary<string, object> result;
+            try { result = await api.Call("POST", "/v1/account/services/" + Uri.EscapeDataString(id) + "/connect", body, cancellation); }
+            catch (ApiException error) {
+                if (error.Status == 402) throw new InvalidOperationException("Скиллы и MCP доступны в тарифе Pro.");
+                if (error.Status == 403) throw new InvalidOperationException("Сервис нельзя подключить.");
+                throw;
+            }
             var status = Json.Text(result, "status");
             if (status == "waiting") {
                 Uri address;
@@ -65,6 +73,7 @@ namespace Troika.Desktop {
             } catch (ApiException error) {
                 if (error.Status == 404) throw new InvalidOperationException("Сервер пока не поддерживает подключение навыков и MCP.");
                 if (error.Status == 403) throw new InvalidOperationException("Это нельзя подключить в облаке Тройки.");
+                if (error.Status == 402) throw new InvalidOperationException("Скиллы и MCP доступны в тарифе Pro.");
                 throw;
             }
         }
@@ -84,7 +93,8 @@ namespace Troika.Desktop {
         public static CatalogueSnapshot ParseCatalogue(Dictionary<string, object> value) {
             if (Json.Text(value, "object") != "troika.extensions")
                 throw new InvalidDataException("Сервер вернул некорректный каталог возможностей.");
-            return new CatalogueSnapshot { Skills = Entries(value, "skills"), Mcp = Entries(value, "mcp"), Tools = Tools(value, "tools") };
+            return new CatalogueSnapshot { Skills = Entries(value, "skills"), Mcp = Entries(value, "mcp"), Tools = Tools(value, "tools"),
+                ExtensionsAllowed = !(Json.Get(value, "extensions_allowed") is bool) || Json.Flag(value, "extensions_allowed") };
         }
         private static List<Dictionary<string, object>> Tools(Dictionary<string, object> value, string key) {
             var raw = Json.Get(value, key) as object[];
