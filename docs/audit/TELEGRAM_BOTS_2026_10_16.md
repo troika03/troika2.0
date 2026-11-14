@@ -90,3 +90,26 @@ Telegram; остальные image tags сохранены. Каноническ
 
 Инструкция и ограничения: [TELEGRAM_BOTS.md](../development/TELEGRAM_BOTS.md).
 Изображения: `troika_product/telegram_commerce/assets`; prompts сохранены рядом.
+
+## Обновление 14 ноября 2026 года
+
+Выкачены коммиты `3cfae62` (новое меню, цветные кнопки, тарифы из
+`subscription_policy.py`, статусы обращений) и `9e3cebd` (возвращён цикл
+доставки `Service.deliveries`). Пакет: `/srv/troika/releases/telegram-20261114/
+telegram_commerce`, рядом `runtime.env`, `source-manifest.txt` и копия
+`resource-images.env.before`. Образ прежний: `telegram-runtime-20261016`; его
+политика подписок совпадает с репозиторием (версия `2026-10-12`). В основном
+`resource-images.env` изменена только `TROIKA_TELEGRAM_SOURCE`, владелец root
+сохранён. Сервис пересоздан с `--no-deps`; API, STT и поиск не трогались.
+
+Первая попытка упала при старте: в переписанном `service.py` пропал метод
+`deliveries`. Сервис был сразу возвращён на пакет от 16 октября, ошибка найдена
+ручным запуском (выводились только тип ошибки и строка кода), исправлена и
+покрыта тестом. Простой бота — несколько минут.
+
+Проверки: 20 passed в `test_telegram_commerce.py`, ruff чист. Новая версия
+50 секунд работала с настоящим Telegram без ошибок, затем запущена как сервис:
+`healthy`, 0 перезапусков. `profile` применён: новые команды и описания.
+Очередь: 0 ожидающих, 2 старых failed `deleteMessage`, 0 открытых обращений.
+Не проверено: нажатие кнопок в живом клиенте и то, как Telegram рисует `style`;
+откат — вернуть в `resource-images.env` путь пакета `telegram-20261016`.
