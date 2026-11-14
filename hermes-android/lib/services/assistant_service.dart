@@ -771,6 +771,7 @@ class AssistantService extends ChangeNotifier {
       // Стримим «поток мыслей»: размышления и вызовы инструментов
       // появляются в пузыре в реальном времени, пока Тройка работает.
       final successfulTools = <String>[];
+      String? activityLabel;
       RunActionResult? structuredResult;
       final voiceText = StringBuffer();
       if (speak) turn.speech = _tts.beginReply();
@@ -795,17 +796,24 @@ class AssistantService extends ChangeNotifier {
           pending.thoughts.add(ThoughtStep(ThoughtKind.thinking, t));
           notifyListeners();
         },
+        onActivity: (label) => activityLabel = label,
         onToolStart: (tool) {
           _checkTurn(turn);
           _actionInProgress = true;
-          _activityStatus = safeActivityStatusForTool(tool);
-          pending.thoughts.add(ThoughtStep(ThoughtKind.toolStart, tool));
+          _activityStatus = activityLabel ?? safeActivityStatusForTool(tool);
+          pending.thoughts.add(
+            ThoughtStep(ThoughtKind.toolStart, activityLabel ?? tool),
+          );
           notifyListeners();
         },
         onToolDone: (tool, isErr) {
           _checkTurn(turn);
           pending.thoughts.add(
-            ThoughtStep(ThoughtKind.toolDone, tool, isError: isErr),
+            ThoughtStep(
+              ThoughtKind.toolDone,
+              activityLabel ?? tool,
+              isError: isErr,
+            ),
           );
           if (!isErr && tool.trim().isNotEmpty) successfulTools.add(tool);
           notifyListeners();

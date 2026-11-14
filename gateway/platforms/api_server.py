@@ -6003,6 +6003,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                 pass
 
         def _callback(event_type: str, tool_name: str = None, preview: str = None, args=None, **kwargs):
+            from troika_product.activity_labels import activity_label
             from troika_product.web_sources import web_source_activity
 
             ts = time.time()
@@ -6012,6 +6013,8 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                     "run_id": run_id,
                     "timestamp": ts,
                     "tool": "action" if product_mode else tool_name,
+                    # Fixed, content-free phrase for the client status line.
+                    "label": activity_label(tool_name, args),
                 }
                 if not product_mode:
                     event["preview"] = preview

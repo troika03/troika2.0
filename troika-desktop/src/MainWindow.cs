@@ -296,7 +296,7 @@ namespace Troika.Desktop {
                     if (closed) return;
                     var kind = Json.Text(ev, "event");
                     if (kind == "message.delta") { var delta = Json.Text(ev, "delta"); answer.Text += delta; speechText.Append(delta); if (replySpeech != null) replySpeech.Add(delta); conversationScroll.ScrollToEnd(); }
-                    if (kind == "tool.started") { SetStatus(ToolStatus(Json.Text(ev, "tool")), false); orb.SetState("acting"); }
+                    if (kind == "tool.started") { var label = Json.Text(ev, "label"); SetStatus(label.Length > 0 ? label + "…" : ToolStatus(Json.Text(ev, "tool")), false); orb.SetState("acting"); }
                     RenderSources(Json.Map(Json.Get(ev, "web_activity")), sourceList, sources);
                 }, AskApproval, cancellation);
                 answer.Text = result; await ReceiveFiles(); SetStatus("Готово", false);

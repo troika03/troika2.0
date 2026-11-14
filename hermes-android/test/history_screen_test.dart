@@ -43,19 +43,22 @@ void main() {
     await TroikaConfig.init();
   });
 
-  SessionSummary summary(String id, String preview) => SessionSummary(
-    id: id,
-    messageCount: 2,
-    preview: preview,
-    lastActive: DateTime.now().millisecondsSinceEpoch / 1000,
-  );
+  // Fixed order: the newer conversation is listed first.
+  final now = DateTime.now().millisecondsSinceEpoch / 1000;
+  SessionSummary summary(String id, String preview, double age) =>
+      SessionSummary(
+        id: id,
+        messageCount: 2,
+        preview: preview,
+        lastActive: now - age,
+      );
 
   testWidgets('history renames and deletes one whole conversation', (
     tester,
   ) async {
     final api = _FakeApi([
-      summary('home', 'Первый разговор'),
-      summary('desktop-2', 'Второй разговор'),
+      summary('home', 'Первый разговор', 1),
+      summary('desktop-2', 'Второй разговор', 60),
     ]);
     await tester.pumpWidget(MaterialApp(home: HistoryScreen(api: api)));
     await tester.pumpAndSettle();

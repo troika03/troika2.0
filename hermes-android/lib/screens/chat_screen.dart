@@ -235,6 +235,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         if (a.state == AssistantState.error && a.errorMessage.isNotEmpty)
           _errorBar(a.errorMessage),
+        if (a.state == AssistantState.processing) _activityLine(a),
         _attachments(),
         _inputBar(a, isBusy),
       ],
@@ -303,6 +304,40 @@ class _ChatScreenState extends State<ChatScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// Маленькая строка над полем ввода: что Тройка делает прямо сейчас.
+  Widget _activityLine(AssistantService a) {
+    final p = TroikaPalette.of(context);
+    final text = a.isActing ? '${a.activityStatus}…' : 'Думаю…';
+    return Padding(
+      key: const ValueKey('assistant-activity-line'),
+      padding: const EdgeInsets.fromLTRB(20, 2, 20, 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 10,
+            height: 10,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.5,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Semantics(
+              liveRegion: true,
+              child: Text(
+                text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: p.textMuted, fontSize: 12),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -846,7 +881,7 @@ class _ThoughtsViewState extends State<_ThoughtsView> {
       case ThoughtKind.toolStart:
         icon = '🔧';
         color = Theme.of(context).colorScheme.primary;
-        text = 'вызываю $text';
+        // Подпись уже описывает действие («Ищу в интернете»).
         break;
       case ThoughtKind.toolDone:
         icon = s.isError ? '⚠️' : '✅';

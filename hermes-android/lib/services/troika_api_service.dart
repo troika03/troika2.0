@@ -630,6 +630,7 @@ class TroikaApiService {
     void Function(WebSourceActivity activity)? onWebActivity,
     void Function(String tool)? onToolStart,
     void Function(String tool, bool isError)? onToolDone,
+    void Function(String label)? onActivity,
     FutureOr<void> Function(RunActionResult result)? onResult,
     void Function(String delta)? onDelta,
     Future<String> Function(RunApprovalRequest request)? onApproval,
@@ -733,6 +734,9 @@ class TroikaApiService {
             }
             break;
           case 'tool.started':
+            // Сервер присылает короткую безопасную подпись действия.
+            final label = (ev['label'] ?? '').toString().trim();
+            if (label.isNotEmpty) onActivity?.call(label);
             onToolStart?.call((ev['tool'] ?? '').toString());
             break;
           case 'tool.completed':
