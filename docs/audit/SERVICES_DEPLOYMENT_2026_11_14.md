@@ -46,3 +46,20 @@
 (`previous-config-files.txt`) и `rollback-pinned-image.override.yaml`; при
 необходимости вернуть `.env` из `env.before`. Таблица
 `troika_service_connections` безопасна для прежнего образа (не читается).
+
+## Исправление 14.11: Тройка не находила GitHub
+
+Владелец подключил GitHub токеном, но на просьбу показать проекты Тройка
+отвечала про локальные файлы, затем «нет доступа». В логах API:
+`troika_tool_search` → `invalid_discovery_arguments` и четыре
+`troika_tool_call` → `tool_not_allowed` (модель угадывала имена). Подключение
+GitHub в базе было (1 запись `github/token`); переписка не читалась.
+
+Исправление `267d2af`: имя сервиса в `capability` ведёт в MCP-поиск этого
+сервера; неизвестные capability/инструменты возвращают подсказку; у серверов
+с множеством инструментов сначала краткий список имён, полная схема — по
+`tool=<server>/<name>`; описание `troika_tool_search` называет GitHub, Notion,
+Jira, Stripe. Образ `troika-production:services-20261114-2`
+(`sha256:6301860d…ded5c2`) поверх `services-20261114`, пересоздан только
+`api`, healthy, 0 перезапусков. Повторная проверка в приложении владельца
+ещё не выполнена.
