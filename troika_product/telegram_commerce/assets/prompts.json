@@ -1,0 +1,7 @@
+{
+  "tool": "built-in image_gen",
+  "reference": "brand/troika/exports/png/logos/logo-ru-reverse.png",
+  "welcome": "Refined 16:9 Telegram banner for Тройка. Preserve the official flat amber logo and off-white wordmark. Graphite #0C0B0A, amber #F5A623, paper #F3F0EA. Large Cyrillic headline: Скажи, что нужно. Subtitle: Голосовой помощник для Android и Windows. Footer: Тарифы · Приложение · Поддержка. Sculptural amber voice waveform on right. Editorial spacing, mobile-legible type. No price, robots, fake screenshots, unavailable feature claims or watermark.",
+  "support": "Matching 16:9 sibling of the welcome banner. Same flat official logo, palette and typography. Headline: Рядом, когда нужно. Subtitle: Поддержка Тройки. Footer: Установка · Аккаунт · Помощь. Two sculptural speech forms, amber and graphite, on right. No price, 24/7 claim, response-time promise, robot faces or watermark.",
+  "avatars": "Existing vector app-icon-amber.svg for shop and app-icon-dark.svg for support, converted to 640 × 640 JPEG without redesign."
+}

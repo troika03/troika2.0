@@ -1,0 +1,10 @@
+# Copy outside the checkout. Replace the IDs with your own Telegram user ID.
+shop_username: troika03_shop_bot
+support_username: troika03_support_bot
+operator_ids: [0]
+operator_chat_id: 0
+website: https://cm444726.tw1.ru
+payments_enabled: false
+# Defaults are profile-aware. In production HERMES_HOME=/opt/troika.
+# state_directory: /opt/troika/troika-telegram
+# assets: /app/troika_product/telegram_commerce/assets

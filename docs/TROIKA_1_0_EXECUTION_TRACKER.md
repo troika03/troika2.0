@@ -33,7 +33,7 @@ installed-client E2E или релизной готовности. `[-]` — ч�
 | 12. Безопасность | [ ] | Есть tenant/approval/revoke/export/delete tests; полный production/backup scope не закрыт. |
 | 13. Production | [-] | VPS/API/STT/TLS работают; постоянный домен, production stores, backups/restore, metrics/alerts ещё нужны. |
 | 14. Аналитика | [ ] | Полный product/operational metrics набор ещё не реализован. |
-| 15. Поддержка/legal | [ ] | Черновики страниц есть; оператор, контакты, support и проверка policies не завершены. |
+| 15. Поддержка/legal | [-] | Telegram-магазин и поддержка запущены 16 октября: тарифы, справка, обращения, ответы владельца и закрытие проверены. Старое меню удаляется при переходе по кнопкам. Оплата выключена; почта, реквизиты/legal, сроки поддержки и общие release gates открыты. [Аудит](audit/TELEGRAM_BOTS_2026_10_16.md). |
 | 16. Rebrand | [-] | Flutter identity/native strings мигрированы. Python, CLI, пути/headers/native IDs сохраняют совместимость; hard rename не завершён. |
 | 17. CI/QA/release | [-] | Часть workflows и сборок работает. Полный Windows Python baseline и dashboard lint не зелёные; installer/update E2E отсутствует. |
 | 18. Closed beta | [ ] | Предыдущие device smokes не заменяют закрытую beta на реальных пользователях. |

@@ -1,4 +1,52 @@
 services:
+  telegram:
+    profiles: [telegram]
+    image: ${TROIKA_TELEGRAM_IMAGE:-troika-production:local}
+    restart: unless-stopped
+    user: "1000:1000"
+    command:
+      - python
+      - -m
+      - troika_product.telegram_commerce
+      - --config
+      - /opt/troika/config.yaml
+      - run
+    env_file:
+      - path: /srv/troika/telegram/.env
+        required: false
+    environment:
+      HOME: /opt/troika
+      HERMES_HOME: /opt/troika
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - /srv/troika/telegram:/opt/troika
+      - ${TROIKA_TELEGRAM_SOURCE:-./telegram-source}:/app/troika_product/telegram_commerce:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    mem_limit: 192m
+    cpus: 0.5
+    pids_limit: 64
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "from pathlib import Path; import time; root=Path('/opt/troika/troika-telegram'); assert all(time.time()-float((root/(bot+'.heartbeat')).read_text())<120 for bot in ('shop','support'))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: "2"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
   api:
     build:
       context: ../..
