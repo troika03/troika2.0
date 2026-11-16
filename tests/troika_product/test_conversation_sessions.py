@@ -88,8 +88,11 @@ def test_concurrent_devices_share_one_active_segment(conversation):
     assert {r[0] for r in results} == {first}
 
 
-def test_archive_is_retrievable_but_not_in_new_prompt(conversation):
+def test_older_archive_is_retrievable_beyond_recent_reference(conversation):
     registry, principal, db, sessions, home = conversation
+    for label in ("one", "two"):
+        db.append_message(home, "user", f"Current detail {label}")
+        db.append_message(home, "assistant", f"Confirmed {label}")
     effective, _, _ = sessions.resolve(principal, home, "Привет")
     guard = SimpleNamespace(principal=principal, stopped=False, ledger=SimpleNamespace(registry=registry))
     context = WorkingContext(guard, enabled=True)
@@ -99,12 +102,55 @@ def test_archive_is_retrievable_but_not_in_new_prompt(conversation):
     with provider_metering_scope(guard):
         prepared = context.prepare(payload, client=SimpleNamespace())
         assert "REF-287" not in str(prepared)
+        assert "Current detail two" in str(prepared)
         match = context.retrieve({"action": "history_search", "query": "REF-287"})["matches"][0]
         assert "REF-287" in context.retrieve({"action": "history_read", "index": match["index"]})["text"]
-        assert len(context.retrieve({"action": "history_recent"})["matches"]) == 3
+        assert len(context.retrieve({"action": "history_recent"})["matches"]) == 7
         registry.revoke_device(principal, principal.device_id)
         with pytest.raises(PermissionError):
             context.retrieve({"action": "history_read", "index": 1})
+
+
+def test_tool_heavy_turn_is_available_after_context_limit_rotation(conversation):
+    registry, principal, db, sessions, home = conversation
+    original_request = "Проверь черновик отчёта отдела «Вектор»."
+    original_result = "Готово. В отчёте отдела «Вектор» проверены три раздела."
+    db.append_message(home, "user", original_request)
+    db.append_message(home, "assistant", None, tool_calls=[{
+        "id": "fixture", "type": "function",
+        "function": {"name": "troika_tool_call", "arguments": "{}"},
+    }])
+    db.append_message(home, "tool", "Exact observation from source. " * 5000, tool_call_id="fixture")
+    db.append_message(home, "assistant", original_result)
+    original = db.get_messages_as_conversation(home)
+    follow_up = "А теперь проверь ещё четвёртый."
+    effective, history, reason = sessions.resolve(principal, home, follow_up)
+    assert reason == "context_limit" and effective != home and history == []
+
+    guard = SimpleNamespace(principal=principal, stopped=False, ledger=SimpleNamespace(registry=registry))
+    context = WorkingContext(guard, enabled=True)
+    context.archive_messages = sessions.archive(principal, effective)
+    current = {"role": "user", "content": follow_up}
+    payload = {"messages": [current], "tools": [
+        {"function": {"name": "troika_tool_search"}}, {"function": {"name": "troika_tool_call"}},
+    ]}
+    with provider_metering_scope(guard):
+        prepared = context.prepare(payload, client=SimpleNamespace())
+        assert prepared["messages"][-1] == current
+        reference = json.loads(prepared["messages"][0]["content"].splitlines()[1])
+        assert [item["excerpt"] for item in reference["dialogue"]][-2:] == [original_request, original_result]
+        tool_index, = reference["tool_result_indices"]
+        result = context.retrieve({"action": "history_read", "index": tool_index})
+        assert result["text"].startswith("Exact observation from source.")
+        assert "Exact observation from source." not in str(prepared)
+        assert payload["messages"] == [current]
+        assert context.messages == [current]
+        assert db.get_messages_as_conversation(home) == original
+        assert not db.get_messages(effective)
+
+        # Social turns keep their existing boundary even with an archive.
+        context.conversation_only = True
+        assert context.prepare(payload, client=SimpleNamespace()) is payload
 
 
 def test_foreign_account_cannot_resolve_or_read_channel(conversation):

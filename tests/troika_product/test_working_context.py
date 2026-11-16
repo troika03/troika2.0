@@ -244,6 +244,7 @@ def test_gateway_passes_full_stored_history_to_compact_scope(tmp_path, monkeypat
     registry = adapter._access_registry
     token, principal = identity(registry, "history@example.com")
     sid = registry.account_home_session_id(principal)
+    assert registry.claim_session(principal, sid)
     db = SessionDB(tmp_path / "sessions.db")
     db.create_session(sid, source="api_server", model="free")
     for i in range(40):
@@ -303,7 +304,11 @@ def test_rotated_archive_indexes_and_cache_stay_with_their_originals(scoped):
     client, _ = sdk_client()
     guard.context.archive_messages = [{"role": "user", "content": "Earlier session REF-ARCHIVE-A."}]
     derived = guard.context.prepare(payload(), client=client)
-    summary = json.loads(derived["messages"][1]["content"].splitlines()[1])
+    index_message = next(
+        m["content"] for m in derived["messages"]
+        if (m.get("content") or "").startswith("[TROIKA_HISTORY_SUMMARY:")
+    )
+    summary = json.loads(index_message.splitlines()[1])
     assert summary["original_range"][0] == 2
     for item in summary["summary"]["items"]:
         page = guard.context.retrieve({"action": "history_read", "index": item["index"]})

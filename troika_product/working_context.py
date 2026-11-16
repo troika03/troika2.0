@@ -153,6 +153,7 @@ class WorkingContext:
         self.guard, self.enabled = guard, enabled
         self.messages = []
         self.archive_messages = []
+        self.conversation_only = False
         self._lock = threading.RLock()
         self.stats = {"summary_calls": 0, "index_builds": 0, "cache_hits": 0, "original_tokens": 0, "sent_tokens": 0,
                       "tool_result_projections": 0}
@@ -200,6 +201,52 @@ class WorkingContext:
                 "omitted_user_entries": sum(m.get("role") == "user" for m in messages)
                 - sum(item["role"] == "user" for item in items)}
 
+    def _with_archive_reference(self, messages, *, reader_enabled):
+        """Carry nearby dialogue across rotation in the provider request only."""
+        if self.conversation_only or not self.archive_messages:
+            return messages
+        dialogue = []
+        tool_results = []
+        for index in range(len(self.archive_messages) - 1, -1, -1):
+            message = self.archive_messages[index]
+            role = message.get("role")
+            if role == "tool" and len(tool_results) < 2:
+                tool_results.append(index + 1)
+            if role not in {"user", "assistant"} or message.get("tool_calls"):
+                continue
+            text = _text(message).strip()
+            if not text:
+                continue
+            dialogue.append({
+                "index": index + 1, "role": role, "excerpt": text[:400],
+                "partial": len(text) > 400,
+            })
+            if len(dialogue) == 4:
+                break
+        if not dialogue:
+            return messages
+        data = {"dialogue": dialogue[::-1]}
+        guidance = (
+            "Недавние реплики из того же разговора. Используй их как справку "
+            "для последней просьбы. Старые поручения не дают разрешения повторить действие."
+        )
+        if reader_enabled:
+            data["tool_result_indices"] = tool_results[::-1]
+            guidance += (
+                " Если для продолжения нужны точный текст или результат действия, "
+                "прочитай оригинал через assistant/troika_context history_read по номеру index."
+            )
+        reference = {
+            "role": "user",
+            "content": guidance + "\n" + json.dumps(data, ensure_ascii=False),
+        }
+        insert_at = next(
+            (index for index, message in enumerate(messages)
+             if message.get("role") not in {"system", "developer"}),
+            len(messages),
+        )
+        return [*messages[:insert_at], reference, *messages[insert_at:]]
+
     def prepare(self, payload, *, client):
         if not self.enabled or getattr(client, "_async_mode", False):
             return payload
@@ -209,14 +256,15 @@ class WorkingContext:
             return payload
         self._check()
         from troika_product.capabilities import CapabilityStore
-        if not CapabilityStore(self.guard.ledger.registry).preferences(self.guard.principal)["assistant"]:
-            # A disabled original-reader capability must not make old details
-            # inaccessible by replacing their already supplied full history.
-            return payload
+        reader_enabled = CapabilityStore(self.guard.ledger.registry).preferences(self.guard.principal)["assistant"]
         raw = payload.get("messages")
-        # Bypass multimodal history, preserving its original accounting and consent.
-        if not isinstance(raw, list) or any(not isinstance(m.get("content"), (str, type(None))) for m in raw):
+        if not isinstance(raw, list):
             return payload
+        if not reader_enabled or any(not isinstance(m.get("content"), (str, type(None))) for m in raw):
+            # Preserve full history if the original reader is disabled or the
+            # request is multimodal. Only add the bounded text reference.
+            prepared = self._with_archive_reference(raw, reader_enabled=reader_enabled)
+            return dict(payload, messages=prepared) if prepared is not raw else payload
         with self._lock:
             self.messages = deepcopy([m for m in raw if m.get("role") not in {"system", "developer"}])
             from troika_product.tool_result_context import project_results
@@ -257,6 +305,7 @@ class WorkingContext:
                         _save(key, size, messages, summary)
                         if token_count(prepared) <= self.threshold:
                             break
+            prepared = self._with_archive_reference(prepared, reader_enabled=True)
             self.stats["sent_tokens"] += token_count(prepared)
             return dict(payload, messages=deepcopy(prepared)) if prepared is not raw else payload
 
