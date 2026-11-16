@@ -1,0 +1,16 @@
+{
+  "name": "troika-motion",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "bundle": "esbuild src/preview.tsx --bundle --minify --external:/public/* --outfile=work/preview.js",
+    "render": "python render.py"
+  },
+  "dependencies": {
+    "@remotion/player": "4.0.544",
+    "esbuild": "0.27.4",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "remotion": "4.0.544"
+  }
+}

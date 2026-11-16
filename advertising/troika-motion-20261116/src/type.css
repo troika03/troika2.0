@@ -1,0 +1,10 @@
+@font-face {
+  font-family: Golos;
+  src: url('/public/GolosText-Variable.ttf') format('truetype');
+  font-display: block;
+  font-weight: 400 900;
+}
+
+* {
+  box-sizing: border-box;
+}
