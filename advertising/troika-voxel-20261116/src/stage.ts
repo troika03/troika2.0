@@ -188,7 +188,7 @@ function texture(url: string) {
 }
 
 export type Stage = {
-  draw: (time: number, beat: Beat, end: number) => void;
+  draw: (time: number, beat: Beat, end: number, mouthPose?: number) => void;
   dispose: () => void;
 };
 
@@ -230,11 +230,11 @@ export async function buildStage(canvas: HTMLCanvasElement, assets: {mark: strin
   torch.position.set(-0.28, 0.39, 0.64);
   scene.add(torch);
 
-  const draw = (time: number, beat: Beat, end: number) => {
+  const draw = (time: number, beat: Beat, end: number, mouthPose?: number) => {
     const t = time - beat.start;
     const length = end - beat.start;
     const pause = beat.reaction === 'punch' ? 0.47 : beat.reaction === 'deadpan' ? 0.35 : 0.11;
-    const talking = t > pause && t < length - 0.23;
+    const talking = mouthPose === undefined ? t > pause && t < length - 0.23 : mouthPose > 0;
     const talk = (count: number) => Math.floor(t * count) % 3;
     const light = beat.view === 'light' ? pace(t / 0.29) : 0;
     const cover = beat.view === 'cover';
@@ -279,7 +279,7 @@ export async function buildStage(canvas: HTMLCanvasElement, assets: {mark: strin
       brow.position.y = 0.431 + (doubt ? (index === 0 ? 0.046 : 0.009) : 0.012 * gesture);
       brow.rotation.z = (index === 0 ? 1 : -1) * (doubt ? 0.18 : 0.08);
     });
-    human.mouth(humanSpeaks ? talk(6.6) : beat.reaction === 'smirk' ? 3 : 0);
+    human.mouth(humanSpeaks ? mouthPose ?? talk(6.6) : beat.reaction === 'smirk' ? 3 : 0);
 
     const bob = robotSpeaks ? 0.014 * Math.sin(t * 13.1) : 0.011 * Math.sin(time * 3.6);
     robot.root.rotation.y = -0.18 + 0.04 * Math.sin(t * 3.1);
@@ -306,7 +306,8 @@ export async function buildStage(canvas: HTMLCanvasElement, assets: {mark: strin
       brow.rotation.z = (index === 0 ? 1 : -1) * (0.13 + 0.13 * Math.sin(t * 4));
       brow.position.y = 0.541 + (beat.reaction === 'punch' && index === 0 ? 0.037 * pace(t / 0.62) : 0);
     });
-    robot.mouth(beat.reaction === 'punch' && t > 1.68 ? 1 : robotSpeaks ? talk(7.5) : 1);
+    const silentAnimationPose = beat.reaction === 'punch' && t > 1.68 ? 1 : talk(7.5);
+    robot.mouth(robotSpeaks ? mouthPose ?? silentAnimationPose : 1);
 
     const move = pace(t / Math.max(0.1, length));
     const sway = 0.018 * Math.sin(t * 3.1);

@@ -19,6 +19,8 @@ EPISODES = {
     "deadline": (882, "Troika-Deadline-3D.mp4", (22, 101, 171, 244, 309, 419, 503, 587, 671, 742, 779, 845)),
 }
 IMAGES = ("android-home.png", "windows-home.png", "app-icon.png", "wordmark-white.svg")
+VOICE = ROOT / "public" / "deadline-voice.wav"
+VOICE_FILES = (VOICE.name, "deadline-mouth.json")
 HTML = b'''<!doctype html><html lang="ru"><meta charset="utf-8">
 <title>Troika Motion</title><link rel="stylesheet" href="/work/preview.css">
 <style>html,body,#root{margin:0;width:100%;height:100%;overflow:hidden;background:#0b0c10}</style>
@@ -43,7 +45,7 @@ class Handler(SimpleHTTPRequestHandler):
         if path in allowed or path.startswith("/public/"):
             super().do_GET()
             return
-        if path[1:] in IMAGES:
+        if path[1:] in (*IMAGES, *VOICE_FILES):
             self.path = "/public" + path
             super().do_GET()
             return
@@ -80,8 +82,8 @@ def bundle():
     subprocess.run([npm, "run", "bundle"], cwd=ROOT, check=True)
 
 
-def ready(page, url, episode):
-    page.goto(f"{url}?capture&episode={episode}", wait_until="networkidle")
+def ready(page, url, query):
+    page.goto(f"{url}?capture&{query}", wait_until="networkidle")
     page.wait_for_function("typeof window.seek === 'function'")
     page.evaluate("""async () => {
         await document.fonts.load('700 50px Golos', 'Тройка');
@@ -110,16 +112,20 @@ def grab(page, frame, quality=96):
     return page.screenshot(type="jpeg", quality=quality, timeout=20_000)
 
 
-def encode(page, output, start, end):
+def encode(page, output, start, end, voiced):
     command = [
         "ffmpeg", "-hide_banner", "-loglevel", "warning", "-n",
         "-f", "image2pipe", "-vcodec", "mjpeg", "-framerate", str(FPS), "-i", "-",
+    ]
+    if voiced:
+        command.extend(["-ss", f"{start / FPS:.6f}", "-i", str(VOICE)])
+    command.extend([
         "-map", "0:v", "-c:v", "libx264", "-preset", "fast", "-crf", "17",
         "-filter:v", "scale=out_range=tv", "-pix_fmt", "yuv420p",
         "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
-        "-an", "-t", f"{(end - start + 1) / FPS:.6f}",
-        "-movflags", "+faststart", str(output),
-    ]
+    ])
+    command.extend(["-map", "1:a", "-c:a", "aac", "-b:a", "192k"] if voiced else ["-an"])
+    command.extend(["-t", f"{(end - start + 1) / FPS:.6f}", "-movflags", "+faststart", str(output)])
     with subprocess.Popen(command, stdin=subprocess.PIPE) as encoder:
         for frame in range(start, end + 1):
             encoder.stdin.write(grab(page, frame))
@@ -133,6 +139,7 @@ def encode(page, output, start, end):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--episode", choices=EPISODES, default="five-minutes")
+    parser.add_argument("--voiced", action="store_true", help="Render the deadline episode with dialogue.")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--frames")
     parser.add_argument("--scale", type=float, choices=(0.5, 1), default=1)
@@ -140,16 +147,23 @@ def main():
     parser.add_argument("--preview", action="store_true")
     args = parser.parse_args()
     total, filename, stills = EPISODES[args.episode]
+    if args.voiced:
+        if args.episode != "deadline":
+            parser.error("--voiced requires --episode deadline")
+        if not all((ROOT / "public" / name).is_file() for name in VOICE_FILES):
+            parser.error("Run python voice_deadline.py to prepare the dialogue first")
+        filename = filename.removesuffix(".mp4") + "-Voiced.mp4"
     start, end = map(int, (args.frames or f"0-{total - 1}").split("-"))
     if not 0 <= start <= end < total:
         parser.error(f"frames must be in 0–{total - 1}")
     output = (args.output or ROOT / "final" / filename).resolve()
     if output.exists() and not (args.stills or args.preview):
         parser.error("output already exists")
+    query = f"episode={args.episode}" + ("&voiced" if args.voiced else "")
     bundle()
     if args.preview:
         with server() as url:
-            print(f"{url}?episode={args.episode}", flush=True)
+            print(f"{url}?{query}", flush=True)
             input("Press Enter to stop.\n")
         return
     with server() as url, sync_playwright() as playwright:
@@ -163,14 +177,14 @@ def main():
             "height": round(args.scale * 1920),
         })
         page.on("pageerror", lambda error: print(error, flush=True))
-        ready(page, url, args.episode)
+        ready(page, url, query)
         if args.stills:
-            prefix = "frame" if args.episode == "five-minutes" else args.episode
+            prefix = "voiced" if args.voiced else "frame" if args.episode == "five-minutes" else args.episode
             for frame in stills:
                 (ROOT / "work" / f"{prefix}-{frame:03}.jpg").write_bytes(grab(page, frame))
         else:
             output.parent.mkdir(parents=True, exist_ok=True)
-            encode(page, output, start, end)
+            encode(page, output, start, end, args.voiced)
         browser.close()
 
 

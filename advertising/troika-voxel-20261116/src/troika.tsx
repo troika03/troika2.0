@@ -1,5 +1,5 @@
 import React, {useLayoutEffect, useRef} from 'react';
-import {AbsoluteFill, Img, staticFile, useCurrentFrame} from 'remotion';
+import {AbsoluteFill, Audio, Img, staticFile, useCurrentFrame} from 'remotion';
 import {Beat, beatAt, defaultEpisode, type Episode, FPS} from './beats';
 import {buildStage, type Stage} from './stage';
 
@@ -7,27 +7,40 @@ const WHITE = '#f4f7ff';
 const MINT = '#cbffe2';
 const fade = (p: number) => 1 - (1 - Math.max(0, Math.min(1, p))) ** 3;
 
-function StageCanvas({time, beat, end}: {time: number; beat: Beat; end: number}) {
+async function loadMouthPoses() {
+  const response = await fetch(staticFile('deadline-mouth.json'));
+  if (!response.ok) throw new Error('Deadline voice timing could not be loaded');
+  return await response.json() as number[];
+}
+
+function StageCanvas({frame, beat, end, voiced}: {frame: number; beat: Beat; end: number; voiced: boolean}) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const stage = useRef<Stage | null>(null);
-  const last = useRef({time, beat, end});
-  last.current = {time, beat, end};
+  const poses = useRef<number[] | undefined>(undefined);
+  const last = useRef({frame, beat, end});
+  last.current = {frame, beat, end};
 
   useLayoutEffect(() => {
     const element = canvas.current!;
     let cancelled = false;
-    buildStage(element, {
-      mark: staticFile('app-icon.png'),
-      android: staticFile('android-home.png'),
-      windows: staticFile('windows-home.png'),
-    }).then((created) => {
+    delete element.dataset.ready;
+    delete element.dataset.error;
+    Promise.all([
+      buildStage(element, {
+        mark: staticFile('app-icon.png'),
+        android: staticFile('android-home.png'),
+        windows: staticFile('windows-home.png'),
+      }),
+      voiced ? loadMouthPoses() : undefined,
+    ]).then(([created, mouthPoses]) => {
       if (cancelled) {
         created.dispose();
         return;
       }
       stage.current = created;
+      poses.current = mouthPoses;
       const initial = last.current;
-      created.draw(initial.time, initial.beat, initial.end);
+      created.draw(initial.frame / FPS, initial.beat, initial.end, mouthPoses?.[initial.frame]);
       element.dataset.ready = 'yes';
     }).catch((error: unknown) => {
       element.dataset.error = String(error);
@@ -38,9 +51,11 @@ function StageCanvas({time, beat, end}: {time: number; beat: Beat; end: number})
       stage.current?.dispose();
       stage.current = null;
     };
-  }, []);
+  }, [voiced]);
 
-  useLayoutEffect(() => { stage.current?.draw(time, beat, end); }, [time, beat, end]);
+  useLayoutEffect(() => {
+    stage.current?.draw(frame / FPS, beat, end, poses.current?.[frame]);
+  }, [frame, beat, end]);
 
   return <canvas ref={canvas} aria-hidden style={{position: 'absolute', inset: 0, width: '100%', height: '100%'}}/>;
 }
@@ -125,12 +140,15 @@ function End({time, start}: {time: number; start: number}) {
   );
 }
 
-export function TroikaFilm({episode = defaultEpisode}: {episode?: Episode}) {
-  const time = useCurrentFrame() / FPS;
+export function TroikaFilm({episode = defaultEpisode, voiced = false, mute = false}: {
+  episode?: Episode; voiced?: boolean; mute?: boolean;
+}) {
+  const frame = useCurrentFrame();
+  const time = frame / FPS;
   const {beat, end} = beatAt(time, episode);
   return (
     <AbsoluteFill style={{background: '#101528', fontFamily: 'Golos, Arial, sans-serif', overflow: 'hidden'}}>
-      <StageCanvas time={time} beat={beat} end={end}/>
+      <StageCanvas frame={frame} beat={beat} end={end} voiced={voiced}/>
       <AbsoluteFill style={{
         pointerEvents: 'none',
         background: 'radial-gradient(ellipse at 49% 55%,transparent 42%,#080a2145 100%),linear-gradient(180deg,#03051370 0%,transparent 38%,transparent 79%,#06081764 100%)',
@@ -138,6 +156,7 @@ export function TroikaFilm({episode = defaultEpisode}: {episode?: Episode}) {
       <Subtitle time={time} beat={beat}/>
       <ResultInsert time={time} beat={beat}/>
       {beat.view === 'wide' && <End time={time} start={beat.start}/>}
+      {voiced && !mute && <Audio src={staticFile('deadline-voice.wav')}/>}
     </AbsoluteFill>
   );
 }

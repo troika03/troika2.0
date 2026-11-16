@@ -9,6 +9,7 @@ const params = new URLSearchParams(location.search);
 const capture = params.has('capture');
 const requested = params.get('episode');
 const episode = requested && Object.hasOwn(episodes, requested) ? requested as Episode : defaultEpisode;
+const voiced = episode === 'deadline' && params.has('voiced');
 
 declare global {
   interface Window {
@@ -25,7 +26,7 @@ function Preview() {
     <Player
       ref={player}
       component={TroikaFilm}
-      inputProps={{episode}}
+      inputProps={{episode, voiced, mute: capture}}
       compositionWidth={1080}
       compositionHeight={1920}
       durationInFrames={episodes[episode].frames}
