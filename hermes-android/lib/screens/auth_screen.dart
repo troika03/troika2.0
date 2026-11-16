@@ -8,8 +8,13 @@ import '../services/assistant_service.dart';
 
 class AuthScreen extends StatefulWidget {
   final VoidCallback onAuthenticated;
+  final bool startWithSignIn;
 
-  const AuthScreen({super.key, required this.onAuthenticated});
+  const AuthScreen({
+    super.key,
+    required this.onAuthenticated,
+    this.startWithSignIn = false,
+  });
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
@@ -20,7 +25,7 @@ class _AuthScreenState extends State<AuthScreen> {
   final _password = TextEditingController();
   late final TextEditingController _server;
   final _accounts = AccountService();
-  bool _register = true;
+  late bool _register;
   bool _busy = false;
   bool _showServer = false;
   bool _showPassword = false;
@@ -29,6 +34,7 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   void initState() {
     super.initState();
+    _register = !widget.startWithSignIn && !TroikaConfig.onboardingDone;
     _server = TextEditingController(text: TroikaConfig.serverUrl);
     _showServer = TroikaConfig.serverUrl.trim().isEmpty;
   }
@@ -53,12 +59,12 @@ class _AuthScreenState extends State<AuthScreen> {
       setState(() => _error = 'Пароль должен содержать минимум 10 символов.');
       return;
     }
-    TroikaConfig.serverUrl = _normalizedServer();
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
+      await TroikaConfig.saveServerUrl(_normalizedServer());
       if (_register) {
         await _accounts.register(email: email, password: password);
       } else {
@@ -68,7 +74,15 @@ class _AuthScreenState extends State<AuthScreen> {
       await context.read<AssistantService>().onAccountAuthenticated();
       if (mounted) widget.onAuthenticated();
     } on AccountException catch (error) {
-      if (mounted) setState(() => _error = error.message);
+      if (!mounted) return;
+      setState(() {
+        if (_register && error.statusCode == 409) {
+          _register = false;
+          _error = 'Аккаунт с этой почтой уже есть. Нажмите «Войти».';
+        } else {
+          _error = error.message;
+        }
+      });
     } catch (_) {
       if (mounted) setState(() => _error = 'Не удалось подключиться.');
     } finally {

@@ -109,20 +109,6 @@ class TroikaConfig {
     _voiceRevision.value++;
   }
 
-  static Future<void> _setVoiceServerUrl(String url) async {
-    final operation = _beginVoiceIdentityChange();
-    try {
-      if (Platform.isAndroid) {
-        await _setNativeConnection('setAccountServerUrl', url);
-      } else {
-        await _setStringCompat(_keyServerUrl, _legacyKeyServerUrl, url);
-      }
-      _finishVoiceIdentityChange(operation);
-    } catch (_) {
-      // A failed identity change cannot resume audio authorized for the old one.
-    }
-  }
-
   static Future<void> _setVoiceApiKey(String key) async {
     final operation = _beginVoiceIdentityChange();
     try {
@@ -149,6 +135,7 @@ class TroikaConfig {
     _prefs = await SharedPreferences.getInstance();
     await _migrateLegacyPreferences();
     await _migrateHostedEndpoint();
+    await _repairServerUrl();
     _sessionKey = _prefs.getString(_keySessionKey)?.trim() ?? '';
     if (_sessionKey.isEmpty) {
       _sessionKey = 'mobile-${_newOpaqueId()}';
@@ -185,6 +172,31 @@ class TroikaConfig {
     );
     await _copyBool(_keyPhoneControlEnabled, _legacyKeyPhoneControlEnabled);
     await _prefs.setInt(_keyBrandMigrationVersion, _brandMigrationVersion);
+  }
+
+  /// Add the home gateway port only to an IPv4 address entered without a scheme.
+  static String normalizeServerInput(String raw) {
+    final address = raw.trim().replaceFirst(RegExp(r'/+$'), '');
+    if (address.isEmpty || address.contains('://')) return address;
+    final isBareIp = RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(address);
+    return isBareIp ? 'http://$address:8642' : 'http://$address';
+  }
+
+  /// Repair the packaged origin when old settings appended the local port.
+  static String? repairedServerUrl(String saved, String packaged) {
+    final endpoint = packaged.trim().replaceAll(RegExp(r'/+$'), '');
+    if (endpoint.isEmpty) return null;
+    final current = saved.trim().replaceAll(RegExp(r'/+$'), '');
+    return current == '$endpoint:8642' ? endpoint : null;
+  }
+
+  static Future<void> _repairServerUrl() async {
+    final saved = _prefs.getString(_keyServerUrl);
+    if (saved == null) return;
+    final repaired = repairedServerUrl(saved, _packagedServerUrl);
+    if (repaired != null) {
+      await _setStringCompat(_keyServerUrl, _legacyKeyServerUrl, repaired);
+    }
   }
 
   static Future<void> _migrateHostedEndpoint() async {
@@ -283,11 +295,19 @@ class TroikaConfig {
       _prefs.getString(_keyServerUrl) ?? defaultServerUrl;
 
   static set serverUrl(String url) {
-    if (url == serverUrl) {
-      unawaited(_setStringCompat(_keyServerUrl, _legacyKeyServerUrl, url));
+    unawaited(saveServerUrl(url).catchError((Object _) {}));
+  }
+
+  /// Authentication must wait for the selected origin and native revision.
+  static Future<void> saveServerUrl(String url) async {
+    final operation = url == serverUrl ? null : _beginVoiceIdentityChange();
+    if (operation != null && Platform.isAndroid) {
+      await _setNativeConnection('setAccountServerUrl', url);
     } else {
-      unawaited(_setVoiceServerUrl(url));
+      final saved = await _setStringCompat(_keyServerUrl, _legacyKeyServerUrl, url);
+      if (!saved) throw StateError('Не удалось сохранить подключение.');
     }
+    if (operation != null) _finishVoiceIdentityChange(operation);
   }
 
   static String get apiKey => _prefs.getString(_keyApiKey) ?? defaultApiKey;

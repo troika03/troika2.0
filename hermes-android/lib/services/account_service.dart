@@ -58,9 +58,23 @@ class AccountService {
         }),
       );
       identity.check();
+      if (response.statusCode == 429) {
+        throw const AccountException(
+          'Слишком много попыток. Подождите немного и попробуйте снова.',
+          statusCode: 429,
+        );
+      }
+      if (response.statusCode >= 500) {
+        throw const AccountException(
+          'Сервер временно недоступен. Попробуйте войти чуть позже.',
+        );
+      }
       final payload = jsonDecode(utf8.decode(response.bodyBytes));
       if (response.statusCode != expectedStatus || payload is! Map) {
-        throw AccountException(_errorMessage(payload, response.statusCode));
+        throw AccountException(
+          _errorMessage(payload, response.statusCode),
+          statusCode: response.statusCode,
+        );
       }
       final token = payload['token']?.toString().trim() ?? '';
       if (!token.startsWith('trk_live_')) {
@@ -331,8 +345,9 @@ class AccountSessionRevoked extends RequestIdentityChanged {
 
 class AccountException implements Exception {
   final String message;
+  final int? statusCode;
 
-  const AccountException(this.message);
+  const AccountException(this.message, {this.statusCode});
 
   @override
   String toString() => message;

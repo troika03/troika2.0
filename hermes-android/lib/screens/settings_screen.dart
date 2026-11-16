@@ -110,7 +110,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadBargeIn();
     _locationContextEnabled = TroikaConfig.locationContextEnabled;
     _phoneControlEnabled = TroikaConfig.phoneControlEnabled;
-    if (TroikaConfig.signedIn) {
+    if (widget.section != SettingsSection.permissions &&
+        TroikaConfig.signedIn) {
       _loadAccountDevices();
       _loadSubscription();
     }
@@ -375,23 +376,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _applyVoiceSettings();
   }
 
-  /// Нормализуем введённый новичком адрес: добавляем http:// и порт 8642,
-  /// если их забыли. «1.2.3.4» → «http://1.2.3.4:8642».
-  String _normalizeUrl(String raw) {
-    var url = raw.trim();
-    if (url.isEmpty) return url;
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      url = 'http://$url';
-    }
-    // Убираем хвостовой слэш
-    url = url.replaceAll(RegExp(r'/+$'), '');
-    // Если порт не указан — добавляем дефолтный 8642
-    final hostPart = url.replaceFirst(RegExp(r'^https?://'), '');
-    if (!hostPart.contains(':')) {
-      url = '$url:8642';
-    }
-    return url;
-  }
+  /// «1.2.3.4» → «http://1.2.3.4:8642»; домены и https-адреса не трогаем.
+  String _normalizeUrl(String raw) => TroikaConfig.normalizeServerInput(raw);
 
   Future<void> _testConnection() async {
     setState(() {
@@ -537,6 +523,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       MaterialPageRoute(
         builder: (routeContext) => TroikaPageScope(
             child: AuthScreen(
+          startWithSignIn: true,
           onAuthenticated: () => Navigator.of(routeContext).pop(true),
         )),
       ),
@@ -1607,7 +1594,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ],
-          if (widget.section != SettingsSection.account) ...[
+          if (widget.section == SettingsSection.advanced) ...[
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: _save,
