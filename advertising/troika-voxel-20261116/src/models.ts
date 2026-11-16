@@ -166,10 +166,10 @@ export function assistant(scene: T.Scene, mark: T.Texture) {
   box(antenna, edge, [0.109, 0.062, 0.1], [0, 0.028, 0], true);
   box(antenna, warm, [0.037, 0.222, 0.037], [0, 0.122, 0], true);
   const tip = box(antenna, glow, [0.092, 0.081, 0.088], [0, 0.24, 0], true);
-  const badge = new T.Mesh(new T.PlaneGeometry(0.146, 0.146), new T.MeshBasicMaterial({
+  const badge = new T.Mesh(new T.PlaneGeometry(0.181, 0.181), new T.MeshBasicMaterial({
     map: mark, transparent: true, depthWrite: false, toneMapped: false,
   }));
-  badge.position.set(-0.320, 0.586, 0.425);
+  badge.position.set(-0.251, 0.642, 0.425);
   core.add(badge);
   const eyes = [-0.167, 0.167].map(x => {
     const lid = pivot(core, x, 0.421, 0.423);

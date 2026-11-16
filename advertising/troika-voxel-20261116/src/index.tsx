@@ -1,18 +1,20 @@
 import React from 'react';
 import {Composition, registerRoot} from 'remotion';
 import {TroikaFilm} from './troika';
-import {FPS, FRAMES} from './beats';
+import {episodes, type Episode, FPS} from './beats';
 import './type.css';
 
-const Root = () => (
+const Root = () => Object.entries(episodes).map(([episode, spec]) => (
   <Composition
-    id="Troika"
+    key={episode}
+    id={spec.composition}
     component={TroikaFilm}
+    defaultProps={{episode: episode as Episode}}
     width={1080}
     height={1920}
     fps={FPS}
-    durationInFrames={FRAMES}
+    durationInFrames={spec.frames}
   />
-);
+));
 
 registerRoot(Root);

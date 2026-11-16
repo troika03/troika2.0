@@ -14,8 +14,11 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent
 FPS = 30
-TOTAL = 984
-IMAGES = ("android-home.png", "windows-home.png", "logo-ru-reverse.svg", "mark.png")
+EPISODES = {
+    "five-minutes": (984, "Troika-Five-Minutes-3D.mp4", (24, 96, 175, 271, 335, 445, 546, 633, 738, 796, 850, 930)),
+    "deadline": (882, "Troika-Deadline-3D.mp4", (22, 101, 171, 244, 309, 419, 503, 587, 671, 742, 779, 845)),
+}
+IMAGES = ("android-home.png", "windows-home.png", "app-icon.png", "wordmark-white.svg")
 HTML = b'''<!doctype html><html lang="ru"><meta charset="utf-8">
 <title>Troika Motion</title><link rel="stylesheet" href="/work/preview.css">
 <style>html,body,#root{margin:0;width:100%;height:100%;overflow:hidden;background:#0b0c10}</style>
@@ -77,8 +80,8 @@ def bundle():
     subprocess.run([npm, "run", "bundle"], cwd=ROOT, check=True)
 
 
-def ready(page, url, capture=True):
-    page.goto(url + ("?capture" if capture else ""), wait_until="networkidle")
+def ready(page, url, episode):
+    page.goto(f"{url}?capture&episode={episode}", wait_until="networkidle")
     page.wait_for_function("typeof window.seek === 'function'")
     page.evaluate("""async () => {
         await document.fonts.load('700 50px Golos', 'Тройка');
@@ -129,22 +132,24 @@ def encode(page, output, start, end):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output", type=Path, default=ROOT / "final" / "Troika-Five-Minutes-3D.mp4")
-    parser.add_argument("--frames", default=f"0-{TOTAL - 1}")
+    parser.add_argument("--episode", choices=EPISODES, default="five-minutes")
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--frames")
     parser.add_argument("--scale", type=float, choices=(0.5, 1), default=1)
     parser.add_argument("--stills", action="store_true")
     parser.add_argument("--preview", action="store_true")
     args = parser.parse_args()
-    start, end = map(int, args.frames.split("-"))
-    if not 0 <= start <= end < TOTAL:
-        parser.error(f"frames must be in 0–{TOTAL - 1}")
-    output = args.output.resolve()
+    total, filename, stills = EPISODES[args.episode]
+    start, end = map(int, (args.frames or f"0-{total - 1}").split("-"))
+    if not 0 <= start <= end < total:
+        parser.error(f"frames must be in 0–{total - 1}")
+    output = (args.output or ROOT / "final" / filename).resolve()
     if output.exists() and not (args.stills or args.preview):
         parser.error("output already exists")
     bundle()
     if args.preview:
         with server() as url:
-            print(url, flush=True)
+            print(f"{url}?episode={args.episode}", flush=True)
             input("Press Enter to stop.\n")
         return
     with server() as url, sync_playwright() as playwright:
@@ -158,10 +163,11 @@ def main():
             "height": round(args.scale * 1920),
         })
         page.on("pageerror", lambda error: print(error, flush=True))
-        ready(page, url)
+        ready(page, url, args.episode)
         if args.stills:
-            for frame in (24, 96, 175, 271, 335, 445, 546, 633, 738, 796, 850, 930):
-                (ROOT / "work" / f"frame-{frame:03}.jpg").write_bytes(grab(page, frame))
+            prefix = "frame" if args.episode == "five-minutes" else args.episode
+            for frame in stills:
+                (ROOT / "work" / f"{prefix}-{frame:03}.jpg").write_bytes(grab(page, frame))
         else:
             output.parent.mkdir(parents=True, exist_ok=True)
             encode(page, output, start, end)

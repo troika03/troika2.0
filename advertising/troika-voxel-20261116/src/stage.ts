@@ -80,6 +80,36 @@ function glowDisc() {
   });
 }
 
+function deadlineSlide() {
+  return paintTexture(960, 680, (ctx) => {
+    ctx.fillStyle = '#e5f4e9';
+    ctx.fillRect(0, 0, 960, 680);
+    ctx.fillStyle = '#9dddba';
+    ctx.fillRect(0, 0, 17, 680);
+    ctx.strokeStyle = '#bddccb';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(45, 40, 870, 600);
+    ctx.fillStyle = '#315e51';
+    ctx.font = 'bold 26px Segoe UI, sans-serif';
+    ctx.fillText('ПРАКТИЧЕСКИЙ ПРИМЕР', 83, 112);
+    ctx.fillStyle = '#162b29';
+    ctx.font = 'bold 68px Segoe UI, sans-serif';
+    ctx.fillText('Как перестать', 77, 230);
+    ctx.fillText('всё откладывать', 77, 309);
+    ctx.fillStyle = '#c3e4d0';
+    ctx.fillRect(78, 399, 803, 179);
+    ctx.fillStyle = '#31554c';
+    ctx.font = 'bold 24px Segoe UI, sans-serif';
+    ctx.fillText('СРОК СДАЧИ', 115, 456);
+    ctx.fillStyle = '#a74236';
+    ctx.font = 'bold 62px Segoe UI, sans-serif';
+    ctx.fillText('ВЧЕРА', 112, 533);
+    ctx.fillStyle = '#628475';
+    ctx.font = '24px Segoe UI, sans-serif';
+    ctx.fillText('01 / 03', 752, 537);
+  });
+}
+
 function floorDisc(scene: T.Scene, map: T.Texture, color: string, x: number, z: number, size: number, opacity: number) {
   const plane = new T.Mesh(new T.PlaneGeometry(size, size),
     new T.MeshBasicMaterial({map, color, transparent: true, opacity, depthWrite: false, toneMapped: false}));
@@ -146,7 +176,7 @@ function landscape(scene: T.Scene, windows: T.Texture) {
     new T.MeshBasicMaterial({map: windows, toneMapped: false}));
   desktopDisplay.position.set(0, 0.363, 0.026);
   desktop.add(desktopDisplay);
-  return {torchPool, usb: rig, desktop};
+  return {torchPool, desktop, desktopDisplay};
 }
 
 function texture(url: string) {
@@ -177,7 +207,8 @@ export async function buildStage(canvas: HTMLCanvasElement, assets: {mark: strin
   scene.fog = new T.FogExp2('#151d35', 0.053);
   const camera = new T.PerspectiveCamera(36, WIDTH / HEIGHT, 0.1, 26);
   const [mark, android, windows] = await Promise.all([texture(assets.mark), texture(assets.android), texture(assets.windows)]);
-  const {torchPool, desktop} = landscape(scene, windows);
+  const {torchPool, desktop, desktopDisplay} = landscape(scene, windows);
+  const titleSlide = deadlineSlide();
   const human = person(scene);
   const robot = assistant(scene, mark);
   const handset = phone(human.grip, android);
@@ -202,16 +233,19 @@ export async function buildStage(canvas: HTMLCanvasElement, assets: {mark: strin
   const draw = (time: number, beat: Beat, end: number) => {
     const t = time - beat.start;
     const length = end - beat.start;
-    const talking = t > (beat.reaction === 'punch' ? 0.47 : 0.11) && t < length - 0.23;
+    const pause = beat.reaction === 'punch' ? 0.47 : beat.reaction === 'deadpan' ? 0.35 : 0.11;
+    const talking = t > pause && t < length - 0.23;
     const talk = (count: number) => Math.floor(t * count) % 3;
     const light = beat.view === 'light' ? pace(t / 0.29) : 0;
-    const result = beat.view === 'result';
+    const cover = beat.view === 'cover';
+    const result = beat.view === 'result' || cover;
     human.root.visible = !result;
-    robot.root.visible = beat.view !== 'light';
+    robot.root.visible = beat.view !== 'light' && !cover;
     handset.visible = beat.reaction === 'ask' && !result;
     torchPhone.visible = beat.view === 'light';
     desktop.visible = result;
-    desktop.rotation.set(-0.04, 0.1 + 0.035 * Math.sin(t * 2), -0.07);
+    desktopDisplay.material.map = cover ? titleSlide : windows;
+    desktop.rotation.set(-0.04, 0.1 + 0.035 * Math.sin(t * 2), cover ? -0.018 : -0.07);
     desktop.position.y = 0.88 + 0.075 * pace(t / 0.6);
     torch.intensity = 9.1 * light;
     torchPool.material.opacity = 0.70 * light;
@@ -223,8 +257,10 @@ export async function buildStage(canvas: HTMLCanvasElement, assets: {mark: strin
     const glance = humanSpeaks ? 0.10 : 0.18;
     const gesture = (beat.reaction === 'ask' ? 0.70 : beat.reaction === 'question' ? 0.38 : 0.18) * pace(t / 0.39)
       * (1 - 0.34 * pace((t - length + 0.43) / 0.41));
-    const doubt = beat.reaction === 'smirk' || beat.reaction === 'question';
-    human.root.rotation.y = glance + 0.048 * Math.sin(t * 1.65);
+    const caught = beat.reaction === 'caught';
+    const late = beat.reaction === 'late';
+    const doubt = beat.reaction === 'smirk' || beat.reaction === 'question' || caught || late;
+    human.root.rotation.y = caught ? 0.11 * (1 - pace(t / 0.42)) : glance + 0.048 * Math.sin(t * 1.65);
     human.body.rotation.z = (humanSpeaks ? 0.03 : -0.014) + 0.018 * Math.sin(time * 2);
     human.head.rotation.set(-0.015 - 0.077 * gesture + 0.025 * Math.sin(t * 5), 0.009 + 0.07 * gesture,
       doubt ? -0.095 * pace(t / 0.68) : -0.017 + 0.032 * Math.sin(t * 2.4));
@@ -237,7 +273,7 @@ export async function buildStage(canvas: HTMLCanvasElement, assets: {mark: strin
     const humanBlink = Math.max(blink(t, length * 0.44), blink(t, length - 0.4));
     human.eyes.forEach(({lid, iris}) => {
       lid.scale.y = 1 - 0.93 * humanBlink;
-      iris.position.x = 0.026 * (0.25 + 0.62 * pace(t / 0.75));
+      iris.position.x = caught ? -0.024 * pace(t / 0.42) : 0.026 * (0.25 + 0.62 * pace(t / 0.75));
     });
     human.eyebrows.forEach((brow, index) => {
       brow.position.y = 0.431 + (doubt ? (index === 0 ? 0.046 : 0.009) : 0.012 * gesture);
@@ -262,7 +298,7 @@ export async function buildStage(canvas: HTMLCanvasElement, assets: {mark: strin
     const rb = Math.max(blink(t, beat.reaction === 'punch' ? 0.36 : length * 0.58),
       blink(t, length - 0.43));
     robot.eyes.forEach(({lid, iris}, index) => {
-      const wink = beat.reaction === 'punch' && index === 1 ? blink(t, 2.28, 0.165) : 0;
+      const wink = beat.reaction === 'punch' && index === 1 ? blink(t, Math.min(2.28, length - 0.33), 0.165) : 0;
       lid.scale.y = 1 - 0.89 * Math.max(rb, wink);
       iris.position.x = -0.019 - 0.011 * Math.sin(t * 3.6);
     });
@@ -278,14 +314,15 @@ export async function buildStage(canvas: HTMLCanvasElement, assets: {mark: strin
     switch (beat.view) {
       case 'person':
         camera.position.copy(V(-1.05 + move * 0.21 + sway, 1.80 + move * 0.12,
-          2.64 - move * 0.15 + (beat.reaction === 'ask' ? 0.48 : 0)));
+          2.64 - move * (caught ? 0.43 : 0.15) + (beat.reaction === 'ask' ? 0.48 : 0)
+          - (late ? 0.12 * pace((t - 0.26) / 0.24) : 0)));
         camera.fov = 36;
         look = V(-0.76 + 0.034 * move, beat.reaction === 'ask' ? 1.95 : 2.12, 0.01);
         break;
       case 'assistant':
-        camera.position.copy(V(1.29 - move * 0.27, 1.22 + sway, 3.25 - move * 0.30));
+        camera.position.copy(V(1.29 - move * 0.27, 1.22 + sway, 3.36 - move * 0.30));
         camera.fov = 33;
-        look = V(0.8, 1.183 + 0.02 * move, 0.04);
+        look = V(0.76, 1.183 + 0.02 * move, 0.04);
         break;
       case 'light':
         camera.position.copy(V(0.82 - move * 0.31, 0.82 - move * 0.12, 2.77 - 0.34 * move));
@@ -293,9 +330,15 @@ export async function buildStage(canvas: HTMLCanvasElement, assets: {mark: strin
         look = V(0.062, 0.25, 0.52);
         break;
       case 'result':
-        camera.position.copy(V(0.47 - 0.17 * move, 1.42 + 0.07 * move, 5.34 - 0.21 * move));
+        camera.position.copy(V(0.47 - 0.17 * move, 1.42 + 0.07 * move, 5.34 - 0.21 * move
+          - (beat.insert === 'deck' ? 0.27 : 0)));
         camera.fov = 39;
         look = V(0.26, 1.47, 0.01);
+        break;
+      case 'cover':
+        camera.position.copy(V(-0.20 - 0.16 * move, 1.56 + 0.045 * move, 3.35 - 0.18 * move));
+        camera.fov = 36;
+        look = V(-0.38, 1.35, 0.48);
         break;
       case 'wide':
         camera.position.copy(V(0.19 + 0.08 * move, 1.83 + move * 0.17, 6.64 + move * 0.73));

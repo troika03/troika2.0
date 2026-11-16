@@ -1,6 +1,6 @@
 import React, {useLayoutEffect, useRef} from 'react';
 import {AbsoluteFill, Img, staticFile, useCurrentFrame} from 'remotion';
-import {Beat, beatAt, FPS} from './beats';
+import {Beat, beatAt, defaultEpisode, type Episode, FPS} from './beats';
 import {buildStage, type Stage} from './stage';
 
 const WHITE = '#f4f7ff';
@@ -17,7 +17,7 @@ function StageCanvas({time, beat, end}: {time: number; beat: Beat; end: number})
     const element = canvas.current!;
     let cancelled = false;
     buildStage(element, {
-      mark: staticFile('mark.png'),
+      mark: staticFile('app-icon.png'),
       android: staticFile('android-home.png'),
       windows: staticFile('windows-home.png'),
     }).then((created) => {
@@ -48,7 +48,9 @@ function StageCanvas({time, beat, end}: {time: number; beat: Beat; end: number})
 function Subtitle({time, beat}: {time: number; beat: Beat}) {
   const local = time - beat.start;
   if (!beat.lines) return null;
-  const lines = beat.reaction === 'punch' && local < 0.47 ? ['…'] : beat.lines;
+  const pause = beat.reaction === 'punch' ? 0.47 : beat.reaction === 'deadpan' ? 0.35 : 0;
+  const lines = local < pause ? ['…'] : beat.lines;
+  const hook = beat.reaction === 'late';
   const reveal = beat.start === 0 ? 1 : 0.7 + 0.3 * fade(local / 0.083);
   return (
     <div style={{
@@ -58,15 +60,29 @@ function Subtitle({time, beat}: {time: number; beat: Beat}) {
       opacity: reveal, textShadow: '0 3px 4px #04040d, 0 3px 19px #000',
       whiteSpace: 'pre-line', letterSpacing: -1.2,
     }}>
-      {lines.join('\n')}
+      {hook ? <>
+        <div>{lines[0]}</div>
+        <div style={{
+          color: '#ffc497', fontSize: 61, marginTop: 2,
+          opacity: fade((local - 0.13) / 0.30),
+        }}>{lines[1]}</div>
+      </> : lines.join('\n')}
     </div>
   );
 }
 
+const insertCopy = {
+  source: {label: 'Поддержка Microsoft', title: 'Запись экрана в Windows 11'},
+  slides: {label: 'PPTX', title: 'Запись экрана.pptx', detail: 'Три слайда'},
+  research: {label: 'Cornell University', title: 'Разбей задачу на небольшие шаги'},
+  deck: {label: 'PPTX', title: 'Как перестать откладывать.pptx', detail: 'Три слайда'},
+};
+
 function ResultInsert({time, beat}: {time: number; beat: Beat}) {
-  if (beat.insert !== 'source' && beat.insert !== 'slides') return null;
+  if (!beat.insert || beat.insert === 'light') return null;
+  const copy = insertCopy[beat.insert];
   const read = fade((time - beat.start - 0.26) / 0.72);
-  const slide = beat.insert === 'slides';
+  const slide = 'detail' in copy;
   return (
     <div style={{
       position: 'absolute', left: 135, bottom: 322, width: 760, padding: '23px 30px 24px',
@@ -78,14 +94,14 @@ function ResultInsert({time, beat}: {time: number; beat: Beat}) {
         <div style={{
           color: '#123025', background: '#97ebba', borderRadius: 10, padding: '11px 15px',
           fontSize: 22, fontWeight: 800, letterSpacing: 1,
-        }}>PPTX</div>
+        }}>{copy.label}</div>
         <div>
-          <div style={{fontSize: 34, fontWeight: 735}}>Запись экрана.pptx</div>
-          <div style={{fontSize: 23, color: '#bad3c7', marginTop: 1}}>Три слайда</div>
+          <div style={{fontSize: 34, fontWeight: 735}}>{copy.title}</div>
+          <div style={{fontSize: 23, color: '#bad3c7', marginTop: 1}}>{copy.detail}</div>
         </div>
       </div> : <>
-        <div style={{fontSize: 25, fontWeight: 690, color: MINT}}>Поддержка Microsoft</div>
-        <div style={{fontSize: 34, fontWeight: 735, marginTop: 3}}>Запись экрана в Windows 11</div>
+        <div style={{fontSize: 25, fontWeight: 690, color: MINT}}>{copy.label}</div>
+        <div style={{fontSize: 34, fontWeight: 735, marginTop: 3}}>{copy.title}</div>
       </>}
     </div>
   );
@@ -99,16 +115,19 @@ function End({time, start}: {time: number; start: number}) {
       color: WHITE, textShadow: '0 3px 14px #040516', opacity: arrive,
       transform: `translateY(${24 * (1 - arrive)}px)`,
     }}>
-      <Img src={staticFile('logo-ru-reverse.svg')} style={{width: 458, display: 'block', margin: '0 auto'}}/>
+      <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 25}}>
+        <Img src={staticFile('app-icon.png')} style={{width: 111, height: 111}}/>
+        <Img src={staticFile('wordmark-white.svg')} style={{width: 291, display: 'block'}}/>
+      </div>
       <div style={{fontSize: 39, fontWeight: 720, letterSpacing: -1.1, marginTop: 21}}>Голосовая помощница</div>
       <div style={{fontSize: 27, fontWeight: 560, letterSpacing: 0.3, marginTop: 10, color: MINT}}>Android · Windows</div>
     </div>
   );
 }
 
-export function TroikaFilm() {
+export function TroikaFilm({episode = defaultEpisode}: {episode?: Episode}) {
   const time = useCurrentFrame() / FPS;
-  const {beat, end} = beatAt(time);
+  const {beat, end} = beatAt(time, episode);
   return (
     <AbsoluteFill style={{background: '#101528', fontFamily: 'Golos, Arial, sans-serif', overflow: 'hidden'}}>
       <StageCanvas time={time} beat={beat} end={end}/>
