@@ -1,0 +1,8 @@
+{
+  "voice": "Microsoft Irina",
+  "segments": [
+    {"id": "light-reply", "text": "Фонарик включён."},
+    {"id": "search-reply", "text": "Нашла. Вин, Шифт, эр."},
+    {"id": "slides-reply", "text": "Слайды готовы. Выступать тебе."}
+  ]
+}
