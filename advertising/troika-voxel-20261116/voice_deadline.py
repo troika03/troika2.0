@@ -1,3 +1,4 @@
+import argparse
 import json
 import subprocess
 import wave
@@ -81,11 +82,15 @@ def mouth_frames(samples, start, poses):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Mix recorded dialogue and calculate the mouth poses.")
+    parser.add_argument("--takes", type=Path, default=SOURCE, help="Directory containing the nine MP3 takes.")
+    args = parser.parse_args()
+    source = args.takes.resolve()
     mix = np.zeros((FRAMES * SAMPLES_PER_FRAME, 2))
     poses = [0] * FRAMES
     timing = []
     for name, start, end, pan in CUES:
-        samples = fit(trim(decode(SOURCE / f"{name}.mp3")), end - start, name)
+        samples = fit(trim(decode(source / f"{name}.mp3")), end - start, name)
         first = round(start * RATE)
         angle = (pan + 1) * np.pi / 4
         mix[first:first + len(samples)] += samples[:, None] * [np.cos(angle), np.sin(angle)]
@@ -97,7 +102,7 @@ def main():
         track.setparams((2, 2, RATE, 0, "NONE", "not compressed"))
         track.writeframes((mix * 32767).astype("<i2").tobytes())
     (PUBLIC / "deadline-mouth.json").write_text(json.dumps(poses, separators=(",", ":")), encoding="utf-8")
-    (SOURCE / "timing.json").write_text(json.dumps(timing, indent=2) + "\n", encoding="utf-8")
+    (source / "timing.json").write_text(json.dumps(timing, indent=2) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

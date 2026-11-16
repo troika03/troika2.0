@@ -26,9 +26,14 @@
 
 ### Версия с озвучкой
 
-Герой говорит торопливее и сбавляет темп на неловких репликах. Тройка отвечает спокойнее и выдерживает паузы перед шутками. Озвучка синтезирована двумя русскими голосами Fish Audio через OpenRouter. Моменты открытия рта привязаны к звуку. Титульный слайд и реакция героя идут в тишине. [Модель озвучки](https://openrouter.ai/fish-audio/s2.1-pro-free:free)
+Голос героя и низкий голос ассистента синтезированы по отдельным речевым фрагментам из приложенного `Download.mp4`. Для новых реплик использовались Fish Audio Drama 3 и S2.1 Pro через OpenRouter. Моменты открытия рта привязаны к звуку. Титульный слайд и реакция героя идут в тишине. [Озвучка по образцу в OpenRouter](https://openrouter.ai/docs/guides/overview/multimodal/tts#voice-cloning)
 
-В комплекте озвученной версии лежат отдельные реплики в `materials/deadline-voice/`, их таймкоды и сведённый WAV. Чтобы заново свести дорожку после правки реплик, выполните `python voice_deadline.py` с установленным NumPy. Команда `python render.py --episode deadline --voiced` создаёт `final/Troika-Deadline-3D-Voiced.mp4`.
+В комплекте `Troika-Deadline-3D-Original-Voices-Remotion.zip` лежат девять новых реплик в `materials/deadline-original-voices/`, их таймкоды и сведённый WAV. Для пересборки нужны NumPy и зависимости из раздела «Пересборка».
+
+```sh
+python voice_deadline.py --takes materials/deadline-original-voices
+python render.py --episode deadline --voiced --output final/Troika-Deadline-3D-Original-Voices.mp4
+```
 
 ## Серия «Пять минут до созвона»
 
