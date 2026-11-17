@@ -1,0 +1,17 @@
+assets/
+materials/
+final/
+.hyperframes/
+.thumbnails/
+.waveform-cache/
+renders/
+work/
+node_modules/
+qa*/
+*.log
+check*.json
+__pycache__/
+registry-source/
+work-transcribe.py
+voice-samples.py
+hyperframes.lock.json

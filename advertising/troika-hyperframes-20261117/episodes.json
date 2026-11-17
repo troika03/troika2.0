@@ -1,0 +1,34 @@
+{
+  "model": "fish-audio/s2.1-pro-free:free",
+  "voices": {"user": "48ec28a45588422b977a86460c11977f", "troika": "cde09f575c314ecaa801614c94a738af"},
+  "episodes": [
+    {"id":"coffee","title":"Кофе за твой счёт","beats":[
+      {"id":"bet","kind":"hook","title":"ПОСПОРИЛ С ИИ\nНА КОФЕ","voice":"user","say":"Я поспорил с Тройкой на кофе. Кто из нас забудет первым."},
+      {"id":"request","kind":"request","title":"ОДНА ФРАЗА.\nДВА ДЕЛА.","voice":"user","say":"Тройка, напомни через десять минут забрать кофе. И запомни: я без сахара."},
+      {"id":"remember","kind":"memory","title":"ОНА ЗАПОМНИЛА","voice":"troika","say":"Запомнила. Через десять минут напомню."},
+      {"id":"reminder","kind":"reminder","title":"10 МИНУТ СПУСТЯ","voice":"troika","say":"Пора забрать кофе."},
+      {"id":"sugar","kind":"question","title":"И ТУТ Я СПРОСИЛ…","voice":"user","say":"А сахар взять?"},
+      {"id":"lost","kind":"punch","title":"ТРОЙКА — 1\nЯ — 0","voice":"troika","say":"Ты без сахара. Кажется, кофе за твой счёт."},
+      {"id":"end","kind":"end","title":"А ЧТО ЗАБЫВАЕШЬ ТЫ?","hold":3}
+    ]},
+    {"id":"shorter","title":"Шеф написал одно слово","beats":[
+      {"id":"boss","kind":"hook","title":"ШЕФ НАПИСАЛ\nОДНО СЛОВО","voice":"user","say":"Шеф попросил три слайда. А потом написал одно слово."},
+      {"id":"make","kind":"request","title":"СНАЧАЛА —\nТРИ СЛАЙДА","voice":"user","say":"Тройка, собери презентацию: проблема, решение, следующий шаг."},
+      {"id":"slides","kind":"slides","title":"ВСЁ ПО ДЕЛУ","voice":"troika","say":"Готово. Три слайда и файл на компьютере."},
+      {"id":"message","kind":"message","title":"И ВОТ ОНО…","voice":"user","say":"Короче.","minDuration":2.6},
+      {"id":"reduce","kind":"question","title":"ЛАДНО.\nТОЛЬКО СУТЬ.","voice":"user","say":"Тройка, оставь только суть."},
+      {"id":"budget","kind":"budget","title":"НУЖЕН\nБЮДЖЕТ","voice":"troika","say":"Нам нужен бюджет.","minDuration":2.8},
+      {"id":"approved","kind":"approved","title":"СОГЛАСОВАНО","voice":"user","say":"Вот. Так и надо было."},
+      {"id":"end","kind":"end","title":"ЗНАКОМОЕ ТЕХЗАДАНИЕ?","hold":3}
+    ]},
+    {"id":"tabs","title":"Уже восемь вкладок","beats":[
+      {"id":"seven","kind":"hook","title":"7 ВКЛАДОК.\n1 ВОПРОС.","voice":"user","say":"Я открыл семь вкладок, чтобы ответить на один вопрос. И забыл вопрос."},
+      {"id":"search","kind":"request","title":"ВОПРОС ВСПОМНИЛ","voice":"user","say":"Тройка, найди, как записать экран в Виндоус. Нужен официальный источник."},
+      {"id":"source","kind":"source","title":"ИСТОЧНИК\nПОД РУКОЙ","voice":"troika","say":"Нашла инструкцию Майкрософт."},
+      {"id":"memo","kind":"question","title":"СОХРАНИМ\nГЛАВНОЕ","voice":"user","say":"Собери из неё короткую памятку."},
+      {"id":"file","kind":"file","title":"МОЖНО ЗАКРЫВАТЬ","voice":"troika","say":"Файл готов. Осталось закрыть семь вкладок."},
+      {"id":"eight","kind":"punch","title":"УЖЕ ВОСЕМЬ","voice":"user","say":"Уже восемь. Я открыл ещё одну."},
+      {"id":"end","kind":"end","title":"СКОЛЬКО ВКЛАДОК У ТЕБЯ?","hold":3}
+    ]}
+  ]
+}

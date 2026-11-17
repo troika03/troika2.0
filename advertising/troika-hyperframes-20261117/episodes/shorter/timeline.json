@@ -1,0 +1,87 @@
+{
+  "id": "shorter",
+  "title": "Шеф написал одно слово",
+  "beats": [
+    {
+      "id": "boss",
+      "kind": "hook",
+      "title": "ШЕФ НАПИСАЛ\nОДНО СЛОВО",
+      "voice": "user",
+      "say": "Шеф попросил три слайда. А потом написал одно слово.",
+      "speechDuration": 2.464,
+      "duration": 2.8666666666666667,
+      "start": 0
+    },
+    {
+      "id": "make",
+      "kind": "request",
+      "title": "СНАЧАЛА —\nТРИ СЛАЙДА",
+      "voice": "user",
+      "say": "Тройка, собери презентацию: проблема, решение, следующий шаг.",
+      "speechDuration": 3.22,
+      "duration": 3.6333333333333333,
+      "start": 2.866667
+    },
+    {
+      "id": "slides",
+      "kind": "slides",
+      "title": "ВСЁ ПО ДЕЛУ",
+      "voice": "troika",
+      "say": "Готово. Три слайда и файл на компьютере.",
+      "speechDuration": 3.1,
+      "duration": 3.5,
+      "start": 6.5
+    },
+    {
+      "id": "message",
+      "kind": "message",
+      "title": "И ВОТ ОНО…",
+      "voice": "user",
+      "say": "Короче.",
+      "minDuration": 2.6,
+      "speechDuration": 0.537,
+      "duration": 1.6,
+      "start": 10.0
+    },
+    {
+      "id": "reduce",
+      "kind": "question",
+      "title": "ЛАДНО.\nТОЛЬКО СУТЬ.",
+      "voice": "user",
+      "say": "Тройка, оставь только суть.",
+      "speechDuration": 1.116,
+      "duration": 2.0,
+      "start": 11.6
+    },
+    {
+      "id": "budget",
+      "kind": "budget",
+      "title": "НУЖЕН\nБЮДЖЕТ",
+      "voice": "troika",
+      "say": "Нам нужен бюджет.",
+      "minDuration": 2.8,
+      "speechDuration": 1.39,
+      "duration": 2.4,
+      "start": 13.6
+    },
+    {
+      "id": "approved",
+      "kind": "approved",
+      "title": "СОГЛАСОВАНО",
+      "voice": "user",
+      "say": "Вот. Так и надо было.",
+      "speechDuration": 1.37,
+      "duration": 2.0,
+      "start": 16.0
+    },
+    {
+      "id": "end",
+      "kind": "end",
+      "title": "ЗНАКОМОЕ ТЕХЗАДАНИЕ?",
+      "hold": 3,
+      "duration": 2.5,
+      "start": 18.0
+    }
+  ],
+  "duration": 20.5
+}

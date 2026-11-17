@@ -1,0 +1,75 @@
+{
+  "id": "tabs",
+  "title": "Уже восемь вкладок",
+  "beats": [
+    {
+      "id": "seven",
+      "kind": "hook",
+      "title": "7 ВКЛАДОК.\n1 ВОПРОС.",
+      "voice": "user",
+      "say": "Я открыл семь вкладок, чтобы ответить на один вопрос. И забыл вопрос.",
+      "speechDuration": 3.09,
+      "duration": 3.5,
+      "start": 0
+    },
+    {
+      "id": "search",
+      "kind": "request",
+      "title": "ВОПРОС ВСПОМНИЛ",
+      "voice": "user",
+      "say": "Тройка, найди, как записать экран в Виндоус. Нужен официальный источник.",
+      "speechDuration": 3.32,
+      "duration": 3.7333333333333334,
+      "start": 3.5
+    },
+    {
+      "id": "source",
+      "kind": "source",
+      "title": "ИСТОЧНИК\nПОД РУКОЙ",
+      "voice": "troika",
+      "say": "Нашла инструкцию Майкрософт.",
+      "speechDuration": 2.05,
+      "duration": 3.1,
+      "start": 7.233333
+    },
+    {
+      "id": "memo",
+      "kind": "question",
+      "title": "СОХРАНИМ\nГЛАВНОЕ",
+      "voice": "user",
+      "say": "Собери из неё короткую памятку.",
+      "speechDuration": 1.53,
+      "duration": 2.0,
+      "start": 10.333333
+    },
+    {
+      "id": "file",
+      "kind": "file",
+      "title": "МОЖНО ЗАКРЫВАТЬ",
+      "voice": "troika",
+      "say": "Файл готов. Осталось закрыть семь вкладок.",
+      "speechDuration": 2.9,
+      "duration": 4.2,
+      "start": 12.333333
+    },
+    {
+      "id": "eight",
+      "kind": "punch",
+      "title": "УЖЕ ВОСЕМЬ",
+      "voice": "user",
+      "say": "Уже восемь. Я открыл ещё одну.",
+      "speechDuration": 1.93,
+      "duration": 2.3333333333333335,
+      "start": 16.533333
+    },
+    {
+      "id": "end",
+      "kind": "end",
+      "title": "СКОЛЬКО ВКЛАДОК У ТЕБЯ?",
+      "hold": 3,
+      "duration": 2.5,
+      "start": 18.866667
+    }
+  ],
+  "duration": 21.366667
+}

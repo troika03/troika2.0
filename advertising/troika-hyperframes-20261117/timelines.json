@@ -1,0 +1,239 @@
+[
+  {
+    "id": "coffee",
+    "title": "Кофе за твой счёт",
+    "beats": [
+      {
+        "id": "bet",
+        "kind": "hook",
+        "title": "ПОСПОРИЛ С ИИ\nНА КОФЕ",
+        "voice": "user",
+        "say": "Я поспорил с Тройкой на кофе. Кто из нас забудет первым.",
+        "speechDuration": 2.86,
+        "duration": 3.2666666666666666,
+        "start": 0
+      },
+      {
+        "id": "request",
+        "kind": "request",
+        "title": "ОДНА ФРАЗА.\nДВА ДЕЛА.",
+        "voice": "user",
+        "say": "Тройка, напомни через десять минут забрать кофе. И запомни: я без сахара.",
+        "speechDuration": 3.481,
+        "duration": 3.9,
+        "start": 3.266667
+      },
+      {
+        "id": "remember",
+        "kind": "memory",
+        "title": "ОНА ЗАПОМНИЛА",
+        "voice": "troika",
+        "say": "Запомнила. Через десять минут напомню.",
+        "speechDuration": 2.82,
+        "duration": 3.2333333333333334,
+        "start": 7.166667
+      },
+      {
+        "id": "reminder",
+        "kind": "reminder",
+        "title": "10 МИНУТ СПУСТЯ",
+        "voice": "troika",
+        "say": "Пора забрать кофе.",
+        "speechDuration": 1.4,
+        "duration": 2.0,
+        "start": 10.4
+      },
+      {
+        "id": "sugar",
+        "kind": "question",
+        "title": "И ТУТ Я СПРОСИЛ…",
+        "voice": "user",
+        "say": "А сахар взять?",
+        "speechDuration": 0.742,
+        "duration": 2.0,
+        "start": 12.4
+      },
+      {
+        "id": "lost",
+        "kind": "punch",
+        "title": "ТРОЙКА — 1\nЯ — 0",
+        "voice": "troika",
+        "say": "Ты без сахара. Кажется, кофе за твой счёт.",
+        "speechDuration": 3.06,
+        "duration": 3.466666666666667,
+        "start": 14.4
+      },
+      {
+        "id": "end",
+        "kind": "end",
+        "title": "А ЧТО ЗАБЫВАЕШЬ ТЫ?",
+        "hold": 3,
+        "duration": 2.5,
+        "start": 17.866667
+      }
+    ],
+    "duration": 20.366667
+  },
+  {
+    "id": "shorter",
+    "title": "Шеф написал одно слово",
+    "beats": [
+      {
+        "id": "boss",
+        "kind": "hook",
+        "title": "ШЕФ НАПИСАЛ\nОДНО СЛОВО",
+        "voice": "user",
+        "say": "Шеф попросил три слайда. А потом написал одно слово.",
+        "speechDuration": 2.464,
+        "duration": 2.8666666666666667,
+        "start": 0
+      },
+      {
+        "id": "make",
+        "kind": "request",
+        "title": "СНАЧАЛА —\nТРИ СЛАЙДА",
+        "voice": "user",
+        "say": "Тройка, собери презентацию: проблема, решение, следующий шаг.",
+        "speechDuration": 3.22,
+        "duration": 3.6333333333333333,
+        "start": 2.866667
+      },
+      {
+        "id": "slides",
+        "kind": "slides",
+        "title": "ВСЁ ПО ДЕЛУ",
+        "voice": "troika",
+        "say": "Готово. Три слайда и файл на компьютере.",
+        "speechDuration": 3.1,
+        "duration": 3.5,
+        "start": 6.5
+      },
+      {
+        "id": "message",
+        "kind": "message",
+        "title": "И ВОТ ОНО…",
+        "voice": "user",
+        "say": "Короче.",
+        "minDuration": 2.6,
+        "speechDuration": 0.537,
+        "duration": 1.6,
+        "start": 10.0
+      },
+      {
+        "id": "reduce",
+        "kind": "question",
+        "title": "ЛАДНО.\nТОЛЬКО СУТЬ.",
+        "voice": "user",
+        "say": "Тройка, оставь только суть.",
+        "speechDuration": 1.116,
+        "duration": 2.0,
+        "start": 11.6
+      },
+      {
+        "id": "budget",
+        "kind": "budget",
+        "title": "НУЖЕН\nБЮДЖЕТ",
+        "voice": "troika",
+        "say": "Нам нужен бюджет.",
+        "minDuration": 2.8,
+        "speechDuration": 1.39,
+        "duration": 2.4,
+        "start": 13.6
+      },
+      {
+        "id": "approved",
+        "kind": "approved",
+        "title": "СОГЛАСОВАНО",
+        "voice": "user",
+        "say": "Вот. Так и надо было.",
+        "speechDuration": 1.37,
+        "duration": 2.0,
+        "start": 16.0
+      },
+      {
+        "id": "end",
+        "kind": "end",
+        "title": "ЗНАКОМОЕ ТЕХЗАДАНИЕ?",
+        "hold": 3,
+        "duration": 2.5,
+        "start": 18.0
+      }
+    ],
+    "duration": 20.5
+  },
+  {
+    "id": "tabs",
+    "title": "Уже восемь вкладок",
+    "beats": [
+      {
+        "id": "seven",
+        "kind": "hook",
+        "title": "7 ВКЛАДОК.\n1 ВОПРОС.",
+        "voice": "user",
+        "say": "Я открыл семь вкладок, чтобы ответить на один вопрос. И забыл вопрос.",
+        "speechDuration": 3.09,
+        "duration": 3.5,
+        "start": 0
+      },
+      {
+        "id": "search",
+        "kind": "request",
+        "title": "ВОПРОС ВСПОМНИЛ",
+        "voice": "user",
+        "say": "Тройка, найди, как записать экран в Виндоус. Нужен официальный источник.",
+        "speechDuration": 3.32,
+        "duration": 3.7333333333333334,
+        "start": 3.5
+      },
+      {
+        "id": "source",
+        "kind": "source",
+        "title": "ИСТОЧНИК\nПОД РУКОЙ",
+        "voice": "troika",
+        "say": "Нашла инструкцию Майкрософт.",
+        "speechDuration": 2.05,
+        "duration": 3.1,
+        "start": 7.233333
+      },
+      {
+        "id": "memo",
+        "kind": "question",
+        "title": "СОХРАНИМ\nГЛАВНОЕ",
+        "voice": "user",
+        "say": "Собери из неё короткую памятку.",
+        "speechDuration": 1.53,
+        "duration": 2.0,
+        "start": 10.333333
+      },
+      {
+        "id": "file",
+        "kind": "file",
+        "title": "МОЖНО ЗАКРЫВАТЬ",
+        "voice": "troika",
+        "say": "Файл готов. Осталось закрыть семь вкладок.",
+        "speechDuration": 2.9,
+        "duration": 4.2,
+        "start": 12.333333
+      },
+      {
+        "id": "eight",
+        "kind": "punch",
+        "title": "УЖЕ ВОСЕМЬ",
+        "voice": "user",
+        "say": "Уже восемь. Я открыл ещё одну.",
+        "speechDuration": 1.93,
+        "duration": 2.3333333333333335,
+        "start": 16.533333
+      },
+      {
+        "id": "end",
+        "kind": "end",
+        "title": "СКОЛЬКО ВКЛАДОК У ТЕБЯ?",
+        "hold": 3,
+        "duration": 2.5,
+        "start": 18.866667
+      }
+    ],
+    "duration": 21.366667
+  }
+]
