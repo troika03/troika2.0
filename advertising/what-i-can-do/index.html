@@ -1,0 +1,58 @@
+<!DOCTYPE html><html lang="ru"><meta charset="utf-8"><title>Тройка — Что я умею</title><style>
+@font-face{font-family:Golos;src:url(local/golos.ttf);font-weight:100 900}*{box-sizing:border-box}
+html,body{margin:0;background:#030606;color:#f5f7f6;overflow:hidden;font-family:Golos,sans-serif}
+#root{position:absolute;top:50%;left:50%;width:540px;height:960px;overflow:hidden;transform:translate(-50%,-50%) scale(var(--fit));background:radial-gradient(ellipse at 38% 42%,#11231d 0%,#080f0d 45%,#020504 87%)}
+#shots,.shot{position:absolute;inset:0;perspective:1400px}.shot{visibility:hidden}
+.device{position:absolute;left:55px;top:138px;width:430px;border:3px solid #424d48;border-right-color:#222b27;border-bottom-color:#171c19;border-radius:31px;overflow:hidden;background:#101513;box-shadow:2px 2px 0 #111713,6px 11px 34px #0009;transform-origin:50% 40%}
+.device img{display:block;width:100%;height:auto}.wide .device{border-radius:19px}
+#veil{position:absolute;inset:0;pointer-events:none;background:linear-gradient(to bottom,#030706 0%,#030706 11%,#030706ef 14%,transparent 21%,transparent 62%,#030706e6 79%,#030706 93%)}
+#heading,#captions{position:absolute;left:33px;right:33px;pointer-events:none}#heading{top:60px;height:102px}
+.heading{position:absolute;inset:0;opacity:0;font-size:37px;line-height:1.02;letter-spacing:-1.7px;font-weight:660;display:flex;align-items:center;gap:12px}
+.heading:before{content:'';width:7px;height:25px;border-radius:4px;background:#44df9a;flex:none}
+#captions{bottom:143px;height:128px;display:grid;align-items:end}
+.cap{position:absolute;bottom:0;left:0;right:0;color:#f4f5f7;opacity:0;font-size:27px;line-height:1.15;letter-spacing:-.8px;font-weight:540;text-wrap:balance;text-shadow:0 2px 12px #000}
+#kbd{position:absolute;top:655px;left:0;right:0;text-align:center;opacity:0}kbd{font:570 22px Golos;border:1px solid #52655a;border-bottom-width:3px;border-radius:8px;background:#112119;color:#e7f2eb;padding:6px 13px;margin:0 2px}
+#end{position:absolute;inset:0;background:#030605;display:grid;place-content:center;justify-items:center;opacity:0}
+#end img:first-child{width:102px}#end img:nth-child(2){width:176px;margin-top:16px}#end p{font-size:23px;letter-spacing:-.5px;margin:29px 0 0}
+</style><div id="root" data-duration="84"><div id="shots"></div><div id="veil"></div><div id="heading"></div><div id="captions"></div><div id="kbd"><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>T</kbd></div><div id="end"><img src="../../brand/troika/logos/mark-white.svg"><img src="../../brand/troika/logos/wordmark-ru-white.svg"><p>Ссылка в шапке профиля</p></div></div><script src="local/gsap.min.js"></script><script src="cues.js"></script><script>
+const root=document.querySelector('#root');const fit=()=>root.style.setProperty('--fit',Math.min(innerWidth/540,innerHeight/960));fit();onresize=fit;
+const tl=gsap.timeline({paused:true});window.__timelines={main:tl};
+// Shot coordinates follow the actual row or control being discussed.
+const plan=[
+[0,5.2,'home','Что я умею',.97,1.08,12,5,-4],
+[5.2,10.7,'talk','Голос и текст',1.01,1.14,52,54,2],
+[10.7,14.2,'short','Голос и текст',1.15,1.24,37,5,-2],
+[14.2,20.85,'history','Разговоры',1.00,1.12,38,19,2],
+[20.85,24.55,'memory','Память',1.07,1.16,-54,-79,-3],
+[24.55,30.45,'sources','Поиск',1.08,1.18,42,13,2],
+[30.45,33.55,'sources','Источники',1.18,1.27,5,-16,-2],
+[33.55,36.6,'doc','Документы',1.01,1.09,3,-11,-3],
+[36.6,38.8,'slides','Презентации',1.04,1.13,-25,-38,2],
+[38.8,42.35,'files','Мои файлы',1.07,1.17,-56,-79,-2],
+[42.35,47.1,'tasks','Дела',1.01,1.12,-15,-45,3],
+[47.1,51.55,'reminders','Напоминания',1.12,1.22,-34,-56,-3],
+[51.55,59.6,'commands','Команды Android',1.08,1.19,-24,-70,2],
+[59.6,62.55,'media','Музыка и звук',1.12,1.22,26,11,-2],
+[62.55,65.85,'windows','Тройка на Windows',1.00,1.07,76,66,3],
+[65.85,69,'pc','Команды компьютера',1.03,1.18,-249,-277,-2],
+[69,72.75,'winhelp','Доступ к экрану',1.10,1.19,145,137,2],
+[72.75,75.65,'skills','Навыки',1.04,1.12,-67,-80,-3],
+[75.65,79.05,'mcp','Подключения',1.05,1.14,-64,-87,3],
+[79.05,81.36,'home','С чего начнём?',1.06,.99,8,24,-2]];
+const add=(parent,cls,txt)=>{const el=document.createElement('div');el.className=cls;if(txt)el.textContent=txt;document.querySelector(parent).append(el);return el;};
+let lastHeading=null;let previous='';
+for(const [a,b,asset,title,s1,s2,y1,y2,angle] of plan){
+  const section=add('#shots','shot'+(['windows','winhelp'].includes(asset)?' wide':''));
+  const plane=document.createElement('div');plane.className='device';section.append(plane);
+  const pic=document.createElement('img');pic.src='local/screens/'+({pc:'media'}[asset]||asset)+'.png';plane.append(pic);
+  tl.set(section,{visibility:'visible'},a);
+  tl.fromTo(plane,{scale:s1,y:y1,rotationZ:angle,rotationY:angle*1.9},{scale:s2,y:y2,rotationZ:angle*.36,rotationY:angle*.7,duration:b-a,ease:'sine.inOut'},a);
+  if(a>0)tl.fromTo(section,{opacity:0},{opacity:1,duration:.20,ease:'power2.out'},a);
+  tl.set(section,{visibility:'hidden'},b+.2);
+  if(title!==previous){if(lastHeading)tl.to(lastHeading,{opacity:0,duration:.12},a-.12);lastHeading=add('#heading','.heading'.slice(1),title);tl.fromTo(lastHeading,{y:8,opacity:0},{y:0,opacity:1,duration:.29,ease:'power2.out'},a);previous=title;}
+}
+tl.to(lastHeading,{opacity:0,duration:.24},81.03);
+for(const [a,b,_,words] of cues){const cap=add('#captions','cap',words);tl.fromTo(cap,{opacity:0,y:5},{opacity:1,y:0,duration:.13,ease:'power2.out'},a).to(cap,{opacity:0,duration:.09},b-.09);}
+tl.to('#kbd',{opacity:1,duration:.25},62.83).to('#kbd',{opacity:0,duration:.22},65.55);
+tl.to('#end',{opacity:1,duration:.48},81.12);tl.fromTo('#end p',{opacity:0,y:6},{opacity:1,y:0,duration:.38},81.7);tl.set({},{},84);
+</script></html>
