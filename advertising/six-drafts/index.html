@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ru"><meta charset="utf-8"><title>Тройка — Шесть раз стёр</title>
+<style>
+@font-face{font-family:Golos;src:url(local/golos.ttf)}*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#040606;color:#f7f7f5;font-family:Golos,sans-serif}
+#root{width:540px;height:960px;position:absolute;top:50%;left:50%;overflow:hidden;isolation:isolate;transform:translate(-50%,-50%) scale(var(--size,1));background:radial-gradient(ellipse at 57% 43%,#0a100f 0%,#030505 51%,#010202 78%)}
+#space{position:absolute;inset:0;perspective:1550px;perspective-origin:50% 48%}
+#phone{position:absolute;left:75px;top:77px;width:390px;height:780px;transform-style:preserve-3d}
+#shell{position:absolute;inset:-5px;border-radius:32px;background:linear-gradient(112deg,#818982,#171b1a 3%,#414744 24%,#131615 52%,#68706b 76%,#202422 94%,#696e6b);box-shadow:1px 2px 0 #343b37,3px 3px 0 #151917,4px 4px 8px #000}
+#display{position:absolute;inset:0;overflow:hidden;border-radius:27px;background:#0b0c10;outline:2px solid #101211}
+.panel,.row{position:absolute;left:0;display:block;width:100%;pointer-events:none}.panel{top:0;height:100%}.row{opacity:0}
+#focus{position:absolute;box-sizing:border-box;border-radius:16px;box-shadow:0 0 0 1000px rgba(1,4,3,.72),inset 0 0 0 1px rgba(164,233,203,.44);opacity:0}
+#glass{position:absolute;inset:0;border-radius:27px;box-shadow:inset 0 0 0 1px #c6dbd81a;pointer-events:none}
+#ring{position:absolute;left:216px;top:240px;width:78px;height:78px;border:1.8px solid #9df5cf;border-radius:50%;opacity:0}
+#shade{position:absolute;left:0;right:0;bottom:0;height:245px;background:linear-gradient(transparent,rgba(0,0,0,.64) 65%,rgba(0,0,0,.78));pointer-events:none}
+.cap{position:absolute;left:17px;right:17px;bottom:103px;text-align:center;font-size:26px;line-height:1.14;font-weight:610;letter-spacing:-.85px;text-shadow:0 2px 5px #000,0 1px 12px #000b;opacity:0}
+#last{font-size:34px;letter-spacing:-1.1px;bottom:109px}
+#last span{display:inline-block;opacity:0}
+#brand{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;opacity:0}
+#lockup{display:flex;flex-direction:column;align-items:center;gap:19px}
+#mark{width:108px;height:108px}#word{width:188px;height:auto}
+#play{position:fixed;inset:auto 16px 16px auto;border:1px solid #888;background:#151515;color:white;border-radius:999px;padding:10px 20px}
+</style>
+<div id="root" data-duration="24">
+  <div id="space"><div id="phone"><div id="shell"></div><div id="display">
+    <img class="panel" src="local/thread.webp">
+    <img class="row" id="r1" style="top:161px" src="local/row-1.webp">
+    <img class="row" id="r2" style="top:233px" src="local/row-2.webp">
+    <img class="row" id="r3" style="top:284px" src="local/row-3.webp">
+    <div id="focus"></div>
+    <img class="panel" id="home" src="local/home.webp"><div id="ring"></div>
+    <div id="glass"></div></div></div></div>
+  <div id="shade"></div>
+  <div id="captions"></div>
+  <div class="cap" id="last"><span>Ты мне тоже.</span><br><span>Ещё с сентября.</span></div>
+  <div id="brand"><div id="lockup"><img id="mark" src="../../brand/troika/logos/mark-white.svg"><img id="word" src="../../brand/troika/logos/wordmark-ru-white.svg"></div></div>
+</div>
+<button id="play">▶ Старт</button><script src="local/gsap.min.js"></script><script>
+const root=document.querySelector('#root');
+const resize=()=>root.style.setProperty('--size', Math.min(innerWidth/540,innerHeight/960));
+resize(); addEventListener('resize',resize);
+const tl=gsap.timeline({paused:true}); window.__timelines={main:tl};
+const pose=(t,d,x,y,s,angle,yaw,pitch,ease='sine.inOut')=>
+  tl.to('#phone',{x,y,scale:s,rotationZ:angle,rotationY:yaw,rotationX:pitch,duration:d,ease},t);
+tl.set('#phone',{x:-10,y:11,scale:.98,rotationZ:-4.6,rotationY:-13,rotationX:4},0);
+pose(0,1.16,-22,32,1.11,-3,-8,3,'power2.out');
+tl.fromTo('#ring',{scale:.8,opacity:.8},{scale:1.42,opacity:0,duration:.53,ease:'power2.out'},.38);
+pose(1.16,1.51,-33,163,1.48,2.4,8,-2);
+tl.set('#home',{visibility:'hidden'},2.52);
+pose(2.39,1.03,-31,307,1.44,1.4,5,0,'power3.out');
+pose(3.42,1.61,-24,298,1.42,.3,3,1);
+function row(number,t){tl.fromTo('#r'+number,{y:6,opacity:0},{y:0,opacity:1,duration:.29,ease:'power2.out'},t);}
+row(1,5.24);pose(4.99,.97,35,203,1.48,-2.7,-8,2,'power2.inOut');
+pose(5.96,2.61,39,199,1.51,-1.2,-6,1);
+row(2,9.16);pose(8.77,.92,-32,148,1.50,2.4,7,0);
+pose(9.69,2.54,-58,166,1.70,1.6,5,-1);
+function spot(t,left,top,width,height){tl.set('#focus',{left,top,width,height},t).to('#focus',{opacity:1,duration:.37},t);}
+spot(10.29,87,237,291,43);
+tl.to('#focus',{opacity:0,duration:.29},11.96);
+row(3,12.33);pose(12.13,1.10,58,77,1.55,-3.2,-9,2);
+pose(13.23,2.45,78,82,1.77,-2,-6,1);
+spot(13.82,12,289,259,43);
+tl.to('#focus',{opacity:0,duration:.51},15.64);
+pose(15.62,1.65,1,-36,1.0,1.8,7,0);
+pose(17.27,2.20,-9,-64,.91,3.8,11,-2);
+tl.to('#space',{opacity:.43,duration:1,ease:'sine.inOut'},16.92);
+pose(19.45,1.17,-16,-100,.74,4.6,15,-1);
+tl.to('#space',{opacity:0,duration:1.04,ease:'power2.inOut'},19.62);
+tl.to('#shade',{opacity:0,duration:.8},19.74);
+tl.fromTo('#brand',{opacity:0},{opacity:1,duration:.62},20.18);
+tl.fromTo('#mark',{y:10,scale:.84},{y:0,scale:1,duration:.9,ease:'power3.out'},20.18);
+tl.fromTo('#word',{y:7,opacity:0},{y:0,opacity:1,duration:.55},20.45);
+tl.to('#lockup',{scale:1.035,duration:2.62,ease:'sine.out'},21.34);
+function cap(start,end,words){
+  const el=document.createElement('div');el.className='cap';el.textContent=words;
+  document.querySelector('#captions').append(el);
+  tl.fromTo(el,{opacity:0,y:5},{opacity:1,y:0,duration:.13,ease:'power2.out'},start)
+    .to(el,{opacity:0,y:-3,duration:.095,ease:'power1.in'},end-.095);
+}
+cap(.42,1.84,'Тройка, она мне написала:');
+cap(1.85,2.83,'«Ты мне нравишься».');
+cap(2.84,4.90,'Я уже шесть раз ответ стёр.');
+cap(5.24,6.29,'Подожди.');
+cap(6.30,8.68,'Ты мне вчера про неё что сказал?');
+cap(9.17,11.33,'Что она мне с сентября нравится.');
+cap(12.34,13.19,'Ну вот.');
+cap(13.20,14.28,'Ей это скажи,');
+cap(14.29,15.71,'не тупи.');
+tl.set('#last',{opacity:1},17.54);
+tl.to('#last span:first-child',{opacity:1,duration:.19},17.54);
+tl.to('#last span:last-child',{opacity:1,duration:.24},18.43);
+tl.to('#last',{opacity:0,duration:.36},19.87);
+tl.set({}, {}, 24);
+const music=new Audio('local/mix.wav');
+const play=document.querySelector('#play');
+if(navigator.webdriver)play.hidden=true;
+function start(){play.hidden=true;music.currentTime=0;music.play();tl.play(0);}
+play.onclick=start;onkeydown=e=>{if(e.code==='KeyR')start()};
+</script></html>
