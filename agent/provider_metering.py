@@ -190,7 +190,12 @@ class _Completions:
             if not bounded.get("stream"):
                 lease.succeeded(response)
         except BaseException as error:
-            lease.failed(error)
+            # Only this boundary is before a response/stream was obtained.
+            # A guard may reconcile an explicit provider rejection here;
+            # stream failures must retain uncertain-usage protection.
+            rejected = getattr(lease, "rejected_before_response", None)
+            if rejected is None or not rejected(error):
+                lease.failed(error)
             raise
         if bounded.get("stream"):
             return _Stream(response, lease)
@@ -203,7 +208,12 @@ class _Completions:
             if not bounded.get("stream"):
                 lease.succeeded(response)
         except BaseException as error:
-            lease.failed(error)
+            # Only this boundary is before a response/stream was obtained.
+            # A guard may reconcile an explicit provider rejection here;
+            # stream failures must retain uncertain-usage protection.
+            rejected = getattr(lease, "rejected_before_response", None)
+            if rejected is None or not rejected(error):
+                lease.failed(error)
             raise
         if bounded.get("stream"):
             return _AsyncStream(response, lease)

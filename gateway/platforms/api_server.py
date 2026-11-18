@@ -2023,6 +2023,9 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         from agent.provider_metering import current_provider_guard
         own = getattr(current_provider_guard(), "credentials", None)
         context = getattr(current_provider_guard(), "context", None)
+        if self._access_registry is not None and context is not None:
+            from troika_product.device_routing import requested_target
+            context.control_target = requested_target(current_user_message)
         if self._access_registry is not None and context is not None and session_id and not computer_lab:
             from troika_product.conversation_sessions import ConversationSessions, conversation_only
             context.conversation_only = conversation_only(current_user_message)
@@ -2041,7 +2044,13 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
                     getattr(current_provider_guard(), "principal", None))):
             # A failed paid request (for example an empty provider balance)
             # falls back to the ordinary model instead of failing the turn.
-            fallback_model = [{"provider": runtime_kwargs.get("provider") or "openrouter", "model": model}]
+            # Reuse credentials for this same hosted provider. The gateway can
+            # resolve its primary key from config even when the fallback resolver
+            # has no OPENROUTER_API_KEY environment variable or credential pool.
+            fallback_model = [{
+                "provider": runtime_kwargs.get("provider") or "openrouter", "model": model,
+                **{key: runtime_kwargs[key] for key in ("api_key", "base_url") if runtime_kwargs.get(key)},
+            }]
             model = self._product_pro_model
 
         if self._access_registry is not None and own is None and reasoning_config is None:

@@ -140,7 +140,7 @@ object PhoneCommandExecutor {
 
     private fun openApp(ctx: Context, name: String): JSONObject {
         if (name.isBlank()) return err("missing app")
-        // Сначала проверяем алиасы из PhoneCommands.APP_ALIASES (через прямой матч имени)
+        // Local and server commands use the same installed-app aliases.
         val pkg = findPackage(ctx, name)
         if (pkg == null) return err("app_not_found")
         val intent = ctx.packageManager.getLaunchIntentForPackage(pkg)
@@ -154,22 +154,14 @@ object PhoneCommandExecutor {
     }
 
     private fun findPackage(ctx: Context, query: String): String? {
-        val q = query.lowercase().trim()
-        // 1. Точный package name
         val pm = ctx.packageManager
-        try {
-            if (pm.getLaunchIntentForPackage(q) != null) return q
-        } catch (_: Exception) {}
-        // 2. По label через PackageManager
         val intent = Intent(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) }
-        val apps = pm.queryIntentActivities(intent, 0)
-        for (info in apps) {
-            val label = info.loadLabel(pm).toString().lowercase()
-            if (label == q || label.contains(q) || q.contains(label)) {
-                return info.activityInfo.packageName
-            }
+        val apps = pm.queryIntentActivities(intent, 0).map {
+            it.activityInfo.packageName to it.loadLabel(pm).toString()
         }
-        return null
+        return AppNameResolver.resolve(query, apps) { pkg ->
+            try { pm.getLaunchIntentForPackage(pkg) != null } catch (_: Exception) { false }
+        }
     }
 
     private fun dial(ctx: Context, number: String): JSONObject {

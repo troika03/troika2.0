@@ -52,17 +52,31 @@ class ProductToolGuardrailController(ToolCallGuardrailController):
         "Выполнение всей просьбы не подтверждено."
     )
 
+    def before_call(self, tool_name, args):
+        tool_name, args = guardrail_call(tool_name, args or {})
+        return super().before_call(tool_name, args)
+
     def after_call(self, tool_name, args, result, *, failed=None):
-        from troika_product.capabilities import CALL_TOOL
+        from troika_product import capabilities
+        CALL_TOOL = capabilities.CALL_TOOL
+        def _unwrap_untrusted(value):
+            unwrap = getattr(capabilities, "_unwrap_untrusted", None)
+            if unwrap is not None:
+                return unwrap(value)
+            # Compatibility with the deployed gateway's original web wrapper.
+            if value.startswith('<untrusted_tool_result source="web_search">\n'):
+                return value.partition("\n\n")[2].rstrip().removesuffix("</untrusted_tool_result>").strip()
+            return value
 
         if tool_name == CALL_TOOL and isinstance(result, str):
             try:
                 if len(result.encode("utf-8")) <= _MAX_SIGNATURE_ARGUMENT_BYTES:
-                    envelope = json.loads(result)
+                    envelope = json.loads(_unwrap_untrusted(result))
                     if isinstance(envelope, dict) and type(envelope.get("ok")) is bool:
                         failed = not envelope["ok"]
             except (ValueError, UnicodeError, RecursionError):
                 pass
+        tool_name, args = guardrail_call(tool_name, args or {})
         return super().after_call(tool_name, args, result, failed=failed)
 
 
@@ -75,8 +89,12 @@ def install_agent_policy(agent, config, guard=None):
     if not isinstance(previous, ToolCallGuardrailConfig):
         previous = ToolCallGuardrailConfig()
     agent._tool_guardrails = ProductToolGuardrailController(
-        replace(previous, hard_stop_enabled=enabled, idempotent_tools=previous.idempotent_tools | _READ_TOOLS),
-        call_resolver=guardrail_call,
+        replace(previous, hard_stop_enabled=enabled,
+                exact_failure_warn_after=min(previous.exact_failure_warn_after, 2),
+                exact_failure_block_after=min(previous.exact_failure_block_after, 2),
+                same_tool_failure_warn_after=min(previous.same_tool_failure_warn_after, 2),
+                same_tool_failure_halt_after=min(previous.same_tool_failure_halt_after, 4),
+                idempotent_tools=previous.idempotent_tools | _READ_TOOLS),
     )
     bind = getattr(guard, "bind_agent_deadline", None)
     if callable(bind):

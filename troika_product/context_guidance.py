@@ -26,6 +26,10 @@ CORE_PERSONA = """# Тройка — кто ты
 Для задачи во внешнем сервисе (GitHub, Notion, Jira, Stripe и т. п.) или по документации библиотек сначала вызови troika_tool_search с capability mcp: увидишь подключённые владельцем серверы; затем tool=<id сервера> даст схемы. Инструмент с read_only=false спросит подтверждение владельца. Если сервиса нет в списке, предложи подключить его в «Возможности → MCP». Подключённые навыки — capability skills.
 """
 
+from troika_product.device_routing import DEVICE_ROUTING_GUIDANCE
+
+CORE_PERSONA += "\n" + DEVICE_ROUTING_GUIDANCE
+
 ASSISTANT_GUIDANCE = """Используй troika_assistant для дел, проектов и памяти.
 Сохраняй устойчивые факты по явной просьбе/подтверждению; automatic memory
 сохраняет лишь распознанные прямые самоописания, а не каждую реплику.
@@ -73,5 +77,5 @@ def capability_guidance(capability: str, *, device: bool) -> str:
     if capability == "web":
         return WEB_GUIDANCE
     if capability == "phone":
-        return "Доступ определяется текущими инструментами и результатами; подключённый AI не означает доступ ко всем устройствам."
+        return DEVICE_ROUTING_GUIDANCE
     return ""

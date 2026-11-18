@@ -494,7 +494,45 @@ class _Lease:
         self.settled = True
         self.meter.diagnostics.received(response, charged=charged)
 
+    def rejected_before_response(self, error):
+        """A verified OpenRouter HTTP 402 refused inference before a response.
+
+        Do not treat timeouts, 5xx, missing usage, or in-stream errors as free.
+        Returning True preserves the SDK error so the configured free fallback
+        can run without the unknown-usage stop used for ambiguous failures.
+        """
+        from openai import APIStatusError
+
+        if self.settled or not isinstance(error, APIStatusError) or error.status_code != 402:
+            return False
+        response = error.response
+        if response is None or urlsplit(str(response.url)).hostname != "openrouter.ai":
+            return False
+        try:
+            body = response.json()
+        except (ValueError, TypeError):
+            return False
+        refusal = body.get("error") if isinstance(body, dict) else None
+        if (not isinstance(refusal, dict) or refusal.get("code") != 402
+                or any(key in body for key in ("id", "usage", "choices"))):
+            return False
+        self.meter.ledger.settle(
+            self.meter.principal, self.hold.id, charged_tokens=0,
+            usage=TokenUsage(0, 0), successful=False,
+            details={"service": "llm", "unit": "tokens", "units": 0, "cost_rub": "0"},
+        )
+        self.settled = True
+        return True
+
     def failed(self, error):
+        import logging
+        if error is not None:
+            # Do not log exception text, provider body, URL, prompt, or keys.
+            status = getattr(error, "status_code", None)
+            logging.getLogger(__name__).warning(
+                "Provider call incomplete: exception=%s http_status=%s usage_confirmed=%s",
+                type(error).__name__, status if type(status) is int else "unknown", self.settled,
+            )
         # No inference-cost claim is made from an exception or missing usage.
         # Reconciliation, including company-paid retries, is a separate adapter.
         self.meter.stopped = True

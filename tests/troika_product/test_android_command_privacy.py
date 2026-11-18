@@ -457,7 +457,7 @@ def test_android_command_callers_do_not_log_or_echo_private_payloads(tmp_path):
     app_fixtures = tmp_path / "AppFixtures.kt"
     app_fixtures.write_text(KOTLIN_FIXTURES, encoding="utf-8")
     classpath = [android, stubs, json_jar, compiler[1], compiler[-1]]
-    sources = [SOURCE / name for name in ("PhoneBridgeClient.kt", "PhoneCommandExecutor.kt", "HermesAccessibilityService.kt")]
+    sources = [SOURCE / name for name in ("PhoneBridgeClient.kt", "AppNameResolver.kt", "PhoneCommandExecutor.kt", "HermesAccessibilityService.kt")]
     _compile_kotlin(java, compiler, classpath, [*sources, app_fixtures], production, tmp_path)
     harness = tmp_path / "AndroidCommandPrivacyHarness.java"
     harness.write_text(HARNESS, encoding="utf-8")

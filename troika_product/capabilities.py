@@ -48,7 +48,7 @@ CAPABILITIES = (
     Capability("files", "Файлы", "Искать, читать и изменять личные файлы.",
                ("troika_files", "troika_file_search", "troika_terminal"),
                "Работать с файлами владельца через ограниченные файловые операции."),
-    Capability("phone", "Телефон", "Управлять подключённым телефоном с его разрешения.",
+    Capability("phone", "Телефон", "Базовые команды Android. Для работы внутри приложений — control.",
                ("android_status", "android_battery", "android_network",
                 "android_open_app", "android_web_search", "android_set_alarm",
                 "android_set_timer", "android_navigate", "android_volume",
@@ -94,7 +94,7 @@ SEARCH_SCHEMA = {
     "description": (
         "Load full tool schemas and a skill for a needed capability: assistant "
         "(tasks/memory/reminders), web, documents, development, files, phone, "
-        "images, vision, screen; skills/mcp list the owner's connected skills "
+        "images, vision, screen (one screenshot only), control (operate inside apps); skills/mcp list the owner's connected skills "
         "and MCP servers, tool=<id> loads one. External services (GitHub, Notion, Jira, "
         "Stripe...) and library docs: capability mcp. Use catalog for enabled/configured status only. "
         "Optional tool selects one exact tool. "
@@ -137,6 +137,10 @@ troika_tool_call с именем mcp:<сервер>/<инструмент>. Де
 read_only=false сервер подтвердит у владельца. Неподключённый сервис предложи
 подключить в «Возможности → MCP». Подключённые навыки — capability skills.
 """
+
+from troika_product.device_routing import DEVICE_ROUTING_GUIDANCE
+
+ROUTING_GUIDANCE += "\n" + DEVICE_ROUTING_GUIDANCE
 
 
 class CapabilityStore:
@@ -213,6 +217,12 @@ def available_schemas() -> dict[str, dict]:
     result = {schema["function"]["name"]: schema["function"] for schema in schemas
               if schema["function"]["name"] in TOOL_CAPABILITY
               and schema["function"]["name"] not in FORBIDDEN_PRODUCT_TOOLS}
+    # Android handlers implement only the fields they advertise. Never silently
+    # ignore a model-invented action=close on an open_app request.
+    for name, schema in list(result.items()):
+        if name.startswith("android_"):
+            result[name] = {**schema, "parameters": {
+                **schema.get("parameters", {}), "additionalProperties": False}}
     # The upstream web tool shares one requirement check for search/extract.
     # A configured search-only provider must not advertise page reading.
     if "web_extract" in result:
@@ -307,12 +317,23 @@ def discover(args: dict, **_: Any) -> str:
             raise ValueError("tool does not belong to capability")
         selected = [schemas[name] for name in item.tools if name in schemas and (not tool or name == tool)]
         if not selected:
-            return _error("capability_unavailable")
+            payload = {"ok": False, "error": "capability_unavailable"}
+            if capability in {"phone", "screen"} and preferences.get("control", False) and "troika_device_control" in schemas:
+                payload["hint"] = (
+                    "This capability is unavailable. For reading UI elements, tapping, typing or scrolling "
+                    "discover capability=control; it is a separate approved tool, not a screenshot. "
+                    "Do not retry this unavailable capability."
+                )
+            return json.dumps(payload)
         from troika_product.context_guidance import capability_guidance
         guidance = capability_guidance(item.id, device=get_session_env("TROIKA_PRODUCT_DELIVERY_MODE", "server") == "device")
-        return json.dumps({"ok": True, "capability": item.id, "skill": item.skill,
-                           "guidance": guidance,
-                           "tools": selected, "call_via": CALL_TOOL}, ensure_ascii=False)
+        payload = {"ok": True, "capability": item.id, "skill": item.skill,
+                   "guidance": guidance, "tools": selected, "call_via": CALL_TOOL}
+        if item.id in {"phone", "control"}:
+            from troika_product.device_routing import route_context
+            payload["device_context"] = route_context(
+                registry, principal, getattr(current_provider_guard(), "context", None))
+        return json.dumps(payload, ensure_ascii=False)
     except PermissionError:
         return _error("product_identity_required")
     except (ValueError, TypeError):
@@ -362,8 +383,22 @@ def execute(args: dict, **kwargs: Any) -> str:
         # Validate required parameters/types before reaching a mutating handler.
         # jsonschema is declared directly because dispatch relies on it.
         from jsonschema import Draft7Validator
-        if not Draft7Validator(schemas[tool].get("parameters", {})).is_valid(arguments):
-            return _error("invalid_tool_arguments")
+        parameters = schemas[tool].get("parameters", {})
+        if not Draft7Validator(parameters).is_valid(arguments):
+            payload = {"ok": False, "error": "invalid_tool_arguments"}
+            payload["expected_arguments"] = {
+                "required": parameters.get("required", []),
+                "fields": {key: value.get("type", "any")
+                           for key, value in parameters.get("properties", {}).items()},
+                "hint": "Fix arguments to match the discovered schema before calling again.",
+            }
+            return json.dumps(payload, ensure_ascii=False)
+        if tool == "troika_device_control":
+            from troika_product.device_routing import control_arguments, route_context
+            arguments, refusal = control_arguments(arguments, route_context(
+                registry, principal, getattr(current_provider_guard(), "context", None)))
+            if refusal is not None:
+                return json.dumps(refusal, ensure_ascii=False)
         from model_tools import handle_function_call
         from agent.provider_metering import current_provider_guard
         guard = current_provider_guard()
