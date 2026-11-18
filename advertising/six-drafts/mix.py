@@ -45,22 +45,22 @@ for bar in range(9):
     for n in [1.01,3.015]: percussion(origin+beat*n,'rim',.1)
     for n in [.50,1.53,2.53,3.49]: percussion(origin+beat*n,'hat',.039)
 clock=times(dur)
-bed *= np.interp(clock,[0,.18,8.78,9.19,10.33,10.9,12.31,12.62,15.1,15.9,17.3,19.32,19.53,21.4,23.99],
+bed *= np.interp(clock,[0,.18,10.8,11.34,12.43,12.96,14.05,14.62,16.78,17.02,17.44,19.79,20.03,21.4,23.99],
  [0,1,.82,.57,.47,.10,.13,.41,.39,.7,.53,.5,1.12,.96,0])[:,None]
-for i,start in enumerate([.42,5.24,9.17,12.34,17.54]):
-    buf=subprocess.check_output(['ffmpeg','-v','error','-i',str(root/'voices'/f'line-{i}.mp3'),'-f','f32le','-ac','1','-ar',str(sr),'-'])
-    s=np.frombuffer(buf,np.float32).astype(float)
-    active=s[np.abs(s)>.014]
-    s*=min(.88/max(abs(s)),.20/max(np.sqrt(np.mean(active**2)),.001))
-    place(dialogue,start,s,-.055 if i%2==0 else .07)
-    # Very short reflection adds space without smearing words.
-    place(dialogue,start+.043,s*.035,.53 if i%2==0 else -.48)
+# Keep the Studio performance and its pauses intact. Only the bed and UI sounds move.
+voice_file = root / 'gemini-dialogue.wav'
+buf = subprocess.check_output(['ffmpeg','-v','error','-i',str(voice_file),
+    '-f','f32le','-ac','1','-ar',str(sr),'-'])
+voice = np.frombuffer(buf,np.float32).astype(float)
+active = voice[np.abs(voice)>.014]
+voice *= min(.88/max(abs(voice)),.21/np.sqrt(np.mean(active**2)))
+place(dialogue,0,voice)
 def touch(t,gain=.04):
     x=times(.065)
     place(fx,t,gain*(filtered_noise(x,[900,4400])+np.sin(2*np.pi*450*x)*.3)*np.exp(-x/.013),.22)
-for start in [.38,2.43,5.27,9.2,12.36]:touch(start)
-for start in [16.58,16.78,16.93,17.85,18.14,18.31,18.61,18.82]:touch(start,.032)
-for start,f,vol in [(19.26,583,.11),(19.34,874,.09)]:
+for start in [.13,4.31,8.52,11.44,14.04]:touch(start)
+for start in [17.08,17.29,17.38,18.16,18.35,18.55,18.77,18.96]:touch(start,.032)
+for start,f,vol in [(19.88,583,.11),(19.96,874,.09)]:
     t=times(.43);s=vol*(np.sin(2*np.pi*f*t)+.11*np.sin(4*np.pi*f*t))*(1-np.exp(-t/.011))*np.exp(-t/.085)
     place(fx,start,s,.14)
 total=bed+dialogue+fx

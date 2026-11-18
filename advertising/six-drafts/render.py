@@ -50,4 +50,4 @@ if __name__=='__main__':
         section(('review',[6,27,59,77,109,165,200,280,322,377,430,489,535,573,599,617,647,702],False));sheet()
     else:
         section(('full',range(fps*duration),True))
-        subprocess.run(['ffmpeg','-y','-v','error','-i',str(local/'part-full.mp4'),'-i',str(local/'mix.wav'),'-map','0:v','-map','1:a','-c:v','copy','-c:a','aac','-b:a','224k','-t',str(duration),'-movflags','+faststart',str(root/'Шесть раз стёр.mp4')],check=True)
+        subprocess.run(['ffmpeg','-y','-v','error','-i',str(local/'part-full.mp4'),'-i',str(local/'mix.wav'),'-map','0:v','-map','1:a','-c:v','copy','-c:a','aac','-b:a','224k','-t',str(duration),'-movflags','+faststart',str(root/'Шесть раз стёр — Gemini.mp4')],check=True)

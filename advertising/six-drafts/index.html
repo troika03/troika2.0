@@ -19,7 +19,7 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#040606;col
 #brand{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;opacity:0}
 #lockup{display:flex;flex-direction:column;align-items:center;gap:19px}
 #mark{width:108px;height:108px}#word{width:188px;height:auto}
-#play{position:fixed;inset:auto 16px 16px auto;border:1px solid #888;background:#151515;color:white;border-radius:999px;padding:10px 20px}
+#profile-link{position:absolute;top:calc(50% + 106px);width:100%;margin:0;text-align:center;font-size:23px;font-weight:520;letter-spacing:-.45px;color:#f4f5f7}#play{position:fixed;inset:auto 16px 16px auto;border:1px solid #888;background:#151515;color:white;border-radius:999px;padding:10px 20px}
 </style>
 <div id="root" data-duration="24">
   <div id="space"><div id="phone"><div id="shell"></div><div id="display">
@@ -33,7 +33,7 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#040606;col
   <div id="shade"></div>
   <div id="captions"></div>
   <div class="cap" id="last"><span>Ты мне тоже.</span><br><span>Ещё с сентября.</span></div>
-  <div id="brand"><div id="lockup"><img id="mark" src="../../brand/troika/logos/mark-white.svg"><img id="word" src="../../brand/troika/logos/wordmark-ru-white.svg"></div></div>
+  <div id="brand"><div id="lockup"><img id="mark" src="../../brand/troika/logos/mark-white.svg"><img id="word" src="../../brand/troika/logos/wordmark-ru-white.svg"></div><p id="profile-link">Ссылка в шапке профиля</p></div>
 </div>
 <button id="play">▶ Старт</button><script src="local/gsap.min.js"></script><script>
 const root=document.querySelector('#root');
@@ -43,33 +43,34 @@ const tl=gsap.timeline({paused:true}); window.__timelines={main:tl};
 const pose=(t,d,x,y,s,angle,yaw,pitch,ease='sine.inOut')=>
   tl.to('#phone',{x,y,scale:s,rotationZ:angle,rotationY:yaw,rotationX:pitch,duration:d,ease},t);
 tl.set('#phone',{x:-10,y:11,scale:.98,rotationZ:-4.6,rotationY:-13,rotationX:4},0);
-pose(0,1.16,-22,32,1.11,-3,-8,3,'power2.out');
-tl.fromTo('#ring',{scale:.8,opacity:.8},{scale:1.42,opacity:0,duration:.53,ease:'power2.out'},.38);
-pose(1.16,1.51,-33,163,1.48,2.4,8,-2);
-tl.set('#home',{visibility:'hidden'},2.52);
-pose(2.39,1.03,-31,307,1.44,1.4,5,0,'power3.out');
-pose(3.42,1.61,-24,298,1.42,.3,3,1);
+pose(0,1.55,-22,32,1.11,-3,-8,3,'power2.out');
+tl.fromTo('#ring',{scale:.8,opacity:.8},{scale:1.42,opacity:0,duration:.53,ease:'power2.out'},.13);
+pose(1.55,2.32,-33,163,1.48,2.4,8,-2);
+tl.set('#home',{visibility:'hidden'},4.31);
+pose(3.93,1.27,-31,307,1.44,1.4,5,0,'power3.out');
+pose(5.2,2.94,-24,298,1.42,.3,3,1);
 function row(number,t){tl.fromTo('#r'+number,{y:6,opacity:0},{y:0,opacity:1,duration:.29,ease:'power2.out'},t);}
-row(1,5.24);pose(4.99,.97,35,203,1.48,-2.7,-8,2,'power2.inOut');
-pose(5.96,2.61,39,199,1.51,-1.2,-6,1);
-row(2,9.16);pose(8.77,.92,-32,148,1.50,2.4,7,0);
-pose(9.69,2.54,-58,166,1.70,1.6,5,-1);
+row(1,8.52);pose(8.15,.97,35,203,1.48,-2.7,-8,2,'power2.inOut');
+pose(9.12,1.85,39,199,1.51,-1.2,-6,1);
+row(2,11.44);pose(11.10,.86,-32,148,1.50,2.4,7,0);
+pose(11.96,1.70,-58,166,1.70,1.6,5,-1);
 function spot(t,left,top,width,height){tl.set('#focus',{left,top,width,height},t).to('#focus',{opacity:1,duration:.37},t);}
-spot(10.29,87,237,291,43);
-tl.to('#focus',{opacity:0,duration:.29},11.96);
-row(3,12.33);pose(12.13,1.10,58,77,1.55,-3.2,-9,2);
-pose(13.23,2.45,78,82,1.77,-2,-6,1);
-spot(13.82,12,289,259,43);
-tl.to('#focus',{opacity:0,duration:.51},15.64);
-pose(15.62,1.65,1,-36,1.0,1.8,7,0);
-pose(17.27,2.20,-9,-64,.91,3.8,11,-2);
-tl.to('#space',{opacity:.43,duration:1,ease:'sine.inOut'},16.92);
-pose(19.45,1.17,-16,-100,.74,4.6,15,-1);
-tl.to('#space',{opacity:0,duration:1.04,ease:'power2.inOut'},19.62);
-tl.to('#shade',{opacity:0,duration:.8},19.74);
-tl.fromTo('#brand',{opacity:0},{opacity:1,duration:.62},20.18);
-tl.fromTo('#mark',{y:10,scale:.84},{y:0,scale:1,duration:.9,ease:'power3.out'},20.18);
-tl.fromTo('#word',{y:7,opacity:0},{y:0,opacity:1,duration:.55},20.45);
+spot(12.43,87,237,291,43);
+tl.to('#focus',{opacity:0,duration:.29},13.65);
+row(3,14.04);pose(13.9,.83,58,77,1.55,-3.2,-9,2);
+pose(14.73,2.01,78,82,1.77,-2,-6,1);
+spot(15.57,12,289,259,43);
+tl.to('#focus',{opacity:0,duration:.51},16.91);
+pose(16.89,.79,1,-36,1.0,1.8,7,0);
+pose(17.68,2.03,-9,-64,.91,3.8,11,-2);
+tl.to('#space',{opacity:.43,duration:1,ease:'sine.inOut'},17.22);
+pose(19.79,.96,-16,-100,.74,4.6,15,-1);
+tl.to('#space',{opacity:0,duration:1.04,ease:'power2.inOut'},19.85);
+tl.to('#shade',{opacity:0,duration:.8},19.9);
+tl.fromTo('#brand',{opacity:0},{opacity:1,duration:.62},20.35);
+tl.fromTo('#mark',{y:10,scale:.84},{y:0,scale:1,duration:.9,ease:'power3.out'},20.35);
+tl.fromTo('#word',{y:7,opacity:0},{y:0,opacity:1,duration:.55},20.58);
+tl.fromTo('#profile-link',{opacity:0,y:6},{opacity:1,y:0,duration:.38,ease:'power2.out'},20.98);
 tl.to('#lockup',{scale:1.035,duration:2.62,ease:'sine.out'},21.34);
 function cap(start,end,words){
   const el=document.createElement('div');el.className='cap';el.textContent=words;
@@ -77,19 +78,20 @@ function cap(start,end,words){
   tl.fromTo(el,{opacity:0,y:5},{opacity:1,y:0,duration:.13,ease:'power2.out'},start)
     .to(el,{opacity:0,y:-3,duration:.095,ease:'power1.in'},end-.095);
 }
-cap(.42,1.84,'Тройка, она мне написала:');
-cap(1.85,2.83,'«Ты мне нравишься».');
-cap(2.84,4.90,'Я уже шесть раз ответ стёр.');
-cap(5.24,6.29,'Подожди.');
-cap(6.30,8.68,'Ты мне вчера про неё что сказал?');
-cap(9.17,11.33,'Что она мне с сентября нравится.');
-cap(12.34,13.19,'Ну вот.');
-cap(13.20,14.28,'Ей это скажи,');
-cap(14.29,15.71,'не тупи.');
-tl.set('#last',{opacity:1},17.54);
-tl.to('#last span:first-child',{opacity:1,duration:.19},17.54);
-tl.to('#last span:last-child',{opacity:1,duration:.24},18.43);
-tl.to('#last',{opacity:0,duration:.36},19.87);
+cap(1.27,2.63,'Тройка,');
+cap(2.75,4.22,'она мне написала:');
+cap(4.28,5.86,'«Ты мне нравишься».');
+cap(6.29,8.12,'Я уже шесть раз ответ стёр.');
+cap(8.52,9.36,'Подожди.');
+cap(9.37,11.01,'Ты мне вчера про неё что сказал?');
+cap(11.42,13.73,'Что она мне с сентября нравится.');
+cap(14.47,15.36,'Ну вот.');
+cap(15.38,16.29,'Ей это скажи,');
+cap(16.30,17.22,'не тупи.');
+tl.set('#last',{opacity:1},17.45);
+tl.to('#last span:first-child',{opacity:1,duration:.19},17.45);
+tl.to('#last span:last-child',{opacity:1,duration:.24},19.10);
+tl.to('#last',{opacity:0,duration:.36},20.05);
 tl.set({}, {}, 24);
 const music=new Audio('local/mix.wav');
 const play=document.querySelector('#play');
