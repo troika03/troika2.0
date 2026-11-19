@@ -35,8 +35,12 @@ def music():
         short=x[:3200]
         noise=rng.normal(0,.066,len(short))
         put(t+.3,np.diff(noise,prepend=0)*np.exp(-78*short)*(1-np.exp(-short/.002)),.3)
+    # First-frame tap and the softer two-note confirmation on the file match.
+    for start, hz, level in [(.025,205,.28),(1.16,587,.16),(1.24,784,.10)]:
+        pulse=np.arange(int(.27*rate))/rate
+        put(start,level*np.sin(2*np.pi*hz*pulse)*(1-np.exp(-pulse/.004))*np.exp(-pulse/.065),.07)
     time=np.arange(len(track))/rate
-    vol=np.interp(time,[0,.25,59.65,60.18,62.45,63,80.9,81.5,83.1,84],[0,.87,.87,.18,.18,.85,.82,1,.84,0])
+    vol=np.interp(time,[0,.018,59.65,60.18,62.45,63,80.9,81.5,83.1,84],[0,.87,.87,.18,.18,.85,.82,1,.84,0])
     wavfile.write(local/'music.wav',rate,(track*vol[:,None]*32767).astype(np.int16))
 
 if __name__=='__main__':
@@ -46,4 +50,4 @@ if __name__=='__main__':
     else:
         music()
         renderer.section(('overview',range(84*30),True))
-        subprocess.run(['ffmpeg','-y','-v','error','-i',str(local/'part-overview.mp4'),'-i',str(local/'music.wav'),'-map','0:v','-map','1:a','-c:v','copy','-c:a','aac','-b:a','160k','-movflags','+faststart','-t','84',str(root/'Что умеет Тройка — монтаж.mp4')],check=True)
+        subprocess.run(['ffmpeg','-y','-v','error','-i',str(local/'part-overview.mp4'),'-i',str(local/'music.wav'),'-map','0:v','-map','1:a','-c:v','copy','-c:a','aac','-b:a','160k','-movflags','+faststart','-t','84',str(root/'Что умеет Тройка — До доклада 5 минут.mp4')],check=True)
