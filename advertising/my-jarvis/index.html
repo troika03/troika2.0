@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Я создал своего Джарвиса</title><style>
+@font-face{font-family:Golos;src:url("../../hermes-android/assets/fonts/GolosText-Variable.ttf");font-weight:100 900}
+*{box-sizing:border-box}body{margin:0;background:#040806;color:#f3f7f5;font-family:Golos,Arial,sans-serif}#root{position:relative;width:540px;height:960px;overflow:hidden;background:radial-gradient(ellipse at 60% 36%,#143728 0,#091810 42%,#030806 77%);isolation:isolate}
+.scene{position:absolute;inset:0;overflow:hidden;visibility:hidden}#intro{visibility:visible}h1,h2,p{margin:0}
+#macro{position:absolute;width:430px;height:430px;top:99px;left:66px;transform:rotate(-10deg);filter:drop-shadow(0 18px 38px #0008)}.mark{background:#49d897;mask:url("../../brand/troika/logos/mark-white.svg") center/contain no-repeat}
+#intro h1{position:absolute;left:37px;top:519px;font-size:55px;line-height:.99;font-weight:570;letter-spacing:-3.5px}#intro h1 strong{display:block;color:#6bf1b2;font-size:82px;letter-spacing:-5px;font-weight:670}
+#intro small,.eyebrow{position:absolute;left:39px;top:100px;text-transform:uppercase;font-size:15px;letter-spacing:2.2px;font-weight:600;color:#acbdaf}
+#intro small{top:93px;color:#d6e7dc}
+#voice h2,#evidence h2,#more h2{position:absolute;z-index:2;top:132px;left:37px;font-size:56px;line-height:1;letter-spacing:-3px;font-weight:620}
+.phone{position:absolute;overflow:hidden;border-radius:38px;background:#101915;border:3px solid #54675c;box-shadow:inset -2px 0 0 #16231c,10px 16px 35px #0008;transform-origin:50% 50%}
+.phone img{width:100%;display:block}.hero{width:359px;left:91px;top:228px;height:507px}.wave{position:absolute;left:50%;bottom:21px;transform:translateX(-50%);display:flex;align-items:center;gap:4px;height:23px}.wave i{width:4px;height:19px;border-radius:3px;background:#64e6ac}
+#evidence h2{font-size:100px;letter-spacing:-8px;color:#6bf1b2;top:117px}
+#rem{position:absolute;top:305px;left:37px;width:466px;height:358px;overflow:hidden;border-radius:25px;border:2px solid #526458;box-shadow:0 17px 48px #0009;background:#202322}.sheet{position:absolute;width:468px;top:-92px;left:0}.sheet svg g[data-name="task-detail"]{opacity:.65}.sheet svg g[data-name="task-detail"]:first-of-type{opacity:1}.sheet svg{width:100%;height:auto;display:block}
+#more h2{font-size:49px}.feature{position:absolute;left:36px;top:251px;width:468px;height:416px;border-radius:26px;background:#17221b;overflow:hidden;border:2px solid #53675a;box-shadow:2px 14px 36px #0008}.feature img{width:100%;display:block}.feature.doc img{transform:translateY(-322px)}
+#end{background:radial-gradient(ellipse at 50% 35%,#133522,#060c09 55%);text-align:center}
+#endMark{width:130px;height:130px;margin:204px auto 22px}#endBrand{width:137px}#end h2{position:absolute;top:470px;left:24px;right:24px;font-size:57px;line-height:1.01;font-weight:620;letter-spacing:-3px}#end h2 b{color:#6bf1b2;font-weight:inherit}
+#caption{position:absolute;bottom:138px;left:38px;right:44px;z-index:3}.cap{position:absolute;bottom:0;font-size:32px;font-weight:560;line-height:1.12;letter-spacing:-.9px;text-shadow:0 2px 12px #000;visibility:hidden;text-wrap:balance}
+#endline{position:absolute;bottom:148px;left:0;right:0;font-size:29px;letter-spacing:-.8px;font-weight:530}
+</style></head><body><main id="root">
+<section class="scene" id="intro"><small>Тройка / Android</small><div id="macro" class="mark"></div><h1>Я создал своего<strong>Джарвиса.</strong></h1></section>
+<section class="scene" id="voice"><p class="eyebrow">Тройка / Android</p><h2>Голосом.</h2><div class="phone hero"><img src="assets/home.webp"><div class="wave"></div></div></section>
+<section class="scene" id="evidence"><p class="eyebrow">Напоминание на сегодня</p><h2>19:00</h2><div id="rem"><div class="sheet"></div></div></section>
+<section class="scene" id="more"><p class="eyebrow">Тройка / Android</p><h2 id="featureTitle">Поиск</h2><h2 id="docTitle">Документы</h2><div class="feature source"><img src="assets/sources.webp"></div><div class="feature doc"><img src="assets/doc.webp"></div></section>
+<section class="scene" id="end"><div class="mark" id="endMark"></div><img id="endBrand" src="../../brand/troika/logos/wordmark-ru-white.svg"><h2>Бета-тест<br>в <b>Telegram</b></h2><p id="endline">Ссылка в шапке профиля</p></section><div id="caption"></div></main>
+<script src="assets/gsap.min.js"></script><script src="timing.js"></script><script src="timeline.js"></script></body></html>

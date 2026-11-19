@@ -1,0 +1,4 @@
+local/
+*.mp4
+__pycache__/
+timing.js
