@@ -20,4 +20,5 @@ if __name__=='__main__':
         portrait.sheet()
     else:
         portrait.section(('visual',range(frames),True))
-        subprocess.run(['ffmpeg','-y','-v','error','-i',str(local/'part-visual.mp4'),'-i',str(local/'mix.wav'),'-map','0:v','-map','1:a','-c:v','copy','-c:a','aac','-ar','48000','-ac','2','-b:a','224k','-t',str(frames/30),'-movflags','+faststart',str(root/'Тройка — Чёрное стекло.mp4')],check=True)
+        subprocess.run(['ffmpeg','-y','-v','error','-i',str(local/'part-visual.mp4'),'-i',str(local/'mix.wav'),'-map','0:v','-map','1:a','-c:v','copy','-c:a','aac','-ar','48000','-ac','2','-b:a','224k','-t',str(frames/30),'-movflags','+faststart',str(root/'Тройка — Открой файлы.mp4')],check=True)
+        subprocess.run(['ffmpeg','-y','-v','error','-i',str(root/'Тройка — Открой файлы.mp4'),'-t',str(134/30),'-c:v','libx264','-crf','17','-preset','fast','-c:a','aac','-b:a','192k','-movflags','+faststart',str(root/'Первые секунды — Открой файлы.mp4')],check=True)

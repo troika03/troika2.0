@@ -52,17 +52,33 @@ for i,t in enumerate(starts):
     if i in (0,4,7):bell(t+.14,1100,.039,.18,.32)
 for i,offset in [(1,1.15),(1,1.81),(2,2.16),(3,3.05),(4,1.45),(5,1.79),(6,1.22),(6,1.89),(6,2.56),(7,1.65)]:
     bell(starts[i]+offset,930,.049,.061,.12)
-for i,(_,lines) in enumerate(story):
-    data = subprocess.check_output(['ffmpeg','-v','error','-i',str(local/f'voices/chapter-{i}.mp3'),'-ar',str(sr),'-ac','1','-f','f32le','-'])
+def read_voice(name):
+    data = subprocess.check_output(['ffmpeg','-v','error','-i',str(local/'voices'/name),'-ar',str(sr),'-ac','1','-f','f32le','-'])
     raw = np.frombuffer(data,'<f4')
     active = np.flatnonzero(abs(raw)>.008)
-    if not len(active): raise ValueError(f'Empty voice {i}')
-    take = raw[max(0,active[0]-int(.03*sr)):min(len(raw),active[-1]+int(.08*sr))].copy()
+    if not len(active): raise ValueError(f'Empty voice {name}')
+    take = raw[max(0,active[0]-int(.012*sr)):min(len(raw),active[-1]+int(.08*sr))].copy()
     take *= min(.90/np.max(np.abs(take)), .175/np.sqrt(np.mean(take[abs(take)>.02]**2)))
-    t=starts[i]+.16
-    pos=round(t*sr)
-    assert t+len(take)/sr < (starts+[duration])[i+1], 'Voice overlaps next chapter'
-    speech[pos:pos+len(take)]=take
+    return take
+
+def speak(t,take,deadline):
+    pos = round(t*sr)
+    if pos + len(take) >= round(deadline*sr):
+        raise ValueError('Voice overlaps next chapter')
+    speech[pos:pos+len(take)] = take
+
+opening = read_voice('opening-user.mp3')
+answer = read_voice('opening-troika.mp3')
+reply = round((.02 + len(opening)/sr + .12)*30)/30
+speak(.02, opening, reply)
+speak(reply, answer, starts[1])
+captions.extend([[0,story[0][1][0]],[reply,story[0][1][1]]])
+bell(.27,735,.045,.08,-.24)
+bell(reply,980,.052,.14,.28)
+for i,(_,lines) in enumerate(story[1:],1):
+    take = read_voice(f'chapter-{i}.mp3')
+    t = starts[i]+.16
+    speak(t,take,(starts+[duration])[i+1])
     windows=take[:len(take)//480*480].reshape(-1,480)
     energies=np.sqrt(np.mean(windows**2,axis=1))
     weights=np.array([len(line.replace(' ','')) for line in lines],float)

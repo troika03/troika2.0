@@ -17,3 +17,19 @@ section{visibility:hidden;text-align:center}section:first-child{visibility:visib
 .opening-logo img{width:355px;height:auto;display:block}
 #root.opening{background:#000}#root.opening .studio,#root.opening .grid,#root.opening header,#root.opening #progress,#root.opening section:first-child h1{visibility:hidden}
 #root.opening .caption{opacity:var(--intro-caption,0)}
+
+.hook-content{position:absolute;inset:0;pointer-events:none}
+.hook h2{position:absolute;left:25px;right:25px;top:175px;margin:0;text-align:center;font-size:57px;line-height:1;letter-spacing:-3.5px;font-weight:660}
+.hook-files{position:absolute;left:33px;right:33px;top:310px;padding:8px;border-radius:27px;transform-origin:50% 64%}
+.hook-viewport{height:352px;border-radius:19px;overflow:hidden;position:relative;background:#1c1c1d}
+.hook-source{position:absolute;left:0;right:0;top:-85px;transform-origin:28% 318px}
+.hook-source img{width:100%;display:block;filter:grayscale(1)}
+.hook-selection{position:absolute;top:268px;height:95px;left:11px;right:11px;border:1.5px solid #d4d4dc;border-radius:12px;background:linear-gradient(118deg,#ffffff17,#ffffff04 72%)}
+.hook-selection span{position:absolute;right:12px;top:32px;display:grid;place-items:center;width:27px;height:27px;background:#e3e3e8;color:#151518;border-radius:50%;font-size:15px;font-weight:750}
+#root.opening{background:radial-gradient(ellipse at 49% 53%,#17171a,#060607 67%,#020203)}
+.hook .opening-logo{z-index:2}
+.hook-content,.hook-result{opacity:0}
+.hook-result{position:absolute;left:9px;right:9px;top:135px;display:flex;align-items:center;gap:14px;text-align:left;padding:23px 16px;border-radius:16px;border:1px solid #aaaab1;background:linear-gradient(135deg,#35353c,#1e1e23 63%,#2d2d33);box-shadow:0 8px 20px #0008}
+.hook-result strong{display:block;font-size:25px;font-weight:590;letter-spacing:-1px}
+.hook-result small{display:block;font-size:14px;color:#c5c5cb;margin-top:5px}
+.doc-fold{display:grid;place-items:center;width:45px;height:54px;border-radius:4px;background:linear-gradient(145deg,#e3e3e8,#b4b4bc);color:#151517;font:700 12px Golos;clip-path:polygon(0 0,73% 0,100% 24%,100% 100%,0 100%)}

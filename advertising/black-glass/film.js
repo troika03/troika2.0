@@ -23,6 +23,21 @@ scenes.forEach((s,i)=>{
   else if(i!==4) enter(object,{scale:i===7?1.15:.94,y:17,opacity:.16},start,.7);
 });
 const S=i=>scenes[i],at=(i,t)=>cuts[i]+t;
+const reply = window.cut.caps[1][0];
+// The logo begins alone. The folder and the command are legible inside the first second.
+timeline.set('.hook-content', {opacity:0}, 0);
+timeline.to('.opening-logo img', {scale:.31,x:-158,y:-403,duration:.48,ease:'power2.inOut'}, .033);
+timeline.to('.hook-content', {opacity:1,duration:.28,ease:'sine.out'}, .17);
+timeline.fromTo('.hook h2', {y:17,opacity:0}, {y:0,opacity:1,duration:.38,ease:'power2.out'}, .19);
+timeline.fromTo('.hook-files', {y:48,rotationX:9,scale:.91,clipPath:'inset(0% 0% 77% 0% round 27px)'},
+  {y:0,rotationX:0,scale:1,clipPath:'inset(0% 0% 0% 0% round 27px)',duration:.57,ease:'power3.out'}, .25);
+timeline.set('.hook-selection',{opacity:0},0);
+timeline.fromTo('.hook-selection', {opacity:0}, {opacity:1,duration:.26,ease:'sine.out'}, reply-.06);
+timeline.fromTo('.hook-selection span',{scale:.55},{scale:1,duration:.32,ease:'back.out(1.3)'},reply);
+timeline.to('.hook-source', {scale:1.05,y:-12,opacity:.23,duration:.50,ease:'power2.inOut'},reply+.12);
+timeline.fromTo('.hook-result', {opacity:0,scale:.93,y:20}, {opacity:1,scale:1,y:0,duration:.46,ease:'power3.out',immediateRender:false},reply+.15);
+timeline.to('.hook-files', {y:-4,scale:1.022,duration:1.8,ease:'sine.inOut'},reply+.30);
+
 enter(each(S(1),'.step'),{y:11,opacity:0},at(1,1.15),.5,.66);
 enter(S(2).querySelector('.command'),{y:14,opacity:0},at(2,.35),.42);
 timeline.fromTo('.fileScreen',{opacity:0,x:42},{opacity:1,x:0,duration:.48,ease:'power2.out',immediateRender:false},at(2,2.16));
