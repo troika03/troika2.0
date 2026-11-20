@@ -90,6 +90,11 @@ for i,(_,lines) in enumerate(story[1:],1):
         cost=energies[candidates]+abs(candidates-guess)*.00065
         boundary=candidates[np.argmin(cost)]/100
         captions.append([round(t+boundary,3),lines[j+1]])
+# Export the two voices on the exact video timeline, including the final hold.
+subprocess.run([
+    'ffmpeg', '-y', '-v', 'error', '-f', 'f32le', '-ar', str(sr), '-ac', '1',
+    '-i', 'pipe:0', '-c:a', 'pcm_s24le', str(root/'Тройка — Озвучка.wav')
+], input=speech.astype('<f4').tobytes(), check=True)
 mix=music*np.interp(times,[0,.08,duration-.55,duration],[.25,1,1,0])[:,None]+speech[:,None]
 wavfile.write(local/'premix.wav',sr,(mix.clip(-.999,.999)*32767).astype(np.int16))
 subprocess.run(['ffmpeg','-y','-v','error','-i',str(local/'premix.wav'),'-af','loudnorm=I=-16:TP=-1.6:LRA=7','-ar',str(sr),str(local/'mix.wav')],check=True)
