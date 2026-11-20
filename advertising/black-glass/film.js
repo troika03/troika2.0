@@ -22,7 +22,8 @@ scenes.forEach((s,i)=>{
   else if(i===2||i===3) enter(object,{scale:.87,rotationY:i===2?-22:18,rotationZ:i===2?-4:3,y:24},start,.95);
   else if(i!==4) enter(object,{scale:i===7?1.15:.94,y:17,opacity:.16},start,.7);
 });
-const S=i=>scenes[i],at=(i,t)=>cuts[i]+t;
+const S=i=>scenes[i];
+const at=(i,t)=>window.cut.events?.[i+','+t] ?? cuts[i]+t;
 const reply = window.cut.caps[1][0];
 // The logo begins alone. The folder and the command are legible inside the first second.
 timeline.set('.hook-content', {opacity:0}, 0);
@@ -133,6 +134,6 @@ function frame(t){
   if(idx===7)drawMedal(scenes[idx].querySelector('canvas'),d);
   if(idx===1||idx===3)waveform(scenes[idx].querySelector('.wave'),d,idx===3);
   if(idx===4)circuit(d);
-  if(idx===5){const f=clamp((d-.35)/2.11);document.querySelector('#value').textContent=String(Math.round(824*(1-f)**3))}
+  if(idx===5){const settle=window.cut.zeroAt ? window.cut.zeroAt-cuts[5] : 2.46;const f=clamp((d-.35)/(settle-.35));document.querySelector('#value').textContent=String(Math.round(824*(1-f)**3))}
 }
 window.__timelines={main:{seek:frame}};frame(0);
