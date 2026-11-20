@@ -20,6 +20,7 @@ class EmptyFiles extends FilesService {
 
 class IdleAgent extends DevelopmentAgentService {
   String? prompt;
+  String execution = 'not_run';
   @override
   Future<GeneratedProject> generate(String input,
       {void Function(String)? onStatus}) async {
@@ -32,10 +33,10 @@ class IdleAgent extends DevelopmentAgentService {
         'review': {
           'method': 'api_model_review',
           'status': 'passed',
-          'execution': 'not_run'
+          'execution': execution
         }
       }),
-      'MODEL_REVIEW.md': 'Модель проверила исходники. Тесты не запускались.',
+      'MODEL_REVIEW.md': 'Отчёт по исходникам проекта.',
     }.entries) {
       final bytes = utf8.encode(entry.value);
       archive.addFile(ArchiveFile(entry.key, bytes.length, bytes));
@@ -107,6 +108,17 @@ void main() {
             'Проект сохранён. Модель проверила исходники. Тесты не запускались.'),
         findsOneWidget);
     expect(find.text('Ревью модели'), findsOneWidget);
+    for (final result in {
+      'passed': 'Тесты прошли в изолированной среде.',
+      'failed': 'Тесты завершились с ошибками.',
+    }.entries) {
+      agent.execution = result.key;
+      await tester.ensureVisible(find.text('Разработать проект'));
+      await tester.tap(find.text('Разработать проект'));
+      await tester.pumpAndSettle();
+      expect(find.text(result.value), findsOneWidget);
+      expect(find.text('Тесты не запускались.'), findsNothing);
+    }
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     await tester.pumpAndSettle();

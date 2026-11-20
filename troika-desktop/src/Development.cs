@@ -20,7 +20,23 @@ namespace Troika.Desktop {
         public bool NoTests;
     }
     public static class Development {
-        private static readonly HashSet<string> Extensions = new HashSet<string>(new[] { ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".json", ".md", ".txt", ".css", ".html", ".yaml", ".yml", ".toml", ".csv", ".dart", ".cs", ".xml" });
+        private static readonly HashSet<string> Extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+            ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".json", ".md", ".txt", ".css",
+            ".html", ".htm", ".yaml", ".yml", ".toml", ".csv", ".dart", ".cs", ".xml", ".java",
+            ".kt", ".cpp", ".hpp", ".c", ".h", ".go", ".rs", ".swift", ".vue", ".svelte"
+        };
+        private static bool HasHiddenComponent(string name) {
+            var parts = name.Split('/');
+            for (int i = 0; i < parts.Length; i++) {
+                if (parts[i].StartsWith(".") && !(i == parts.Length - 1 && parts[i] == ".gitignore")) return true;
+            }
+            return false;
+        }
+        private static bool IsSourceFile(string name) {
+            var filename = Path.GetFileName(name);
+            return filename == ".gitignore" || filename == "go.mod" || filename == "go.sum" ||
+                filename == "Cargo.lock" || Extensions.Contains(Path.GetExtension(name));
+        }
         public static string Extract(string archive, string projectsRoot) {
             var root = Path.GetFullPath(projectsRoot); Directory.CreateDirectory(root);
             if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0) throw new InvalidDataException("Папка проектов не должна быть ссылкой.");
@@ -33,12 +49,12 @@ namespace Troika.Desktop {
                         if (++count > 300) throw new InvalidDataException("В проекте больше 300 файлов.");
                         var name = entry.FullName.Replace('\\', '/');
                         var segments = name.Split('/');
-                        if (name.StartsWith("/") || segments.Any(s => s == "." || s == ".." || s.StartsWith(".") || s.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) || ((entry.ExternalAttributes >> 16) & 0xF000) == 0xA000) throw new InvalidDataException("ZIP содержит небезопасный путь или ссылку.");
+                        if (name.StartsWith("/") || HasHiddenComponent(name) || segments.Any(s => s.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) || ((entry.ExternalAttributes >> 16) & 0xF000) == 0xA000) throw new InvalidDataException("ZIP содержит небезопасный путь или ссылку.");
                         var path = Path.GetFullPath(Path.Combine(destination, name));
                         if (!path.StartsWith(destination + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Путь выходит за папку проекта.");
                         if (name.EndsWith("/")) { Directory.CreateDirectory(path); continue; }
                         LocalStore.SafeName(Path.GetFileName(path));
-                        if (!Extensions.Contains(Path.GetExtension(path).ToLowerInvariant())) throw new InvalidDataException("В ZIP разрешены только исходники и текстовые файлы.");
+                        if (!IsSourceFile(name)) throw new InvalidDataException("В ZIP разрешены только исходники и текстовые файлы.");
                         if (entry.Length > 1024 * 1024 || (total += entry.Length) > 10 * 1024 * 1024) throw new InvalidDataException("Проект слишком большой.");
                         Directory.CreateDirectory(Path.GetDirectoryName(path));
                         using (var input = entry.Open()) using (var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None)) {
@@ -114,7 +130,8 @@ namespace Troika.Desktop {
             var context = new StringBuilder("Исправь проект по отчёту локальной проверки. Верни новую версию проекта ZIP с исходниками, README и тестами. Не утверждай, что тесты запускались на сервере.\nОтчёт:\n" + Redact(report.Output) + "\nИсходники:\n");
             int count = 0;
             foreach (var file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)) {
-                if (!Extensions.Contains(Path.GetExtension(file).ToLowerInvariant()) || Path.GetFileName(file).StartsWith(".") || file.Contains(Path.DirectorySeparatorChar + "__pycache__" + Path.DirectorySeparatorChar) || new FileInfo(file).Length > 100000) continue;
+                var name = file.Substring(folder.Length).TrimStart(Path.DirectorySeparatorChar).Replace('\\', '/');
+                if (!IsSourceFile(name) || HasHiddenComponent(name) || file.Contains(Path.DirectorySeparatorChar + "__pycache__" + Path.DirectorySeparatorChar) || new FileInfo(file).Length > 100000) continue;
                 if (++count > 100) throw new InvalidDataException("Больше 100 исходных файлов. Уменьшите проект.");
                 var source = File.ReadAllText(file);
                 if (Regex.IsMatch(source, @"trk_(live|refresh)_|(?i)(api[_-]?key|secret|password|token)\s*[:=]\s*['""].+?['""]")) throw new InvalidDataException("В исходниках найдены возможные секреты. Удалите их перед отправкой.");
@@ -140,7 +157,7 @@ namespace Troika.Desktop {
             while (pending.Count > 0) { var current = pending.Pop(); if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) throw new InvalidDataException("Папка проекта является ссылкой."); foreach (var directory in Directory.EnumerateDirectories(current)) pending.Push(directory); }
         }
         public static void ValidateSource(string name, string content) {
-            if (string.IsNullOrEmpty(name) || name.Contains('\\') || name.Split('/').Any(p => p.Length == 0 || p == "." || p == ".." || p.StartsWith(".")) || !Extensions.Contains(Path.GetExtension(name).ToLowerInvariant())) throw new InvalidDataException("Недопустимый путь исходника.");
+            if (string.IsNullOrEmpty(name) || name.Contains('\\') || name.Split('/').Any(p => p.Length == 0) || HasHiddenComponent(name) || !IsSourceFile(name)) throw new InvalidDataException("Недопустимый путь исходника.");
             foreach (var part in name.Split('/')) LocalStore.SafeName(part);
             if (Regex.IsMatch(content, @"trk_(live|refresh)_|sk-[A-Za-z0-9_-]{20,}|-----BEGIN .*PRIVATE KEY|(?i)(api[_-]?key|secret|password|token)\s*[:=]\s*['""].+?['""]")) throw new InvalidDataException("В исходниках найдены возможные секреты.");
         }

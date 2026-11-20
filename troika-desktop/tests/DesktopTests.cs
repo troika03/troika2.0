@@ -116,6 +116,20 @@ namespace Troika.Desktop {
             await Test("stop targets only the active run", async () => {
                 var handler = new FakeHandler { Route = request => FakeHandler.Value("{}", 200) }; using (var api = Client(handler)) { api.ActiveRun = "run_test"; await api.Stop(CancellationToken.None); Assert(api.ActiveRun == "" && handler.Requests.Single() == "POST /v1/runs/run_test/stop", "wrong stop scope"); }
             });
+            await Test("published Go and Rust sources can be extracted and reopened for review", () => {
+                var root = Temporary();
+                try {
+                    var names = new[] { "main.go", "tests/test_main.go", "go.mod", "src/lib.rs", "Cargo.lock", ".gitignore" };
+                    var archive = Path.Combine(root, "project.zip");
+                    using (var zip = ZipFile.Open(archive, ZipArchiveMode.Create)) {
+                        foreach (var name in names) using (var writer = new StreamWriter(zip.CreateEntry(name).Open())) writer.Write("sample");
+                    }
+                    var folder = Development.Extract(archive, Path.Combine(root, "projects"));
+                    var sources = Development.Sources(folder);
+                    foreach (var name in names) Assert(sources[name] == "sample", "source lost: " + name);
+                } finally { Directory.Delete(root, true); }
+                return Task.FromResult(0);
+            });
             await Test("ZIP traversal and hidden secrets are rejected", () => {
                 var root = Temporary(); try { foreach (var name in new[] { "../outside.py", ".env", "nested/../../outside.py", "nested/.git/config.txt", "run.exe" }) { bool blocked = false; try { Development.Extract(Zip(root, name, "test"), Path.Combine(root, "projects")); } catch (InvalidDataException) { blocked = true; } Assert(blocked, "unsafe ZIP accepted"); } Assert(!File.Exists(Path.Combine(root, "outside.py")), "ZIP escaped folder"); } finally { Directory.Delete(root, true); } return Task.FromResult(0);
             });

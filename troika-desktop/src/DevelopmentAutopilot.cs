@@ -85,6 +85,8 @@ namespace Troika.Desktop {
                             var archive = await store.Receive(api, artifact, token);
                             if (identity != api.Account.Email) return;
                             Results[id] = Json.Text(artifact, "kind") == "zip" ? Development.Extract(archive, Path.Combine(store.FilesFolder(owner), "projects")) : archive;
+                        } catch (InvalidDataException error) {
+                            project["delivery_error"] = "Не удалось открыть результат: " + error.Message;
                         } catch { project["delivery_error"] = "Результат ещё не сохранён. Проверьте сеть и повторите скачивание."; }
                     }
                     var available = Json.Rows(project, "reports").ToList();

@@ -134,5 +134,8 @@ _logs/
 # Temporary lock files created while the canonical Word plan is open.
 ~$*.docx
 
-# Temporary files for the 2026-10-05 repository audit only.
-/work/docs-audit-2026-10-05/
+# Local working copies, review outputs and compiler products at the repo root.
+/work/
+/*.log
+/*.obj
+/reminder-test.exe

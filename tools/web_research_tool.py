@@ -94,7 +94,7 @@ def _parse_extract(raw: str) -> List[Dict[str, str]]:
         return []
     out: List[Dict[str, str]] = []
     for r in results:
-        if not isinstance(r, dict):
+        if not isinstance(r, dict) or r.get("error"):
             continue
         content = (r.get("content") or "").strip()
         if not content:
@@ -178,7 +178,7 @@ async def _synthesize(question: str, pages: List[Dict[str, str]],
 def _fallback_answer(snippets: List[Dict[str, str]]) -> str:
     """Без LLM — склеиваем 2-3 сниппета в подобие ответа."""
     parts = []
-    for s in snippets[:3]:
+    for s in snippets:
         d = s["description"] or s["title"]
         if d:
             parts.append(d)
@@ -241,12 +241,13 @@ async def _handle(args: Dict[str, Any], **_kw) -> str:
 
     # 3. Синтез устного ответа
     answer = await _synthesize(question, pages, snippets)
-    used_llm = answer is not None
-    if not answer:
-        answer = _fallback_answer(snippets)
-
-    # Источники: домены реально прочитанных страниц, иначе топ выдачи
-    src_pool = pages if pages else snippets[:_MAX_EXTRACT]
+    used_llm = bool(answer)
+    if used_llm:
+        src_pool = pages or snippets[:5]
+    else:
+        src_pool = snippets[:3]
+        answer = _fallback_answer(src_pool)
+    source_status = "read" if used_llm and pages else "found"
     sources = []
     seen = set()
     for r in src_pool:
@@ -263,7 +264,7 @@ async def _handle(args: Dict[str, Any], **_kw) -> str:
             "sources": sources,
             "source_details": [
                 {"url": r["url"], "title": r.get("title", ""),
-                 "status": "read" if pages else "found"}
+                 "status": source_status}
                 for r in src_pool
             ],
             "pages_read": len(pages),

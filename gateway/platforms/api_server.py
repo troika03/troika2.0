@@ -1875,7 +1875,7 @@ class APIServerAdapter(CapabilityAPI, BasePlatformAdapter):
         if self._session_db is None:
             try:
                 from hermes_state import SessionDB
-                self._session_db = SessionDB()
+                self._session_db = SessionDB(get_hermes_home() / "state.db")
             except Exception as e:
                 logger.debug("SessionDB unavailable for API server: %s", e)
         return self._session_db

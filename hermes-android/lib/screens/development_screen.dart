@@ -51,6 +51,7 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
   String _status = '';
   String _mode = 'model_review';
   String? _modelReport;
+  String _executionSummary = '';
   bool _busy = false;
   bool _closing = false;
   int _operation = 0;
@@ -137,6 +138,28 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  void _readModelReview(Map<String, List<int>> files) {
+    final manifest = json.decode(utf8.decode(files['troika-project.json']!));
+    final review = manifest['review'];
+    final report = files['MODEL_REVIEW.md'];
+    _modelReport = report == null ? null : utf8.decode(report);
+    final execution = review is Map ? review['execution'] : null;
+    _executionSummary = switch (execution ?? manifest['execution']) {
+      'passed' => 'Тесты прошли в изолированной среде.',
+      'failed' => 'Тесты завершились с ошибками.',
+      'not_run' => 'Тесты не запускались.',
+      _ => 'Результат запуска тестов неизвестен.',
+    };
+    if (review is! Map || review['method'] != 'api_model_review') {
+      _status = 'Проект сохранён. Ревью модели не подтверждено.';
+      return;
+    }
+    final conclusion = review['status'] == 'passed'
+        ? 'Модель проверила исходники.'
+        : 'Смотри выводы модели в отчёте.';
+    _status = 'Проект сохранён. $conclusion $_executionSummary';
   }
 
   void _showVersion(DevelopmentOutcome version) {
@@ -289,23 +312,8 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
       if (!mounted || operation != _operation) return;
       _verifyOwner();
       final decoded = DevelopmentService.decodeProject(project.bytes);
-      final manifest =
-          json.decode(utf8.decode(decoded['troika-project.json']!));
-      final review = manifest['review'];
-      final reviewed = review is Map &&
-          review['method'] == 'api_model_review' &&
-          review['execution'] == 'not_run';
       _showVersion(DevelopmentOutcome(project, null, null, 0));
-      setState(() {
-        _modelReport = !reviewed || decoded['MODEL_REVIEW.md'] == null
-            ? null
-            : utf8.decode(decoded['MODEL_REVIEW.md']!);
-        _status = reviewed
-            ? review['status'] == 'passed'
-                ? 'Проект сохранён. Модель проверила исходники. Тесты не запускались.'
-                : 'Проект сохранён. Ревью модели нашло ошибки; смотри отчёт.'
-            : 'Проект сохранён. Ревью модели не подтверждено.';
-      });
+      setState(() => _readModelReview(decoded));
       return;
     }
     _modelReport = null;
@@ -492,9 +500,7 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
                               final decoded =
                                   DevelopmentService.decodeProject(bytes);
                               _selected = file;
-                              _modelReport = decoded['MODEL_REVIEW.md'] == null
-                                  ? null
-                                  : utf8.decode(decoded['MODEL_REVIEW.md']!);
+                              _readModelReview(decoded);
                               if (!_projects.any((p) => p.id == file.id)) {
                                 _projects.insert(0, file);
                               }
@@ -518,7 +524,7 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
                   if (_modelReport != null)
                     ExpansionTile(
                         title: const Text('Ревью модели'),
-                        subtitle: const Text('Код и тесты не запускались'),
+                        subtitle: Text(_executionSummary),
                         children: [
                           Padding(
                               padding: const EdgeInsets.all(16),

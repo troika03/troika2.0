@@ -122,7 +122,10 @@ def test_no_llm_uses_snippet_fallback(monkeypatch):
     ]))
 
     async def fake_extract(urls, fmt):
-        return _extract_json([])  # пусто
+        return _extract_json([
+            {"url": urls[0], "content": "Server error", "error": "HTTP 503"},
+            {"url": urls[1], "content": "Full page from the second source."},
+        ])
     monkeypatch.setattr(wr, "web_extract_tool", fake_extract)
 
     async def no_synth(question, pages, snippets):
@@ -133,6 +136,9 @@ def test_no_llm_uses_snippet_fallback(monkeypatch):
     assert res["ok"] is True
     assert res["synthesized"] is False
     assert "факт по теме" in res["say_to_user"]
+    assert res["pages_read"] == 1
+    assert res["sources"] == ["a.com", "b.com"]
+    assert [source["status"] for source in res["source_details"]] == ["found", "found"]
 
 
 if __name__ == "__main__":

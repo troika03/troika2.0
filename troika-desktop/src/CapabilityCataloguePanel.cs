@@ -142,7 +142,7 @@ namespace Troika.Desktop {
                 action.HorizontalAlignment = HorizontalAlignment.Left; action.Margin = new Thickness(48, 10, 0, 0); action.IsEnabled = !catalogueSaving;
                 content.Children.Add(action);
             }
-            return new Border { Background = CardSurface(), BorderBrush = glassLine, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(18), Padding = new Thickness(16), Margin = new Thickness(0, 0, 0, 10), Child = content };
+            return new Border { Background = CardSurface(), BorderBrush = this.line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(18), Padding = new Thickness(16), Margin = new Thickness(0, 0, 0, 10), Child = content };
         }
 
         // Same icon keys as the server and Android client (24×24 outline paths).

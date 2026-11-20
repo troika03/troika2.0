@@ -32,3 +32,12 @@ runtime/
 
 # Local diagnostics, isolated review checkouts, and temporary build caches.
 _logs/
+work/
+tmp/
+reports/
+*.log
+*.obj
+reminder-test.exe
+hermes-android/build/
+hermes-android/.dart_tool/
+hermes-android/android/.gradle/

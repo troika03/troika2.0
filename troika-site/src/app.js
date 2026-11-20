@@ -58,9 +58,21 @@
       for (const platform of ['android', 'windows']) {
         const box = document.querySelector(`[data-release="${platform}"]`), release = releases[platform];
         if (!release) { box.innerHTML = '<p class="notice">Файл ещё не опубликован. Попробуйте позже.</p>'; continue; }
-        if (!/^\/downloads\/(android|windows)\/[a-f0-9]{64}\/Troika-[A-Za-z0-9.+_-]+\.(apk|zip)$/.test(release.url)) throw new Error('Не удалось проверить ссылку на файл.');
+        const link = /^\/downloads\/(android|windows)\/[a-f0-9]{64}\/Troika-[A-Za-z0-9.+_-]+\.(apk|zip)$/.exec(release.url);
+        if (!link || link[1] !== platform || link[2] !== (platform === 'android' ? 'apk' : 'zip')) {
+          box.textContent = 'Не удалось проверить ссылку на файл.';
+          continue;
+        }
         box.innerHTML = `<p>Версия ${e(release.version)}. ${number((release.size / 1024 / 1024).toFixed(1))} МБ.</p><a class="button" href="${e(release.url)}" download>Скачать ${platform === 'android' ? 'APK' : 'для Windows'}</a><code class="checksum">SHA-256: ${e(release.sha256)}</code><button class="button secondary small" type="button" data-copy-hash>Скопировать SHA-256</button><p class="fine-print">Опубликовано: ${e(date(release.published_at))}</p>`;
-        box.querySelector('[data-copy-hash]').addEventListener('click', async ev => { try { await navigator.clipboard.writeText(release.sha256); ev.currentTarget.textContent = 'Скопировано'; } catch { ev.currentTarget.textContent = 'Выделите SHA-256 выше'; } });
+        const copyButton = box.querySelector('[data-copy-hash]');
+        copyButton.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(release.sha256);
+            copyButton.textContent = 'Скопировано';
+          } catch {
+            copyButton.textContent = 'Выделите SHA-256 выше';
+          }
+        });
       }
     } catch (error) { document.querySelectorAll('[data-release]').forEach(box => { box.textContent = error.message; }); }
   }

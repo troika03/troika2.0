@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN touch README.md \
-    && uv sync --frozen --no-install-project --extra messaging --extra edge-tts --extra product-voice
+    && uv sync --frozen --no-install-project --extra messaging --extra edge-tts --extra product-voice --extra mcp
 
 COPY . .
 RUN uv pip install --no-cache-dir --no-deps -e .
