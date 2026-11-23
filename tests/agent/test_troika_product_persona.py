@@ -114,6 +114,8 @@ def test_backend_metadata_is_operator_only(monkeypatch, product_mode, provider):
     (True, "[TROIKA_PERSONA_VERSION:10]"),
     (False, "[TROIKA_PERSONA_VERSION:11]"),
     (True, "[TROIKA_PERSONA_VERSION:12]"),
+    (False, "[TROIKA_PERSONA_VERSION:13]"),
+    (True, "[TROIKA_PERSONA_VERSION:14]"),
 ])
 def test_previous_persona_sessions_refresh_once_without_rewriting_history(monkeypatch, compact, previous_marker):
     """Both deployed persona modes migrate once and preserve user conversation bytes."""
