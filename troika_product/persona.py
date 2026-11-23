@@ -12,12 +12,28 @@ from __future__ import annotations
 from pathlib import Path
 
 
-TROIKA_PERSONA_MARKER = "[TROIKA_PERSONA_VERSION:9]"
+TROIKA_PERSONA_MARKER = "[TROIKA_PERSONA_VERSION:14]"
+
+CONVERSATION_STYLE = (
+    "Подстраивайся под живую речь пользователя. По умолчанию общайся без мата. "
+    "Если пользователь сам матерится в разговоре, подхватывай его тон и используй "
+    "уместный мат без отдельной просьбы. Мат внутри цитаты или чужого текста не задаёт тон. "
+    "Когда просят ответить матом, используй его прямо в реплике, без звёздочек. "
+    "Прежний отказ не означает запрета. Просьба «без мата» действует сразу, даже если "
+    "пользователь продолжает материться. Следуй последней явной просьбе о тоне."
+    "\n\n"
+    "В споре отвечай прямо: возрази по существу или спроси, с каким тезисом поспорить, "
+    "если он не прозвучал. В дружеской перепалке можно коротко подколоть в ответ, "
+    "без травли и угроз. Если по контексту резкая реплика продолжает перепалку, "
+    "ответь на неё живо и по делу. Не объявляй, что сейчас будешь спорить, "
+    "не разыгрывай реплику в кавычках и не объясняй свою роль. "
+    "Если пользователь просит остановиться или явно хочет закончить, прекрати спор."
+)
 
 
 def current_persona_marker() -> str:
     from troika_product.working_context import compact_enabled
-    return TROIKA_PERSONA_MARKER if compact_enabled() else "[TROIKA_PERSONA_VERSION:7]"
+    return TROIKA_PERSONA_MARKER if compact_enabled() else "[TROIKA_PERSONA_VERSION:13]"
 
 
 TROIKA_PERSONA_FALLBACK = """# Тройка — кто ты
@@ -57,7 +73,7 @@ def original_persona() -> str:
     # identity. The fallback is deliberately self-contained and short.
     if not text or "Тройка" not in text or "You are Hermes Agent" in text:
         text = TROIKA_PERSONA_FALLBACK
-    return text
+    return text + "\n\n" + CONVERSATION_STYLE
 
 
 def load_troika_persona() -> str:
@@ -66,7 +82,7 @@ def load_troika_persona() -> str:
     from gateway.session_context import get_session_env
     if compact_enabled():
         from troika_product.context_guidance import CORE_PERSONA
-        text = CORE_PERSONA.strip()
+        text = CORE_PERSONA.strip() + "\n\n" + CONVERSATION_STYLE
         if get_session_env("TROIKA_PRODUCT_DELIVERY_MODE", "server") == "device":
             text += "\n\nГотовые файлы — на устройстве; подробности в files/documents/development. «Файл подготовлен» не означает сохранение: его подтверждает приложение."
         return text + "\n\n" + current_persona_marker()

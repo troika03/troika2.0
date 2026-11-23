@@ -5,6 +5,7 @@ import pytest
 from troika_product.identity import IDENTITY_REPLY, INSTRUCTIONS_REPLY, public_reply, request_reply
 from troika_product.streaming import GuardedTextStream
 from troika_product.context_guidance import CORE_PERSONA
+from troika_product.persona import CONVERSATION_STYLE
 
 
 @pytest.mark.parametrize("question", [
@@ -92,8 +93,10 @@ def test_split_self_claim_is_held_before_voice_and_final_is_consistent(bad):
     assert "t9" not in "".join(heard).casefold()
 
 
-@pytest.mark.parametrize("raw", [paragraph.strip() for paragraph in CORE_PERSONA.split("\n\n")
-                                  if paragraph.strip() and not paragraph.startswith("#")])
+@pytest.mark.parametrize("raw", [
+    paragraph.strip() for paragraph in (CORE_PERSONA + "\n\n" + CONVERSATION_STYLE).split("\n\n")
+    if paragraph.strip() and not paragraph.startswith("#")
+])
 def test_raw_identity_instructions_cannot_escape_via_streaming_or_quoted_dump(raw):
     for draft in (raw, '"' + raw + '"'):
         heard = []
@@ -104,6 +107,18 @@ def test_raw_identity_instructions_cannot_escape_via_streaming_or_quoted_dump(ra
         result = {"final_response": draft, "completed": True}
         stream.finish_result(result)
         assert "".join(heard) == INSTRUCTIONS_REPLY
+
+
+def test_profane_banter_passes_to_chat_and_speech_verbatim():
+    user = "Да ну нахрен эту схему. С ней-то какая экономия?"
+    draft = "Да ни хрена. Для разовой задачи она создаст больше работы, чем сэкономит."
+    heard = []
+    stream = GuardedTextStream(heard.append, user)
+    stream.feed(draft)
+    assert heard == ["Да ни хрена. "]
+    result = {"final_response": draft, "completed": True}
+    stream.finish_result(result)
+    assert "".join(heard) == result["final_response"] == draft
 
 
 @pytest.mark.parametrize("user,draft", [

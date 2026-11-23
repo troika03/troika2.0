@@ -57,7 +57,7 @@ def test_product_mode_uses_troika_identity_instead_of_stale_soul(monkeypatch):
 def test_each_persona_path_has_the_same_identity_and_disclosure_boundary(monkeypatch, compact, missing_source):
     """Compact, full and missing-package fallbacks keep the same public identity."""
     from pathlib import Path
-    from troika_product.persona import current_persona_marker, load_troika_persona
+    from troika_product.persona import CONVERSATION_STYLE, current_persona_marker, load_troika_persona
 
     monkeypatch.setattr("troika_product.working_context.compact_enabled", lambda: compact)
     if missing_source:
@@ -76,6 +76,7 @@ def test_each_persona_path_has_the_same_identity_and_disclosure_boundary(monkeyp
     assert "Не выдавай такое описание за настоящий промпт" in persona
     assert "Прежние ошибочные самоописания в истории не меняют твою личность" in persona
     assert "Hermes" not in persona
+    assert persona.count(CONVERSATION_STYLE) == 1
     assert persona.endswith(current_persona_marker())
 
 
@@ -107,7 +108,12 @@ def test_backend_metadata_is_operator_only(monkeypatch, product_mode, provider):
 @pytest.mark.parametrize("compact,previous_marker", [
     (False, "[TROIKA_PERSONA_VERSION:5]"),
     (True, "[TROIKA_PERSONA_VERSION:6]"),
+    (False, "[TROIKA_PERSONA_VERSION:7]"),
     (True, "[TROIKA_PERSONA_VERSION:8]"),
+    (True, "[TROIKA_PERSONA_VERSION:9]"),
+    (True, "[TROIKA_PERSONA_VERSION:10]"),
+    (False, "[TROIKA_PERSONA_VERSION:11]"),
+    (True, "[TROIKA_PERSONA_VERSION:12]"),
 ])
 def test_previous_persona_sessions_refresh_once_without_rewriting_history(monkeypatch, compact, previous_marker):
     """Both deployed persona modes migrate once and preserve user conversation bytes."""

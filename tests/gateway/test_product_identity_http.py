@@ -192,6 +192,40 @@ async def test_product_http_serves_and_persists_only_checked_identity(product_ht
 
 
 @pytest.mark.asyncio
+async def test_run_keeps_the_conversation_for_a_short_banter_reply(product_http):
+    state = product_http
+    app = web.Application()
+    app.router.add_post("/v1/runs", state.adapter._handle_runs)
+    app.router.add_get("/v1/runs/{run_id}/events", state.adapter._handle_run_events)
+    headers = {"Authorization": "Bearer " + state.token}
+    first = "Поспорь со мной. Какого хрена ездить на работу на велосипеде?"
+    second = "Охренеть довод. А если дождь?"
+    first_reply = "А на хрена стоять в пробке, если на велике быстрее?"
+    history = []
+
+    async with TestClient(TestServer(app)) as client:
+        for utterance, reply in (
+            (first, first_reply),
+            (second, "В ливень я бы тоже не выпендривалась. Села бы в автобус."),
+        ):
+            state.draft = reply
+            response = await client.post("/v1/runs", headers=headers, json={
+                "input": utterance, "session_id": "banter-session", "conversation_history": history,
+            })
+            assert response.status == 202, await response.text()
+            run_id = (await response.json())["run_id"]
+            stream = await client.get("/v1/runs/" + run_id + "/events", headers=headers)
+            events = sse_payloads(await asyncio.wait_for(stream.text(), 15))
+            done = next(event for event in events if event.get("event") == "run.completed")
+            assert done["output"] == reply
+            history.extend(({"role": "user", "content": utterance}, {"role": "assistant", "content": reply}))
+
+    messages = state.agents[-1].client.chat.completions.create.call_args.kwargs["messages"]
+    turns = [(message["role"], message["content"]) for message in messages if message["role"] != "system"]
+    assert turns == [("user", first), ("assistant", first_reply), ("user", second)]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("stream", [False, True])
 async def test_responses_remains_disabled_for_product_without_calling_a_provider(product_http, stream):
     state = product_http
