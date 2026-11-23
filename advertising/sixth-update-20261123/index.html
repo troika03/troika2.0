@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<title>Тройка — Шестое обновление</title>
+<style>
+@font-face {
+  font-family: Golos;
+  src: url("../../brand/troika/fonts/GolosText-Variable.ttf") format("truetype");
+  font-weight: 400 900;
+}
+* { box-sizing: border-box; }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #080b0d; }
+#root {
+  width: 540px; height: 960px; position: absolute; inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%) scale(var(--fit, 1)); isolation: isolate; overflow: hidden;
+  color: #f4f5f7; font-family: Golos, sans-serif; background: #080b0d;
+}
+#spill {
+  position: absolute; inset: -48px; opacity: .82;
+  background: radial-gradient(ellipse 355px 430px at 46% 50%, #183c33, #101b19 58%, #080b0d 94%);
+}
+#reflection {
+  position: absolute; pointer-events: none; left: 54px; right: 54px; bottom: 28px; height: 170px;
+  background: radial-gradient(ellipse at 50% 54%, #3ddc9728, transparent 71%);
+  filter: blur(15px);
+}
+#stage { position: absolute; inset: 0; perspective: 1300px; perspective-origin: 50% 37%; }
+#camera, #float, #shake { position: absolute; inset: 0; transform-style: preserve-3d; }
+#phone {
+  position: absolute; left: 89px; top: 83px; width: 362px; height: 783px;
+  transform-style: preserve-3d;
+}
+#back {
+  position: absolute; inset: -6px; border-radius: 42px; transform: translateZ(-7px);
+  background: #1c2322; box-shadow: 16px 26px 56px #020504a6, inset 0 0 1px 1px #717c77;
+}
+#frame {
+  position: absolute; inset: -5px; border-radius: 41px; padding: 2px;
+  background: linear-gradient(123deg,#778780 0%,#303a36 5%,#192420 27%,#4b5c54 55%,#111814 74%,#4e5b55 100%);
+  box-shadow: inset 0 0 0 1px #b7d3c338, 0 2px 9px #020604b0;
+}
+.key {
+  position: absolute; right: -7px; width: 4px; border-radius: 4px;
+  background: #65736a; box-shadow: inset -1px 0 1px #0e1510;
+  transform: translateZ(-2px);
+}
+.key.volume { top: 167px; height: 57px; }
+.key.power { top: 244px; height: 34px; }
+#screen {
+  position: absolute; inset: 0; border-radius: 36px; overflow: hidden;
+  background: #0b0c10; border: 3px solid #080b0b;
+  box-shadow: inset 0 0 0 1px #25332e; isolation: isolate; transform: translateZ(2px);
+}
+#glow {
+  position: absolute; inset: 0; opacity: .8;
+  background: radial-gradient(ellipse 85% 42% at 47% 32%, #215d46 0%, #132e26 40%, transparent 100%),
+    radial-gradient(ellipse 85% 40% at 50% 91%, #133d2d, transparent 94%);
+}
+#statusbar {
+  position: absolute; top: 9px; left: 24px; right: 24px; height: 19px;
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 11px; font-weight: 530;
+}
+#statusbar svg { width: 40px; height: 14px; }
+#lens {
+  width: 9px; height: 9px; border-radius: 50%; background: #050707; position: absolute;
+  left: calc(50% - 4.5px); top: 14px; box-shadow: inset 0 0 0 1px #1a222b;
+}
+#toolbar {
+  position: absolute; top: 92px; left: 20px; right: 20px; height: 29px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+#toolbar svg { width: 20px; height: 20px; }
+#brand { display: flex; align-items: center; gap: 6px; }
+#brand .sign { width: 19px; height: 19px; }
+#brand .name { width: 61px; height: auto; }
+#island {
+  position: absolute; top: 33px; left: 50%; width: 166px; height: 44px;
+  transform: translateX(-50%); border-radius: 22px; border: 1px solid #ffffff20;
+  background: #050506f2; box-shadow: 0 5px 12px #0009; z-index: 7;
+  display: flex; align-items: center; justify-content: flex-start; gap: 8px;
+  padding: 0 13px 0 10px; white-space: nowrap;
+  transform-origin: 50% 50%;
+}
+#island svg { width: 44px; height: 30px; overflow: visible; flex: 0 0 44px; }
+#island path { fill: none; stroke-linecap: round; }
+#island .wave-main { stroke: #8cf0c4; stroke-width: 1.48; filter: drop-shadow(0 0 3px #72e6b384); }
+#island .wave-mid { stroke: #3ddc97; stroke-width: .94; opacity: .65; }
+#island .wave-high { stroke: #8cf0c4; stroke-width: .67; opacity: .42; }
+#island-status {
+  position: absolute; left: 63px; right: 14px; overflow: hidden; text-overflow: ellipsis;
+  color: #f4f5f7; font-size: 14px; font-weight: 520; line-height: 1.2;
+}
+#voice { position: absolute; top: 159px; left: 0; right: 0; text-align: center; }
+#orb { width: 217px; height: 217px; margin: 0 auto; position: relative; }
+#arcs { width: 100%; height: 100%; fill: #3ddc97; overflow: visible; }
+#arc-out, #arc-in { transform-origin: 73% 73%; }
+#mic {
+  position: absolute; top: 56%; left: 56%; width: 35%; height: 35%; border-radius: 50%;
+  display: grid; place-items: center; background: #111919; border: 1px solid #ffffff2b;
+}
+#mic svg { width: 63%; height: 58%; }
+#voice-label { margin: 15px 0 0; font-size: 22px; font-weight: 560; letter-spacing: -.4px; }
+#dialogue { position: absolute; top: 451px; left: 22px; right: 22px; height: 131px; }
+.line {
+  position: absolute; inset: 0; margin: 0; text-align: center; white-space: pre-line;
+  font-size: 25px; line-height: 1.16; font-weight: 650; letter-spacing: -.7px;
+  color: #f4f5f7; opacity: 0; text-wrap: balance;
+  text-shadow: 0 5px 19px #020905a8;
+}
+.line.troika { color: #c7fae1; }
+.line.punch { font-size: 32px; letter-spacing: -.9px; }
+#quick {
+  position: absolute; left: 18px; right: 18px; bottom: 138px;
+  display: flex; justify-content: center; gap: 7px; align-items: center;
+}
+#quick span {
+  display: flex; gap: 6px; align-items: center; border-radius: 22px; padding: 10px 13px;
+  border: 1px solid #354541; font-size: 13px; font-weight: 580; background: #111b1955;
+}
+#quick svg { width: 14px; height: 14px; }
+#composer {
+  position: absolute; left: 14px; right: 14px; bottom: 72px; height: 53px;
+  border-radius: 28px; padding: 0 6px 0 16px; background: #ffffff0d; border: 1px solid #ffffff16;
+  display: flex; align-items: center; justify-content: space-between; color: #a6adb8; font-size: 13px;
+}
+#send { border-radius: 50%; display: grid; place-items: center; background: #ffffff1b; width: 36px; height: 36px; }
+#send svg { width: 18px; height: 18px; }
+#nav {
+  position: absolute; display: flex; left: 14px; right: 14px; bottom: 17px; height: 48px;
+  align-items: center; justify-content: space-around; border-radius: 23px;
+  border: 1px solid #ffffff16; background: #ffffff0b;
+}
+#nav span {
+  display: grid; justify-items: center; align-items: center; gap: 3px; min-width: 44px;
+  font-size: 9px; color: #a6adb8; font-weight: 530;
+}
+#nav .selected { color: #f4f5f7; }
+#nav svg { width: 17px; height: 17px; }
+#nav .selected svg { color: #3ddc97; }
+#gesture { position: absolute; bottom: 5px; left: calc(50% - 45px); width: 90px; height: 3px; border-radius: 4px; background: #edf4f1a1; }
+#glass {
+  position: absolute; inset: 0; pointer-events: none; border-radius: 36px;
+  box-shadow: inset 1px 1px 1px #d9fff527; overflow: hidden;
+}
+#glass::after {
+  content: ""; position: absolute; inset: 0; opacity: .35;
+  background: linear-gradient(118deg, transparent 8%, #e4fff908 22%, transparent 31%, transparent 76%, #d4fff60e 100%);
+}
+#title {
+  position: absolute; z-index: 8; left: 46px; right: 46px; top: 32px;
+  margin: 0; text-align: center; color: #eef7f2; font-size: 31px;
+  letter-spacing: -1.25px; font-weight: 680; text-shadow: 0 3px 20px #0b160c;
+}
+</style>
+<div id="root" data-duration="21.7">
+  <div id="spill"></div><div id="reflection"></div>
+  <h1 id="title">Шестое обновление</h1>
+  <div id="stage"><div id="camera"><div id="float"><div id="shake"><div id="phone">
+    <div id="back"></div><div class="key volume"></div><div class="key power"></div><div id="frame"></div>
+    <div id="screen">
+      <div id="glow"></div>
+      <div id="statusbar"><span>21:47</span><svg viewBox="0 0 48 15" fill="none">
+        <path d="M1 12h2V9H1zm4 0h2V6H5zm4 0h2V3H9z" fill="currentColor"/>
+        <path d="M16 6q5-5 10 0m-8 2q3-3 6 0m-4 2q1-1 2 0" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        <rect x="31" y="4.5" width="13" height="7" rx="2" stroke="currentColor"/><path d="M46 7v2" stroke="currentColor"/>
+        <rect x="33" y="6" width="8" height="4" rx="1" fill="currentColor"/>
+      </svg></div><div id="lens"></div>
+      <div id="island">
+        <svg viewBox="0 0 44 30"><path class="wave-mid"></path><path class="wave-high"></path><path class="wave-main"></path></svg>
+        <span id="island-status">Слушаю…</span>
+      </div>
+      <div id="toolbar">
+        <div id="brand">
+          <img class="sign" src="../../brand/troika/logos/mark-amber.svg" alt="">
+          <img class="name" src="../../brand/troika/logos/wordmark-ru-white.svg" alt="Тройка">
+        </div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
+          <path d="M4 4h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H8l-5 4V6a2 2 0 0 1 1-2z"/>
+        </svg>
+      </div>
+      <section id="voice">
+        <div id="orb">
+          <svg id="arcs" viewBox="0 0 112 112">
+            <path id="arc-out" d="M12 92V60C12 33.49 33.49 12 60 12H92A8 8 0 0 1 92 28H60C42.327 28 28 42.327 28 60V92A8 8 0 0 1 12 92Z"/>
+            <path id="arc-in" d="M40 92V68C40 52.536 52.536 40 68 40H92A8 8 0 0 1 92 56H68C61.373 56 56 61.373 56 68V92A8 8 0 0 1 40 92Z"/>
+          </svg>
+          <div id="mic"><svg viewBox="0 0 60 50" fill="none" stroke-linecap="round" stroke-width="3">
+            <g id="microphone" stroke="#f4f5f7">
+              <rect x="25" y="9" width="10" height="19" rx="5"/><path d="M20 22v2a10 10 0 0 0 20 0v-2m-10 12v7"/>
+            </g>
+            <g id="speaking-bars" stroke="#8cf0c4" stroke-width="3.1" opacity="0">
+              <path d="M15 22v6m8-10v14m7-18v22m7-18v14m8-10v6"/>
+            </g>
+          </svg></div>
+        </div>
+        <p id="voice-label">Слушаю</p>
+      </section>
+      <div id="dialogue"></div>
+      <div id="quick">
+        <span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 5h6l2 2h8v9H2z" stroke-linejoin="round"/></svg>Файлы</span>
+        <span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="m7 6-4 4 4 4m6-8 4 4-4 4"/></svg>Разработка</span>
+      </div>
+      <div id="composer"><span>Напиши сообщение</span><div id="send"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 16V4m-5 5 5-5 5 5"/></svg></div></div>
+      <div id="nav">
+        <span class="selected"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m2 9 8-7 8 7m-13 0v8h10V9m-7 8v-5h4v5"/></svg>Главная</span>
+        <span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 8a7 7 0 1 1 1 7M2 5v4l4-.5m4-3v5l3 2"/></svg>Разговоры</span>
+        <span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="m2 6 2 2 3-4m4 2h7M2 14l2 2 3-4m4 2h7"/></svg>Дела</span>
+        <span><svg viewBox="0 0 20 20" fill="currentColor"><circle cx="4" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/><circle cx="16" cy="10" r="1.5"/></svg>Ещё</span>
+      </div>
+      <div id="gesture"></div><div id="glass"></div>
+    </div>
+  </div></div></div></div></div>
+</div>
+<script src="local/gsap.min.js"></script>
+<script src="cues.js"></script>
+<script>
+const id = (name) => document.getElementById(name);
+const root = id("root");
+const take = takes[new URLSearchParams(location.search).get("take")] || takes[1];
+const { starts, silence, duration } = take;
+root.dataset.duration = duration;
+function fit() {
+  root.style.setProperty("--fit", Math.min(innerWidth / 540, innerHeight / 960));
+}
+fit();
+addEventListener("resize", fit);
+const tl = gsap.timeline({ paused: true });
+window.__timelines = { main: tl };
+const camera = id("camera");
+const phone = id("phone");
+const drift = id("float");
+const shake = id("shake");
+const island = id("island");
+const energy = { value: .36 };
+const timing = { cursor: 0 };
+tl.to(timing, { cursor: duration, duration, ease: "none" }, 0);
+gsap.set(camera, { x: -9, y: 20, scale: .94, rotationZ: -6 });
+gsap.set(phone, { rotationX: 4, rotationY: -14 });
+gsap.set([id("arc-in"), id("arc-out")], { transformOrigin: "73% 73%" });
+
+function shot(start, seconds, x, y, scale, roll, yaw, pitch, ease = "power2.inOut") {
+  tl.to(camera, { x, y, scale, rotationZ: roll, duration: seconds, ease }, start);
+  tl.to(phone, { rotationY: yaw, rotationX: pitch, duration: seconds, ease }, start);
+  tl.to("#spill", { x: x * .42, y: y * .19, duration: seconds, ease }, start);
+  tl.to("#reflection", { x: -x * .3, y: -y * .2, duration: seconds, ease }, start);
+}
+shot(0, 1.78, 10, 109, 1.14, -2.5, -4, 1.4, "power3.out");
+shot(1.78, starts[2] - .29 - 1.78, 14, 120, 1.17, -1.8, -2, 1.2, "sine.inOut");
+shot(starts[2] - .29, .65, -8, -25, 1.21, 2.9, 9, -1.4);
+shot(starts[2] + .36, 3.07, -3, -36, 1.25, 1.1, 5, -1, "sine.inOut");
+shot(starts[4] - .21, .61, 17, 137, 1.20, -4.6, -9, 2.1);
+shot(starts[4] + .4, 1.62, 10, 143, 1.24, -3.4, -6, 2, "sine.inOut");
+shot(starts[5] - .19, .49, -18, -48, 1.25, .8, -2, -3);
+shot(starts[5] + .30, 4.77, 3, -19, 1.20, 2.9, 10, -1, "sine.inOut");
+shot(starts[8] - .23, .61, 0, 211, 1.37, -1.7, -3, 1.7);
+shot(starts[8] + .38, 1.05, -2, 248, 1.44, -1.4, 0, 1, "sine.inOut");
+shot(silence, 1.01, 0, 266, 1.49, -.7, 1, .3, "sine.inOut");
+shot(starts[10] - .22, .55, -3, -47, 1.36, .1, 0, -2, "power3.inOut");
+shot(starts[10] + .33, .61, 0, -53, 1.39, 0, 0, -2, "sine.inOut");
+shot(starts[11] - .12, .62, 12, 110, 1.19, -3.4, -6, 1, "power2.inOut");
+shot(starts[11] + .5, duration - starts[11] - .5, 5, 52, 1.06, -2.4, -8, 2, "sine.inOut");
+
+tl.to("#title", { opacity: 0, y: -12, duration: .37, ease: "power2.in" }, 2.15);
+tl.fromTo(island, { scale: .96 }, { scale: 1, duration: .32, ease: "back.out(1.4)" }, 0);
+tl.to(energy, { value: .035, duration: .24, ease: "sine.out" }, silence);
+tl.to(energy, { value: .40, duration: .18, ease: "power2.out" }, starts[9] - .06);
+tl.to(energy, { value: .08, duration: .15, ease: "sine.inOut" }, starts[10] - .28);
+tl.to(energy, { value: .92, duration: .13, ease: "power2.out" }, starts[10]);
+tl.to(energy, { value: .36, duration: .19, ease: "sine.out" }, starts[11]);
+tl.to(shake, { y: -5, duration: .09, ease: "power2.out" }, starts[10]);
+tl.to(shake, { y: 0, duration: .25, ease: "sine.out" }, starts[10] + .09);
+
+const lines = dialogue.map(([speaker, text], index) => {
+  const el = document.createElement("p");
+  el.className = "line " + speaker + (index === 10 ? " punch" : "");
+  el.textContent = text;
+  id("dialogue").append(el);
+  const start = starts[index];
+  const end = starts[index + 1] || duration;
+  if (index === 0) {
+    gsap.set(el, { opacity: 1 });
+  } else {
+    tl.fromTo(el, { y: 9, opacity: 0 }, { y: 0, opacity: 1, duration: .17, ease: "power3.out" }, start);
+  }
+  if (index < dialogue.length - 1) {
+    const leave = index === 8 ? silence + .13 : end - .13;
+    tl.to(el, { y: -4, opacity: 0, duration: .13, ease: "power2.in" }, leave);
+  }
+  return el;
+});
+
+const wavePaths = [...island.querySelectorAll("path")];
+const arcOut = id("arc-out");
+const arcIn = id("arc-in");
+const label = id("voice-label");
+const islandStatus = id("island-status");
+const micIcon = id("microphone");
+const bars = id("speaking-bars");
+const envelope = () => window.voiceEnvelope || [];
+let previousStatus = "";
+
+function wavePath(t, amp, frequency, offset) {
+  const positions = [];
+  for (let i = 0; i <= 32; i++) {
+    const u = i / 32;
+    const y = 15 + Math.sin(u * frequency * Math.PI * 2 + t * 7 + offset) * Math.sin(u * Math.PI) * amp;
+    positions.push((i ? "L" : "M") + (44 * u).toFixed(1) + " " + y.toFixed(2));
+  }
+  return positions.join(" ");
+}
+function draw(t) {
+  let current = 0;
+  while (current + 1 < starts.length && starts[current + 1] <= t) current++;
+  const speaking = dialogue[current][0] === "troika";
+  const pause = (t >= silence && t < starts[9]) || (t > starts[9] + .58 && t < starts[10]);
+  const rms = envelope()[Math.round(t * 30)] ?? .15;
+  const strength = pause ? .03 : rms;
+  const status = t > starts[9] + .58 && t < starts[10] ? "Думаю…" : speaking && !pause ? "Отвечаю…" : "Слушаю…";
+  if (status !== previousStatus) {
+    islandStatus.textContent = status;
+    label.textContent = status.replace("…", "");
+    label.style.color = speaking && !pause ? "#8cf0c4" : "#f4f5f7";
+    micIcon.setAttribute("opacity", speaking && !pause ? "0" : "1");
+    bars.setAttribute("opacity", speaking && !pause ? "1" : "0");
+    previousStatus = status;
+  }
+  const voiceFocus = 1 - Math.min(1, Math.max(0, (Number(gsap.getProperty(camera, "y")) + 5) / 145));
+  const orbContrast = .61 + .39 * voiceFocus;
+  id("mic").style.opacity = String(.68 + .32 * voiceFocus);
+  island.style.borderColor = "rgba(178, 233, 207, " + (.10 + .14 * (1 - voiceFocus)) + ")";
+  const amp = (2.1 + 7.5 * strength) * energy.value * (speaking ? 1.9 : 1.45);
+  wavePaths[0].setAttribute("d", wavePath(t, amp * 1.13, 1.1, 1.2));
+  wavePaths[1].setAttribute("d", wavePath(t, amp * .64, 2.4, 2.5));
+  wavePaths[2].setAttribute("d", wavePath(t, amp, 1.6, 0));
+  arcOut.style.opacity = String(((speaking ? .55 : .44) + .34 * strength) * orbContrast);
+  arcIn.style.opacity = String((.75 + .25 * strength) * orbContrast);
+  arcOut.style.transform = "scale(" + (1 + strength * .055) + ")";
+  arcIn.style.transform = "scale(" + (1 + strength * .026) + ")";
+  bars.style.transformOrigin = "50% 50%";
+  bars.style.transform = "scaleY(" + (.62 + .65 * strength) + ")";
+  const glow = id("glow");
+  glow.style.opacity = String(pause ? .56 : .73 + strength * (speaking ? .23 : .09));
+  drift.style.transform = "translate(" + (2.2 * Math.sin(t * .97)) + "px," + (2.8 * Math.sin(t * .81)) + "px)";
+}
+window.seekFrame = (t) => {
+  tl.seek(t, false);
+  draw(t);
+};
+window.seekFrame(0);
+</script>
