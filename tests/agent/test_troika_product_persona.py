@@ -5,7 +5,13 @@ import pytest
 from gateway.session_context import clear_session_override, set_session_override
 
 
-def test_product_mode_uses_troika_identity_instead_of_stale_soul(monkeypatch):
+@pytest.fixture
+def offline_model_context(monkeypatch):
+    """Building a persona for a fake model should not look up its context size online."""
+    monkeypatch.setattr("agent.context_compressor.get_model_context_length", lambda *a, **kw: 131072)
+
+
+def test_product_mode_uses_troika_identity_instead_of_stale_soul(monkeypatch, offline_model_context):
     """A stale Hermes SOUL.md cannot rename an authenticated product session."""
 
     monkeypatch.setattr(
@@ -82,7 +88,7 @@ def test_each_persona_path_has_the_same_identity_and_disclosure_boundary(monkeyp
 
 @pytest.mark.parametrize("product_mode", [False, True])
 @pytest.mark.parametrize("provider", ["openrouter", "alibaba"])
-def test_backend_metadata_is_operator_only(monkeypatch, product_mode, provider):
+def test_backend_metadata_is_operator_only(monkeypatch, product_mode, provider, offline_model_context):
     """Neither generic nor provider-specific model hints rename product sessions."""
     monkeypatch.setattr("run_agent.load_soul_md", lambda: "Operator assistant")
     monkeypatch.setattr("run_agent.build_context_files_prompt", lambda **kwargs: "")
@@ -116,6 +122,10 @@ def test_backend_metadata_is_operator_only(monkeypatch, product_mode, provider):
     (True, "[TROIKA_PERSONA_VERSION:12]"),
     (False, "[TROIKA_PERSONA_VERSION:13]"),
     (True, "[TROIKA_PERSONA_VERSION:14]"),
+    (False, "[TROIKA_PERSONA_VERSION:15]"),
+    (True, "[TROIKA_PERSONA_VERSION:16]"),
+    (False, "[TROIKA_PERSONA_VERSION:17]"),
+    (True, "[TROIKA_PERSONA_VERSION:18]"),
 ])
 def test_previous_persona_sessions_refresh_once_without_rewriting_history(monkeypatch, compact, previous_marker):
     """Both deployed persona modes migrate once and preserve user conversation bytes."""

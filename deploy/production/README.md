@@ -38,7 +38,7 @@ Keep this file outside Git and preserve it during upgrades. The SearXNG image
 is pinned by digest. Review and test a new digest before updating it.
 
 `config.yaml` is mounted read-only into the API as `/opt/troika/config.yaml`.
-The ordinary hosted agent is pinned to `nvidia/nemotron-3.5-lightning:free`, with
+The ordinary hosted agent is pinned to `nvidia/nemotron-3-ultra-550b-a55b:free`, with
 reasoning disabled and both fallback chains empty. Recheck the full OpenRouter
 price map and text/tool capabilities before replacing this model; a classifier
 is not a conversational agent. Keep the exact model's zero-price accounting entry

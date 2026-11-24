@@ -9,6 +9,16 @@ product_billing_enabled: false
 product_verification_enabled: false
 product_resource_subsidy_tokens: 13333333
 product_resource_prices:
+  nvidia/nemotron-3-ultra-550b-a55b:free:
+    provider: openrouter
+    version: free-agent-2026-11-23
+    debit_mode: model_tokens
+    input_rub: 0
+    output_rub: 0
+    cache_read_rub: 0
+    cache_write_rub: 0
+    default_output_tokens: 8192
+    maximum_output_tokens: 65536
   nvidia/nemotron-3.5-lightning:free:
     provider: openrouter
     version: free-agent-2026-10-29
