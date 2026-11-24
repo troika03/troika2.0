@@ -14,14 +14,24 @@ namespace Troika.Desktop {
         public readonly string Action, Task;
         private CodexVoiceRequest(string action, string task) { Action = action; Task = task; }
         private const string Codex = @"(?:codex|кодекс(?:а|у|ом)?)";
-        private static readonly Regex Start = new Regex(@"^(?:/codex(?:\s+|$)|(?:попроси|поручи|передай)(?:\s+(?:задачу|проект))?\s+" + Codex + @"\b|(?:через|запусти)\s+" + Codex + @"\b|" + Codex + @"\s*[:,])\s*[:,—-]?\s*(.*)$", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant);
+        private const RegexOptions IgnoreCase = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+        private static readonly Regex Start = new Regex(@"^(?:/codex(?:\s+|$)|(?:скажи|напиши|попроси|поручи|передай)(?:\s+(?:задачу|проект))?\s+" + Codex + @"\b|(?:через|запусти)\s+" + Codex + @"\b|" + Codex + @"\s*[:,])\s*[:,—-]?\s*(.*)$", IgnoreCase | RegexOptions.Singleline);
+        private static readonly Regex ChatGptLocation = new Regex(@"\b(?:в|на)\s+(?:(?:чате|приложении|сайте|веб-версии)\s+)?(?:chat\s*gpt|чат(?:е)?\s*(?:gpt|гпт|джи\s*пи\s*ти)|gpt)\b(?!\s+(?:codex|кодекс[аеу]?)\b)", IgnoreCase);
+        private static readonly Regex ProjectCreation = new Regex(@"\b(?:созда[а-яё]*|сдела[а-яё]*|заве[а-яё]*)\b[^.!?;,\r\n]{1,65}\bпроект\b", IgnoreCase);
         public static CodexVoiceRequest Parse(string input) {
-            string phrase = (input ?? "").Trim().TrimEnd('.', '!', '?');
-            if (phrase.StartsWith("Тройка,", StringComparison.OrdinalIgnoreCase)) phrase = phrase.Substring(7).TrimStart();
-            if (Regex.IsMatch(phrase, @"^(?:останови|прерви)\s+" + Codex + "$", RegexOptions.IgnoreCase) || phrase.Equals("/codex stop", StringComparison.OrdinalIgnoreCase)) return new CodexVoiceRequest("stop", "");
-            if (Regex.IsMatch(phrase, @"^(?:что делает|статус)\s+" + Codex + "$", RegexOptions.IgnoreCase) || phrase.Equals("/codex status", StringComparison.OrdinalIgnoreCase)) return new CodexVoiceRequest("status", "");
+            string phrase = Regex.Replace((input ?? "").Trim(), @"^тройка(?:\s*[:,—-]\s*|\s+)", "", IgnoreCase);
+            string command = phrase.TrimEnd('.', '!', '?');
+            if (Regex.IsMatch(command, @"^(?:останови|прерви)\s+" + Codex + "$", IgnoreCase) || command.Equals("/codex stop", StringComparison.OrdinalIgnoreCase)) return new CodexVoiceRequest("stop", "");
+            if (Regex.IsMatch(command, @"^(?:что делает|статус)\s+" + Codex + "$", IgnoreCase) || command.Equals("/codex status", StringComparison.OrdinalIgnoreCase)) return new CodexVoiceRequest("status", "");
             var match = Start.Match(phrase);
-            return match.Success ? new CodexVoiceRequest("start", match.Groups[1].Value.Trim()) : null;
+            if (!match.Success) return null;
+            string task = match.Groups[1].Value.Trim();
+            if (!phrase.StartsWith("/codex", StringComparison.OrdinalIgnoreCase))
+                task = Regex.Replace(task, @"^чтобы\s+(?:(?:он|тот|" + Codex + @")\s+)?", "", IgnoreCase);
+            return new CodexVoiceRequest("start", task.Trim('.', '!', '?').Length == 0 ? "" : task);
+        }
+        public static bool TargetsChatGptProject(string task) {
+            return ChatGptLocation.IsMatch(task) && ProjectCreation.IsMatch(task);
         }
     }
 

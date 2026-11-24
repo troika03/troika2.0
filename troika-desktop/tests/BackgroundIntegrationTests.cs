@@ -46,11 +46,23 @@ public static class BackgroundIntegrationTests {
             }
             Check(CodexVoiceRequest.Parse("Когда стоит использовать Codex?") == null, "Normal conversation stays local to Troika routing");
             Check(CodexVoiceRequest.Parse("Попроси Кодекс сделать проект").Task == "сделать проект", "Voice delegation");
+            var delegated = CodexVoiceRequest.Parse("Тройка скажи Кодексу, чтобы он подготовил README.");
+            Check(delegated != null && delegated.Task == "подготовил README.", "Spoken delegation with a subordinate clause");
+            var chatProject = CodexVoiceRequest.Parse("Скажи кодексу, чтобы он в чате GPT создал новый проект и написал привет.");
+            Check(chatProject != null && CodexVoiceRequest.TargetsChatGptProject(chatProject.Task), "Named ChatGPT project stays distinct from a folder-based Codex task");
+            Check(CodexVoiceRequest.TargetsChatGptProject("создай в ChatGPT новый проект"), "ChatGPT destination can follow the verb");
+            Check(!CodexVoiceRequest.TargetsChatGptProject("создай проект в ChatGPT Codex") &&
+                !CodexVoiceRequest.TargetsChatGptProject("создай проект для интеграции с ChatGPT"), "Ordinary coding projects are delegated");
+            Check(CodexVoiceRequest.Parse("Скажи, чем мне может помочь Кодекс?") == null, "General question about Codex stays in chat");
             Check(CodexVoiceRequest.Parse("Тройка, что делает Кодекс?").Action == "status", "Voice status");
             Check(CodexVoiceRequest.Parse("Останови Кодекс.").Action == "stop", "Voice stop");
             Check(CodexVoiceRequest.Parse("/codex сделай README").Task == "сделай README", "Explicit text delegation");
             Check(LocalFileRequest.Parse("Найди в интернете отчёт") == null, "Web tasks stay in ordinary chat");
             Check(LocalFileRequest.Parse("Покажи содержимое папки").Action == "list", "Voice list");
+            Check(LocalFileRequest.Parse("А чё у меня последнее скачивалось в папке загрузка?").Action == "latest-download", "Colloquial Downloads question");
+            Check(LocalFileRequest.Parse("Какая у меня последняя загрузка?").Action == "latest-download", "Most recent download");
+            Check(LocalFileRequest.Parse("Что я скачал последним?").Action == "latest-download", "Recent download without a folder name");
+            Check(LocalFileRequest.Parse("Найди в интернете последнюю загрузку дистрибутива") == null, "Online lookup stays in chat");
             Check(LocalFileRequest.Parse("Прочитай файл «заметка.txt».").Target == "заметка.txt", "Voice filename");
             Console.WriteLine("PASS explicit voice and text routing");
 
@@ -75,6 +87,23 @@ public static class BackgroundIntegrationTests {
             Reject(() => LocalFileAccess.Resolve(root, "notes\\заметка.txt:stream"), "Alternate data stream accepted");
             Reject(() => LocalFileAccess.Resolve(root, root + "-outside\\secret.txt"), "Sibling-prefix path accepted");
             Console.WriteLine("PASS local file lookup, limits and containment");
+
+            string recentFolder = Directory.CreateDirectory(Path.Combine(root, "recent")).FullName;
+            Check(LocalFileAccess.LatestDownload(recentFolder) == null, "Empty Downloads folder");
+            var day = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            string oldDownload = Path.Combine(recentFolder, "old.txt");
+            string newDownload = Path.Combine(recentFolder, "new.txt");
+            string partialDownload = Path.Combine(recentFolder, "pending.crdownload");
+            File.WriteAllText(oldDownload, "");
+            File.WriteAllText(newDownload, "");
+            File.WriteAllText(partialDownload, "");
+            File.SetCreationTimeUtc(oldDownload, day);
+            File.SetLastWriteTimeUtc(oldDownload, day.AddDays(4));
+            File.SetCreationTimeUtc(newDownload, day.AddDays(1));
+            File.SetLastWriteTimeUtc(newDownload, day.AddDays(-1));
+            File.SetCreationTimeUtc(partialDownload, day.AddDays(3));
+            Check(LocalFileAccess.LatestDownload(recentFolder).Name == "new.txt", "Newest completed arrival wins over modification time and partial downloads");
+            Console.WriteLine("PASS newest finished download by creation time");
 
             var silence = new byte[3200];
             var speech = Enumerable.Range(0, 1600).SelectMany(_ => BitConverter.GetBytes((short)1800)).ToArray();

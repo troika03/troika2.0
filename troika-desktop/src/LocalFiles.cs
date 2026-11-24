@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -22,9 +23,16 @@ namespace Troika.Desktop {
             new Regex(@"^создай\s+папку\s+(.+)$", RegexOptions.IgnoreCase)
         };
         private static readonly string[] Actions = { "list", "folder", "open", "read", "find", "create" };
+        private const RegexOptions Spoken = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+        private static readonly Regex DownloadQuestion = new Regex(@"^(?:(?:а|ну)\s+)*(?:что|ч[её]|чо|как(?:ой|ая|ое|ие|ую|им|их)|покажи|посмотри|проверь|найди|назови|скажи|последн[а-яё]+)\b", Spoken);
+        private static readonly Regex Recent = new Regex(@"\b(?:последн[а-яё]+|свеж[а-яё]+|недавно|новейш[а-яё]+|сам[а-яё]+\s+нов[а-яё]+)\b", Spoken);
+        private static readonly Regex Downloaded = new Regex(@"\b(?:скача[а-яё]+|скачива[а-яё]+|загрузк[а-яё]+|загрузил[а-яё]*|загруженн[а-яё]+|downloads)\b", Spoken);
+        private static readonly Regex OutsideDownloads = new Regex(@"\b(?:на\s+сайте|в\s+интернете|в\s+браузере|в\s+облаке)\b", Spoken);
         public static LocalFileRequest Parse(string input) {
             string value = input.Trim().TrimEnd('!', '?');
-            if (value.StartsWith("Тройка,", StringComparison.OrdinalIgnoreCase)) value = value.Substring(7).TrimStart();
+            value = Regex.Replace(value, @"^тройка(?:\s*[:,—-]\s*|\s+)", "", Spoken);
+            if (DownloadQuestion.IsMatch(value) && Recent.IsMatch(value) && Downloaded.IsMatch(value) && !OutsideDownloads.IsMatch(value))
+                return new LocalFileRequest("latest-download", "");
             for (int i = 0; i < Patterns.Length; i++) {
                 var match = Patterns[i].Match(value);
                 if (match.Success) return new LocalFileRequest(Actions[i], match.Groups[1].Value.Trim().TrimEnd('.').Trim('"', '«', '»'));
@@ -34,6 +42,33 @@ namespace Troika.Desktop {
     }
 
     public static class LocalFileAccess {
+        private static readonly Guid DownloadsId = new Guid("374DE290-123F-4565-9164-39C4925E467B");
+        private static readonly HashSet<string> PartialDownloads = new HashSet<string>(
+            new[] { ".crdownload", ".part", ".opdownload", ".download", ".partial", ".tmp" }, StringComparer.OrdinalIgnoreCase);
+        private const FileAttributes IgnoredEntries = FileAttributes.ReparsePoint | FileAttributes.Hidden | FileAttributes.System;
+        [DllImport("shell32.dll", ExactSpelling = true)]
+        private static extern int SHGetKnownFolderPath(ref Guid folderId, uint flags, IntPtr token, out IntPtr path);
+
+        public static string DownloadsFolder() {
+            Guid folderId = DownloadsId;
+            IntPtr path;
+            int result = SHGetKnownFolderPath(ref folderId, 0, IntPtr.Zero, out path);
+            try {
+                if (result != 0 || path == IntPtr.Zero)
+                    throw new DirectoryNotFoundException("Папка «Загрузки» Windows недоступна.");
+                return ValidateRoot(Marshal.PtrToStringUni(path));
+            } finally { Marshal.FreeCoTaskMem(path); }
+        }
+        public static FileInfo LatestDownload(string folder) {
+            FileInfo latest = null;
+            foreach (var file in new DirectoryInfo(ValidateRoot(folder)).EnumerateFiles()) {
+                if ((file.Attributes & IgnoredEntries) != 0 || PartialDownloads.Contains(file.Extension)) continue;
+                if (latest == null || file.CreationTimeUtc > latest.CreationTimeUtc ||
+                    file.CreationTimeUtc == latest.CreationTimeUtc && file.LastWriteTimeUtc > latest.LastWriteTimeUtc)
+                    latest = file;
+            }
+            return latest;
+        }
         public static string Resolve(string root, string name) {
             root = ValidateRoot(root);
             if (string.IsNullOrWhiteSpace(name) || name.Equals(Path.GetFileName(root), StringComparison.OrdinalIgnoreCase)
@@ -73,7 +108,7 @@ namespace Troika.Desktop {
                 try { attributes = File.GetAttributes(path); }
                 catch (IOException) { continue; }
                 catch (UnauthorizedAccessException) { continue; }
-                if ((attributes & (FileAttributes.ReparsePoint | FileAttributes.Hidden | FileAttributes.System)) == 0) yield return path;
+                if ((attributes & IgnoredEntries) == 0) yield return path;
             }
         }
         public static List<string> Find(string root, string name, bool exact = false) {
@@ -151,11 +186,12 @@ namespace Troika.Desktop {
             panelContent.Children.Add(Label("Скажите «Покажи содержимое папки», «Найди файл отчёт» или «Прочитай файл заметки.txt».", 13, muted));
         }
         private async Task HandleLocalFileRequest(string input, LocalFileRequest request) {
-            var root = LocalFileRoot();
-            if (root.Length == 0) {
+            bool latestDownload = request.Action == "latest-download";
+            var root = latestDownload ? "" : LocalFileRoot();
+            if (!api.Account.SignedIn || !latestDownload && root.Length == 0) {
                 ShowFromTray();
-                await OpenPanelTask("Рабочая папка");
-                SetStatus("Сначала выберите рабочую папку на ПК.", false);
+                await OpenPanelTask(latestDownload ? "Аккаунт" : "Рабочая папка");
+                SetStatus(latestDownload ? "Войдите в Тройку, чтобы посмотреть «Загрузки» на этом ПК." : "Сначала выберите рабочую папку на ПК.", false);
                 return;
             }
             string owner = api.Account.Email;
@@ -165,7 +201,7 @@ namespace Troika.Desktop {
                 if (request.Action == "open" || request.Action == "read")
                     target = Regex.Replace(target, @"\s+точка\s+", ".", RegexOptions.IgnoreCase);
                 var result = await Task.Run(() => RunLocalFileRequest(root, target, request.Action));
-                if (closed || !api.Account.SignedIn || api.Account.Email != owner || LocalFileRoot() != root) return;
+                if (closed || !api.Account.SignedIn || api.Account.Email != owner || !latestDownload && LocalFileRoot() != root) return;
                 if (result.Item2.Length > 0) {
                     var path = LocalFileAccess.Resolve(root, result.Item2);
                     if (Directory.Exists(path)) Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
@@ -187,6 +223,10 @@ namespace Troika.Desktop {
             return new[] { ".docx", ".pptx", ".xlsx", ".pdf", ".txt", ".md", ".png", ".jpg", ".jpeg", ".zip", ".csv" }.Contains(Path.GetExtension(path).ToLowerInvariant());
         }
         private static Tuple<string, string> RunLocalFileRequest(string root, string target, string action) {
+            if (action == "latest-download") {
+                var file = LocalFileAccess.LatestDownload(LocalFileAccess.DownloadsFolder());
+                return Tuple.Create(file == null ? "В «Загрузках» пока нет готовых файлов." : "Самый свежий файл в «Загрузках» — " + file.Name, "");
+            }
             root = LocalFileAccess.ValidateRoot(root);
             if (action == "find") {
                 var matches = LocalFileAccess.Find(root, target);

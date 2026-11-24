@@ -11,6 +11,7 @@ using System.Windows.Threading;
 
 namespace Troika.Desktop {
     public sealed partial class MainWindow {
+        private const string ChatGptProjectHelp = "Проект для чатов создаётся в меню «Новый проект» в ChatGPT. Через эту связку Codex может работать с проектом в папке на этом ПК.";
         private readonly Queue<string> codexReports = new Queue<string>();
         private readonly DispatcherTimer codexTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         private CancellationTokenSource codexRun, codexAuth;
@@ -159,6 +160,10 @@ namespace Troika.Desktop {
                 await AnswerCodexStatus(codexState.Length > 0 && codexOwner == api.Account.Email ? codexState : "Сейчас Codex свободен.");
                 return;
             }
+            if (CodexVoiceRequest.TargetsChatGptProject(request.Task)) {
+                await AnswerCodexStatus(ChatGptProjectHelp);
+                return;
+            }
             if (codexRun != null || codexConfirming) {
                 await AnswerCodexStatus("Codex уже занят. Пока проект выполняется, мы можем продолжить разговор.");
                 return;
@@ -175,6 +180,7 @@ namespace Troika.Desktop {
         private async Task StartCodex(string task, string selectedFolder) {
             task = task.Trim();
             if (task.Length == 0 || task.Length > 8000) { SetStatus("Опишите задачу для Codex. До 8000 символов.", true); return; }
+            if (CodexVoiceRequest.TargetsChatGptProject(task)) { SetStatus(ChatGptProjectHelp, true); return; }
             if (codexRun != null || codexAuth != null || codexConfirming || preview) return;
             if (!api.Account.SignedIn) { ShowFromTray(); await OpenPanelTask("Аккаунт"); return; }
             string owner = api.Account.Email;
