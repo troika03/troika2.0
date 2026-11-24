@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" fill="none">
+  <title>Abstract mint vinyl</title>
+  <defs>
+    <linearGradient id="art-panel" x1="82" y1="38" x2="566" y2="640" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#182423"/>
+      <stop offset=".5" stop-color="#0B0C10"/>
+      <stop offset="1" stop-color="#121A1B"/>
+    </linearGradient>
+    <radialGradient id="art-light" cx="0" cy="0" r="1" gradientTransform="translate(459 162) rotate(129) scale(478 361)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3DDC97" stop-opacity=".22"/>
+      <stop offset=".53" stop-color="#3DDC97" stop-opacity=".035"/>
+      <stop offset="1" stop-color="#3DDC97" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="art-disc" x1="180" y1="85" x2="444" y2="530" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#233232"/>
+      <stop offset=".28" stop-color="#0B1012"/>
+      <stop offset=".6" stop-color="#141B1D"/>
+      <stop offset="1" stop-color="#080A0D"/>
+    </linearGradient>
+    <linearGradient id="art-edge" x1="153" y1="99" x2="513" y2="581" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6AA18C" stop-opacity=".75"/>
+      <stop offset=".46" stop-color="#293A39" stop-opacity=".64"/>
+      <stop offset="1" stop-color="#DEF9EF" stop-opacity=".05"/>
+    </linearGradient>
+    <linearGradient id="art-ribbon" x1="136" y1="466" x2="515" y2="127" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#113B2C"/>
+      <stop offset=".32" stop-color="#226B52"/>
+      <stop offset=".64" stop-color="#3DDC97"/>
+      <stop offset="1" stop-color="#ADFFE0"/>
+    </linearGradient>
+    <linearGradient id="art-ribbon-inset" x1="188" y1="450" x2="449" y2="149" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#101A1A"/>
+      <stop offset=".44" stop-color="#145C42"/>
+      <stop offset=".72" stop-color="#2F9F73"/>
+      <stop offset="1" stop-color="#50E3A3"/>
+    </linearGradient>
+    <radialGradient id="art-hub" cx="0" cy="0" r="1" gradientTransform="translate(310 301) rotate(52) scale(62)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#43524E"/>
+      <stop offset=".47" stop-color="#182121"/>
+      <stop offset=".8" stop-color="#0C1113"/>
+      <stop offset="1" stop-color="#1B2828"/>
+    </radialGradient>
+    <clipPath id="art-cover"><rect width="640" height="640" rx="42"/></clipPath>
+    <clipPath id="art-disc-clip"><circle cx="320" cy="320" r="222"/></clipPath>
+    <path id="art-engraving" d="M86 362c103 0 151-54 186-115 51-88 106-121 273-121"/>
+  </defs>
+
+  <g clip-path="url(#art-cover)">
+    <g id="art-background">
+      <rect width="640" height="640" fill="url(#art-panel)"/>
+      <rect width="640" height="640" fill="url(#art-light)"/>
+      <g stroke="#879F96" stroke-opacity=".11">
+        <path d="M40 60h560M40 580h560M60 40v560M580 40v560"/>
+        <path d="M320 44v35m0 482v35M44 320h35m482 0h35"/>
+        <path d="M104 60v8m36-8v4m36-4v8m36-8v4m36-4v8m36-8v4m72-4v4m36-4v8m36-8v4m36-4v8m36-8v4m36-4v8"/>
+        <path d="M104 580v-8m36 8v-4m36 4v-8m36 8v-4m36 4v-8m36 8v-4m72 4v-4m36 4v-8m36 8v-4m36 4v-8m36 8v-4m36 4v-8"/>
+      </g>
+      <path d="M72 97V72h25m446 0h25v25m0 446v25h-25m-446 0H72v-25" stroke="#B7E0D1" stroke-opacity=".33" stroke-width="1.5"/>
+      <circle cx="72" cy="72" r="2.5" fill="#A2F8D0"/>
+      <circle cx="568" cy="568" r="2.5" fill="#3DDC97" opacity=".58"/>
+      <rect x="16" y="16" width="608" height="608" rx="31" stroke="#B6DCCE" stroke-opacity=".13"/>
+      <ellipse cx="320" cy="331" rx="235" ry="228" fill="#05080A" fill-opacity=".65"/>
+    </g>
+
+    <g id="art-record">
+      <circle cx="320" cy="320" r="224" fill="url(#art-disc)" stroke="url(#art-edge)" stroke-width="2"/>
+      <g stroke="#BCD5CC" stroke-opacity=".1">
+        <circle cx="320" cy="320" r="217"/>
+        <circle cx="320" cy="320" r="210"/>
+        <circle cx="320" cy="320" r="202"/>
+        <circle cx="320" cy="320" r="194"/>
+        <circle cx="320" cy="320" r="186"/>
+        <circle cx="320" cy="320" r="177"/>
+        <circle cx="320" cy="320" r="168"/>
+        <circle cx="320" cy="320" r="160"/>
+        <circle cx="320" cy="320" r="151"/>
+        <circle cx="320" cy="320" r="143"/>
+        <circle cx="320" cy="320" r="134"/>
+        <circle cx="320" cy="320" r="125"/>
+        <circle cx="320" cy="320" r="116"/>
+        <circle cx="320" cy="320" r="106"/>
+        <circle cx="320" cy="320" r="97"/>
+        <circle cx="320" cy="320" r="87"/>
+        <circle cx="320" cy="320" r="78"/>
+        <circle cx="320" cy="320" r="69"/>
+      </g>
+
+      <g clip-path="url(#art-disc-clip)">
+        <path d="M86 453c134 0 176-106 210-166 58-101 112-119 268-119" stroke="#040608" stroke-opacity=".8" stroke-width="95"/>
+        <path d="M86 449c134 0 176-106 210-166 58-101 112-119 268-119" stroke="#213430" stroke-width="82"/>
+        <path d="M86 444c134 0 176-106 210-166 58-101 112-119 268-119" stroke="url(#art-ribbon)" stroke-width="72"/>
+        <path d="M86 444c134 0 176-106 210-166 58-101 112-119 268-119" stroke="url(#art-ribbon-inset)" stroke-width="55"/>
+        <path d="M86 444c134 0 176-106 210-166 58-101 112-119 268-119" stroke="#071B17" stroke-opacity=".38" stroke-width="42"/>
+        <path d="M86 429c134 0 176-106 210-166 58-101 112-119 268-119" stroke="#B9F5DE" stroke-opacity=".36" stroke-width="1.3"/>
+        <path d="M86 439c134 0 176-106 210-166 58-101 112-119 268-119" stroke="#C9FFE8" stroke-opacity=".21"/>
+        <path d="M86 449c134 0 176-106 210-166 58-101 112-119 268-119" stroke="#C9FFE8" stroke-opacity=".15"/>
+        <path d="M86 460c134 0 176-106 210-166 58-101 112-119 268-119" stroke="#B8FDDC" stroke-opacity=".21"/>
+        <use href="#art-engraving" stroke="#010907" stroke-opacity=".6" stroke-width="9"/>
+        <use href="#art-engraving" stroke="#75EAB9" stroke-opacity=".58" stroke-width="2"/>
+        <path d="M108 509c146-18 177-96 235-184 52-79 113-110 214-110" stroke="#3DDC97" stroke-opacity=".29" stroke-width="2"/>
+        <path d="M110 516c146-18 177-96 235-184 52-79 113-110 214-110" stroke="#B7F9DD" stroke-opacity=".12" stroke-width="1.5"/>
+      </g>
+
+      <path d="M143 203a213 213 0 0 1 154-95m172 49a213 213 0 0 1 62 93m-30 188a213 213 0 0 1-138 88" stroke="#6AE6B2" stroke-opacity=".48" stroke-width="1.25" stroke-linecap="round"/>
+      <path d="M110 305a210 210 0 0 0 67 169" stroke="#C6F8E4" stroke-opacity=".16" stroke-width="2" stroke-dasharray="1 4"/>
+      <circle cx="320" cy="320" r="56" fill="#060A0C" stroke="#1D3530" stroke-width="2.5"/>
+      <circle cx="320" cy="320" r="48" fill="url(#art-hub)" stroke="#A2DBCA" stroke-opacity=".38"/>
+      <circle cx="320" cy="320" r="40" stroke="#99DDC6" stroke-opacity=".26" stroke-width="1.2" stroke-dasharray="1 3"/>
+      <circle cx="320" cy="320" r="22.5" fill="#0C1718" stroke="#7FEFC0" stroke-opacity=".52"/>
+      <circle cx="320" cy="320" r="9" fill="#3DDC97"/>
+      <circle cx="320" cy="320" r="4.5" fill="#0C1718"/>
+      <circle cx="320" cy="272" r="2.6" fill="#A9F7D4"/>
+    </g>
+  </g>
+</svg>
