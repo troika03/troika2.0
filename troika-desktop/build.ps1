@@ -58,6 +58,11 @@ if ($Test) {
 }
 Write-Output ('Built: ' + (Join-Path $output 'TroikaDesktop.exe'))
 if ($Test) {
+    $backgroundTests = Join-Path $output 'BackgroundIntegrationTests.exe'
+    & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + $backgroundTests) ('/reference:' + (Join-Path $output 'TroikaDesktop.exe')) $references (Join-Path $root 'tests\BackgroundIntegrationTests.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Background integration test build failed.' }
+    & $backgroundTests
+    if ($LASTEXITCODE -ne 0) { throw 'Background integration tests failed.' }
     & $compiler /nologo /target:exe /platform:x64 /utf8output ('/out:' + (Join-Path $output 'VoiceIdentityTests.exe')) ('/reference:' + (Join-Path $output 'TroikaDesktop.exe')) $references (Join-Path $root 'tests\VoiceIdentityTests.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Voice identity test build failed.' }
     & (Join-Path $output 'VoiceIdentityTests.exe')

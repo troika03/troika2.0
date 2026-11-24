@@ -139,37 +139,64 @@ namespace Troika.Desktop {
         [DllImport("libvosk.dll", CallingConvention = CallingConvention.Cdecl)] private static extern void vosk_model_free(IntPtr value);
         [DllImport("libvosk.dll", CallingConvention = CallingConvention.Cdecl)] private static extern void vosk_spk_model_free(IntPtr value);
         [DllImport("libvosk.dll", CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr vosk_recognizer_new_spk(IntPtr model, float rate, IntPtr speaker);
+        [DllImport("libvosk.dll", CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr vosk_recognizer_new_grm(IntPtr model, float rate, byte[] grammar);
         [DllImport("libvosk.dll", CallingConvention = CallingConvention.Cdecl)] private static extern int vosk_recognizer_accept_waveform(IntPtr recognizer, byte[] data, int length);
+        [DllImport("libvosk.dll", CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr vosk_recognizer_result(IntPtr recognizer);
         [DllImport("libvosk.dll", CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr vosk_recognizer_final_result(IntPtr recognizer);
         [DllImport("libvosk.dll", CallingConvention = CallingConvention.Cdecl)] private static extern void vosk_recognizer_free(IntPtr recognizer);
         public VoskVoiceSignatureExtractor(string directory) { assets = Path.GetFullPath(directory); }
         public bool Available { get { return File.Exists(Path.Combine(assets, "manifest.json")) && File.Exists(Path.Combine(assets, "native", "libvosk.dll")); } }
         private static byte[] Utf8Path(string value) { return Encoding.UTF8.GetBytes(value + "\0"); }
-        private void Initialize(CancellationToken cancellation) {
+        private void Initialize(CancellationToken cancellation, bool needSpeaker = true) {
             if (disposed) throw new ObjectDisposedException("VoskVoiceSignatureExtractor");
-            if (model != IntPtr.Zero && speaker != IntPtr.Zero) return;
+            if (model != IntPtr.Zero && (!needSpeaker || speaker != IntPtr.Zero)) return;
             try {
-                VerifyAssets(cancellation);
-                string native = Path.Combine(assets, "native");
-                lock (librarySync) {
-                    if (loadedLibrary.Length > 0 && loadedLibrary != native) throw new InvalidDataException("В процессе уже загружена другая голосовая модель.");
-                    if (loadedLibrary.Length == 0) {
-                        foreach (string name in new[] { "libwinpthread-1.dll", "libgcc_s_seh-1.dll", "libstdc++-6.dll", "libvosk.dll" }) {
-                            IntPtr library = LoadLibraryEx(Path.Combine(native, name), IntPtr.Zero, 0x8);
-                            if (library == IntPtr.Zero) throw new InvalidDataException("Не удалось загрузить локальную модель голоса. Переустановите приложение.");
-                            libraries.Add(library);
+                if (model == IntPtr.Zero) {
+                    VerifyAssets(cancellation);
+                    string native = Path.Combine(assets, "native");
+                    lock (librarySync) {
+                        if (loadedLibrary.Length > 0 && loadedLibrary != native) throw new InvalidDataException("В процессе уже загружена другая голосовая модель.");
+                        if (loadedLibrary.Length == 0) {
+                            foreach (string name in new[] { "libwinpthread-1.dll", "libgcc_s_seh-1.dll", "libstdc++-6.dll", "libvosk.dll" }) {
+                                IntPtr library = LoadLibraryEx(Path.Combine(native, name), IntPtr.Zero, 0x8);
+                                if (library == IntPtr.Zero) throw new InvalidDataException("Не удалось загрузить локальную модель голоса. Переустановите приложение.");
+                                libraries.Add(library);
+                            }
+                            loadedLibrary = native;
                         }
-                        loadedLibrary = native;
                     }
+                    vosk_set_log_level(-1);
+                    cancellation.ThrowIfCancellationRequested();
+                    model = vosk_model_new(Utf8Path(Path.Combine(assets, "vosk-model-small-ru-0.22")));
+                    if (model == IntPtr.Zero) throw new InvalidDataException("Локальная модель речи недоступна. Переустановите приложение.");
                 }
-                vosk_set_log_level(-1);
-                cancellation.ThrowIfCancellationRequested();
-                model = vosk_model_new(Utf8Path(Path.Combine(assets, "vosk-model-small-ru-0.22")));
-                if (model == IntPtr.Zero) throw new InvalidDataException("Локальная модель речи недоступна. Переустановите приложение.");
+                if (!needSpeaker) return;
                 cancellation.ThrowIfCancellationRequested();
                 speaker = vosk_spk_model_new(Utf8Path(Path.Combine(assets, VoiceIdentityStore.ModelVersion)));
                 if (speaker == IntPtr.Zero) throw new InvalidDataException("Локальная модель голоса недоступна. Переустановите приложение.");
             } catch { FreeModels(); throw; }
+        }
+        internal void ListenForWake(Action<Func<byte[], int, bool>> listen, CancellationToken cancellation) {
+            lock (sync) {
+                Initialize(cancellation, false);
+                var recognizer = vosk_recognizer_new_grm(model, 16000, Utf8Path("[\"тройка\",\"[unk]\"]"));
+                if (recognizer == IntPtr.Zero) throw new InvalidDataException("Распознавание слова «Тройка» недоступно.");
+                try {
+                    listen((bytes, count) => {
+                        int state = vosk_recognizer_accept_waveform(recognizer, bytes, count);
+                        if (state < 0) throw new InvalidDataException("Не удалось обработать звук микрофона.");
+                        if (state == 0) return false;
+                        var pointer = vosk_recognizer_result(recognizer);
+                        if (pointer == IntPtr.Zero) return false;
+                        int length = 0;
+                        while (length < 4096 && Marshal.ReadByte(pointer, length) != 0) length++;
+                        if (length == 4096) return false;
+                        var result = new byte[length];
+                        Marshal.Copy(pointer, result, 0, length);
+                        return Json.Text(Json.Parse(Encoding.UTF8.GetString(result)), "text") == "тройка";
+                    });
+                } finally { vosk_recognizer_free(recognizer); }
+            }
         }
         private void VerifyAssets(CancellationToken cancellation) {
             string marker = Path.Combine(assets, "manifest.json");

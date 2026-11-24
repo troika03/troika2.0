@@ -60,6 +60,8 @@ namespace Troika.Desktop {
             api.Account = preview ? new AccountSession() : store.LoadSession(); api.SessionId = api.Account.HomeSession; api.SaveSession = store.SaveSession; api.PersonalProviders = new PersonalProviderStore(store.Root);
             InitializeVoiceIdentity();
             Build();
+            InitializeBackgroundVoice(Json.Flag(settings, "wake_enabled"), Json.Text(settings, "wake_owner"));
+            InitializeCodex(Json.Text(settings, "codex_executable"));
             StartReminders();
             SizeChanged += delegate { if (voiceVisual != null) { voiceVisual.Height = Math.Max(180, Math.Min(260, ActualHeight - 380)); heroTitle.FontSize = ActualHeight < 600 ? 28 : 32; if (!compact) body.ColumnDefinitions[0].Width = new GridLength(NavigationWidth); } };
             WindowChrome.SetWindowChrome(this, new WindowChrome { CaptionHeight = 0, ResizeBorderThickness = new Thickness(6), CornerRadius = new CornerRadius(14), GlassFrameThickness = new Thickness(0) });
@@ -81,15 +83,17 @@ namespace Troika.Desktop {
             player.MediaEnded += delegate { StopPlayback(); Idle(); };
             player.MediaFailed += delegate { if (phrasePlayback != null) phrasePlayback.TrySetException(new InvalidOperationException("Не удалось воспроизвести ответ.")); StopPlayback(); SetStatus("Ответ получен. Windows не смогла воспроизвести звук.", true); Idle(); };
             PreviewKeyDown += async delegate(object sender, KeyEventArgs e) {
-                if (e.Key == Key.Escape) { e.Handled = true; if (busy || recorder.Recording || speaking || localCheck != null || developmentConsent != null) await Stop(); else if (openPanel.Length > 0) ClosePanel(); else if (compact) ToggleCompact(); }
+                if (e.Key == Key.Escape) { e.Handled = true; if (busy || recorder.Recording || wakeRecording || speaking || localCheck != null || developmentConsent != null) await Stop(); else if (openPanel.Length > 0) ClosePanel(); else if (compact) ToggleCompact(); }
                 if (e.Key == Key.N && Keyboard.Modifiers == ModifierKeys.Control) { e.Handled = true; NewConversation(); }
             };
             Closing += async delegate(object sender, System.ComponentModel.CancelEventArgs e) {
                 if (closed) return;
                 e.Cancel = true;
-                await Stop();
                 if (KeepProjectsInBackground()) return;
+                exitRequested = true;
+                await Stop();
                 closed = true; recordingLimit.Stop(); reminderTimer.Stop(); recorder.Dispose(); StopPlayback();
+                DisposeCodex(); DisposeBackgroundVoice();
                 DisposeProjectTray();
                 DisposeAutopilotObserver();
                 if (hotkeyRegistered) UnregisterHotKey(handle, 17);
@@ -99,13 +103,13 @@ namespace Troika.Desktop {
         private IntPtr WindowMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled) {
             if (message == Program.ActivationMessage && !preview) {
                 handled = true;
-                Dispatcher.BeginInvoke(new Action(delegate { if (!IsVisible) Show(); if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal; Activate(); }));
+                Dispatcher.BeginInvoke(new Action(ShowFromTray));
             }
             if (message == 0x0312 && wParam.ToInt32() == 17) {
                 handled = true;
                 Dispatcher.BeginInvoke(new Action(async delegate {
                     if (!IsVisible) Show(); if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal; Activate();
-                    if (!compact && !busy && !recorder.Recording && !speaking) ToggleCompact();
+                    if (!compact && !busy && !recorder.Recording && !wakeRecording && !speaking) ToggleCompact();
                     await ToggleVoice();
                 }));
             }
@@ -235,12 +239,12 @@ namespace Troika.Desktop {
             return dialog.ShowDialog() == true ? box.Text : null;
         }
         private void SetStatus(string value, bool error) { status.Text = value; status.Foreground = error ? Color(light ? "#A84632" : "#F0A994") : muted; status.ToolTip = value; UpdateStop(); }
-        private void UpdateStop() { if (stop != null) stop.Visibility = busy || recorder.Recording || speaking || localCheck != null ? Visibility.Visible : Visibility.Collapsed; }
+        private void UpdateStop() { if (stop != null) stop.Visibility = busy || recorder.Recording || wakeRecording || speaking || localCheck != null ? Visibility.Visible : Visibility.Collapsed; }
         private void Idle() { orb.SetState("idle"); microphone.Content = "Говорить"; send.IsEnabled = !busy; UpdateStop(); if (hero.Visibility == Visibility.Visible) { heroTitle.Text = "Чем помочь?"; heroHint.Text = "Нажмите на микрофон"; } }
         private async Task Safe(Func<Task> work) {
             try { await work(); }
             catch (OperationCanceledException) { if (!closed) SetStatus("Остановлено", false); }
-            catch (ApiException error) { if (!closed) { SetStatus(error.Message, true); if (error.Status == 401 || error.Status == 403) { CancelVoiceEnrollment(); InvalidateVoiceIdentity(); recordingLimit.Stop(); recorder.Dispose(); store.ForgetSession(); api.Account = new AccountSession(); api.SessionId = ""; sessions.Clear(); transcript.Children.Clear(); ShowHero(); RenderHistory(); profile.Content = "Войти"; if (openPanel == "Аккаунт") { var pending = Dispatcher.BeginInvoke(new Action(() => OpenPanel("Аккаунт"))); } } } }
+            catch (ApiException error) { if (!closed) { SetStatus(error.Message, true); if (error.Status == 401 || error.Status == 403) { CancelWakeCapture(); CancelVoiceEnrollment(); InvalidateVoiceIdentity(); recordingLimit.Stop(); recorder.Dispose(); store.ForgetSession(); api.Account = new AccountSession(); api.SessionId = ""; sessions.Clear(); transcript.Children.Clear(); ShowHero(); RenderHistory(); profile.Content = "Войти"; if (openPanel == "Аккаунт") { var pending = Dispatcher.BeginInvoke(new Action(() => OpenPanel("Аккаунт"))); } } } }
             catch (Exception error) { if (!closed) SetStatus(error is System.Net.Http.HttpRequestException ? "Нет соединения. Проверьте интернет и повторите." : error.Message, true); }
         }
         private void ShowHero() { hero.Visibility = Visibility.Visible; conversationScroll.Visibility = Visibility.Collapsed; UpdateNavigation(); }
@@ -277,13 +281,26 @@ namespace Troika.Desktop {
             var value = await api.Get("/v1/sessions?limit=30", CancellationToken.None); sessions.Clear(); sessions.AddRange(Json.Rows(value, "sessions")); RenderHistory(); profile.Content = "Аккаунт";
             await ReceiveFiles();
         }
-        private async Task Send() {
+        private async Task Send(string voice = null) {
             if (projectSpeech != null) projectSpeech.Cancel();
             if (busy || recorder.Recording || localCheck != null || developmentRelay != null && developmentRelay.Checking) return;
-            StopPlayback(); var input = composer.Text.Trim(); if (input.Length == 0) { composer.Focus(); return; }
-            try { var local = TryLocalAction(input); if (local != null) { composer.Clear(); AddMessage("user", input); AddMessage("assistant", local); SetStatus("Готово на этом ПК", false); return; } } catch (Exception error) { SetStatus(error.Message, true); return; }
+            StopPlayback(); var input = (voice ?? composer.Text).Trim(); if (input.Length == 0) { composer.Focus(); return; }
+            CancelWakeCapture();
+            try { var local = TryLocalAction(input); if (local != null) { if (voice == null) composer.Clear(); AddMessage("user", input); AddMessage("assistant", local); SetStatus("Готово на этом ПК", false); return; } } catch (Exception error) { SetStatus(error.Message, true); return; }
+            var localFile = LocalFileRequest.Parse(input);
+            if (localFile != null) {
+                if (voice == null) composer.Clear();
+                await HandleLocalFileRequest(input, localFile);
+                return;
+            }
             if (!api.Account.SignedIn) { await OpenPanelTask("Аккаунт"); SetStatus("Войдите, чтобы отправить задачу.", false); return; }
-            composer.Clear(); AddMessage("user", input); answer = AddMessage("assistant", ""); sourceList = new StackPanel(); sources.Clear(); transcript.Children.Add(sourceList);
+            var codex = CodexVoiceRequest.Parse(input);
+            if (codex != null) {
+                if (voice == null) composer.Clear();
+                await HandleCodexRequest(input, codex);
+                return;
+            }
+            if (voice == null) composer.Clear(); AddMessage("user", input); answer = AddMessage("assistant", ""); sourceList = new StackPanel(); sources.Clear(); transcript.Children.Add(sourceList);
             busy = true; send.IsEnabled = false; microphone.Content = "Стоп"; operation = new CancellationTokenSource(TimeSpan.FromMinutes(10)); var cancellation = operation.Token; SetStatus("Разбираюсь…", false); orb.SetState("thinking");
             await Safe(async () => {
                 var speechText = new System.Text.StringBuilder();
@@ -316,6 +333,9 @@ namespace Troika.Desktop {
         }
         private static string ToolStatus(string tool) { if (tool.Contains("search") || tool.Contains("research")) return "Ищу источники…"; if (tool.Contains("document") || tool.Contains("presentation")) return "Создаю файл…"; if (tool.Contains("assistant") || tool.Contains("remind")) return "Обновляю дела…"; return "Выполняю задачу…"; }
         private async Task ToggleVoice() {
+            if (wakeTransition > 0) return;
+            if (wakeRecording) { CancelWakeCapture(); SetStatus("Запись остановлена", false); return; }
+            await ReleaseWakeMicrophone();
             if (voiceEnrollment) { await ToggleVoiceEnrollment(); return; }
             if (projectSpeech != null) {
                 projectSpeech.Cancel();
@@ -331,23 +351,27 @@ namespace Troika.Desktop {
                 }
                 recordingLimit.Stop(); var audio = recorder.Stop();
                 if (audio.Length < 3244) { Array.Clear(audio, 0, audio.Length); Idle(); SetStatus("Запись слишком короткая. Повторите задачу.", true); return; }
-                string owner = voiceRecordingOwner; int epoch = voiceRecordingEpoch;
-                var active = new CancellationTokenSource(TimeSpan.FromSeconds(95)); operation = active;
-                busy = true; voiceProcessing = true; microphone.Content = "Стоп"; orb.SetState("thinking"); SetStatus(voiceIdentities.Load(owner).Enabled ? "Проверяю голос на этом ПК…" : "Распознаю речь…", false);
-                try { composer.Text = await voiceRequestGate.Transcribe(audio, owner, () => VoiceIdentityCurrent(owner, epoch), api.Transcribe, active.Token); }
-                finally { Array.Clear(audio, 0, audio.Length); voiceProcessing = false; active.Dispose(); if (operation == active) { busy = false; operation = null; Idle(); } }
-                if (!VoiceIdentityCurrent(owner, epoch)) return;
-                if (composer.Text.Trim().Length == 0) { SetStatus("Речь не распознана. Повторите или напишите задачу.", true); return; }
-                await Send();
+                await TranscribeVoice(audio, voiceRecordingOwner, voiceRecordingEpoch);
             });
+        }
+        private async Task TranscribeVoice(byte[] audio, string owner, int epoch) {
+            var active = new CancellationTokenSource(TimeSpan.FromSeconds(95)); operation = active;
+            busy = true; voiceProcessing = true; microphone.Content = "Стоп"; orb.SetState("thinking");
+            SetStatus(voiceIdentities.Load(owner).Enabled ? "Проверяю голос на этом ПК…" : "Распознаю речь…", false);
+            string request;
+            try { request = await voiceRequestGate.Transcribe(audio, owner, () => VoiceIdentityCurrent(owner, epoch), api.Transcribe, active.Token); }
+            finally { Array.Clear(audio, 0, audio.Length); voiceProcessing = false; if (operation == active) { busy = false; operation = null; if (!closed) Idle(); } active.Dispose(); }
+            if (!VoiceIdentityCurrent(owner, epoch)) return;
+            if (string.IsNullOrWhiteSpace(request)) { SetStatus("Речь не распознана. Повторите или напишите задачу.", true); return; }
+            await Send(request);
         }
         private async Task Speak(string value, CancellationToken cancellation) {
             SetStatus("Готово · озвучиваю", false); var bytes = await api.Speech(value.Length > 10000 ? value.Substring(0, 10000) : value, cancellation); cancellation.ThrowIfCancellationRequested();
-            StopPlayback(); var folder = Path.Combine(store.Root, "audio"); Directory.CreateDirectory(folder); audioFile = Path.Combine(folder, Guid.NewGuid().ToString("N") + ".mp3"); File.WriteAllBytes(audioFile, bytes); Array.Clear(bytes, 0, bytes.Length);
+            CancelWakeCapture(); StopPlayback(); var folder = Path.Combine(store.Root, "audio"); Directory.CreateDirectory(folder); audioFile = Path.Combine(folder, Guid.NewGuid().ToString("N") + ".mp3"); File.WriteAllBytes(audioFile, bytes); Array.Clear(bytes, 0, bytes.Length);
             speaking = true; player.Open(new Uri(audioFile)); player.Play(); orb.SetState("speaking"); microphone.Content = "Прервать";
         }
         private async Task PlayPhrase(byte[] bytes, CancellationToken cancellation) {
-            cancellation.ThrowIfCancellationRequested(); StopPlayback();
+            cancellation.ThrowIfCancellationRequested(); CancelWakeCapture(); StopPlayback();
             var folder = Path.Combine(store.Root, "audio"); Directory.CreateDirectory(folder);
             audioFile = Path.Combine(folder, Guid.NewGuid().ToString("N") + ".mp3"); File.WriteAllBytes(audioFile, bytes);
             var done = new TaskCompletionSource<bool>(); phrasePlayback = done;
@@ -360,6 +384,7 @@ namespace Troika.Desktop {
         }
         private void StopPlayback() { player.Stop(); player.Close(); speaking = false; if (audioFile.Length > 0) { try { File.Delete(audioFile); } catch { } audioFile = ""; } var done = phrasePlayback; phrasePlayback = null; if (done != null) done.TrySetResult(true); }
         private async Task Stop() {
+            if (wakeRecording) CancelWakeCapture();
             InvalidateVoiceIdentity();
             if (replySpeech != null) replySpeech.Cancel();
             if (projectSpeech != null) projectSpeech.Cancel();
@@ -406,9 +431,11 @@ namespace Troika.Desktop {
                 if (title == "Возможности") { await LoadCapabilityCatalogue(); return; }
                 if (title == "Действия на ПК") { RenderCapabilities(); return; }
                 if (title == "Разработка") { RenderDevelopment(); return; }
+                if (title == "Codex") { RenderCodex(); return; }
                 if (title == "Аккаунт") { await RenderAccount(); return; }
                 if (title == "Мой голос") { RenderVoiceIdentity(); return; }
                 if (title == "Файлы") { await RenderFiles(); return; }
+                if (title == "Рабочая папка") { RenderLocalFiles(); return; }
                 if (title == "Подтверждение") return;
                 if (!api.Account.SignedIn) { panelContent.Children.Clear(); panelContent.Children.Add(Label("Войдите, чтобы увидеть " + title.ToLowerInvariant() + ".", 14, muted)); AddPanelButton("Войти", () => OpenPanel("Аккаунт"), true); SurfaceGroup(0, "Ваши " + title.ToLowerInvariant(), "Раздел доступен на телефоне и ПК в одном аккаунте.", title == "Дела" ? "tasks" : "memory"); return; }
                 var value = await api.Get(title == "Дела" ? "/v1/assistant/tasks?include_closed=false" : "/v1/memories", CancellationToken.None);
@@ -484,6 +511,9 @@ namespace Troika.Desktop {
             AddBillingOptions(Json.Flag(subscription, "billing_enabled") && !Json.Flag(subscription, "billing_test"), Json.Flag(subscription, "verification_enabled"));
             SurfaceGroup(account, "Аккаунт и тариф", "", "profile"); int settings = panelContent.Children.Count;
             Check("Озвучивать ответы", autoSpeak, value => { autoSpeak = value; SaveSettings(); }); Check("Закрепить поверх окон", Topmost, value => { Topmost = value; SaveSettings(); }); Check("Меньше анимации", reducedMotion, value => { reducedMotion = value; orb.Motion = !value && SystemParameters.ClientAreaAnimation; orb.SetState(orb.State); SaveSettings(); });
+            Check("Фоновое пробуждение по слову «Тройка»", WakeEnabledForAccount, SetWakeEnabled);
+            wakeBadge = Label(WakeStatus(), 12, muted);
+            panelContent.Children.Add(wakeBadge);
             AddPanelButton("Мой голос", () => OpenPanel("Мой голос"), false);
             SurfaceGroup(settings, "На этом компьютере", "Голос и поведение окна", "home"); AddAppearanceSettings();
             int management = panelContent.Children.Count;
@@ -498,7 +528,7 @@ namespace Troika.Desktop {
             panelContent.Children.Add(Label("Ctrl+Alt+T — голос. Готовые файлы хранятся на этом ПК; автоматической облачной копии нет.", 11, muted));
         }
         private void Check(string title, bool current, Action<bool> update) { var check = new CheckBox { Content = title, IsChecked = current, Foreground = text, FontSize = 13, Margin = new Thickness(0, 7, 0, 7) }; check.Click += delegate { update(check.IsChecked == true); }; panelContent.Children.Add(check); }
-        private void SaveSettings() { store.SaveSettings(new { auto_speak = autoSpeak, light = light, reduced_motion = reducedMotion, always_on_top = Topmost, interface_accent = interfaceAccent }); }
+        private void SaveSettings() { store.SaveSettings(new { auto_speak = autoSpeak, light = light, reduced_motion = reducedMotion, always_on_top = Topmost, interface_accent = interfaceAccent, wake_enabled = wakeEnabled, wake_owner = wakeOwner, codex_executable = codexExe }); }
         private async Task ShowDevices() {
             await Safe(async () => { var value = await api.Get("/v1/account/devices", CancellationToken.None); RenderDeviceCards(value); });
         }
@@ -519,7 +549,7 @@ namespace Troika.Desktop {
                 var current = Json.Rows(devices, "devices").FirstOrDefault(item => Json.Flag(item, "current"));
                 if (current == null) throw new InvalidDataException("Сервер не определил текущее устройство. Выход не подтверждён.");
                 await api.Call("DELETE", "/v1/account/devices/" + Uri.EscapeDataString(Json.Text(current, "id")), null, CancellationToken.None);
-                CancelVoiceEnrollment(); InvalidateVoiceIdentity(); ResetDevelopmentState(); store.ForgetSession(); api.Account = new AccountSession(); api.SessionId = ""; transcript.Children.Clear(); sessions.Clear(); ShowHero(); RenderHistory(); profile.Content = "Войти"; await RenderAccount(); SetStatus("Вы вышли на этом ПК", false);
+                CancelWakeCapture(); CancelVoiceEnrollment(); InvalidateVoiceIdentity(); ResetDevelopmentState(); store.ForgetSession(); api.Account = new AccountSession(); ResetCodexAccount(); api.SessionId = ""; transcript.Children.Clear(); sessions.Clear(); ShowHero(); RenderHistory(); profile.Content = "Войти"; await RenderAccount(); SetStatus("Вы вышли на этом ПК", false);
             });
         }
         private void RenderTasks(Dictionary<string, object> value, Dictionary<string, object> projects) {
@@ -571,6 +601,7 @@ namespace Troika.Desktop {
             if (api.Account.SignedIn) await Safe(ReceiveFiles); if (revision != panelRevision) return;
             panelContent.Children.Clear();
             if (owner.Length == 0) { panelContent.Children.Add(Label("Войдите, чтобы открыть файлы своего аккаунта.", 13, muted)); AddPanelButton("Войти", () => OpenPanel("Аккаунт"), true); SurfaceGroup(0, "Сохранено на этом ПК", "Документы и результаты ваших задач", "files"); return; }
+            AddPanelButton("Рабочая папка на ПК", () => OpenPanel("Рабочая папка"), false);
             RenderFileCards(store.Files(owner).ToList());
         }
         private void RenderFileCards(List<string> files) {

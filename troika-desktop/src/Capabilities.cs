@@ -129,6 +129,7 @@ namespace Troika.Desktop {
         private void RenderDevelopment() {
             panelContent.Children.Clear();
             if (localCheck != null || developmentRelay != null && developmentRelay.Checking) { panelContent.Children.Add(Label("Разработка или проверка выполняется…", 13, muted)); AddPanelButton("Остановить", () => { var task = Stop(); }, true); return; }
+            AddPanelButton("Codex · аккаунт ChatGPT", () => OpenPanel("Codex"), false);
             panelContent.Children.Add(Label("Что разработать?", 12, muted));
             var request = Field("Какой проект создать", true); request.Text = developmentRequest; request.TextChanged += delegate { developmentRequest = request.Text; }; request.MinHeight = 84; panelContent.Children.Add(request);
             panelContent.Children.Add(Label("Способ проверки", 12, muted)); var kinds = new ComboBox { Margin = new Thickness(0, 8, 0, 8) }; AccessibleName(kinds, "Способ проверки проекта");

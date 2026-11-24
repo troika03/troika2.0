@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 
 namespace Troika.Desktop {
     // PCM capture stays in RAM. No microphone access before an explicit user action.
@@ -29,6 +30,59 @@ namespace Troika.Desktop {
             } catch { Dispose(); throw; }
         }
         private static void Check(uint result) { if (result != 0) throw new InvalidOperationException("Не удалось начать запись микрофона."); }
+        internal static void Listen(Func<byte[], int, bool> receive, Action ready, CancellationToken cancellation) {
+            const int blockSize = 3200;
+            const uint done = 1;
+            var format = new Format { Tag = 1, Channels = 1, Rate = 16000, Average = 32000, Align = 2, Bits = 16, Extra = 0 };
+            var size = (uint)Marshal.SizeOf(typeof(Header));
+            var buffers = new IntPtr[4];
+            var headers = new IntPtr[buffers.Length];
+            var prepared = new bool[buffers.Length];
+            var bytes = new byte[blockSize];
+            using (var signal = new AutoResetEvent(false)) {
+                IntPtr input;
+                if (waveInOpen(out input, uint.MaxValue, ref format, signal.SafeWaitHandle.DangerousGetHandle(), IntPtr.Zero, 0x50000) != 0)
+                    throw new InvalidOperationException("Микрофон недоступен. Проверьте подключение и разрешение Windows.");
+                try {
+                    for (int i = 0; i < buffers.Length; i++) {
+                        buffers[i] = Marshal.AllocHGlobal(blockSize);
+                        headers[i] = Marshal.AllocHGlobal((int)size);
+                        Marshal.StructureToPtr(new Header { Data = buffers[i], Length = blockSize }, headers[i], false);
+                        Check(waveInPrepareHeader(input, headers[i], size)); prepared[i] = true;
+                        Check(waveInAddBuffer(input, headers[i], size));
+                    }
+                    cancellation.ThrowIfCancellationRequested();
+                    Check(waveInStart(input));
+                    ready();
+                    var signals = new WaitHandle[] { cancellation.WaitHandle, signal };
+                    int index = 0;
+                    while (true) {
+                        cancellation.ThrowIfCancellationRequested();
+                        var current = (Header)Marshal.PtrToStructure(headers[index], typeof(Header));
+                        if ((current.Flags & done) == 0) {
+                            if (WaitHandle.WaitAny(signals, 4000) == WaitHandle.WaitTimeout)
+                                throw new InvalidOperationException("Нет сигнала с микрофона. Проверьте выбранное устройство записи.");
+                            continue;
+                        }
+                        int count = (int)Math.Min(current.Recorded, blockSize) & ~1;
+                        Marshal.Copy(buffers[index], bytes, 0, count);
+                        if (count > 0 && !receive(bytes, count)) return;
+                        Check(waveInAddBuffer(input, headers[index], size));
+                        index = (index + 1) % headers.Length;
+                    }
+                } finally {
+                    waveInReset(input);
+                    for (int i = 0; i < headers.Length; i++)
+                        if (prepared[i]) waveInUnprepareHeader(input, headers[i], size);
+                    waveInClose(input);
+                    Array.Clear(bytes, 0, bytes.Length);
+                    for (int i = 0; i < buffers.Length; i++) {
+                        if (headers[i] != IntPtr.Zero) Marshal.FreeHGlobal(headers[i]);
+                        if (buffers[i] != IntPtr.Zero) Marshal.FreeHGlobal(buffers[i]);
+                    }
+                }
+            }
+        }
         public byte[] Stop() {
             if (!Recording) return new byte[0];
             try {

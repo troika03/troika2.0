@@ -82,10 +82,11 @@ namespace Troika.Desktop {
             });
         }
         private async Task SpeakProjectReport() {
-            if (autopilotSpeaking || busy || speaking || recorder.Recording || pendingApproval != null || closed) return;
+            if (autopilotSpeaking || projectSpeech != null || wakeRecording || wakeLocked || wakeSuspended || busy || speaking || recorder.Recording || pendingApproval != null || closed) return;
             var report = Autopilot.NextReport(true); if (report == null) return;
             autopilotSpeaking = true; var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(60)); projectSpeech = cancellation; var identity = api.Account.Email; string reportFile = "";
             try {
+                await ReleaseWakeMicrophone();
                 var bytes = await api.Speech(report.Text, cancellation.Token);
                 if (busy || speaking || recorder.Recording || closed || cancellation.IsCancellationRequested || identity != api.Account.Email) { Array.Clear(bytes, 0, bytes.Length); return; }
                 var completed = new TaskCompletionSource<bool>(); EventHandler ended = (s, e) => completed.TrySetResult(true);
