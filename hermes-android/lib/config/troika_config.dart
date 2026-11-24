@@ -285,6 +285,8 @@ class TroikaConfig {
     await _prefs.remove(legacyKey);
   }
 
+  static String newConversationId() => 'mobile-${_newOpaqueId()}';
+
   static String _newOpaqueId() {
     final random = Random.secure();
     final bytes = List<int>.generate(24, (_) => random.nextInt(256));

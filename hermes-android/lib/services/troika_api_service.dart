@@ -243,8 +243,13 @@ class ChatMessage {
 /// Использует OpenAI-совместимый Chat Completions API в общей сессии
 /// конкретной установки приложения — той же, что голосовой путь (Kotlin).
 class TroikaApiService {
-  TroikaApiService({Future<Map<String, String>> Function()? chatHeaders})
-    : _chatHeaders = chatHeaders ?? TroikaConfig.chatHeadersAsync;
+  TroikaApiService({
+    Future<Map<String, String>> Function()? chatHeaders,
+    String? Function()? activeConversationId,
+  }) : _chatHeaders = chatHeaders ?? TroikaConfig.chatHeadersAsync,
+       _activeConversationId = activeConversationId;
+
+  final String? Function()? _activeConversationId;
 
   final Future<Map<String, String>> Function() _chatHeaders;
   static const Duration _timeout = Duration(seconds: 90);
@@ -636,7 +641,9 @@ class TroikaApiService {
     Future<String> Function(RunApprovalRequest request)? onApproval,
     FutureOr<void> Function(String runId)? onRunStarted,
   }) async {
-    final identity = TroikaRequestIdentity();
+    final identity = TroikaRequestIdentity(
+      conversationId: _activeConversationId?.call(),
+    );
     identity.check();
     // 1) Стартуем run. input = только новое сообщение; историю сервер берёт
     //    из общей сессии. recent шлём как conversation_history для надёжности.
@@ -941,7 +948,9 @@ class TroikaApiService {
   /// Загрузить историю общей сессии с сервера (для отрисовки ленты при входе).
   /// Возвращает сообщения по порядку (старые → новые).
   Future<List<ChatMessage>> loadSessionHistory({int limit = 60}) async {
-    final identity = TroikaRequestIdentity();
+    final identity = TroikaRequestIdentity(
+      conversationId: _activeConversationId?.call(),
+    );
     final encoded = Uri.encodeComponent(identity.session);
     final uri = identity.uri('/v1/sessions/$encoded/messages?limit=$limit');
     final client = http.Client();

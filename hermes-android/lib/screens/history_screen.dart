@@ -5,7 +5,19 @@ import 'session_detail_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
   final TroikaApiService? api;
-  const HistoryScreen({super.key, this.api});
+  final String? homeSessionId;
+  final Future<void> Function(BuildContext, SessionSummary)? onOpen;
+  final Future<void> Function(BuildContext)? onNew;
+  final ValueChanged<String>? onDeleted;
+
+  const HistoryScreen({
+    super.key,
+    this.api,
+    this.homeSessionId,
+    this.onOpen,
+    this.onNew,
+    this.onDeleted,
+  });
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
 }
@@ -86,12 +98,49 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ),
     );
     if (confirmed != true) return;
-    await _mutate(() => _api.deleteSession(s.id), 'Разговор удалён');
+    await _mutate(() async {
+      await _api.deleteSession(s.id);
+      if (mounted) widget.onDeleted?.call(s.id);
+    }, 'Разговор удалён');
+  }
+
+  Future<void> _openSession(SessionSummary s) async {
+    final open = widget.onOpen;
+    if (open != null) {
+      await open(context, s);
+      if (mounted) _reload();
+      return;
+    }
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TroikaPageScope(
+          child: SessionDetailScreen(sessionId: s.id, headerTitle: _shown(s)),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) => TroikaPage(
         appBar: AppBar(title: const Text('Разговоры'), actions: [
+          if (widget.onNew case final create?)
+            IconButton(
+              tooltip: 'Новый разговор',
+              onPressed: () async {
+                await create(context);
+                if (mounted) _reload();
+              },
+              icon: const Icon(Icons.edit_square),
+            ),
+          if (widget.homeSessionId case final id?)
+            IconButton(
+              tooltip: 'Основной разговор',
+              onPressed: () => _openSession(
+                SessionSummary(id: id, messageCount: 0, title: 'Основной разговор'),
+              ),
+              icon: const Icon(Icons.home_outlined),
+            ),
           IconButton(
               tooltip: 'Обновить',
               onPressed: _reload,
@@ -159,6 +208,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                     fontWeight: FontWeight.w600))),
                       _SessionTile(
                         session: filtered[i],
+                        onOpen: () => _openSession(filtered[i]),
                         onRename: () => _rename(filtered[i]),
                         onDelete: () => _delete(filtered[i]),
                       ),
@@ -195,10 +245,12 @@ String _day(double? ts) {
 
 class _SessionTile extends StatelessWidget {
   final SessionSummary session;
+  final VoidCallback onOpen;
   final VoidCallback onRename;
   final VoidCallback onDelete;
   const _SessionTile({
     required this.session,
+    required this.onOpen,
     required this.onRename,
     required this.onDelete,
   });
@@ -215,12 +267,7 @@ class _SessionTile extends StatelessWidget {
     return Card(
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (_) => TroikaPageScope(
-                      child: SessionDetailScreen(
-                          sessionId: session.id, headerTitle: shown)))),
+          onTap: onOpen,
           child: Padding(
               padding: const EdgeInsets.all(20),
               child:

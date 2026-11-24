@@ -3,16 +3,19 @@ import '../config/troika_config.dart';
 /// One request's owner, origin and conversation, including an identity revision.
 /// Access-token rotation for the same identity does not invalidate the request.
 class TroikaRequestIdentity {
-  TroikaRequestIdentity()
+  TroikaRequestIdentity({String? conversationId})
     : revision = TroikaConfig.voiceIdentityRevision,
       owner = TroikaConfig.accountEmail,
       origin = TroikaConfig.serverUrl,
-      session = TroikaConfig.sessionId,
-      sessionKey = TroikaConfig.sessionKey,
+      _homeSession = TroikaConfig.sessionId,
+      _homeSessionKey = TroikaConfig.sessionKey,
+      session = conversationId ?? TroikaConfig.sessionId,
+      sessionKey = conversationId ?? TroikaConfig.sessionKey,
       _hosted = TroikaConfig.signedIn;
 
   final int revision;
   final String owner, origin, session, sessionKey;
+  final String _homeSession, _homeSessionKey;
   final bool _hosted;
 
   bool matches(TroikaRequestIdentity other) =>
@@ -27,8 +30,8 @@ class TroikaRequestIdentity {
     if (revision != TroikaConfig.voiceIdentityRevision ||
         owner != TroikaConfig.accountEmail ||
         origin != TroikaConfig.serverUrl ||
-        session != TroikaConfig.sessionId ||
-        sessionKey != TroikaConfig.sessionKey ||
+        _homeSession != TroikaConfig.sessionId ||
+        _homeSessionKey != TroikaConfig.sessionKey ||
         (_hosted && !TroikaConfig.voiceSessionAvailable)) {
       throw const RequestIdentityChanged();
     }

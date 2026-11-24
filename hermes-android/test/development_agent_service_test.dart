@@ -24,6 +24,7 @@ class FakeApi extends TroikaApiService {
     void Function(String, bool)? onToolDone, FutureOr<void> Function(RunActionResult)? onResult,
     void Function(String)? onDelta, Future<String> Function(RunApprovalRequest)? onApproval,
     FutureOr<void> Function(String)? onRunStarted,
+    void Function(String)? onActivity,
   }) async {
     input = message.text;
     await onRunStarted?.call('run_test');

@@ -49,7 +49,9 @@ class AssistantService extends ChangeNotifier {
   final AudioRecorderService _recorder = AudioRecorderService();
   final SttService _stt = SttService();
   final TtsService _tts = TtsService();
-  final TroikaApiService _troika = TroikaApiService();
+  late final TroikaApiService _troika = TroikaApiService(
+    activeConversationId: () => _conversationId,
+  );
   final WakeWordService _wakeWord = WakeWordService();
   final LocalCommandService _localCommands = LocalCommandService();
 
@@ -72,6 +74,8 @@ class AssistantService extends ChangeNotifier {
 
   // Единая лента диалога — голос и текст вперемешку, как в мессенджере.
   final List<ChatMessage> _messages = [];
+  String? _conversationId;
+  String? _conversationTitle;
   bool _historyLoaded = false;
   int _historyGeneration = 0;
   Timer? _accountSyncTimer;
@@ -134,6 +138,8 @@ class AssistantService extends ChangeNotifier {
     unawaited(_invalidateTurn().catchError((Object _) {}));
     _historyGeneration++;
     _messages.clear();
+    _conversationId = null;
+    _conversationTitle = null;
     _historyLoaded = false;
     _lastUserText = '';
     _lastTroikaText = '';
@@ -214,6 +220,50 @@ class AssistantService extends ChangeNotifier {
   RunApprovalRequest? get pendingApproval => _pendingApproval;
   List<ChatMessage> get messages => List.unmodifiable(_messages);
   bool get historyLoaded => _historyLoaded;
+  String get conversationId => _conversationId ?? TroikaConfig.sessionId;
+  String get conversationTitle => _conversationTitle ?? 'Основной разговор';
+
+  bool get canSwitchConversation =>
+      !_disposed &&
+      _activeTurn == null &&
+      (_state == AssistantState.idle || _state == AssistantState.error);
+
+  bool selectConversation(String id, String title, {bool isNew = false}) {
+    if (!canSwitchConversation || id.isEmpty) return false;
+    _conversationTitle = title;
+    if (id == conversationId) {
+      notifyListeners();
+      return true;
+    }
+    _conversationId = id == TroikaConfig.sessionId ? null : id;
+    _resetConversation(historyLoaded: isNew);
+    if (!isNew) unawaited(loadHistory(replaceEvenIfEmpty: true));
+    return true;
+  }
+
+  void conversationDeleted(String id) {
+    if (id != conversationId) return;
+    unawaited(_invalidateTurn().catchError((Object _) {}));
+    _conversationId = null;
+    _conversationTitle = null;
+    final deletedHome = id == TroikaConfig.sessionId;
+    _resetConversation(historyLoaded: deletedHome);
+    if (!deletedHome) unawaited(loadHistory(replaceEvenIfEmpty: true));
+  }
+
+  void _resetConversation({required bool historyLoaded}) {
+    _historyGeneration++;
+    _turnGeneration++;
+    _messages.clear();
+    _webSources = WebSourceTrace();
+    _lastUserText = '';
+    _lastTroikaText = '';
+    _errorMessage = '';
+    _activityStatus = '';
+    _actionInProgress = false;
+    _historyLoaded = historyLoaded;
+    _setState(AssistantState.idle);
+  }
 
   ({String action, String prompt})? takePendingUiAction() {
     final action = _pendingUiAction;
@@ -312,7 +362,7 @@ class AssistantService extends ChangeNotifier {
     }
   }
 
-  /// Загрузить ленту общей сессии (голос+текст) с сервера.
+  /// Загрузить ленту текущего разговора с сервера.
   Future<void> loadHistory({bool replaceEvenIfEmpty = false}) async {
     if (_disposed ||
         _activeTurn != null ||
@@ -432,6 +482,13 @@ class AssistantService extends ChangeNotifier {
   /// Dedup: если такое же сообщение только что добавлено (ручной путь или
   /// повтор от Kotlin), не дублируем.
   void _onVoiceMessage(String role, String content) {
+    // Native wake-word turns belong to the account's main conversation.
+    if (_conversationId != null) {
+      if (role == 'assistant') {
+        unawaited(ReminderDeliveryService.instance.sync());
+      }
+      return;
+    }
     final text = content.trim();
     if (text.isEmpty) return;
     _historyGeneration++;

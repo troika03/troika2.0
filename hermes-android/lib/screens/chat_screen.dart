@@ -13,6 +13,78 @@ import '../services/assistant_service.dart';
 import '../services/troika_api_service.dart';
 import '../services/thought_translator.dart';
 import '../theme/troika_theme.dart';
+import 'history_screen.dart';
+
+String _conversationTitle(SessionSummary session) {
+  final title = session.title?.trim() ?? '';
+  final preview = session.preview?.trim() ?? '';
+  if (title.isNotEmpty) return title;
+  if (session.id == TroikaConfig.sessionId) return 'Основной разговор';
+  return preview.isEmpty ? 'Разговор' : preview;
+}
+
+void _showBusyConversation(BuildContext context) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('Сначала заверши текущий запрос.')),
+  );
+}
+
+/// The history entry from Home opens the same interactive chat as Text.
+class ConversationHistory extends StatelessWidget {
+  const ConversationHistory({super.key});
+
+  Future<void> _open(
+    BuildContext context,
+    String id,
+    String title, {
+    bool isNew = false,
+  }) async {
+    final assistant = context.read<AssistantService>();
+    if (!assistant.selectConversation(id, title, isNew: isNew)) {
+      _showBusyConversation(context);
+      return;
+    }
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TroikaPageScope(
+          child: TroikaPage(
+            appBar: AppBar(title: const Text('Текст')),
+            body: const ChatScreen(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!TroikaConfig.signedIn) return const HistoryScreen();
+    final revision = TroikaConfig.voiceIdentityRevision;
+    final assistant = context.read<AssistantService>();
+    return HistoryScreen(
+      homeSessionId: TroikaConfig.sessionId,
+      onOpen: (context, session) async {
+        if (revision != TroikaConfig.voiceIdentityRevision) return;
+        await _open(context, session.id, _conversationTitle(session));
+      },
+      onNew: (context) async {
+        if (revision != TroikaConfig.voiceIdentityRevision) return;
+        await _open(
+          context,
+          TroikaConfig.newConversationId(),
+          'Новый разговор',
+          isNew: true,
+        );
+      },
+      onDeleted: (id) {
+        if (revision == TroikaConfig.voiceIdentityRevision) {
+          assistant.conversationDeleted(id);
+        }
+      },
+    );
+  }
+}
 
 /// Полноценный чат-экран: общая лента голоса и текста, прокрутка,
 /// картинки в пузырях, кликабельные ссылки, отправка фото/файлов.
@@ -34,7 +106,98 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Прикреплённые, но ещё не отправленные картинки (data-url).
   final List<String> _pendingImages = [];
+  final _drafts = <String, (TextEditingValue, List<String>)>{};
   int _lastCount = 0;
+
+  void _selectConversation(
+    AssistantService assistant,
+    String id,
+    String title, {
+    bool isNew = false,
+  }) {
+    final previous = assistant.conversationId;
+    if (!assistant.selectConversation(id, title, isNew: isNew)) {
+      _showBusyConversation(context);
+      return;
+    }
+    if (previous == id) return;
+    if (_input.text.isNotEmpty || _pendingImages.isNotEmpty) {
+      _drafts[previous] = (_input.value, List.of(_pendingImages));
+    }
+    final draft = _drafts.remove(id);
+    _input.value = draft?.$1 ?? TextEditingValue.empty;
+    setState(() {
+      _pendingImages
+        ..clear()
+        ..addAll(draft?.$2 ?? const []);
+    });
+  }
+
+  Future<void> _pickConversation(AssistantService assistant) async {
+    final revision = TroikaConfig.voiceIdentityRevision;
+    final session = await Navigator.push<SessionSummary>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TroikaPageScope(
+          child: HistoryScreen(
+            homeSessionId: TroikaConfig.sessionId,
+            onOpen: (context, session) async => Navigator.pop(context, session),
+            onDeleted: (id) {
+              if (!mounted || revision != TroikaConfig.voiceIdentityRevision) {
+                return;
+              }
+              _drafts.remove(id);
+              if (id == assistant.conversationId) {
+                _input.clear();
+                setState(_pendingImages.clear);
+              }
+              assistant.conversationDeleted(id);
+            },
+          ),
+        ),
+      ),
+    );
+    if (!mounted ||
+        session == null ||
+        revision != TroikaConfig.voiceIdentityRevision) {
+      return;
+    }
+    _selectConversation(assistant, session.id, _conversationTitle(session));
+  }
+
+  Widget _conversationBar(AssistantService assistant) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 12),
+    child: Row(
+      children: [
+        IconButton(
+          tooltip: 'Разговоры',
+          onPressed: assistant.canSwitchConversation
+              ? () => _pickConversation(assistant)
+              : null,
+          icon: const Icon(Icons.history_rounded),
+        ),
+        Expanded(
+          child: Text(
+            assistant.conversationTitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        IconButton(
+          tooltip: 'Новый разговор',
+          onPressed: assistant.canSwitchConversation
+              ? () => _selectConversation(
+                    assistant,
+                    TroikaConfig.newConversationId(),
+                    'Новый разговор',
+                    isNew: true,
+                  )
+              : null,
+          icon: const Icon(Icons.edit_square),
+        ),
+      ],
+    ),
+  );
 
   @override
   void dispose() {
@@ -223,6 +386,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     return Column(
       children: [
+        if (TroikaConfig.signedIn) _conversationBar(a),
         Expanded(
           child: messages.isEmpty
               ? _emptyState(a)

@@ -23,6 +23,7 @@ class _Api {
   List<Map<String, dynamic>> history = [];
   Map<String, dynamic> runStatus = {'status': 'running'};
   int historyRequests = 0;
+  final historyPaths = <String>[];
   final firstStart = Completer<void>(), releaseStart = Completer<void>();
   final stopEntered = Completer<void>(), releaseStop = Completer<void>();
   final events = <int, StreamController<List<int>>>{};
@@ -54,6 +55,7 @@ class _Api {
         request.url.path.endsWith('/messages')) {
       final snapshot = List<Map<String, dynamic>>.of(history);
       historyRequests++;
+      historyPaths.add(request.url.path);
       if (!historyEntered.isCompleted) historyEntered.complete();
       if (holdHistory && historyRequests == 1) await releaseHistory.future;
       return response(jsonEncode({'messages': snapshot}), 200);
@@ -197,6 +199,57 @@ void main() {
   AssistantService assistant() => AssistantService(
     replyDelivery: ReminderDeliveryService(supported: false),
   );
+
+  test('new and reopened conversations keep their own transcript', () async {
+    final api = _Api(holdHistory: true), service = assistant();
+    try {
+      await http.runWithClient(() async {
+        api.history = [
+          {'role': 'user', 'content': 'Вопрос из основного разговора'},
+        ];
+        final oldHistory = service.loadHistory();
+        await api.historyEntered.future;
+        final id = TroikaConfig.newConversationId();
+        expect(service.selectConversation(id, 'Новый разговор', isNew: true),
+            isTrue);
+        api.releaseHistory.complete();
+        await oldHistory;
+        expect(service.messages, isEmpty);
+        expect(TroikaConfig.sessionId, 'ses_synthetic');
+
+        final turn = service.sendTextQuery('Почему морская вода солёная?');
+        await api.waitEvents(1);
+        expect(service.selectConversation('ses_synthetic', 'Основной разговор'),
+            isFalse);
+        expect(api.startBodies.single['session_id'], id);
+        expect(api.startBodies.single['conversation_history'], isNull);
+        api.delta(1, 'Ответ нового разговора.');
+        await api.finish(1);
+        await turn;
+
+        api.history = [
+          {'role': 'assistant', 'content': 'Сохранённый ответ другого разговора'},
+        ];
+        expect(service.selectConversation('desktop-existing', 'Старый разговор'),
+            isTrue);
+        expect(service.messages, isEmpty);
+        await service.loadHistory();
+        expect(api.historyPaths.last, '/v1/sessions/desktop-existing/messages');
+        expect(service.messages.single.text,
+            'Сохранённый ответ другого разговора');
+
+        final resumed = service.sendTextQuery('Почему вода в озере пресная?');
+        await api.waitEvents(2);
+        expect(api.startBodies.last['session_id'], 'desktop-existing');
+        api.delta(2, 'Ответ продолженного разговора.');
+        await api.finish(2);
+        await resumed;
+      }, () => api.client);
+    } finally {
+      service.dispose();
+      await api.dispose();
+    }
+  });
 
   test('late old SSE cannot speak or finish a newer query', () async {
     final api = _Api(), service = assistant();

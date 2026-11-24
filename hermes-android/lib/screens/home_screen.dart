@@ -23,7 +23,6 @@ import 'development_screen.dart';
 import 'assistant_hub_screen.dart';
 import 'files_screen.dart';
 import 'files_hub_screen.dart';
-import 'history_screen.dart';
 import 'local_documents_screen.dart';
 import 'memory_screen.dart';
 import 'settings_overview_screen.dart';
@@ -702,7 +701,7 @@ List<(String, IconData, Widget)> _secondaryPages({
   VoidCallback? onSignedOut,
   VoidCallback? onAppearanceChanged,
 }) => [
-  ('Разговоры', Icons.history_rounded, const HistoryScreen()),
+  ('Разговоры', Icons.history_rounded, const ConversationHistory()),
   ('Дела', Icons.checklist_rounded, const AssistantHubScreen()),
   ('Файлы', Icons.folder_outlined, const FilesHubScreen()),
   ('Разработка', Icons.code_rounded, const DevelopmentScreen()),
