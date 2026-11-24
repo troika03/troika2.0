@@ -8,6 +8,17 @@ model:
 fallback_providers: []
 fallback_model: null
 
+auxiliary:
+  development:
+    use_free_company_models: true
+  development_review:
+    use_free_company_models: true
+  development_free:
+    provider: openrouter
+    model: openrouter/free
+    base_url: ""
+    api_key: ${OPENROUTER_API_KEY}
+
 toolsets:
   - troika-product
 
@@ -21,6 +32,16 @@ platforms:
     extra:
       product_voice_enabled: true
       product_resource_prices:
+        openrouter/free:
+          provider: openrouter
+          version: free-development-2026-11-24
+          debit_mode: model_tokens
+          input_rub: 0
+          output_rub: 0
+          cache_read_rub: 0
+          cache_write_rub: 0
+          default_output_tokens: 8192
+          maximum_output_tokens: 65536
         nvidia/nemotron-3-ultra-550b-a55b:free:
           provider: openrouter
           version: free-agent-2026-11-23

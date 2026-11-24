@@ -52,7 +52,18 @@ class MainActivity : FlutterActivity() {
     @Volatile private var ownerVoiceCapture: OwnerVoiceCapture? = null
     @Volatile private var ownerVoiceResumed = false
 
-    override fun onResume() { super.onResume(); ownerVoiceResumed = true }
+    override fun onResume() {
+        super.onResume()
+        ownerVoiceResumed = true
+        val prefs = getSharedPreferences(HermesListenerService.PREFS, MODE_PRIVATE)
+        if (prefs.getBoolean("flutter.hermes_phone_control_enabled", false)) {
+            val intent = Intent(this, HermesListenerService::class.java).apply {
+                action = HermesListenerService.ACTION_ENSURE_PHONE_BRIDGE
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
+            else startService(intent)
+        }
+    }
     override fun onPause() {
         ownerVoiceResumed = false
         ownerVoiceBridge?.cancel()
@@ -431,7 +442,7 @@ class MainActivity : FlutterActivity() {
 
     private fun stopListenerService() {
         val intent = Intent(this, HermesListenerService::class.java).apply {
-            action = HermesListenerService.ACTION_STOP
+            action = HermesListenerService.ACTION_STOP_LISTENING
         }
         startService(intent)
     }

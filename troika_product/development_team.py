@@ -43,13 +43,14 @@ def eligible_free_models(models):
     # Coding descriptions rank ahead of general models, then context capacity.
     eligible.sort(
         key=lambda m: (
+            m["id"] in {"particle-ai/particle-1:free", "dots-studio/dots-3-note-preview:free"},
             "reasoning_effort" in m.get("supported_parameters", []),
             "cod" in (m.get("description", "") + m["id"]).lower(),
             int(m.get("context_length") or 0),
         ),
         reverse=True,
     )
-    return tuple(m["id"] for m in eligible[:3])
+    return tuple(m["id"] for m in eligible[:8])
 
 
 def _free_candidates(client, *, vision=False):
@@ -159,16 +160,26 @@ def free_api(messages, tokens, timeout, cancelled=None, *, vision=False, schema=
     try:
         if cancelled and cancelled():
             raise InterruptedError("Development stopped before free model request")
-        return client.chat.completions.create(
-            model=models[0],
-            messages=messages,
-            max_tokens=tokens,
-            timeout=timeout,
-            extra_body={
-                "reasoning": {"enabled": False},
-                "response_format": schema if vision else response_format(messages),
-            },
-        )
+        for model in models:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ValueError("Free development request timed out")
+            if cancelled and cancelled():
+                raise InterruptedError("Development stopped before free model request")
+            try:
+                return client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    max_tokens=tokens,
+                    timeout=remaining,
+                    extra_body={
+                        "reasoning": {"enabled": False},
+                        "response_format": schema if vision else response_format(messages),
+                    },
+                )
+            except Exception as error:
+                if model == models[-1] or getattr(error, "status_code", None) != 429:
+                    raise
     finally:
         _FREE_REQUESTS.release()
 

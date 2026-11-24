@@ -1,4 +1,4 @@
-"""Only an explicit pre-response credit rejection may release the model hold."""
+"""Release model holds only for verified pre-response provider refusals."""
 
 import asyncio
 import json
@@ -36,6 +36,19 @@ def test_async_credit_refusal_preserves_original_exception(meter):
             await wrap_provider_client(AsyncClient(rejected()), async_mode=True).chat.completions.create(**PAYLOAD)
     with pytest.raises(APIStatusError):
         asyncio.run(run())
+    assert summary(meter)["reserved"] == 0 and not meter.stopped
+
+
+def test_verified_free_rate_limit_releases_hold_for_next_model(meter):
+    from decimal import Decimal
+    from tests.troika_product.test_llm_metering import MODEL
+    from troika_product.llm_metering import ModelPrice, PriceCatalogue
+    from troika_product.subscription_policy import TokenPrices
+
+    prices = TokenPrices("test-free", *(Decimal(0) for _ in range(4)))
+    meter.catalogue = PriceCatalogue({("openrouter", MODEL): ModelPrice(prices, debit_mode="model_tokens")})
+    with pytest.raises(APIStatusError):
+        invoke(meter, Client(rejected(429)))
     assert summary(meter)["reserved"] == 0 and not meter.stopped
 
 

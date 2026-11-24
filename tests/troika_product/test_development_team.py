@@ -176,6 +176,29 @@ def test_free_route_has_no_automatic_provider_retry(monkeypatch):
     assert set(requests[0]["extra_body"]) == {"reasoning", "response_format"}
 
 
+def test_free_route_tries_next_verified_model_after_rate_limit(monkeypatch):
+    attempted = []
+    models = ("first:free", "second:free")
+
+    class RateLimit(Exception):
+        status_code = 429
+
+    def complete(**kwargs):
+        attempted.append(kwargs["model"])
+        if kwargs["model"] == models[0]:
+            raise RateLimit()
+        return "completed"
+
+    client = SimpleNamespace(base_url="https://openrouter.ai/api/v1",
+                             chat=SimpleNamespace(completions=SimpleNamespace(create=complete)))
+    client.with_options = lambda **kwargs: client
+    monkeypatch.setattr("agent.auxiliary_client.get_text_auxiliary_client", lambda **kwargs: (client, "openrouter/free"))
+    monkeypatch.setattr("troika_product.development_team._free_candidates", lambda client: models)
+    messages = [{"role": "system", "content": "JSON"}, {"role": "user", "content": '{"file":"add.py"}'}]
+    assert free_api(messages, 10, 2) == "completed"
+    assert attempted == list(models)
+
+
 def test_free_catalog_rejects_hidden_fees_missing_prices_and_weak_json_routes():
     from troika_product.development_team import eligible_free_models
     model = {"id": "vendor/code:free", "description": "Coding", "context_length": 256000,

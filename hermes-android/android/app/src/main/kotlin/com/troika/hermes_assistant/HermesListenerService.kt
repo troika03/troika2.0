@@ -99,6 +99,8 @@ class HermesListenerService : Service() {
         const val ACTION_TRIGGER_DIALOG = "TRIGGER_DIALOG"
         const val ACTION_INTERRUPT_TTS = "INTERRUPT_TTS"
         const val ACTION_REFRESH_PHONE_BRIDGE = "REFRESH_PHONE_BRIDGE"
+        const val ACTION_ENSURE_PHONE_BRIDGE = "ENSURE_PHONE_BRIDGE"
+        const val ACTION_STOP_LISTENING = "STOP_LISTENING"
         const val ACTION_PAUSE_WAKE_FOR_FOREGROUND_SPEECH =
             "PAUSE_WAKE_FOR_FOREGROUND_SPEECH"
         const val ACTION_RESUME_WAKE_AFTER_FOREGROUND_SPEECH =
@@ -445,7 +447,7 @@ class HermesListenerService : Service() {
         }
 
         when (intent?.action) {
-            ACTION_STOP -> {
+            ACTION_STOP, ACTION_STOP_LISTENING -> {
                 OwnerVoiceCapture.cancelActive()
                 isRunning.set(false)
                 foregroundPauseGeneration++
@@ -453,6 +455,13 @@ class HermesListenerService : Service() {
                 isInDialog.set(false)
                 listenerPaused.set(false)
                 stopLocalWakeListener()
+                if (intent.action == ACTION_STOP_LISTENING && phoneControlEnabled()) {
+                    cancelReplySpeech()
+                    wakeLock?.let { if (it.isHeld) it.release() }
+                    wakeLock = null
+                    startPhoneBridge()
+                    return START_STICKY
+                }
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -489,6 +498,8 @@ class HermesListenerService : Service() {
                 }
             }
             ACTION_REFRESH_PHONE_BRIDGE -> refreshPhoneBridge()
+            ACTION_ENSURE_PHONE_BRIDGE -> if (phoneControlEnabled()) startPhoneBridge()
+                else if (!wakeWordEnabled()) stopSelf()
             else -> {
                 if (wakeWordEnabled()) {
                     startListening()

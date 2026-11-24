@@ -182,6 +182,13 @@ def _api(messages: list[dict], max_tokens: int, timeout: float):
     )
     options = {}
     config = load_config().get("auxiliary", {}).get(task, {})
+    if config.get("use_free_company_models") is True:
+        from agent.provider_metering import current_provider_guard
+        from troika_product.own_provider import current_credentials
+        from troika_product.development_team import free_api
+
+        if not (current_credentials() or getattr(current_provider_guard(), "credentials", None)):
+            return free_api(messages, max_tokens, timeout)
     if config.get("structured_output", True):
         options["response_format"] = response_format(messages)
 

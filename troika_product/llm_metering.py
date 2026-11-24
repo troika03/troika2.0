@@ -495,7 +495,7 @@ class _Lease:
         self.meter.diagnostics.received(response, charged=charged)
 
     def rejected_before_response(self, error):
-        """A verified OpenRouter HTTP 402 refused inference before a response.
+        """Release holds for a credit refusal or a rate-limited zero-price model.
 
         Do not treat timeouts, 5xx, missing usage, or in-stream errors as free.
         Returning True preserves the SDK error so the configured free fallback
@@ -503,7 +503,16 @@ class _Lease:
         """
         from openai import APIStatusError
 
-        if self.settled or not isinstance(error, APIStatusError) or error.status_code != 402:
+        if self.settled or not isinstance(error, APIStatusError):
+            return False
+        free_rate_limit = (
+            error.status_code == 429 and self.debit_mode == "model_tokens"
+            and all(price == 0 for price in (
+                self.prices.input_rub, self.prices.output_rub,
+                self.prices.cache_read_rub, self.prices.cache_write_rub,
+            ))
+        )
+        if error.status_code != 402 and not free_rate_limit:
             return False
         response = error.response
         if response is None or urlsplit(str(response.url)).hostname != "openrouter.ai":
@@ -513,7 +522,7 @@ class _Lease:
         except (ValueError, TypeError):
             return False
         refusal = body.get("error") if isinstance(body, dict) else None
-        if (not isinstance(refusal, dict) or refusal.get("code") != 402
+        if (not isinstance(refusal, dict) or refusal.get("code") != error.status_code
                 or any(key in body for key in ("id", "usage", "choices"))):
             return False
         self.meter.ledger.settle(
