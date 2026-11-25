@@ -15,8 +15,9 @@ namespace Troika.Desktop {
         private readonly Queue<string> codexReports = new Queue<string>();
         private readonly DispatcherTimer codexTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         private CancellationTokenSource codexRun, codexAuth;
-        private string codexExe = "", codexOwner = "", codexFolder = "", codexDraft = "";
-        private string codexState = "", codexResult = "", codexConnection = "";
+        private string codexExe = "", codexOwner = "", codexFolder = "", codexSession = "";
+        private string codexState = "", codexConnection = "";
+        private readonly Queue<string> codexFollowups = new Queue<string>();
         private bool codexConfirming;
         private TextBlock codexProgressLabel;
 
@@ -33,8 +34,8 @@ namespace Troika.Desktop {
             if (codexRun != null) codexRun.Cancel();
             if (codexAuth != null) codexAuth.Cancel();
             if (projectSpeech != null) projectSpeech.Cancel();
-            codexOwner = ""; codexFolder = ""; codexDraft = ""; codexState = ""; codexResult = ""; codexConnection = "";
-            codexReports.Clear();
+            codexOwner = ""; codexFolder = ""; codexSession = ""; codexState = ""; codexConnection = "";
+            codexReports.Clear(); codexFollowups.Clear(); codexCard = null;
             if (!closed && openPanel == "Codex") RenderCodex();
         }
         private void RenderCodex() {
@@ -45,48 +46,26 @@ namespace Troika.Desktop {
                 AddPanelButton("Войти в Тройку", () => OpenPanel("Аккаунт"), true);
                 return;
             }
-            panelContent.Children.Add(Label("Локальный Codex", 22, text));
-            panelContent.Children.Add(Label("Задачи выполняются на этом ПК через ваш вход в ChatGPT. Доступно в Pro.", 13, muted));
+            panelContent.Children.Add(Label("Codex для разработки", 22, text));
+            panelContent.Children.Add(Label("Тройка Pro передаёт задачи разработки из разговора в локальный Codex. Доступ и лимиты Codex определяет ваш аккаунт ChatGPT.", 13, muted));
+            string owner = api.Account.Email;
+            Check("Подключать Codex к задачам разработки", CodexRoutingEnabled(owner), enabled => SetCodexRouting(owner, enabled));
             if (codexConnection.Length > 0) panelContent.Children.Add(Label(codexConnection, 13, text));
-            if (codexAuth == null && codexRun == null && !codexConfirming) {
+            if (codexAuth == null && codexRun == null) {
                 AddPanelButton("Проверить подключение", () => { var pending = ConnectCodex(false); }, false);
                 AddPanelButton("Войти через ChatGPT", () => { var pending = ConnectCodex(true); }, false);
                 AddPanelButton("Выбрать codex.exe…", ChooseCodexExecutable, false);
+                AddPanelButton("Папка для новых проектов…", ChooseCodexProjectsLocation, false);
             } else if (codexAuth != null) AddPanelButton("Отменить вход", () => codexAuth.Cancel(), false);
-            Gap();
-            codexProgressLabel = Label(codexState, 14, text);
-            panelContent.Children.Add(codexProgressLabel);
-            if (codexFolder.Length > 0) AddPanelButton("Открыть папку проекта", () => OpenCodexFolder(codexFolder), false);
-            if (codexResult.Length > 0) panelContent.Children.Add(Label(codexResult, 13, text));
+            var project = CurrentCodexProject();
+            if (project != null && project.Thread.Length > 0)
+                AddPanelButton("Открыть чат проекта в Codex", () => OpenCodexThread(project.Thread), false);
             if (codexRun != null) {
-                AddPanelButton("Остановить Codex", StopCodex, true);
-                return;
+                codexProgressLabel = Label(codexState, 14, text);
+                panelContent.Children.Add(codexProgressLabel);
+                AddPanelButton("Остановить задачу разработки", StopCodex, false);
             }
-            if (codexConfirming) return;
-            var root = CodexProjectsRoot(api.Account.Email);
-            AddPanelButton("Выбрать папку для проектов…", ChooseCodexProjectsLocation, false);
-            var projects = new ComboBox { Margin = new Thickness(0, 8, 0, 8) };
-            AccessibleName(projects, "Папка проекта Codex");
-            projects.Items.Add(new ComboBoxItem { Content = "Новый проект", Tag = "" });
-            if (Directory.Exists(root)) {
-                foreach (string path in Directory.EnumerateDirectories(root, "project-*").OrderByDescending(p => p).Take(30)) {
-                    try { LocalCodex.ValidateProject(root, path); }
-                    catch (InvalidOperationException) { continue; }
-                    projects.Items.Add(new ComboBoxItem { Content = Path.GetFileName(path), Tag = path });
-                }
-            }
-            projects.SelectedItem = projects.Items.Cast<ComboBoxItem>().FirstOrDefault(item => (string)item.Tag == codexFolder) ?? projects.Items[0];
-            panelContent.Children.Add(projects);
-            var request = Field("Задача для Codex", true);
-            request.MaxLength = 8000;
-            request.Text = codexDraft;
-            request.TextChanged += delegate { codexDraft = request.Text; };
-            panelContent.Children.Add(request);
-            AddPanelButton("Передать задачу Codex", () => {
-                var selection = projects.SelectedItem as ComboBoxItem;
-                var pending = StartCodex(request.Text, selection == null ? "" : (string)selection.Tag);
-            }, true);
-            panelContent.Children.Add(Label("Из разговора: «Попроси Кодекс сделать проект…» или «Что делает Кодекс?»", 12, muted));
+            panelContent.Children.Add(Label("В разговоре скажите, например, «Сделай сайт-портфолио», а затем «Добавь форму связи».", 13, muted));
         }
         private void ChooseCodexExecutable() {
             var picker = new Microsoft.Win32.OpenFileDialog { Filter = "Codex CLI (codex.exe)|codex.exe", CheckFileExists = true, Title = "Выберите установленный Codex CLI" };
@@ -114,7 +93,7 @@ namespace Troika.Desktop {
             using (var picker = new System.Windows.Forms.FolderBrowserDialog { Description = "В этой папке Тройка создаст каталог Troika Codex" }) {
                 if (picker.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
                 try {
-                    string path = LocalFileAccess.ValidateRoot(picker.SelectedPath);
+                    string path = LocalCodex.ValidateWorkspace(picker.SelectedPath);
                     LocalStore.WriteAtomic(CodexProjectsLocationPreference(api.Account.Email), System.Text.Encoding.UTF8.GetBytes(path));
                     codexFolder = ""; RenderCodex();
                     SetStatus("Папка для новых проектов выбрана.", false);
@@ -149,134 +128,175 @@ namespace Troika.Desktop {
             }
         }
         private async Task HandleCodexRequest(string input, CodexVoiceRequest request) {
+            if (request.Action == "start" && request.Task.Length > 0) {
+                await SubmitCodexTask(input, request.Task, CodexDevelopmentIntent.Match(request.Task, CurrentCodexProject() != null) == "new");
+                return;
+            }
+            if (openPanel.Length > 0) ClosePanel();
             AddMessage("user", input);
             if (request.Action == "stop") {
                 bool stopping = codexRun != null;
                 StopCodex();
                 await AnswerCodexStatus(stopping ? "Останавливаю Codex." : "Сейчас Codex свободен.");
-                return;
-            }
-            if (request.Action == "status") {
+            } else if (request.Action == "status") {
                 await AnswerCodexStatus(codexState.Length > 0 && codexOwner == api.Account.Email ? codexState : "Сейчас Codex свободен.");
-                return;
+            } else {
+                await AnswerCodexStatus("Скажите, что создать или изменить в проекте.");
             }
-            if (CodexVoiceRequest.TargetsChatGptProject(request.Task)) {
-                await AnswerCodexStatus(ChatGptProjectHelp);
-                return;
-            }
-            if (codexRun != null || codexConfirming) {
-                await AnswerCodexStatus("Codex уже занят. Пока проект выполняется, мы можем продолжить разговор.");
-                return;
-            }
-            codexDraft = request.Task;
-            if (request.Task.Length == 0) { ShowFromTray(); await OpenPanelTask("Codex"); return; }
-            await StartCodex(request.Task, "");
         }
         private async Task AnswerCodexStatus(string message) {
             AddMessage("assistant", message);
             SetStatus(message, false);
-            if (autoSpeak) await Safe(() => Speak(message, CancellationToken.None));
+            if (autoSpeak && !busy && !speaking) await Safe(() => Speak(message, CancellationToken.None));
         }
-        private async Task StartCodex(string task, string selectedFolder) {
-            task = task.Trim();
-            if (task.Length == 0 || task.Length > 8000) { SetStatus("Опишите задачу для Codex. До 8000 символов.", true); return; }
-            if (CodexVoiceRequest.TargetsChatGptProject(task)) { SetStatus(ChatGptProjectHelp, true); return; }
-            if (codexRun != null || codexAuth != null || codexConfirming || preview) return;
-            if (!api.Account.SignedIn) { ShowFromTray(); await OpenPanelTask("Аккаунт"); return; }
-            string owner = api.Account.Email;
-            string root = CodexProjectsRoot(owner);
-            string folder = selectedFolder.Length == 0 ? Path.Combine(root, "project-" + DateTime.Now.ToString("yyyyMMdd") + "-" + Guid.NewGuid().ToString("N").Substring(0, 8)) : selectedFolder;
+        private async Task RequireCodexPro(CancellationToken cancellation) {
+            using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation)) {
+                deadline.CancelAfter(TimeSpan.FromSeconds(20));
+                var development = await api.Get("/v1/development/projects", deadline.Token);
+                if (!Json.Flag(development, "enabled")) throw new InvalidOperationException("Задачи разработки с Codex доступны в Тройке Pro.");
+                if (Json.Rows(development, "projects").Count(project => !DevelopmentAutopilot.Terminal(Json.Text(project, "status"))) >= 4)
+                    throw new InvalidOperationException("Уже работают четыре проекта разработки. Освободите место для задачи Codex.");
+            }
+        }
+        private async Task SubmitCodexTask(string input, string task, bool newProject) {
+            if (openPanel.Length > 0) ClosePanel();
+            AddMessage("user", input);
+            if (CodexVoiceRequest.TargetsChatGptProject(task)) { await AnswerCodexStatus(ChatGptProjectHelp); return; }
+            if (task.Length == 0 || task.Length > 8000) { await AnswerCodexStatus("Задача для Codex должна содержать до 8000 символов."); return; }
+            if (preview || !api.Account.SignedIn) return;
+            string owner = api.Account.Email, conversation = api.SessionId;
+            if (codexRun != null || codexAuth != null) {
+                if (codexRun != null && !codexRun.IsCancellationRequested && !codexConfirming && !newProject && codexOwner == owner && codexSession == conversation && codexFollowups.Count < 4) {
+                    codexFollowups.Enqueue(task);
+                    await AnswerCodexStatus("Добавила задачу. Codex возьмёт её после текущей работы.");
+                } else await AnswerCodexStatus("Codex сейчас занят. Можно продолжить разговор, пока он работает.");
+                return;
+            }
+            await StartCodex(task, owner, conversation, newProject ? null : CurrentCodexProject());
+        }
+        private async Task StartCodex(string task, string owner, string conversation, CodexConversationLink project) {
             var cancellation = new CancellationTokenSource(TimeSpan.FromMinutes(40));
-            bool launched = false, showSetup = false;
-            codexOwner = owner; codexConfirming = true;
-            codexRun = cancellation;
+            codexOwner = owner; codexSession = conversation; codexConfirming = true; codexRun = cancellation;
+            codexFolder = ""; codexFollowups.Clear();
+            bool launched = false;
             try {
+                UpdateCodexProgress("Проверяю доступ к Codex…");
+                await RequireCodexPro(cancellation.Token);
                 string executable = RequireCodex();
-                LocalCodex.ValidateProject(root, folder);
                 using (var access = CancellationTokenSource.CreateLinkedTokenSource(cancellation.Token)) {
                     access.CancelAfter(TimeSpan.FromSeconds(20));
-                    var development = await api.Get("/v1/development/projects", access.Token);
-                    if (!Json.Flag(development, "enabled")) throw new InvalidOperationException("Разработка с Codex доступна в Pro.");
                     if (!await LocalCodex.ChatGptConnected(executable, store.Root, access.Token))
                         throw new InvalidOperationException("Войдите в Codex через аккаунт ChatGPT.");
                 }
                 cancellation.Token.ThrowIfCancellationRequested();
-                if (api.Account.Email != owner || !api.Account.SignedIn || closed) return;
-                ShowFromTray();
-                await ReleaseWakeMicrophone();
-                if (!ConfirmCodexTask(task, folder)) return;
-                cancellation.Token.ThrowIfCancellationRequested();
-                if (api.Account.Email != owner || !api.Account.SignedIn || closed) return;
-                if (selectedFolder.Length > 0 && !Directory.Exists(folder)) throw new DirectoryNotFoundException("Папка этого проекта больше недоступна.");
-                Directory.CreateDirectory(folder);
-                LocalCodex.ValidateProject(root, folder);
-                launched = true; codexConfirming = false;
-                codexDraft = ""; codexResult = ""; codexFolder = folder;
-                UpdateCodexProgress("Тройка передала задачу Codex.");
-                codexReports.Enqueue("Я передала задачу Кодексу. Мы можем продолжить разговор.");
-                if (openPanel == "Codex") RenderCodex();
-                bool reportedWork = false;
-                var progress = new Progress<string>(value => {
-                    if (codexRun != cancellation || cancellation.IsCancellationRequested || codexOwner != owner) return;
-                    UpdateCodexProgress(value);
-                    if (!reportedWork && value == "Codex меняет файлы проекта") {
-                        reportedWork = true; codexReports.Enqueue("Кодекс редактирует файлы проекта.");
-                    }
-                });
-                var result = await LocalCodex.Run(executable, root, folder, task, ((IProgress<string>)progress).Report, cancellation.Token);
-                if (codexOwner != owner || closed || cancellation.IsCancellationRequested) return;
-                codexResult = result.Summary;
-                var hasFiles = Directory.EnumerateFileSystemEntries(folder).Any();
-                UpdateCodexProgress(hasFiles ? "Codex завершил задачу. Результат в папке проекта." : "Codex завершил задачу. Папка проекта пуста.");
-                codexReports.Enqueue(hasFiles ? "Кодекс закончил задачу. Результат сохранён на компьютере." : "Кодекс закончил задачу. Отчёт в разделе разработки.");
-            } catch (OperationCanceledException) {
-                if (codexOwner == owner && launched) {
-                    UpdateCodexProgress("Codex остановлен. Сохранённые файлы остались в папке проекта.");
-                    codexReports.Clear();
+                if (!CodexOwnerCurrent(owner) || api.SessionId != conversation) return;
+                if (project == null) {
+                    string root = CodexProjectsRoot(owner);
+                    string suggested = Path.Combine(root, "project-" + DateTime.Now.ToString("yyyyMMdd") + "-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+                    LocalCodex.ValidateProject(root, suggested);
+                    ShowFromTray();
+                    await ReleaseWakeMicrophone();
+                    if (!CodexOwnerCurrent(owner) || api.SessionId != conversation) return;
+                    string folder = ConfirmCodexProject(task, suggested);
+                    cancellation.Token.ThrowIfCancellationRequested();
+                    if (!CodexOwnerCurrent(owner) || api.SessionId != conversation) return;
+                    if (folder == null) { AddMessage("assistant", "Проект не запущен."); return; }
+                    await RequireCodexPro(cancellation.Token);
+                    if (!CodexOwnerCurrent(owner) || api.SessionId != conversation) return;
+                    if (folder == suggested) Directory.CreateDirectory(folder);
+                    LocalCodex.ValidateWorkspace(folder);
+                    project = new CodexConversationLink(conversation, folder);
+                    new CodexConversationStore(store, owner).Save(project);
+                    RenderHistory();
                 }
+                codexFolder = project.Folder; codexConfirming = false; launched = true;
+                UpdateCodexProgress("Передаю задачу Codex…");
+                ShowCodexCard(project, codexState, cancellation);
+                codexReports.Enqueue("Я передала задачу Кодексу. Мы можем продолжить разговор.");
+                while (true) {
+                    cancellation.Token.ThrowIfCancellationRequested();
+                    var current = project;
+                    bool reportedWork = false;
+                    var progress = new Progress<string>(value => {
+                        if (codexRun != cancellation || cancellation.IsCancellationRequested || !CodexOwnerCurrent(owner)) return;
+                        UpdateCodexProgress(value);
+                        if (!reportedWork && value == "Codex меняет файлы проекта") {
+                            reportedWork = true; codexReports.Enqueue("Кодекс редактирует файлы проекта.");
+                        }
+                    });
+                    var started = new Progress<string>(id => {
+                        if (codexRun != cancellation || !CodexOwnerCurrent(owner)) return;
+                        try { RememberCodexThread(owner, current.WithThread(id)); }
+                        catch (Exception error) { SetStatus(error.Message, true); }
+                    });
+                    var result = await LocalCodex.RunInChat(executable, current, task,
+                        ((IProgress<string>)progress).Report, ((IProgress<string>)started).Report, cancellation.Token);
+                    if (!CodexOwnerCurrent(owner) || cancellation.IsCancellationRequested) return;
+                    project = current.WithThread(result.ThreadId);
+                    RememberCodexThread(owner, project);
+                    UpdateCodexProgress("Codex завершил задачу.");
+                    if (api.SessionId == conversation) {
+                        if (result.Summary.Length > 0) AddMessage("assistant", result.Summary);
+                        if (codexCard != null && codexCard.Run == cancellation) codexCard.Stop.Visibility = Visibility.Collapsed;
+                    }
+                    if (codexFollowups.Count == 0) break;
+                    await RequireCodexPro(cancellation.Token);
+                    cancellation.Token.ThrowIfCancellationRequested();
+                    task = codexFollowups.Dequeue();
+                    UpdateCodexProgress("Codex приступает к следующей задаче…");
+                    if (api.SessionId == conversation) ShowCodexCard(project, codexState, cancellation);
+                }
+                codexReports.Enqueue("Кодекс завершил работу. Результат и ссылка на чат в разговоре Тройки.");
+            } catch (OperationCanceledException) {
+                if (CodexOwnerCurrent(owner)) UpdateCodexProgress(launched ? "Codex остановлен. Сохранённые файлы остались в папке проекта." : "Запуск Codex остановлен.");
+                codexReports.Clear();
             } catch (Exception error) {
-                if (codexOwner != owner || closed) return;
+                if (!CodexOwnerCurrent(owner)) return;
                 UpdateCodexProgress(error.Message);
-                if (launched) codexReports.Enqueue("Кодекс не завершил задачу. Подробности в разделе разработки.");
-                else showSetup = true;
+                if (!launched && api.SessionId == conversation) AddMessage("assistant", error.Message);
+                if (launched) codexReports.Enqueue("Кодекс не завершил задачу. Подробности в разговоре Тройки.");
+                if (codexFollowups.Count > 0 && api.SessionId == conversation) AddMessage("assistant", "Задачи из очереди можно отправить снова после устранения ошибки.");
             } finally {
                 codexConfirming = false;
+                codexFollowups.Clear();
                 if (codexRun == cancellation) codexRun = null;
+                if (codexCard != null && codexCard.Run == cancellation) codexCard.Stop.Visibility = Visibility.Collapsed;
                 cancellation.Dispose();
                 if (!closed && openPanel == "Codex") RenderCodex();
             }
-            if (showSetup) { ShowFromTray(); await OpenPanelTask("Codex"); }
         }
-        private bool ConfirmCodexTask(string task, string folder) {
+        private string ConfirmCodexProject(string task, string folder) {
             var body = new StackPanel { Margin = new Thickness(20) };
-            body.Children.Add(Label("Передать задачу Codex?", 20, text));
-            body.Children.Add(new TextBox { Text = task, IsReadOnly = true, TextWrapping = TextWrapping.Wrap, MaxHeight = 175, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Margin = new Thickness(0, 12, 0, 8) });
-            body.Children.Add(Label("Рабочая папка", 12, muted));
-            body.Children.Add(Label(folder, 13, text));
-            body.Children.Add(Label("Codex сможет изменить файлы и запустить проверки внутри этой папки.", 12, muted));
-            var dialog = new Window { Owner = this, Title = "Запуск Codex", Content = body, Width = 520,
+            body.Children.Add(Label("Подключить папку к разговору?", 20, text));
+            body.Children.Add(new TextBox { Text = task, IsReadOnly = true, TextWrapping = TextWrapping.Wrap, MaxHeight = 145, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Margin = new Thickness(0, 12, 0, 8) });
+            var path = Label(folder, 13, text);
+            body.Children.Add(path);
+            body.Children.Add(Label("Codex сможет менять файлы в этой папке. Следующие задачи разработки в этом разговоре продолжат тот же чат Codex.", 12, muted));
+            var dialog = new Window { Owner = this, Title = "Рабочая папка Codex", Content = body, Width = 520,
                 SizeToContent = SizeToContent.Height, WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 ResizeMode = ResizeMode.NoResize, Background = background };
+            body.Children.Add(Button("Выбрать существующую папку…", () => {
+                using (var picker = new System.Windows.Forms.FolderBrowserDialog { Description = "Выберите папку проекта для этого разговора", ShowNewFolderButton = false }) {
+                    if (picker.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+                    try { path.Text = LocalCodex.ValidateWorkspace(picker.SelectedPath); }
+                    catch (Exception error) { MessageBox.Show(dialog, error.Message, "Рабочая папка Codex"); }
+                }
+            }, false));
             var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 16, 0, 0) };
-            buttons.Children.Add(Button("Запустить в фоне", () => dialog.DialogResult = true, true));
+            buttons.Children.Add(Button("Подключить и запустить", () => dialog.DialogResult = true, true));
             var cancel = Button("Отмена", () => dialog.DialogResult = false, false); cancel.IsCancel = true;
             buttons.Children.Add(cancel); body.Children.Add(buttons);
-            return dialog.ShowDialog() == true;
-        }
-        private void OpenCodexFolder(string folder) {
-            try {
-                LocalCodex.ValidateProject(CodexProjectsRoot(api.Account.Email), folder);
-                Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true });
-            } catch (Exception error) { SetStatus(error.Message, true); }
+            return dialog.ShowDialog() == true ? path.Text : null;
         }
         private void UpdateCodexProgress(string value) {
             codexState = value;
             if (codexProgressLabel != null) codexProgressLabel.Text = value;
-            if (!busy && !speaking && !recorder.Recording && !wakeRecording && !closed) SetStatus(value, false);
+            if (codexCard != null && codexCard.Run == codexRun) codexCard.Status.Text = value;
+            if (!busy && !speaking && !recorder.Recording && !wakeRecording && !closed && api.SessionId == codexSession) SetStatus(value, false);
         }
         private void StopCodex() {
             if (codexRun == null) return;
-            codexReports.Clear();
+            codexReports.Clear(); codexFollowups.Clear();
             codexRun.Cancel();
             UpdateCodexProgress("Останавливаю Codex…");
         }

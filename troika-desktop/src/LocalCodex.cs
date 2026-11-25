@@ -38,13 +38,18 @@ namespace Troika.Desktop {
     public sealed class CodexProgress {
         public string Status = "Запускаю Codex";
         public string Summary = "";
+        public string ThreadId = "";
+        internal string Failure = "";
         public bool Completed, Failed;
         public bool Read(string line) {
             if (string.IsNullOrWhiteSpace(line) || !line.StartsWith("{", StringComparison.Ordinal)) return false;
             var data = Json.Parse(line);
             string previous = Status;
             switch (Json.Text(data, "type")) {
-                case "thread.started": Status = "Codex подключился к проекту"; break;
+                case "thread.started":
+                    ThreadId = CodexConversationLink.NormalizeThread(Json.Text(data, "thread_id"));
+                    Status = "Codex подключился к проекту";
+                    break;
                 case "turn.started": Status = "Codex работает над задачей"; break;
                 case "item.started":
                 case "item.completed":
@@ -62,7 +67,12 @@ namespace Troika.Desktop {
                     }
                     break;
                 case "turn.completed": Completed = true; break;
-                case "turn.failed": Failed = true; break;
+                case "error": Failure = Json.Text(data, "message"); break;
+                case "turn.failed":
+                    Failed = true;
+                    var detail = Json.Text(Json.Map(Json.Get(data, "error")), "message");
+                    if (detail.Length > 0) Failure = detail;
+                    break;
             }
             return previous != Status;
         }
@@ -73,7 +83,7 @@ namespace Troika.Desktop {
         private static readonly string Config = string.Join(" ", new[] {
             "windows.sandbox=\"mxc\"",
             "permissions.troika-local.extends=\":workspace\"",
-            "permissions.troika-local.filesystem={\":root\"=\"deny\",\":minimal\"=\"read\",\":tmpdir\"=\"deny\",\":slash_tmp\"=\"deny\"}",
+            "permissions.troika-local.filesystem={\":root\"=\"deny\",\":minimal\"=\"read\",\":tmpdir\"=\"deny\",\":slash_tmp\"=\"deny\",glob_scan_max_depth=6,\":workspace_roots\"={\".\"=\"write\",\"**/.env\"=\"deny\",\"**/.env.*\"=\"deny\",\"**/.ssh\"=\"deny\",\"**/.codex/auth.json\"=\"deny\"}}",
             "permissions.troika-local.network.enabled=false"
         }.Select(value => "-c " + Quote(value)));
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
@@ -142,6 +152,25 @@ namespace Troika.Desktop {
                 if (entry.Exists && (entry.Attributes & FileAttributes.ReparsePoint) != 0)
                     throw new InvalidOperationException("Папки проекта Codex должны быть обычными папками Windows.");
         }
+        public static string ValidateWorkspace(string folder) {
+            string path = LocalFileAccess.ValidateRoot(folder);
+            string profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string generated = Path.Combine(appData, "TroikaDesktop", "codex-projects");
+            if (IsInside(profile, path) || IsInside(path, Path.Combine(profile, ".codex"))
+                || IsInside(path, Path.Combine(profile, ".ssh")) || IsInside(path, Path.Combine(profile, ".gnupg"))
+                || IsInside(path, Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData))
+                || IsInside(path, Environment.GetFolderPath(Environment.SpecialFolder.Windows))
+                || IsInside(path, Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles))
+                || IsInside(path, Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86))
+                || IsInside(path, appData) && !IsInside(path, generated))
+                throw new InvalidOperationException("Выберите отдельную папку с исходниками проекта.");
+            return path;
+        }
+        private static bool IsInside(string path, string root) {
+            return root.Length > 0 && (path.Equals(root, StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith(root.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase));
+        }
         public static async Task<bool> ChatGptConnected(string executable, string workingDirectory, CancellationToken cancellation) {
             var result = await Execute(executable, "-c forced_login_method=chatgpt login status", workingDirectory, null, null, cancellation).ConfigureAwait(false);
             return result.ExitCode == 0 && (result.Output + "\n" + result.Error)
@@ -152,11 +181,29 @@ namespace Troika.Desktop {
             if (result.ExitCode != 0 || !await ChatGptConnected(executable, workingDirectory, cancellation).ConfigureAwait(false))
                 throw new InvalidOperationException("Вход в ChatGPT не подтверждён. Повторите вход в браузере или войдите в Codex вручную.");
         }
-        public static async Task<CodexProgress> Run(string executable, string root, string folder, string task, Action<string> onProgress, CancellationToken cancellation) {
-            ValidateProject(root, folder);
+        public static Task<CodexProgress> Run(string executable, string root, string folder, string task, Action<string> onProgress, CancellationToken cancellation) {
+            return RunCore(executable, folder, task, () => ValidateProject(root, folder), onProgress, null, "", cancellation);
+        }
+        public static Task<CodexProgress> RunInChat(string executable, CodexConversationLink chat, string task,
+            Action<string> onProgress, Action<string> onThread, CancellationToken cancellation) {
+            if (onThread == null) throw new ArgumentNullException("onThread");
+            return RunCore(executable, chat.Folder, task, () => ValidateWorkspace(chat.Folder),
+                onProgress, onThread, chat.Thread, cancellation);
+        }
+        public static string ExecutionArguments(bool saveChat, string resumeThread) {
+            string arguments = "-c forced_login_method=chatgpt --ask-for-approval never " + Config
+                + " -c default_permissions=troika-local -c allow_login_shell=false -c shell_environment_policy.inherit=none"
+                + " -c project_root_markers=[] -c project_doc_max_bytes=0 -c web_search=disabled --disable hooks --disable shell_snapshot"
+                + " exec --ignore-user-config --ignore-rules --strict-config --json --color never --skip-git-repo-check";
+            if (!saveChat) return arguments + " --ephemeral -";
+            return arguments + (resumeThread.Length == 0 ? " -" : " resume " + Quote(CodexConversationLink.NormalizeThread(resumeThread)) + " -");
+        }
+        private static async Task<CodexProgress> RunCore(string executable, string folder, string task, Action validate,
+            Action<string> onProgress, Action<string> onThread, string resumeThread, CancellationToken cancellation) {
+            validate();
             using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation)) {
                 deadline.CancelAfter(TimeSpan.FromSeconds(40));
-                if (!await ChatGptConnected(executable, root, deadline.Token).ConfigureAwait(false))
+                if (!await ChatGptConnected(executable, folder, deadline.Token).ConfigureAwait(false))
                     throw new InvalidOperationException("Сначала подключите аккаунт ChatGPT в разделе Codex.");
                 var hostname = Path.Combine(Environment.SystemDirectory, "hostname.exe");
                 var check = await Execute(executable, Config + " sandbox --include-managed-config --permission-profile troika-local --cd "
@@ -164,23 +211,30 @@ namespace Troika.Desktop {
                 if (check.ExitCode != 0 || !check.Output.Trim().Equals(Environment.MachineName, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("Изоляция Codex для Windows недоступна. Обновите Codex и проверьте поддержку Windows MXC.");
             }
-            ValidateProject(root, folder);
+            validate();
             var progress = new CodexProgress();
-            string arguments = "-c forced_login_method=chatgpt --ask-for-approval never " + Config
-                + " -c default_permissions=troika-local -c allow_login_shell=false -c shell_environment_policy.inherit=none"
-                + " -c project_root_markers=[] -c project_doc_max_bytes=0 -c web_search=disabled --disable hooks --disable shell_snapshot"
-                + " exec --ignore-user-config --ignore-rules --strict-config --ephemeral --json --color never --skip-git-repo-check -";
             string prompt = "Выполни задачу в текущей папке проекта. Если папка уже содержит проект, "
                 + "сначала изучи его и сохрани существующую работу. Подготовь понятную инструкцию запуска. "
                 + "В конце кратко опиши результат и какие проверки действительно выполнил.\n\nЗадача пользователя:\n" + task;
-            var run = await Execute(executable, arguments, folder, prompt, line => {
+            var run = await Execute(executable, ExecutionArguments(onThread != null, resumeThread), folder, prompt, line => {
+                string previousThread = progress.ThreadId;
                 if (progress.Read(line)) onProgress(progress.Status);
+                if (onThread != null && progress.ThreadId != previousThread) {
+                    if (resumeThread.Length > 0 && progress.ThreadId != resumeThread)
+                        throw new InvalidDataException("Codex открыл неожиданный чат проекта.");
+                    onThread(progress.ThreadId);
+                }
             }, cancellation).ConfigureAwait(false);
             if (!progress.Succeeded(run.ExitCode)) {
+                if (run.Error.IndexOf("already has an active writer", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    progress.Failure.IndexOf("already has an active writer", StringComparison.OrdinalIgnoreCase) >= 0)
+                    throw new InvalidOperationException("Чат открыт для работы в Codex. Завершите или закройте его там и повторите запрос в Тройке.");
                 if (run.Error.IndexOf("failed to load AGENTS.md", StringComparison.OrdinalIgnoreCase) >= 0)
                     throw new InvalidOperationException("Codex не смог открыть рабочую папку. Выберите папку для проектов вне другого репозитория.");
                 throw new InvalidOperationException("Codex не завершил задачу. Сохранённые файлы доступны в папке проекта. Проверьте вход, лимит или доступность Codex.");
             }
+            if (onThread != null && progress.ThreadId.Length == 0)
+                throw new InvalidOperationException("Codex завершил задачу без ссылки на сохранённый чат.");
             return progress;
         }
         private sealed class ProcessResult {

@@ -202,11 +202,13 @@ namespace Troika.Desktop {
         }
         private void RenderHistory() {
             history.Children.Clear();
-            if (sessions.Count == 0) { history.Children.Add(Label(api.Account.SignedIn ? "Пока нет разговоров" : "Войдите для истории", 12, muted)); return; }
-            foreach (var item in sessions.Take(30)) {
+            var conversations = ConversationsWithCodex();
+            if (conversations.Count == 0) { history.Children.Add(Label(api.Account.SignedIn ? "Пока нет разговоров" : "Войдите для истории", 12, muted)); return; }
+            foreach (var item in conversations) {
                 var id = Json.Text(item, "id"); var title = Json.Text(item, "title"); if (title.Length == 0) title = Json.Text(item, "preview"); if (title.Length == 0) title = "Разговор";
                 if (title.Length > 56) title = title.Substring(0, 56) + "…";
                 var button = Button(title, () => { var task = LoadConversation(id); }, false); button.Content = Label(title, 12, text); button.ToolTip = title; button.Margin = new Thickness(0, 0, 0, 8); button.BorderThickness = new Thickness(0); button.Background = id == api.SessionId ? tint : Brushes.Transparent; button.HorizontalContentAlignment = HorizontalAlignment.Left;
+                if (Json.Flag(item, "codex_local_only")) { history.Children.Add(button); continue; }
                 var shown = title; var current = Json.Text(item, "title"); var menu = new ContextMenu();
                 var rename = new MenuItem { Header = "Переименовать" }; rename.Click += (s, e) => { var task = RenameConversation(id, current); };
                 var remove = new MenuItem { Header = "Удалить" }; remove.Click += (s, e) => { var task = DeleteConversation(id, shown); };
@@ -220,10 +222,12 @@ namespace Troika.Desktop {
         }
         private async Task DeleteConversation(string id, string title) {
             if (busy || recorder.Recording || speaking) { SetStatus("Сначала остановите текущую задачу.", true); return; }
+            if (codexRun != null && codexOwner == api.Account.Email && codexSession == id) { SetStatus("Сначала остановите работу над проектом.", true); return; }
             if (MessageBox.Show("«" + title + "» будет удалён на ПК и телефоне. Память ассистента не изменится. Отменить удаление нельзя.", "Удалить разговор?", MessageBoxButton.OKCancel) != MessageBoxResult.OK) return;
             await Safe(async () => {
                 await api.Call("DELETE", "/v1/sessions/" + Uri.EscapeDataString(id), null, CancellationToken.None);
-                if (id == api.SessionId) { transcript.Children.Clear(); ShowHero(); }
+                new CodexConversationStore(store, api.Account.Email).Forget(id);
+                if (id == api.SessionId) { codexCard = null; transcript.Children.Clear(); ShowHero(); }
                 await ReloadHistory(); SetStatus("Разговор удалён", false);
             });
         }
@@ -263,17 +267,22 @@ namespace Troika.Desktop {
         }
         private void NewConversation() {
             if (busy || recorder.Recording || speaking) { SetStatus("Сначала остановите текущую задачу.", true); return; }
-            api.SessionId = "desktop-" + Guid.NewGuid().ToString("N"); transcript.Children.Clear(); ShowHero(); ClosePanel(); composer.Clear(); Idle(); RenderHistory();
+            api.SessionId = "desktop-" + Guid.NewGuid().ToString("N"); codexCard = null; transcript.Children.Clear(); ShowHero(); ClosePanel(); composer.Clear(); Idle(); RenderHistory();
         }
         private async Task LoadConversation(string id) {
             if (busy || recorder.Recording || speaking) { SetStatus("Сначала остановите текущую задачу.", true); return; }
             int revision = panelRevision; string owner = api.Account.Email, device = api.Account.DeviceId, session = api.SessionId;
             await Safe(async () => {
-                var value = await api.Get("/v1/sessions/" + Uri.EscapeDataString(id) + "/messages?limit=60", CancellationToken.None);
+                var project = new CodexConversationStore(store, owner).Read(id);
+                var value = new Dictionary<string, object>();
+                if (project == null || sessions.Any(item => Json.Text(item, "id") == id)) {
+                    try { value = await api.Get("/v1/sessions/" + Uri.EscapeDataString(id) + "/messages?limit=60", CancellationToken.None); }
+                    catch (ApiException error) { if (project == null || error.Status != 404) throw; }
+                }
                 if (closed || revision != panelRevision || owner != api.Account.Email || device.Length > 0 && device != api.Account.DeviceId || session != api.SessionId || busy || recorder.Recording || speaking) return;
-                api.SessionId = id; transcript.Children.Clear(); ShowHero();
+                api.SessionId = id; codexCard = null; transcript.Children.Clear(); ShowHero();
                 foreach (var message in Json.Rows(value, "messages")) { var role = Json.Text(message, "role"); if (role == "user" || role == "assistant") { var content = Json.Content(Json.Get(message, "content")); content = System.Text.RegularExpressions.Regex.Replace(content, @"^\[сейчас [^\]]*\]\s*", ""); if (content.Length > 0) AddMessage(role, content); } }
-                ContinueConversation(); RenderHistory(); SetStatus("История загружена", false);
+                ContinueConversation(); RestoreCodexCard(CurrentCodexProject()); RenderHistory(); SetStatus("История загружена", false);
             });
         }
         private async Task RefreshAccount() {
@@ -298,6 +307,12 @@ namespace Troika.Desktop {
             if (codex != null) {
                 if (voice == null) composer.Clear();
                 await HandleCodexRequest(input, codex);
+                return;
+            }
+            string development = AutomaticCodexIntent(input);
+            if (development.Length > 0) {
+                if (voice == null) composer.Clear();
+                await SubmitCodexTask(input, input, development == "new");
                 return;
             }
             if (voice == null) composer.Clear(); AddMessage("user", input); answer = AddMessage("assistant", ""); sourceList = new StackPanel(); sources.Clear(); transcript.Children.Add(sourceList);
@@ -466,8 +481,9 @@ namespace Troika.Desktop {
             if (revision != panelRevision || api.Account.Email != owner || !api.Account.SignedIn) return;
             sessions.Clear(); sessions.AddRange(Json.Rows(value, "sessions")); RenderHistory(); panelContent.Children.Clear();
             if (transcript.Children.Count > 0) AddPanelButton("Продолжить разговор", ContinueConversation, false);
-            if (sessions.Count == 0) EmptyState("Пока нет разговоров", "Начните с новой задачи.", "history");
-            foreach (var item in sessions) {
+            var conversations = ConversationsWithCodex();
+            if (conversations.Count == 0) EmptyState("Пока нет разговоров", "Начните с новой задачи.", "history");
+            foreach (var item in conversations) {
                 string id = Json.Text(item, "id"), title = Json.Text(item, "title");
                 if (title.Length == 0) title = Json.Text(item, "preview"); if (title.Length == 0) title = "Разговор";
                 var row = Button(title, () => { var task = LoadConversation(id); }, false);

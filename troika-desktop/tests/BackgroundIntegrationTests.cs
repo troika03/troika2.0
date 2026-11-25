@@ -66,10 +66,37 @@ public static class BackgroundIntegrationTests {
             Check(LocalFileRequest.Parse("Прочитай файл «заметка.txt».").Target == "заметка.txt", "Voice filename");
             Console.WriteLine("PASS explicit voice and text routing");
 
+            Check(CodexDevelopmentIntent.Match("Сделай сайт-портфолио", false) == "new", "Normal request begins development");
+            Check(CodexDevelopmentIntent.Match("Доработай мой сайт", false) == "new", "First edit can choose an existing workspace");
+            Check(CodexDevelopmentIntent.Match("Добавь форму связи", true) == "continue" &&
+                CodexDevelopmentIntent.Match("Исправь кнопку входа", true) == "continue", "Local project context handles ordinary follow-ups");
+            Check(CodexDevelopmentIntent.Match("Сделай новый сайт", true) == "new", "Explicit new project requests a separate chat");
+            Check(CodexDevelopmentIntent.Match("Добавь форму связи", false) == "" &&
+                CodexDevelopmentIntent.Match("Как дела, пока пишется код?", true) == "" &&
+                CodexDevelopmentIntent.Match("Сделай презентацию о Python", true) == "", "Unrelated conversation stays outside Codex");
+
             var project = Directory.CreateDirectory(Path.Combine(root, "project-20261125-a1a1a1a1")).FullName;
             LocalCodex.ValidateProject(root, project);
             Reject(() => LocalCodex.ValidateProject(root, Path.Combine(root, "other")), "Unmanaged Codex folder accepted");
             var progress = new CodexProgress();
+            const string thread = "01a12345-6789-7123-8123-0123456789ab";
+            progress.Read("{\"type\":\"thread.started\",\"thread_id\":\"" + thread + "\"}");
+            Check(progress.ThreadId == thread && CodexConversationLink.ThreadUrl(progress.ThreadId) == "codex://threads/" + thread,
+                "Native link opens the same CLI chat");
+            Reject(() => CodexConversationLink.ThreadUrl(thread + "?other=true"), "Thread URL validated before opening");
+            var store = new LocalStore(Path.Combine(root, "state"));
+            var chatLink = new CodexConversationLink("desktop-example", project, thread);
+            new CodexConversationStore(store, "a@example.test").Save(chatLink);
+            var restored = new CodexConversationStore(store, "a@example.test").Read("desktop-example");
+            Check(restored.Thread == thread && restored.Folder == project &&
+                new CodexConversationStore(store, "b@example.test").Read("desktop-example") == null &&
+                new CodexConversationStore(store, "a@example.test").Read("another-chat") == null, "Project mapping survives restart and stays owner and conversation scoped");
+            var start = LocalCodex.ExecutionArguments(true, "");
+            var resume = LocalCodex.ExecutionArguments(true, restored.Thread);
+            Check(!start.Contains("--ephemeral") && !resume.Contains("--ephemeral") &&
+                resume.EndsWith(" resume \"" + thread + "\" -") && resume.Contains("default_permissions=troika-local"), "Persist new CLI chat and resume the exact project under the same boundaries");
+            Console.WriteLine("PASS automatic routing, saved Codex chat and continuation");
+
             progress.Read("{\"type\":\"item.completed\",\"item\":{\"type\":\"command_execution\",\"command\":\"private\",\"aggregated_output\":\"private\"}}");
             Check(!progress.Status.Contains("private") && !progress.Succeeded(0), "Process logs or premature success exposed");
             progress.Read("{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"готово\"}}");
